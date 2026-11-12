@@ -4937,6 +4937,13 @@ fn write_draft_signed_inner(
     // Step 6: the feed is written, and each step on a host passed. The
     // announcements go into the queue before the scans, so that a failed
     // scan does not lose them (ADR 0052 item 13).
+    if let Some(moved) = &feed_move {
+        collection.record_written_feed_move(
+            id,
+            moved.from_url.as_deref(),
+            i64::try_from(now).unwrap_or(i64::MAX),
+        )?;
+    }
     announce::queue(collection, id, &announcements, &Timing::DEFAULT, now)?;
 
     // The feed is written, so each open change set row of the feed is done.

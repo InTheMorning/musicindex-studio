@@ -518,7 +518,10 @@ fn workspace_router_with_shared(workspace: Workspace) -> (Router, WorkspaceHandl
             "/settings/nostr",
             get(routes::get_nostr_settings).put(routes::put_nostr_settings),
         )
-        .route("/feeds/{id}/announcements", get(routes::list_announcements))
+        .route(
+            "/feeds/{id}/announcements",
+            get(routes::list_announcements).post(routes::send_announcement),
+        )
         .route("/hosts/{id}/scan", post(routes::scan_host))
         .route("/apps", get(routes::list_apps).post(routes::add_app))
         .route(

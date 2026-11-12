@@ -6492,6 +6492,67 @@ async fn a_write_sends_one_announcement_to_the_hub() {
 }
 
 #[tokio::test]
+async fn a_send_without_a_write_queues_the_public_address() {
+    let hub = studio_core::testing::TestHub::start();
+    let timing = studio_core::announce::Timing {
+        first_wait: 3_600,
+        ..studio_core::announce::Timing::DEFAULT
+    };
+    let (app, _) = announce_app(&hub, timing);
+    let id = set_up(&app).await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/announcements"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["url"], "https://music.example/album.xml");
+    assert_eq!(body["queued"], true);
+
+    let (status, rows) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{id}/announcements"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{rows}");
+    assert_eq!(rows.as_array().unwrap().len(), 1, "{rows}");
+    assert_eq!(rows[0]["url"], body["url"]);
+    assert_eq!(rows[0]["podping"], true);
+    assert_eq!(rows[0]["state"], "waiting");
+    assert_eq!(hub.requests().len(), 0, "the queue must honor its wait");
+}
+
+#[tokio::test]
+async fn a_send_without_a_public_address_is_refused() {
+    let hub = studio_core::testing::TestHub::start();
+    let (app, _) = announce_app(&hub, studio_core::announce::Timing::DEFAULT);
+    let id = set_up(&app).await;
+    let db = rusqlite::Connection::open(app.data.path().join("collection.sqlite")).unwrap();
+    db.execute("DELETE FROM feed_addresses WHERE feed_id = ?1", [id])
+        .unwrap();
+    db.execute(
+        "UPDATE feeds SET public_url = NULL, address_source = NULL WHERE id = ?1",
+        [id],
+    )
+    .unwrap();
+
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/announcements"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["error"]["code"], "no_public_address");
+    assert_eq!(hub.requests().len(), 0);
+}
+
+#[tokio::test]
 async fn the_choice_off_sends_no_announcement() {
     let hub = studio_core::testing::TestHub::start();
     let (app, announcer) = announce_app(&hub, studio_core::announce::Timing::DEFAULT);
@@ -15064,6 +15125,48 @@ async fn the_outside_check_compares_the_address_of_musicindex_only_on_request() 
     server.set(route, 500, Vec::new());
     let (_, failed) = call(&app, "GET", &format!("{path}?index=true"), None).await;
     assert_eq!(failed["index_url"], Value::Null, "ADR 0150 item 5");
+}
+
+#[tokio::test]
+async fn the_outside_check_gives_the_last_move_and_its_announcement_states() {
+    let (app, _, id) = outside_app().await;
+    let collection =
+        studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+            .unwrap();
+    let feed = collection
+        .feed(studio_core::collection::FeedId(id))
+        .unwrap();
+    let current = feed.public_url.unwrap();
+    collection
+        .record_written_feed_move(
+            studio_core::collection::FeedId(id),
+            Some("https://old.example/album.xml"),
+            100,
+        )
+        .unwrap();
+    studio_core::announce::queue(
+        &collection,
+        studio_core::collection::FeedId(id),
+        &[studio_core::announce::PlannedAnnouncement {
+            url: current.clone(),
+            podping: true,
+        }],
+        &studio_core::announce::Timing::DEFAULT,
+        100,
+    )
+    .unwrap();
+
+    let (status, body) = call(&app, "GET", &format!("/api/v1/feeds/{id}/outside"), None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        body["last_move"]["from_url"],
+        "https://old.example/album.xml"
+    );
+    assert_eq!(body["last_move"]["moved_at"], 100);
+    assert_eq!(body["last_move"]["announcements"][0]["url"], current);
+    assert_eq!(body["last_move"]["announcements"][0]["state"], "waiting");
+    assert_eq!(body["last_move"]["announcements"][0]["send_at"], 130);
+    assert_eq!(body["last_move"]["announcements"][1]["state"], "not_sent");
 }
 
 #[tokio::test]

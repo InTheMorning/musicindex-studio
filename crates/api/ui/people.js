@@ -1057,9 +1057,9 @@ export function pickLink(row, feeds, values) {
 // The suggestions of the read-only pages at the fields of the page (ADR 0159
 // items 8 and 9). `suggestions` is the list of `GET /people/{id}/page-suggestions`.
 // The core compares each page with the saved person. This function removes a
-// value that the pending values already hold, so that a "Use" takes the row
-// away. It gives lists for images, websites, keys, matching wallets, and other
-// recipients. Each row has `{ value, line, guid }`. Wallet rows also have the
+// value that the pending values already hold, so that **Add** takes the row
+// away (ADR 0182 item 1). It gives lists for images, websites, keys, matching
+// wallets, and other recipients. Each row has `{ value, line, guid }`. Wallet rows also have the
 // recipient name, key, and recipient type.
 export function pageSuggestions(suggestions, values) {
   const out = { img: [], href: [], keys: [], wallets: [], otherRecipients: [] };
@@ -1068,27 +1068,27 @@ export function pageSuggestions(suggestions, values) {
   for (const s of suggestions || []) {
     if (s.missing || !shown.has(s.feed_guid)) continue;
     const title = s.title || 'Untitled feed';
-    if (s.picture && s.picture !== values.img) out.img.push({ value: s.picture, line: `New picture on "${title}"`, guid: s.feed_guid });
-    if (s.website && s.website !== values.href) out.href.push({ value: s.website, line: `New website on "${title}"`, guid: s.feed_guid });
-    if (s.npub && !(values.keys || []).includes(s.npub)) out.keys.push({ value: s.npub, line: `New Nostr key on "${title}"`, guid: s.feed_guid });
+    if (s.picture && s.picture !== values.img) out.img.push({ value: s.picture, line: `New picture on "${title}"`, guid: s.feed_guid, button: 'Add', ariaLabel: `Add ${s.picture}` });
+    if (s.website && s.website !== values.href) out.href.push({ value: s.website, line: `New website on "${title}"`, guid: s.feed_guid, button: 'Add', ariaLabel: `Add ${s.website}` });
+    if (s.npub && !(values.keys || []).includes(s.npub)) out.keys.push({ value: s.npub, line: `New Nostr key on "${title}"`, guid: s.feed_guid, button: 'Add', ariaLabel: `Add ${s.npub}` });
     for (const w of s.wallets || []) {
       if (pendingWallets.includes(String(w.key.address).toLowerCase())) continue;
-      out.wallets.push({ value: w.key.address, line: `New wallet on "${title}"`, guid: s.feed_guid, key: w.key, recipient_type: w.recipient_type, recipient_name: w.name });
+      out.wallets.push({ value: w.key.address, line: `New wallet on "${title}"`, guid: s.feed_guid, key: w.key, recipient_type: w.recipient_type, recipient_name: w.name, button: 'Add', ariaLabel: `Add ${w.key.address}` });
     }
     const recipients = [];
     for (const w of s.other_recipients || []) {
       if (pendingWallets.includes(String(w.key.address).toLowerCase())) continue;
-      recipients.push({ value: w.key.address, line: `Other recipient on "${title}"`, guid: s.feed_guid, key: w.key, recipient_type: w.recipient_type, recipient_name: w.name });
+      recipients.push({ value: w.key.address, line: `Other recipient on "${title}"`, guid: s.feed_guid, key: w.key, recipient_type: w.recipient_type, recipient_name: w.name, button: 'Add', ariaLabel: `Add ${w.key.address}` });
     }
     if (recipients.length > 0) out.otherRecipients.push({ title: `${recipients.length} other ${recipients.length === 1 ? 'recipient' : 'recipients'} on ${title}`, rows: recipients });
   }
   return out;
 }
 
-// "Use All Suggestions" (ADR 0170 items 1 to 3): each suggestion of the
+// "Add All Suggestions" (ADR 0182 item 2): each suggestion of the
 // linked pages as a pending value. The wallets that do not match stay
 // suggestions.
-export function useAllPageSuggestions(suggestions, values) {
+export function addAllPageSuggestions(suggestions, values) {
   const rows = pageSuggestions(suggestions, values);
   return {
     ...values,
@@ -1100,7 +1100,7 @@ export function useAllPageSuggestions(suggestions, values) {
 }
 
 // Whether the page of a person has a suggestion from its linked pages, for
-// the button "Use All Suggestions" (ADR 0170 item 1). `rows` is the result of
+// the button "Add All Suggestions" (ADR 0182 item 2). `rows` is the result of
 // `pageSuggestions`. The other recipients do not count (item 2).
 export const hasPageSuggestions = (rows) => rows.img.length + rows.href.length + rows.keys.length + rows.wallets.length > 0;
 
@@ -1116,10 +1116,12 @@ export const linkedPageChanges = (rows = []) => rows.filter((row) => row.img || 
 // The people that start selected in the review sheet: all (ADR 0170 item 5).
 export const linkedPageSelection = (people) => people.map((row) => row.person_id);
 
-// The lines of one person in the review sheet: the values that change.
+// The values of one person in the review sheet (ADR 0182 item 19).
 export function linkedPageChangeLines(person) {
-  return [person.img && 'Picture', person.href && 'Website', ...(person.keys || []).map(() => 'Nostr key'),
-    ...(person.wallets || []).map((wallet) => `Wallet: ${wallet.key.address}`)].filter(Boolean);
+  return [person.img && { kind: 'picture', label: 'Picture', value: person.img },
+    person.href && { kind: 'website', label: 'Website', value: person.href },
+    ...(person.keys || []).map((value) => ({ kind: 'key', label: 'Nostr key', value })),
+    ...(person.wallets || []).map((wallet) => ({ kind: 'wallet', label: 'Wallet', value: wallet.key.address }))].filter(Boolean);
 }
 
 // The offers of a credit after a Save that changes the links (ADR 0118 items 3

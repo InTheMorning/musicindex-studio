@@ -2,9 +2,13 @@
 
 Decision: [ADR 0182](../adr/0182-the-page-of-a-person-starts-with-its-links-and-has-a-nickname.md).
 
-Status: In progress. Packets 118a and 118b are complete. Each save of a person sends the nickname. **Change** in the sheet "Change the Nickname" makes a change that is not saved, and **Save** keeps it. The People list sorts and groups "A to Z" by the shown name, and the initials use the shown name.
+Status: In progress. Packets 118a, 118b and 118c are complete. Each save of a person sends the nickname. **Change** in the sheet "Change the Nickname" makes a change that is not saved, and **Save** keeps it. The People list sorts and groups "A to Z" by the shown name, and the initials use the shown name.
 
 In the screenshot check of 118b, the head, the sheet and the list showed the nickname. The check used 1280 px in the light theme and 390 px in the dark theme. `$edges()` and `$overflow()` gave no result.
+
+In the screenshot check of 118c, the page of a person showed the sections in the sequence of ADR 0182 item 10. **Add All Suggestions** was below the linked pages, and the page had five **Add** buttons. The update sheet showed each value with its label, and a picture row showed the person picture.
+
+The update sheet keeps one checkbox for each person (ADR 0170 item 5). The mockup shows one checkbox for each value, but ADR 0182 does not change the selection. The check used 1280 px in the light theme and 390 px in the dark theme. `$edges()` and `$overflow()` gave no result.
 
 ## Goal
 

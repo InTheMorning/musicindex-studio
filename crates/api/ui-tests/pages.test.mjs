@@ -126,18 +126,20 @@ test('nostr follows author on the three feed pages', () => {
   }
 });
 
-test('the person page has more with the tier content before payment (ADR 0103 item 11)', () => {
+test('the person page has more with the tier content before payment (ADR 0182 item 10)', () => {
   const seq = pageSequence('person');
   const more = seq.findIndex((s) => s.id === 'more');
   assert.ok(more >= 0 && seq[more].tier === 'content');
   assert.equal(seq[more + 1].id, 'payment',
-    'ADR 0103 item 11: more comes before payment. Fix the page person in crates/api/ui/pages.js.');
+    'ADR 0182 item 10: put more before payment. Fix the person page in crates/api/ui/pages.js.');
   assert.equal(tierError('person', seq), null);
 });
 
-test('the person page follows the sequence of ADR 0111 item 1 (task 075b)', () => {
+test('the person page follows ADR 0182 item 10', () => {
   const seq = pageSequence('person');
-  assert.deepEqual(seq.map((s) => s.id), ['profile', 'where', 'check', 'more', 'payment', 'credits', 'support', 'member', 'change', 'delete'],
-    'ADR 0111 item 1 and ADR 0156 item 1: fix the page person in crates/api/ui/pages.js.');
+  assert.deepEqual(seq.map((s) => s.id), ['profile', 'member', 'credits', 'where', 'check', 'more', 'payment', 'support', 'change', 'delete'],
+    'ADR 0182 item 10: set the section sequence. Fix the person page in crates/api/ui/pages.js.');
+  assert.deepEqual(seq.map((s) => s.tier), ['identity', 'identity', 'identity', 'identity', 'identity', 'content', 'content', 'details', 'setup', 'limits'],
+    'ADR 0182 item 10: set each section tier. Fix the person page in crates/api/ui/pages.js.');
   assert.equal(tierError('person', seq), null);
 });

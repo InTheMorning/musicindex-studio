@@ -8,6 +8,7 @@
 //! it changes nothing else. The user decides what Studio does with each
 //! difference.
 
+use std::collections::HashSet;
 use std::fmt;
 use std::fs;
 use std::io;
@@ -292,6 +293,70 @@ pub fn add_new(
     )?)
 }
 
+/// Merge the library records of one release that are one file (ADR 0179
+/// items 3 and 4). Two local records with the same SHA-256 and the same
+/// size are one file. The function keeps the record with the lower
+/// `added_at`, then the lower ID. It removes each newer record, and the
+/// file of the record from the release folder when that file has the
+/// SHA-256 of the record.
+///
+/// The function skips a newer record that a draft operation names. It
+/// changes no draft. A record with its bytes removed (ADR 0105 item 10)
+/// is not a duplicate. A feed with no release folder gives no merge.
+/// The function gives the number of records that it removed.
+///
+/// # Errors
+///
+/// Gives a [`ScanError`] when SQLite fails, or Studio cannot remove a
+/// file. A file that Studio cannot read stays, and its record stays too.
+pub fn merge_duplicates(
+    collection: &Collection,
+    library: &Library,
+    feed_id: FeedId,
+) -> Result<usize, ScanError> {
+    let row = collection.feed(feed_id)?;
+    let Some(folder) = row
+        .folder
+        .as_deref()
+        .filter(|folder| Library::is_folder_path(folder))
+    else {
+        return Ok(0);
+    };
+    let in_draft: HashSet<LibraryFileId> = collection
+        .draft_operations(feed_id)?
+        .into_iter()
+        .filter_map(|operation| operation.library_file_id)
+        .collect();
+
+    // The records of one file, with the oldest first.
+    let mut files = collection.library_files(feed_id)?;
+    files.retain(|file| file.local && file.removed_at.is_none() && file.sha256.is_some());
+    files.sort_by_key(|file| (file.added_at, file.id.0));
+    let mut kept: HashSet<(String, u64)> = HashSet::new();
+    let mut merged = 0;
+    for file in files {
+        let Some(sha256) = file.sha256.clone() else {
+            continue;
+        };
+        if kept.insert((sha256.clone(), file.size)) || in_draft.contains(&file.id) {
+            continue;
+        }
+        // The file goes only when it is the file of the record.
+        if is_plain_name(&file.path) {
+            let full = library.path(folder, &file.path);
+            if full.exists() {
+                if sha256_file(&full).map_err(|e| named(&full, &e))? != sha256 {
+                    continue;
+                }
+                library.remove_file(folder, &file.path)?;
+            }
+        }
+        collection.remove_library_file(file.id)?;
+        merged += 1;
+    }
+    Ok(merged)
+}
+
 #[cfg(test)]
 mod tests {
     use std::time::{Duration, SystemTime};
@@ -466,5 +531,66 @@ mod tests {
         assert!(row.stamp.is_some());
         assert_eq!(scan(&s.collection, &s.library).unwrap(), Vec::new());
         assert!(add_new(&s.collection, &s.library, s.feed, "../x").is_err());
+    }
+
+    #[test]
+    fn two_records_of_one_file_become_one_unless_a_draft_operation_names_the_newer() {
+        let s = setup();
+        let older = record(&s, "a.mp3", b"same");
+        let newer = record(&s, "a 2.mp3", b"same");
+        record(&s, "b.mp3", b"other");
+
+        // A draft operation names the newer record: both records stay.
+        let host = s
+            .collection
+            .add_connector("local", "Home", "{}", None)
+            .unwrap();
+        s.collection
+            .add_draft_operation(
+                s.feed,
+                crate::collection::DraftOperationKind::Copy,
+                Some(newer),
+                host,
+                "album/a 2.mp3",
+            )
+            .unwrap();
+        assert_eq!(
+            merge_duplicates(&s.collection, &s.library, s.feed).unwrap(),
+            0
+        );
+        assert_eq!(s.collection.library_files(s.feed).unwrap().len(), 3);
+        assert!(s.library.path("album", "a 2.mp3").exists());
+
+        // The draft is gone: the older record stays and the newer goes, with its file.
+        s.collection.remove_draft_operations(s.feed).unwrap();
+        assert_eq!(
+            merge_duplicates(&s.collection, &s.library, s.feed).unwrap(),
+            1
+        );
+        let paths: Vec<String> = s
+            .collection
+            .library_files(s.feed)
+            .unwrap()
+            .into_iter()
+            .map(|f| f.path)
+            .collect();
+        assert_eq!(paths, ["a.mp3", "b.mp3"]);
+        assert!(s.collection.library_file(older).is_ok());
+        assert!(!s.library.path("album", "a 2.mp3").exists());
+        assert!(s.library.path("album", "a.mp3").exists());
+    }
+
+    #[test]
+    fn a_merge_keeps_the_file_of_the_newer_record_when_its_bytes_changed() {
+        let s = setup();
+        record(&s, "a.mp3", b"same");
+        record(&s, "a 2.mp3", b"same");
+        fs::write(s.library.path("album", "a 2.mp3"), b"edit").unwrap();
+        assert_eq!(
+            merge_duplicates(&s.collection, &s.library, s.feed).unwrap(),
+            0
+        );
+        assert_eq!(s.collection.library_files(s.feed).unwrap().len(), 2);
+        assert!(s.library.path("album", "a 2.mp3").exists());
     }
 }

@@ -8,9 +8,9 @@
 
 use std::collections::HashSet;
 
-use crate::collection::{Collection, CollectionError, FeedId};
+use crate::collection::{Collection, CollectionError, CollectionErrorKind, FeedId, LibraryFile};
 use crate::feed::Feed;
-use crate::inventory::{self, Hosts};
+use crate::inventory::{self, Hosts, InventoryError, InventoryErrorKind};
 use crate::library::is_plain_name;
 use crate::media::plain_address;
 use crate::pipeline::feed_addresses;
@@ -43,12 +43,16 @@ struct Facts {
 /// `local` false whose address is no longer in `feed`, with its download
 /// record.
 ///
-/// A host that Studio cannot read gives no planned address and no copy.
-/// The function then treats the addresses of that host as other addresses.
+/// When a read of the planned address or of the copies of a local library
+/// file fails, the function gives up and adds no row (ADR 0179 item 1).
+/// A host that Studio cannot read would else make its addresses look like
+/// other addresses. A local file with no host has no planned address, and
+/// that is no failure.
 ///
 /// # Errors
 ///
-/// Gives a [`CollectionError`] when SQLite fails.
+/// Gives a [`CollectionError`] when SQLite fails, or when a read of a host
+/// fails. The next call tries again.
 pub fn record_remote_files(
     collection: &Collection,
     hosts: &Hosts,
@@ -83,12 +87,14 @@ pub fn record_remote_files(
         if !file.local {
             continue;
         }
-        if let Ok(planned) = inventory::planned_path(collection, hosts, &row, file) {
-            known.extend(planned.url);
+        match inventory::planned_path(collection, hosts, &row, file) {
+            Ok(planned) => known.extend(planned.url),
+            Err(error) if error.kind() == InventoryErrorKind::NoHost => {}
+            Err(error) => return Err(read_failed(file, &error)),
         }
-        if let Ok(copies) = inventory::copies(collection, hosts, file) {
-            known.extend(copies.into_iter().filter_map(|copy| copy.url));
-        }
+        let copies = inventory::copies(collection, hosts, file)
+            .map_err(|error| read_failed(file, &error))?;
+        known.extend(copies.into_iter().filter_map(|copy| copy.url));
     }
 
     // The paths in the release folder that are in use. The feed XML is in
@@ -129,6 +135,18 @@ pub fn record_remote_files(
         report.added += 1;
     }
     Ok(report)
+}
+
+/// The error for a failed read of the host of a local library file
+/// (ADR 0179 item 1).
+fn read_failed(file: &LibraryFile, error: &InventoryError) -> CollectionError {
+    CollectionError::with_kind(
+        CollectionErrorKind::Database,
+        format!(
+            "the read of the host of {} failed, so no remote row is added: {error}",
+            file.path
+        ),
+    )
 }
 
 /// The size and the media type that the feed gives for an address.
@@ -557,5 +575,115 @@ mod tests {
         let row = collection.feed(feed_id).unwrap();
         let planned = inventory::planned_path(&collection, &hosts, &row, &file).unwrap();
         assert!(!planned.on_host);
+    }
+
+    /// A connector that fails each read while `fail` is true.
+    struct FailingRead {
+        folder: LocalFolder,
+        fail: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    }
+
+    impl crate::connector::Connector for FailingRead {
+        fn read(
+            &self,
+            path: &str,
+        ) -> Result<Option<crate::connector::FileRead>, crate::connector::ConnectorError> {
+            if self.fail.load(std::sync::atomic::Ordering::SeqCst) {
+                return Err(crate::connector::ConnectorError::new(
+                    crate::connector::ConnectorErrorKind::Io,
+                    "the host does not answer",
+                ));
+            }
+            self.folder.read(path)
+        }
+        fn write(
+            &self,
+            path: &str,
+            bytes: &[u8],
+            expected: &crate::connector::Expected,
+        ) -> Result<crate::connector::Version, crate::connector::ConnectorError> {
+            self.folder.write(path, bytes, expected)
+        }
+        fn public_url(&self, path: &str) -> Option<String> {
+            self.folder.public_url(path)
+        }
+        fn list(&self) -> Result<crate::connector::FileList, crate::connector::ConnectorError> {
+            self.folder.list()
+        }
+        fn stat(
+            &self,
+            path: &str,
+        ) -> Result<Option<crate::connector::ListedFile>, crate::connector::ConnectorError>
+        {
+            self.folder.stat(path)
+        }
+        fn delete(
+            &self,
+            path: &str,
+            expected: &crate::connector::Stamp,
+        ) -> Result<(), crate::connector::ConnectorError> {
+            self.folder.delete(path, expected)
+        }
+    }
+
+    #[test]
+    fn a_failed_read_of_a_host_adds_no_row_and_the_next_call_adds_it() {
+        use std::sync::{Arc, atomic::AtomicBool};
+        let dir = tempfile::tempdir().unwrap();
+        // The host file has the size of the local file, and no SHA-256 in
+        // the inventory. The copies read of the local file reads it.
+        std::fs::write(dir.path().join("x.mp3"), b"music").unwrap();
+        let mut collection = Collection::open_in_memory().unwrap();
+        let home = collection
+            .add_connector("local", "Home", "{}", None)
+            .unwrap();
+        let fail = Arc::new(AtomicBool::new(true));
+        let mut hosts = Hosts::new();
+        hosts.insert(
+            home,
+            Box::new(FailingRead {
+                folder: LocalFolder::new(dir.path(), Some("https://m.example".into())),
+                fail: Arc::clone(&fail),
+            }),
+        );
+        scan(&collection, &hosts, home).unwrap();
+        let feed_id = collection
+            .add_feed(None, Some((home, "album.xml")))
+            .unwrap();
+        collection.set_feed_folder(feed_id, "album").unwrap();
+        let sha = crate::digest::sha256_hex(&[b"music"]);
+        collection
+            .add_library_file(
+                feed_id,
+                "01 One.mp3",
+                5,
+                Some(&sha),
+                "audio/mpeg",
+                true,
+                None,
+                None,
+            )
+            .unwrap();
+        let feed = parse(
+            r#"<rss version="2.0"><channel><title>A</title>
+            <item><guid>1</guid><enclosure url="https://m.example/album/01%20One.mp3" length="5" type="audio/mpeg"/></item>
+            <item><guid>2</guid><enclosure url="https://m.example/other.mp3" length="5" type="audio/mpeg"/></item>
+            </channel></rss>"#,
+        );
+
+        assert!(record_remote_files(&collection, &hosts, feed_id, &feed).is_err());
+        assert_eq!(collection.library_files(feed_id).unwrap().len(), 1);
+
+        fail.store(false, std::sync::atomic::Ordering::SeqCst);
+        let report = record_remote_files(&collection, &hosts, feed_id, &feed).unwrap();
+        assert_eq!(report.added, 1);
+        let remote: Vec<String> = collection
+            .library_files(feed_id)
+            .unwrap()
+            .into_iter()
+            .filter(|f| !f.local)
+            .map(|f| f.path)
+            .collect();
+        assert_eq!(remote, ["other.mp3"]);
     }
 }

@@ -61,6 +61,12 @@ Agent check, 2026-11-08: a scratch copy of Stophammer at `398d10f` parsed the by
 - A return with the tag removed stayed at B, with the refusal of ADR 0083.
 - A crawl of A before the B pointer got a refusal. The next crawl of A gave A. The crawler follows the tag of the B pointer to A.
 
+Human check, 2026-11-12, in the release build of local `main`, with the test album `7ea30e6c-c7ba-5b81-a7be-6465c1591b7a`:
+
+- The move from bastone to heycitizen gave heycitizen in the index at 3:50:03 PM.
+- Review of the move back to bastone showed the return warning.
+- After the move back, the index crawled at 4:06:17 PM and kept the heycitizen address. The file at heycitizen names the bastone address in its tag. Inference: this is the second return of the day, and Stophammer ADR 0083 section 5 gives it a wait of 1 hour from the last return. The check of the index after the wait is open.
+
 The screenshot check of the warning did not run again at `c02910d`, because the sandbox of that session stops Chromium.
 
 ## Stop And Ask When

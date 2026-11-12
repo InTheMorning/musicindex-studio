@@ -84,7 +84,7 @@ test('the Files page gives two text rows for the file hosts and no select menu',
   const rows = fileHostRows(feed, { files_connector_id: null, feed_move: null }, hosts);
   assert.deepEqual(rows, [
     { label: 'Feed file', host: 'Old Host', address: 'https://old.example/album.xml' },
-    { label: 'Release files', host: 'Old Host', address: null },
+    { label: 'Media files', host: 'Old Host', address: null },
   ]);
   for (const row of rows) assert.deepEqual(Object.keys(row), ['label', 'host', 'address']);
   const moved = fileHostRows(feed, { files_connector_id: 2, feed_move: { connector_id: 2 } }, hosts);
@@ -92,9 +92,9 @@ test('the Files page gives two text rows for the file hosts and no select menu',
   assert.equal(moved[1].host, 'New Host');
 });
 
-test('What moves has the three values of ADR 0177, and the first is the start value', () => {
+test('What moves has the three values of ADR 0180, and the first is the start value', () => {
   assert.deepEqual(MOVE_SCOPES.map((scope) => scope.label), [
-    'The feed file and the release files', 'Only the feed file', 'Only the release files']);
+    'Feed and media files', 'Feed file only', 'Media files only']);
   assert.deepEqual(MOVE_SCOPES.map((scope) => scope.value), ['both', 'feed', 'files']);
 });
 

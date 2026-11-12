@@ -29,7 +29,7 @@ import { changeTitle, afterDiscard, changeLine } from './people.js';
 import { makeSettingsDraft, changeSetting, settingsDraftView, discardSettings, saveSettings, asksSettingsLeave } from './settingsdraft.js';
 import { PeoplePage, PersonPage, CheckPage, WalletPage } from './peoplepages.js';
 import { OUTSIDE_LIMIT, OUTSIDE_SETTING_LABEL, OUTSIDE_SETTING_HINT, outsideMark, outsideNotice, indexNotice, eachLimited, panelSet, stateMark } from './outsidecheck.js';
-import { collectionMark, collectionRow, collectionSheet, collectionAction, CLOSED_EXPORT_HINT, COLLECTIONS_HINT, OPENING_TEXT } from './collectionlist.js';
+import { collectionMark, collectionRow, collectionSectionActions, collectionSheet, collectionAction, CLOSED_EXPORT_HINT, COLLECTIONS_HINT, OPENING_TEXT } from './collectionlist.js';
 import { localInputToIso, isoToLocalInput, zoneHint, nowInput, unreadDateHint } from './datetime.js';
 import { durationText, readDuration, DURATION_ERROR, unreadDurationHint } from './duration.js';
 import { coverOf } from './cover.js';
@@ -3298,16 +3298,13 @@ function OutlinePage({ feed, panel, draft, changedFeeds, go, onAdding, onImporti
 // `marked` is the feed that the last Back selection left marked. With a
 // `group`, the page shows the releases of one destination below Releases,
 // and the sort of that page is `groupSort` (ADR 0085 items 4 to 6).
-// The sort menu of a list (musicindex ADR 0027 R-LIST-1, ADR 0043 R-LIST-6).
-// Each sort has two entries: its usual direction, then its reversed direction
-// (musicindex ADR 0054 R-LIST-13, ADR 0155). `onSort` gets the sort and the
-// direction of the entry.
-export function SortMenu({ sorts, sort, reversed, onSort }) {
+// A menu button and its menu use the sort menu styles and Escape behavior.
+function MenuControl({ buttonLabel, accessibleName, menuLabel, items, onSelect }) {
   const [open, setOpen] = useState(false);
   const button = useRef(null);
   const pick = (entry) => {
     setOpen(false);
-    onSort(entry.sort, entry.reversed);
+    onSelect(entry);
     if (button.current) button.current.focus();
   };
   // Escape closes the menu and keeps the focus on its button.
@@ -3320,16 +3317,29 @@ export function SortMenu({ sorts, sort, reversed, onSort }) {
   };
   return html`<div class="sort" onKeyDown=${onKey}>
     <button class="button" type="button" ref=${button} aria-haspopup="menu"
-      aria-expanded=${open ? 'true' : 'false'} onClick=${() => setOpen(!open)}>
-      ${sortLabel(sort, reversed)} ⌄</button>
-    ${open && html`<ul class="sort-menu" role="menu" aria-label="Sort">
-      ${sortEntries(sorts).map((entry) => {
-        const current = entry.sort === sort && entry.reversed === reversed;
-        return html`<li><button type="button" role="menuitemradio" aria-checked=${current ? 'true' : 'false'}
-          onClick=${() => pick(entry)}><span class="sort-mark" aria-hidden="true">${current ? '✓' : ''}</span>${entry.label}</button></li>`;
-      })}
+      aria-label=${accessibleName} aria-expanded=${open ? 'true' : 'false'} onClick=${() => setOpen(!open)}>
+      ${buttonLabel} ⌄</button>
+    ${open && html`<ul class="sort-menu" role="menu" aria-label=${menuLabel}>
+      ${items.map((entry) => html`${entry.separatorBefore && html`<li class="menu-separator" role="separator"></li>`}
+        <li><button class=${entry.destructive ? 'menu-destructive' : ''} type="button" role=${entry.role || 'menuitem'}
+          aria-checked=${entry.checked === undefined ? undefined : (entry.checked ? 'true' : 'false')}
+          onClick=${() => pick(entry)}>${entry.mark !== undefined && html`<span class="sort-mark" aria-hidden="true">${entry.mark}</span>`}${entry.label}</button></li>`)}
     </ul>`}
   </div>`;
+}
+
+// The sort menu of a list (musicindex ADR 0027 R-LIST-1, ADR 0043 R-LIST-6).
+// Each sort has two entries: its usual direction, then its reversed direction
+// (musicindex ADR 0054 R-LIST-13, ADR 0155). `onSort` gets the sort and direction.
+export function SortMenu({ sorts, sort, reversed, onSort }) {
+  const items = sortEntries(sorts).map((entry) => ({
+    ...entry,
+    role: 'menuitemradio',
+    checked: entry.sort === sort && entry.reversed === reversed,
+    mark: entry.sort === sort && entry.reversed === reversed ? '✓' : '',
+  }));
+  return html`<${MenuControl} buttonLabel=${sortLabel(sort, reversed)} menuLabel="Sort" items=${items}
+    onSelect=${(entry) => onSort(entry.sort, entry.reversed)} />`;
 }
 
 // The letter bar of "A to Z" (musicindex ADR 0027 R-LIST-1 item 2). A letter
@@ -4912,37 +4922,39 @@ function CollectionsPanel() {
     setTimeout(() => setOpening(false), 10000);
   });
   return html`<section class="page-section settings-section">
-    <h2>Collections</h2><div class="group settings-group">
+    <h2>Collections</h2><div class="group settings-group collections-group">
     <p class="hint">${COLLECTIONS_HINT}</p>
-    <div class="group">
+    <div class="group collection-rows">
       ${list.map((collection) => {
         const row = collectionRow(collection);
         const choose = (kind) => setAction({ kind, collection });
         return html`<div class="link-row static collection-row" key=${collection.folder}>
-          <span class="text"><span class="label">${row.name}</span><span class="summary">${row.line}</span></span>
-          ${row.tag && html`<span class="tag-open">${row.tag}</span>`}
-          <div class="actions">
-            ${row.canOpen && html`<button class="button action" type="button" disabled=${opening} onClick=${() => open(collection.folder)}>Open</button>`}
-            ${row.canRename && html`<button class="button action" type="button" disabled=${opening} onClick=${() => choose('rename')}>Rename…</button>`}
-            ${row.canReplace && html`<button class="button action" type="button" disabled=${opening} onClick=${() => choose('replace')}>Replace with a File…</button>`}
-            ${row.canDelete && html`<button class="button destructive" type="button" disabled=${opening} onClick=${() => choose('delete')}>Delete…</button>`}
-          </div>
+          <span class="text"><span class="label">${row.name}${row.badge && html` <span class="default-tag"><${Icon} name="check" />${row.badge}</span>`}</span><span class="summary">${row.line}</span></span>
+          <${MenuControl} buttonLabel="Actions" accessibleName=${`Actions for ${collection.name}`}
+            menuLabel=${`Actions for ${collection.name}`} items=${row.actions.map((entry) => ({
+              ...entry,
+              role: 'menuitem',
+            }))} onSelect=${(entry) => {
+              if (entry.action === 'open') open(collection.folder);
+              else if (entry.action === 'export') setExporting(collection);
+              else if (entry.action === 'copy') setSheet('copy');
+              else choose(entry.action);
+            }} />
         </div>`;
       })}
     </div>
     ${opening && html`<p class="hint" role="status">${OPENING_TEXT}</p>`}
     <${ErrorNotice} error=${error} />
     <div class="actions">
-      <button class="button action" type="button" onClick=${() => setSheet('new')}>New Collection…</button>
-      <button class="button action" type="button" onClick=${() => setSheet('copy')}>Copy This Collection…</button>
-      <button class="button action" type="button" onClick=${() => setSheet('import')}>Import an Account File…</button>
-      <button class="button action" type="button" onClick=${() => setExporting(true)}>Export This Collection…</button>
+      ${collectionSectionActions().map((entry) => html`<button class="button action" type="button"
+        onClick=${() => setSheet(entry.action)}>${entry.label}</button>`)}
     </div>
     <${CollectionSheet} kind=${sheet} openName=${openName} onClose=${() => setSheet(null)}
       onDone=${async (made) => { setSheet(null); await load(); await open(made.folder); }} />
     ${action && html`<${CollectionActionSheet} kind=${action.kind} collection=${action.collection}
       onClose=${() => setAction(null)} onDone=${async () => { setAction(null); await load(); }} />`}
-    ${exporting && html`<${ExportSheet} onClose=${() => setExporting(false)} />`}
+    ${exporting !== false && html`<${ExportSheet} folder=${exporting && !exporting.open ? exporting.folder : null}
+      onClose=${() => setExporting(false)} />`}
   </div></section>`;
 }
 

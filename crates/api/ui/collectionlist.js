@@ -14,19 +14,35 @@ function feedsText(collection) {
   return collection.feeds === 1 ? '1 feed' : `${collection.feeds} feeds`;
 }
 
-// One row of the section "Collections" and its actions (ADR 0176 items 2 and
-// 3). A collection that is open has its files in use, so it has no Replace and
-// no Delete. The core refuses both too.
+// The menu entries of one row of "Collections" (ADR 0183 items 2 and 3).
 export function collectionRow(collection) {
+  const actions = collection.open
+    ? [
+        { label: 'Rename…', action: 'rename' },
+        { label: 'Copy…', action: 'copy' },
+        { label: 'Export…', action: 'export' },
+      ]
+    : [
+        { label: 'Open', action: 'open' },
+        { label: 'Rename…', action: 'rename' },
+        { label: 'Export…', action: 'export' },
+        { label: 'Replace with a File…', action: 'replace' },
+        { label: 'Delete…', action: 'delete', separatorBefore: true, destructive: true },
+      ];
   return {
     name: collection.name,
     line: feedsText(collection),
-    tag: collection.open ? 'Open now' : null,
-    canOpen: !collection.open,
-    canRename: true,
-    canReplace: !collection.open,
-    canDelete: !collection.open,
+    badge: collection.open ? 'Current' : null,
+    actions,
   };
+}
+
+// The actions below the collection list (ADR 0183 item 5).
+export function collectionSectionActions() {
+  return [
+    { label: 'New Collection…', action: 'new' },
+    { label: 'Import an Account File…', action: 'import' },
+  ];
 }
 
 const GOES = 'the feeds, the drafts, the versions, the people and the vault';

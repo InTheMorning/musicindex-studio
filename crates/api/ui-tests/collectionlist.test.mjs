@@ -1,7 +1,7 @@
 // The collections of the desktop app (ADR 0149).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { collectionMark, collectionRow, collectionAction, collectionSheet } from '../ui/collectionlist.js';
+import { collectionMark, collectionRow, collectionSectionActions, collectionAction, collectionSheet } from '../ui/collectionlist.js';
 import { leftPanel } from '../ui/shell.js';
 import { pageSequence, tierError } from '../ui/pages.js';
 
@@ -26,18 +26,36 @@ test('The left panel gives the mark after Settings, and it opens Settings (ADR 0
   assert.equal(row.current, false);
 });
 
-test('A closed row has Open, Rename, Replace and Delete (ADR 0176 item 2)', () => {
+test('The open row has the Actions and Current badge of ADR 0183 items 2 and 6', () => {
+  assert.deepEqual(collectionRow(test4), {
+    name: 'Test', line: '1 feed', badge: 'Current',
+    actions: [
+      { label: 'Rename…', action: 'rename' },
+      { label: 'Copy…', action: 'copy' },
+      { label: 'Export…', action: 'export' },
+    ],
+  });
+  assert.equal(collectionRow(test4).tag, undefined);
+});
+
+test('A closed row has the Actions of ADR 0183 item 3', () => {
   assert.deepEqual(collectionRow(main), {
-    name: 'Main collection', line: '14 feeds', tag: null,
-    canOpen: true, canRename: true, canReplace: true, canDelete: true,
+    name: 'Main collection', line: '14 feeds', badge: null,
+    actions: [
+      { label: 'Open', action: 'open' },
+      { label: 'Rename…', action: 'rename' },
+      { label: 'Export…', action: 'export' },
+      { label: 'Replace with a File…', action: 'replace' },
+      { label: 'Delete…', action: 'delete', separatorBefore: true, destructive: true },
+    ],
   });
 });
 
-test('The open row has Rename and the tag Open now, and no Replace and no Delete (ADR 0176 item 3)', () => {
-  assert.deepEqual(collectionRow(test4), {
-    name: 'Test', line: '1 feed', tag: 'Open now',
-    canOpen: false, canRename: true, canReplace: false, canDelete: false,
-  });
+test('The section actions below the list are New and Import only (ADR 0183 item 5)', () => {
+  assert.deepEqual(collectionSectionActions(), [
+    { label: 'New Collection…', action: 'new' },
+    { label: 'Import an Account File…', action: 'import' },
+  ]);
 });
 
 test('The sheets of replace and delete give the name, the count and the parts that go (ADR 0176 items 6 and 7)', () => {

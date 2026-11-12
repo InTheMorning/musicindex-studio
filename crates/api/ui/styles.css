@@ -1738,6 +1738,9 @@ button.outline-feed {
 }
 .sort-menu button:hover { background: var(--fill-soft); }
 .sort-menu .sort-mark { width: 1.2em; color: var(--accent); }
+.sort-menu .menu-separator { height: 1px; margin: 4px 6px; background: var(--sep); }
+.sort-menu button.menu-destructive { color: var(--error); }
+.collections-group, .collection-rows { overflow: visible; }
 .letters {
   position: sticky;
   top: var(--bar-h);
@@ -2284,12 +2287,10 @@ button.outline-feed {
 .releases-text .outside-mark.accent { color: var(--accent); }
 .releases-text .outside-mark.error { color: var(--error); }
 
-/* A row of the section "Collections" (ADR 0149 item 6). At a narrow width,
-   the buttons go below the name. */
+/* A row of the section "Collections" (ADR 0183). */
 .collection-row { flex-wrap: wrap; }
-.collection-row .text { flex: 1; min-width: 160px; display: grid; }
-.collection-row .tag-open { color: var(--accent); font-size: var(--text-callout); }
-.collection-row .actions { margin: 0; }
+.collection-row .text { flex: 1; min-width: 0; display: grid; }
+.collection-row .sort { margin-left: auto; }
 
 /* Under Increase Contrast the left panel has no glow, only the flat sidebar
    color. At 760 px or less the sticky layer of the panel pages goes too

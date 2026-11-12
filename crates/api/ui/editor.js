@@ -4030,7 +4030,7 @@ function ChangeRow({ difference, file, busy, onAct }) {
   </div>`;
 }
 
-// The sheet "Move This Release…" (ADR 0148 items 1 to 6, ADR 0177 item 3).
+// The sheet "Move This Release…" (ADR 0148 items 1 to 6, ADR 0180 item 2).
 // The core gives the plan of each file host and each value of "What moves".
 // `start` is the first file host of the select.
 function MoveReleaseSheet({ open, feed, connectors, start, onDone, onClose }) {
@@ -4484,12 +4484,9 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
     ${libraryRow && html`<section class="page-section"><h2>On this computer</h2>
       <div class="group">
         <div class="link-row static"><span class="text"><span class="label">Release folder</span>
-          <span class="summary mono">${libraryRow.path}</span>
-          ${libraryRow.moveToDefault && html`<span class="summary">Not in the standard folder: <span class="mono">${libraryRow.moveToDefault}</span></span>`}</span>
+          <span class="summary mono">${libraryRow.path}</span></span>
           <div class="actions">
             <button class="button" type="button" disabled=${busy} onClick=${() => setLibraryFolderOpen(true)}>Change…</button>
-            ${libraryRow.moveToDefault && html`<button class="button" type="button" disabled=${busy}
-              onClick=${() => run(() => moveLibraryFolder(libraryRow.moveToDefault))}>Move to Standard Folder</button>`}
           </div>
         </div>
       </div>
@@ -4497,7 +4494,7 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
         Scan the Library Folder</button></div>
     </section>`}
 
-    ${moves.length > 0 && html`<section class="page-section"><h2>Moves that wait</h2>
+    ${moves.length > 0 && html`<section class="page-section"><h2>Old files to delete</h2>
       ${moves.map((move) => html`<${WaitingMoveEntry} key=${move.records[0]} move=${move} connectors=${connectors} busy=${busy}
         onDelete=${deleteOldFiles} onDeleteNow=${deleteOldFilesNow} onKeep=${keepOldFiles} />`)}
     </section>`}

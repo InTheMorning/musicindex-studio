@@ -33,15 +33,9 @@ export function newFeedAddress(feed) {
 }
 
 // The row of the release folder in the section "On this computer" of the
-// Files page (ADR 0177 items 5 to 8). `files` is the answer of the Files
-// route. The row always has "Change…". It gives the relative standard path for
-// "Move to Standard Folder" only when the folder is not at that path. A server
-// that holds no assets gives no folder, so no row.
+// Files page (ADR 0180 item 4). `files` is the answer of the Files route. A
+// server that holds no assets gives no folder, so no row.
 export function libraryFolderRow(files) {
-  if (!files || files.library_folder == null || files.default_library_folder == null || files.library_folder_is_default == null) return null;
-  const moves = !files.library_folder_is_default;
-  return {
-    path: files.library_folder,
-    moveToDefault: moves ? files.default_library_folder_path : null,
-  };
+  if (!files || files.library_folder == null) return null;
+  return { path: files.library_folder };
 }

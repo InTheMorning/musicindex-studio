@@ -2,7 +2,7 @@
 
 - Decision: [ADR 0189](../adr/0189-a-move-sends-one-podping-of-the-old-address.md)
 
-Status: Complete on 2026-11-12, with packet 125b. The mechanical checks passed. The screenshot visual check passed: the notice gives one line, for the address before the move, with **Send the Podping**. In the human test of 2026-11-12, the notice gave one line, and the button sent the address before the move: Music Index moved the record 21 seconds after the send time. The line did not show the sent state, because the notice did not load again. ADR 0189 item 6 corrects that. Packet 125b is complete: in the screenshot check, a waiting line changed to the sent state with no new page. The human check of the sent line passed on 2026-11-12, in the release build of local `main`: after the move back to bastone, the line changed to the sent state with no click. In that check the operator found the state of the line hard to see. ADR 0189 item 7 adds a status tag. Packet 125c is complete: in the screenshot check, the waiting tag changed to the sent tag with no click, at 1280 px in the light theme and at 390 px in the dark theme. `$edges()` and `$overflow()` gave no result. The human check of the tag is open.
+Status: Complete on 2026-11-12, with packet 125b. The mechanical checks passed. The screenshot visual check passed: the notice gives one line, for the address before the move, with **Send the Podping**. In the human test of 2026-11-12, the notice gave one line, and the button sent the address before the move: Music Index moved the record 21 seconds after the send time. The line did not show the sent state, because the notice did not load again. ADR 0189 item 6 corrects that. Packet 125b is complete: in the screenshot check, a waiting line changed to the sent state with no new page. The human check of the sent line passed on 2026-11-12, in the release build of local `main`: after the move back to bastone, the line changed to the sent state with no click. In that check the operator found the state of the line hard to see. ADR 0189 item 7 adds a status tag. Packet 125c is complete: in the screenshot check, the waiting tag changed to the sent tag with no click, at 1280 px in the light theme and at 390 px in the dark theme. `$edges()` and `$overflow()` gave no result. The human check of the tag passed on 2026-11-12, in the release build of local `main`.
 
 ## Goal
 
@@ -56,4 +56,4 @@ Acceptance criteria:
 
 - Mechanical: the Node tests above, and the four checks.
 - Visual, by the planning model: the notice with a waiting tag and with a sent tag, at 1280 px and at 390 px, in the light and dark themes. `$edges()` gives no result.
-- Human, by the operator: the tag is easy to see in the release build. This gate stays open until it runs.
+- Human, by the operator: the tag is easy to see in the release build. This gate passed on 2026-11-12.

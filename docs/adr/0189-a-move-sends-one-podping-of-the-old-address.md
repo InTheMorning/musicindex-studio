@@ -52,7 +52,7 @@ Visual, by the planning model:
 - The notice with one line, at 1280 px, in the light theme.
 - The notice with a waiting tag and with a sent tag, at 1280 px and at 390 px, in the light and dark themes.
 
-Human, by the operator. The first gate passed on 2026-11-12. The second gate stays open until it runs:
+Human, by the operator. Both gates passed on 2026-11-12:
 
 - After a real move of a feed between two file hosts, the notice gives one line, for the address before the move. **Send the Podping** sends that address, and the line shows "sent".
 - In the release build, the status tag of a waiting line and of a sent line is easy to see.

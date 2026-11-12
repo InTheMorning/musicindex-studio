@@ -1,6 +1,6 @@
 # Studio V1 Task 104: Find On Music Index For An Open Credit
 
-Status: Complete, with its screenshot visual check on 2026-11-11. The operator accepted the screenshots of **Replace**. The screenshots used a fixed answer in place of Music Index. The human test is open.
+Status: Complete, with its screenshot visual check on 2026-11-11. The operator accepted the screenshots of **Replace**. The screenshots used a fixed answer in place of Music Index. The human test passed on 2026-11-12, in the release build of local `main`.
 
 Owner of the rules: [ADR 0169](../adr/0169-an-open-credit-can-find-on-music-index.md), and [ADR 0145](../adr/0145-each-sheet-that-adds-a-value-has-one-layout.md) items 1, 3, 5 and 8. ADR 0169 changes item 8 of ADR 0145 for an open credit.
 

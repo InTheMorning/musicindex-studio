@@ -256,3 +256,5 @@ The operator selected this design in the questionnaire, as a drawing:
 - Below the list, only **New Collection…** and **Import an Account File…** stay.
 
 An export of a collection that is not open is new. At this time, only the delete sheet has **Export First…** for such a collection (ADR 0176 item 7).
+
+The tag "Open now" of the open collection is blue text. It looks like an action. The operator selected the badge "✓ Current", in the style of the badge "✓ Default" of a wallet.

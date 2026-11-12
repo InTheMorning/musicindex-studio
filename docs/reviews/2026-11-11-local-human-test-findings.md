@@ -259,3 +259,9 @@ The operator selected this design in the questionnaire, as a drawing:
 An export of a collection that is not open is new. At this time, only the delete sheet has **Export First…** for such a collection (ADR 0176 item 7).
 
 The tag "Open now" of the open collection is blue text. It looks like an action. The operator selected the badge "✓ Current", in the style of the badge "✓ Default" of a wallet.
+
+### Finding 20: A Value That Comes Back Changes The Order Of The Attributes
+
+Owner: the owner of the write of a person is not known. [ADR 0169](../adr/0169-an-open-credit-can-find-on-music-index.md) item 5 makes the fill a change of the draft.
+
+In the test of task 104, the operator cleared the picture address of the credit HeyCitizen (Keyboardist) on "HeyCitizen's Test Album". **Find on Music Index** then filled the same address again. Review showed the `<podcast:person>` line of that credit as changed. Only the order of the attributes changed: `img` moved from the first place to the last place. Thus a draft with no change of a value gives a changed line and a new `lastBuildDate`.

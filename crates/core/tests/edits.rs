@@ -147,6 +147,85 @@ fn a_podcast_element_in_a_feed_without_the_namespace_adds_the_declaration() {
 }
 
 #[test]
+fn a_credit_that_returns_to_its_hosted_values_keeps_its_bytes() {
+    let source = "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel><title>T</title><podcast:person img=\"https://example.com/ann.jpg\" role=\"vocals\">Ann</podcast:person></channel></rss>";
+    let hosted = Document::parse(source).unwrap();
+    let mut doc = Document::parse(source).unwrap();
+    let mut feed = Feed::read(&doc).unwrap();
+    feed.persons[0].img = None;
+    feed.write_hosted(&mut doc, Some(&hosted)).unwrap();
+    let mut feed = Feed::read(&doc).unwrap();
+    feed.persons[0].img = Some("https://example.com/ann.jpg".into());
+    feed.write_hosted(&mut doc, Some(&hosted)).unwrap();
+    let after = doc.write();
+    assert_eq!(
+        after, source,
+        "ADR 0185 item 5: restored values keep the hosted tag bytes."
+    );
+}
+
+#[test]
+fn a_changed_credit_attribute_keeps_its_place_and_new_attributes_go_last() {
+    let source = "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel><title>T</title><podcast:person href=\"https://example.com/ann\" img=\"https://example.com/old.jpg\" role=\"vocals\">Ann</podcast:person></channel></rss>";
+    let after = edit(source, |feed| {
+        let credit = &mut feed.persons[0];
+        credit.img = Some("https://example.com/new.jpg".into());
+        credit.npub = Some("npub1ann".into());
+    });
+    assert!(
+        after.contains("<podcast:person href=\"https://example.com/ann\" img=\"https://example.com/new.jpg\" role=\"vocals\" npub=\"npub1ann\">Ann</podcast:person>"),
+        "ADR 0185 items 5 and 6: changed attributes keep their slots, and new attributes go last. {after}"
+    );
+}
+
+#[test]
+fn a_new_credit_above_a_changed_credit_does_not_change_its_hosted_pair() {
+    let source = "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel><title>T</title><podcast:person img=\"https://example.com/ann.jpg\" role=\"vocals\">Ann</podcast:person></channel></rss>";
+    let hosted = Document::parse(source).unwrap();
+    let mut doc = Document::parse(source).unwrap();
+    let mut feed = Feed::read(&doc).unwrap();
+    feed.persons.insert(
+        0,
+        Entry::new(Person {
+            name: "New credit".into(),
+            ..Person::default()
+        }),
+    );
+    feed.persons[1].img = None;
+    feed.write_hosted(&mut doc, Some(&hosted)).unwrap();
+
+    let mut feed = Feed::read(&doc).unwrap();
+    feed.persons[1].img = Some("https://example.com/ann.jpg".into());
+    feed.write_hosted(&mut doc, Some(&hosted)).unwrap();
+
+    assert!(doc.write().contains(
+        "<podcast:person img=\"https://example.com/ann.jpg\" role=\"vocals\">Ann</podcast:person>"
+    ));
+}
+
+#[test]
+fn a_credit_that_restores_an_attribute_keeps_hosted_order_after_another_change() {
+    let source = "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel><title>T</title><podcast:person href=\"https://example.com/ann\" img=\"https://example.com/ann.jpg\" role=\"vocals\">Ann</podcast:person></channel></rss>";
+    let hosted = Document::parse(source).unwrap();
+    let mut doc = Document::parse(source).unwrap();
+    let mut feed = Feed::read(&doc).unwrap();
+    feed.persons[0].img = None;
+    feed.write_hosted(&mut doc, Some(&hosted)).unwrap();
+
+    let mut feed = Feed::read(&doc).unwrap();
+    feed.persons[0].role = Some("guest".into());
+    feed.write_hosted(&mut doc, Some(&hosted)).unwrap();
+
+    let mut feed = Feed::read(&doc).unwrap();
+    feed.persons[0].img = Some("https://example.com/ann.jpg".into());
+    feed.write_hosted(&mut doc, Some(&hosted)).unwrap();
+
+    assert!(doc.write().contains(
+        "<podcast:person href=\"https://example.com/ann\" img=\"https://example.com/ann.jpg\" role=\"guest\">Ann</podcast:person>"
+    ));
+}
+
+#[test]
 fn a_cdata_title_stays_cdata_after_a_change() {
     let source = "<rss><channel><title><![CDATA[Old]]></title></channel></rss>";
     let after = edit(source, |f| f.title = Some("New & <b>".into()));

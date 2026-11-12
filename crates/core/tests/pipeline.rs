@@ -975,39 +975,6 @@ fn a_draft_that_refers_to_an_imported_file_gives_one_upload_until_it_is_on_the_h
     assert_eq!(diff.files, Vec::new());
 }
 
-#[test]
-fn a_library_file_with_its_own_host_gives_an_upload_there_with_its_url() {
-    let mut s = setup();
-    s.collection.set_feed_folder(s.feed, "album").unwrap();
-    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
-
-    let second_dir = tempfile::tempdir().unwrap();
-    let second_folder = LocalFolder::new(second_dir.path(), Some("https://second.example".into()));
-    let second_id = s
-        .collection
-        .add_connector(LocalFolder::KIND, "Second", &second_folder.config(), None)
-        .unwrap();
-    s.hosts.insert(second_id, Box::new(second_folder));
-
-    let imported = import_file(&s, "01.mp3", b"one");
-    s.collection
-        .set_library_file_connector(imported.library_file_id, Some(second_id))
-        .unwrap();
-    let planned = reference_planned(&s, imported.library_file_id);
-    assert_eq!(planned.connector_id, second_id);
-    assert_eq!(
-        planned.url.as_deref(),
-        Some("https://second.example/album/01.mp3")
-    );
-
-    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
-    assert_eq!(diff.operations.len(), 1);
-    let upload = &diff.operations[0];
-    assert_eq!(upload.kind, OperationKind::Upload);
-    assert_eq!(upload.connector_id, second_id);
-    assert_eq!(upload.url, planned.url);
-}
-
 /// A draft that refers to a copy of a library file on a different host
 /// uses that copy. The file needs no upload to its own host
 /// (ADR 0036 item 10).
@@ -1300,7 +1267,7 @@ fn the_diff_id_changes_when_a_host_operation_changes() {
 // ---- The write of each host operation (ADR 0036 items 14 to 16) ----
 
 #[test]
-fn a_release_with_files_on_two_hosts_writes_both_with_the_correct_address() {
+fn a_release_with_a_separate_files_host_writes_all_files_there() {
     let mut s = setup();
     s.collection.set_feed_folder(s.feed, "album").unwrap();
     pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
@@ -1313,14 +1280,14 @@ fn a_release_with_files_on_two_hosts_writes_both_with_the_correct_address() {
         .add_connector(LocalFolder::KIND, "Second", &second_folder.config(), None)
         .unwrap();
     s.hosts.insert(second_id, Box::new(second_folder));
+    s.collection
+        .set_files_connector(s.feed, Some(second_id))
+        .unwrap();
 
     let track_a = import_file(&s, "01.mp3", b"one");
     reference_planned(&s, track_a.library_file_id);
 
     let track_b = import_file(&s, "02.mp3", b"two");
-    s.collection
-        .set_library_file_connector(track_b.library_file_id, Some(second_id))
-        .unwrap();
     let planned_b = reference_planned(&s, track_b.library_file_id);
     assert_eq!(planned_b.connector_id, second_id);
     assert_eq!(planned_b.path, "album/02.mp3");
@@ -1339,7 +1306,10 @@ fn a_release_with_files_on_two_hosts_writes_both_with_the_correct_address() {
     )
     .unwrap();
 
-    assert_eq!(fs::read(s.dir.path().join("album/01.mp3")).unwrap(), b"one");
+    assert_eq!(
+        fs::read(second_dir.path().join("album/01.mp3")).unwrap(),
+        b"one"
+    );
     assert_eq!(
         fs::read(second_dir.path().join("album/02.mp3")).unwrap(),
         b"two"
@@ -1357,7 +1327,7 @@ fn a_release_with_files_on_two_hosts_writes_both_with_the_correct_address() {
         .filter_map(|item| item.value.enclosure.as_ref())
         .filter_map(|enclosure| enclosure.url.as_deref())
         .collect();
-    assert!(urls.contains(&"https://music.example/album/01.mp3"));
+    assert!(urls.contains(&"https://second.example/album/01.mp3"));
     assert!(urls.contains(&"https://second.example/album/02.mp3"));
 }
 

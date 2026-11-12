@@ -4336,9 +4336,6 @@ async fn a_copy_operation_gives_the_library_file_a_pending_copy() {
             "operation_id": operation_id,
         }])
     );
-    // The file has no host of its own, so it uses the default host of the
-    // release (ADR 0036 item 8).
-    assert_eq!(files["files"][0]["own_connector_id"], Value::Null);
 }
 
 /// ADR 0021 and ADR 0036 item 11: `PUT /connectors/{id}` changes the

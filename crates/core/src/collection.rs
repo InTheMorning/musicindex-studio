@@ -1071,9 +1071,6 @@ pub struct LibraryFile {
     pub local: bool,
     /// The address that the file came from, when Studio knows one.
     pub source_url: Option<String>,
-    /// The host that the user selected for the file. `None` means the
-    /// default host of the release (ADR 0036 item 4 and item 8).
-    pub connector_id: Option<ConnectorId>,
     /// The time that Studio added the row, in seconds after the Unix
     /// epoch.
     pub added_at: i64,
@@ -3093,24 +3090,6 @@ impl Collection {
             })
     }
 
-    /// Give a library file the host that the user selected, or `None`
-    /// for the default host of the release (ADR 0036 item 4 and item 8).
-    ///
-    /// # Errors
-    ///
-    /// Gives a [`CollectionError`] when SQLite fails.
-    pub fn set_library_file_connector(
-        &self,
-        id: LibraryFileId,
-        connector: Option<ConnectorId>,
-    ) -> Result<(), CollectionError> {
-        self.db.execute(
-            "UPDATE library_files SET connector_id = ?2 WHERE id = ?1",
-            params![id.0, connector.map(|c| c.0)],
-        )?;
-        Ok(())
-    }
-
     /// Record that the bytes of a library file are in the library now:
     /// `local` becomes true, with the size, the SHA-256 and the stamp of
     /// the file (ADR 0038 item 11).
@@ -4712,15 +4691,14 @@ fn library_file_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<LibraryFile> {
         media_type: r.get(5)?,
         local: r.get(6)?,
         source_url: r.get(7)?,
-        connector_id: r.get::<_, Option<i64>>(8)?.map(ConnectorId),
-        added_at: r.get(9)?,
-        stamp: r.get(10)?,
-        imported_at: r.get::<_, Option<i64>>(11)?.unwrap_or(r.get::<_, i64>(9)?),
-        removed_at: r.get(12)?,
+        added_at: r.get(8)?,
+        stamp: r.get(9)?,
+        imported_at: r.get::<_, Option<i64>>(10)?.unwrap_or(r.get::<_, i64>(8)?),
+        removed_at: r.get(11)?,
     })
 }
 
-const LIBRARY_FILE_SELECT: &str = "SELECT id, feed_id, path, size, sha256, media_type, local, source_url, connector_id, added_at, stamp, imported_at, removed_at FROM library_files";
+const LIBRARY_FILE_SELECT: &str = "SELECT id, feed_id, path, size, sha256, media_type, local, source_url, added_at, stamp, imported_at, removed_at FROM library_files";
 
 fn host_file_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<HostFile> {
     let size: i64 = r.get(2)?;
@@ -5676,13 +5654,6 @@ mod tests {
             [collection.library_file(file).unwrap()]
         );
         assert_eq!(collection.library_file(file).unwrap().path, "01 Song.mp3");
-        collection
-            .set_library_file_connector(file, Some(connector))
-            .unwrap();
-        assert_eq!(
-            collection.library_file(file).unwrap().connector_id,
-            Some(connector)
-        );
 
         // The host inventory.
         collection
@@ -6367,7 +6338,15 @@ mod tests {
 
         let collection = Collection::open(&path).unwrap();
         let file = collection.library_file(LibraryFileId(1)).unwrap();
-        assert_eq!(file.connector_id, None);
+        let host: Option<i64> = collection
+            .db()
+            .query_row(
+                "SELECT connector_id FROM library_files WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(host, None);
         assert_eq!(
             file.source_url.as_deref(),
             Some("https://file.example/song.mp3")

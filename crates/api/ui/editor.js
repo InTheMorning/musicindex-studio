@@ -3855,7 +3855,7 @@ function FileEntry({ file, defaultHost, connectors, busy, download, onDownload, 
   const summary = html`<span class="badge">${formatLabel(file.media_type)}</span>
     <span class="title">${file.path}</span>
     <span class=${state === null ? 'sub' : 'sub file-status'}>${file.in_use ? 'In use' : 'Not in use'} · ${status}</span>`;
-  const hostName = connectorName(connectors, file.own_connector_id ?? defaultHost);
+  const hostName = connectorName(connectors, defaultHost);
   const reference = (connectorId) => onOperation({ op: 'reference', file: file.id, connector_id: connectorId, from_url: file.url });
   const del = (connectorId, path) => onOperation({ op: 'delete', connector_id: connectorId, path });
   // A copy of a remote file asks first (ADR 0038 item 12). The size comes

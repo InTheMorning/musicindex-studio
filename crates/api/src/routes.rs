@@ -28,7 +28,7 @@ use studio_core::download;
 use studio_core::feed::{Entry, Feed, Recipient};
 use studio_core::folder_scan;
 use studio_core::grant;
-use studio_core::inventory::{self, Hosts};
+use studio_core::inventory::{self, Hosts, planned_path_on};
 use studio_core::keysend::{self, GuessSource, Lookup, LookupStatus};
 use studio_core::library::{self, Library};
 use studio_core::live::{self, LiveStatus};
@@ -3949,9 +3949,6 @@ pub(crate) async fn list_release_files(
                     .source_url
                     .as_deref()
                     .and_then(|url| lengths.get(url)),
-                // The host that the user selected for this file, or `null`
-                // for the default host of the release (ADR 0036 item 8).
-                "own_connector_id": file.connector_id.map(|c| c.0),
                 "url": planned.as_ref().and_then(|p| p.url.clone()),
                 "in_use": in_use,
                 "copies": copies,
@@ -4219,24 +4216,6 @@ pub(crate) async fn set_feed_host(
         Ok(())
     })
     .await
-}
-
-/// The path and the address where Studio would put `file` on
-/// `connector_id` (ADR 0036 item 9). The function forces the host for
-/// this one computation. It does not change the host of `file` in the
-/// collection.
-fn planned_path_on(
-    collection: &Collection,
-    hosts: &Hosts,
-    feed_row: &FeedRow,
-    file: &LibraryFile,
-    connector_id: ConnectorId,
-) -> Result<inventory::PlannedPath, ApiError> {
-    let mut forced = file.clone();
-    forced.connector_id = Some(connector_id);
-    Ok(inventory::planned_path(
-        collection, hosts, feed_row, &forced,
-    )?)
 }
 
 /// The address for the draft, for `file` on `connector_id` (ADR 0036

@@ -316,13 +316,11 @@ pub fn copies(
     Ok(found)
 }
 
-/// The host of a library file: its own host, or the default host of its
-/// release, or the host of the feed XML (ADR 0036 item 8).
+/// The host of a library file: the default host of its release, or the
+/// host of the feed XML (ADR 0180 item 17).
 #[must_use]
-pub fn host_of(feed: &FeedRow, file: &LibraryFile) -> Option<ConnectorId> {
-    file.connector_id
-        .or(feed.files_connector_id)
-        .or(feed.connector_id)
+pub fn host_of(feed: &FeedRow) -> Option<ConnectorId> {
+    feed.files_connector_id.or(feed.connector_id)
 }
 
 /// The start of the placeholder address of a library file on a file host
@@ -413,8 +411,8 @@ pub(crate) fn hash_name(path: &str, sha256: &str) -> String {
 ///
 /// # Errors
 ///
-/// Gives [`InventoryErrorKind::NoHost`] when `file` and `feed` give no
-/// host, [`InventoryErrorKind::UnknownHost`] when the set has no
+/// Gives [`InventoryErrorKind::NoHost`] when the feed gives no host,
+/// [`InventoryErrorKind::UnknownHost`] when the set has no
 /// connector for that host, or an [`InventoryError`] when a read fails or
 /// the collection database fails.
 pub fn planned_path(
@@ -423,12 +421,32 @@ pub fn planned_path(
     feed: &FeedRow,
     file: &LibraryFile,
 ) -> Result<PlannedPath, InventoryError> {
-    let connector_id = host_of(feed, file).ok_or_else(|| {
+    let connector_id = host_of(feed).ok_or_else(|| {
         InventoryError::new(
             InventoryErrorKind::NoHost,
             "the library file and its feed give no host",
         )
     })?;
+    planned_path_on(collection, hosts, feed, file, connector_id)
+}
+
+/// Plan the path and address of a library file on `connector_id`.
+///
+/// This function lets a file operation select a target host without changing
+/// the release's default files host (ADR 0036 item 9).
+///
+/// # Errors
+///
+/// Gives [`InventoryErrorKind::UnknownHost`] when the set has no connector
+/// for `connector_id`, or an [`InventoryError`] when a read fails or the
+/// collection database fails.
+pub fn planned_path_on(
+    collection: &Collection,
+    hosts: &Hosts,
+    feed: &FeedRow,
+    file: &LibraryFile,
+    connector_id: ConnectorId,
+) -> Result<PlannedPath, InventoryError> {
     let feed_path = feed.path.as_deref().unwrap_or("");
     let clean_path = release_path(feed_path, &file.path);
 
@@ -737,7 +755,7 @@ mod tests {
     }
 
     #[test]
-    fn host_of_gives_the_file_host_then_the_release_host_then_the_feed_host() {
+    fn host_of_uses_the_release_files_host_then_the_feed_host() {
         let mut collection = Collection::open_in_memory().unwrap();
         let feed_connector = collection
             .add_connector("local", "Feed", "{}", None)
@@ -745,44 +763,20 @@ mod tests {
         let files_connector = collection
             .add_connector("local", "Files", "{}", None)
             .unwrap();
-        let own_connector = collection
-            .add_connector("local", "Own", "{}", None)
-            .unwrap();
 
         let feed_id = collection
             .add_feed(None, Some((feed_connector, "a.xml")))
             .unwrap();
-        let file_id = collection
-            .add_library_file(
-                feed_id,
-                "a.mp3",
-                1,
-                Some("sha"),
-                "audio/mpeg",
-                true,
-                None,
-                None,
-            )
-            .unwrap();
-
-        // No default host and no file host: Studio uses the feed's host.
+        // With no release files host, Studio uses the feed host.
         let feed = collection.feed(feed_id).unwrap();
-        let file = collection.library_file(file_id).unwrap();
-        assert_eq!(host_of(&feed, &file), Some(feed_connector));
+        assert_eq!(host_of(&feed), Some(feed_connector));
 
-        // A default host of the release wins over the feed's host.
+        // The release files host takes priority.
         collection
             .set_files_connector(feed_id, Some(files_connector))
             .unwrap();
         let feed = collection.feed(feed_id).unwrap();
-        assert_eq!(host_of(&feed, &file), Some(files_connector));
-
-        // The file's own host wins over the default host.
-        collection
-            .set_library_file_connector(file_id, Some(own_connector))
-            .unwrap();
-        let file = collection.library_file(file_id).unwrap();
-        assert_eq!(host_of(&feed, &file), Some(own_connector));
+        assert_eq!(host_of(&feed), Some(files_connector));
     }
 
     #[test]

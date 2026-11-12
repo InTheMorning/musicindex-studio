@@ -11,7 +11,7 @@ use http_body_util::BodyExt;
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
-use crate::{Access, Workspace, local_router};
+use crate::{Access, Workspace, local_router, workspace_router};
 
 const TOKEN: &str = "test-token";
 const HOST: &str = "127.0.0.1:4100";
@@ -166,6 +166,28 @@ fn request(method: &str, path: &str, body: Option<Value>) -> Request<Body> {
 async fn call(app: &App, method: &str, path: &str, body: Option<Value>) -> (StatusCode, Value) {
     let (status, value, _) = send(app, request(method, path, body)).await;
     (status, value)
+}
+
+#[tokio::test]
+async fn only_the_desktop_app_router_has_the_system_folder_dialog_route() {
+    let desktop = app();
+    let (status, _) = call(&desktop, "POST", "/api/v1/choose-folder", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    let data = tempfile::tempdir().unwrap();
+    let workspace = Workspace::open(data.path()).unwrap();
+    let (server, _) = workspace_router(workspace);
+    let response = server
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/choose-folder")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
 /// Send a request and give its raw body, for a response that is not JSON.
@@ -15628,6 +15650,18 @@ async fn release_files_show_library_paths_and_library_folder_move_refusals() {
     );
     assert_eq!(moved["library_folder_is_default"], false);
 
+    let standard = root.join("Other/Album");
+    let (status, moved) = call(
+        &app,
+        "PUT",
+        &format!("/api/v1/feeds/{id}/library-folder"),
+        Some(json!({ "path": standard.to_str().unwrap() })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{moved}");
+    assert_eq!(moved["library_folder"], standard.to_str().unwrap());
+    assert_eq!(moved["library_folder_is_default"], true);
+
     for invalid in ["../outside", root.to_str().unwrap()] {
         let (status, response) = call(
             &app,
@@ -15641,10 +15675,7 @@ async fn release_files_show_library_paths_and_library_folder_move_refusals() {
     }
     let (status, unchanged) = call(&app, "GET", &format!("/api/v1/feeds/{id}/files"), None).await;
     assert_eq!(status, StatusCode::OK, "{unchanged}");
-    assert_eq!(
-        unchanged["library_folder"],
-        root.join("Custom/Album").to_str().unwrap()
-    );
+    assert_eq!(unchanged["library_folder"], standard.to_str().unwrap());
 }
 
 #[tokio::test]
@@ -15663,7 +15694,7 @@ async fn release_files_give_null_library_paths_on_a_server_without_assets() {
 }
 
 #[tokio::test]
-async fn the_library_folders_route_lists_relative_paths_through_three_levels() {
+async fn the_library_folder_browser_lists_one_level_and_makes_a_folder() {
     let app = app();
     let root = app.data.path().join("library");
     let (status, _) = call(
@@ -15684,14 +15715,34 @@ async fn the_library_folders_route_lists_relative_paths_through_three_levels() {
 
     let (status, response) = call(&app, "GET", "/api/v1/library/folders", None).await;
     assert_eq!(status, StatusCode::OK, "{response}");
-    assert_eq!(
-        response["folders"],
-        json!([
-            "Artist",
-            "Artist/Album",
-            "Artist/Album/Disc",
-            "Label",
-            "Label/Release"
-        ])
-    );
+    assert_eq!(response["folders"], json!(["Artist", "Label"]));
+
+    let (status, response) = call(
+        &app,
+        "GET",
+        "/api/v1/library/folders?parent=Artist/Album",
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert_eq!(response["folders"], json!(["Disc"]));
+
+    let (status, response) = call(
+        &app,
+        "POST",
+        "/api/v1/library/folders",
+        Some(json!({ "parent": "Artist", "name": "New Album" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert_eq!(response["path"], "Artist/New Album");
+
+    let (status, _) = call(
+        &app,
+        "POST",
+        "/api/v1/library/folders",
+        Some(json!({ "parent": "../outside", "name": "Bad" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }

@@ -1335,6 +1335,8 @@ select option { background: var(--level-3); color: var(--text); }
    window shows all of it (ADR 0073 item 2). */
 .link-row .text { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .link-row .text .summary { white-space: normal; overflow: visible; }
+/* A folder name can be one long word (ADR 0180 item 9). */
+.folder-browser .link-row .label, .link-row .text .summary.mono { overflow-wrap: anywhere; }
 /* A row with buttons. A narrow window puts the buttons below the text, so a
    button does not cover text (ADR 0177 item 9). */
 @media (max-width: 760px) {

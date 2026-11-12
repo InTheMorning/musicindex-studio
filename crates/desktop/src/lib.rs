@@ -9,8 +9,10 @@ use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 
-use studio_api::{Access, Workspace, local_router_with_drops};
-pub use studio_api::{CollectionsPlace, DroppedFiles, OnClose, OnOpen, WindowClose, Work};
+use studio_api::{Access, Workspace, local_router_with_drops_and_picker};
+pub use studio_api::{
+    CollectionsPlace, DroppedFiles, FolderPicker, OnClose, OnOpen, WindowClose, Work,
+};
 use tokio::net::TcpListener;
 
 /// The port that the desktop shells try first (ADR 0124 item 7). A fixed
@@ -82,7 +84,7 @@ pub fn harden_process() {
 }
 
 /// The settings that the start of the shell needs.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct StartOptions {
     /// The folder of the vault and the collection.
     pub data_dir: PathBuf,
@@ -98,6 +100,22 @@ pub struct StartOptions {
     /// The collections of the app (ADR 0149 item 5). A shell with `None` has
     /// no collection route.
     pub collections: Option<CollectionsPlace>,
+    /// The system folder picker of the desktop app, when a window owns it.
+    pub folder_picker: Option<FolderPicker>,
+}
+
+impl std::fmt::Debug for StartOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StartOptions")
+            .field("data_dir", &self.data_dir)
+            .field("musicindex", &self.musicindex)
+            .field("hub", &self.hub)
+            .field("has_window", &self.has_window)
+            .field("app_folder", &self.app_folder)
+            .field("collections", &self.collections.is_some())
+            .field("folder_picker", &self.folder_picker.is_some())
+            .finish()
+    }
 }
 
 impl StartOptions {
@@ -111,6 +129,7 @@ impl StartOptions {
             has_window: false,
             app_folder: None,
             collections: None,
+            folder_picker: None,
         }
     }
 }
@@ -304,12 +323,13 @@ where
     } else {
         studio_api::WindowClose::default()
     };
-    let router = local_router_with_drops(
+    let router = local_router_with_drops_and_picker(
         workspace,
         access,
         dropped.clone(),
         window_close.clone(),
         options.collections.clone(),
+        options.folder_picker.clone(),
     );
     let serve = async move {
         // The lock stays until the serve ends.

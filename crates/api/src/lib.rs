@@ -25,6 +25,7 @@ mod work;
 mod workspace;
 
 use std::sync::{Arc, Mutex};
+use std::{future::Future, path::PathBuf, pin::Pin};
 
 use axum::extract::DefaultBodyLimit;
 use axum::middleware;
@@ -44,6 +45,10 @@ pub use workspace::{
     AccountIdentity, AppChange, AppHook, ClientAddress, Clock, ServerRules, VaultState, WallClock,
     Workspace, WorkspaceHandle, private_dir,
 };
+
+/// A system folder picker supplied by the desktop app.
+pub type FolderPicker =
+    Arc<dyn Fn(PathBuf) -> Pin<Box<dyn Future<Output = Option<PathBuf>> + Send>> + Send + Sync>;
 
 /// Serve a router until `shutdown` completes. After the signal, the server
 /// accepts no connection and waits for each request that started.
@@ -122,6 +127,18 @@ pub fn local_router_with_drops(
     window_close: WindowClose,
     collections: Option<CollectionsPlace>,
 ) -> Router {
+    local_router_with_drops_and_picker(workspace, access, dropped, window_close, collections, None)
+}
+
+/// The local router with an optional system folder picker for the desktop app.
+pub fn local_router_with_drops_and_picker(
+    workspace: Workspace,
+    access: Access,
+    dropped: DroppedFiles,
+    window_close: WindowClose,
+    collections: Option<CollectionsPlace>,
+    folder_picker: Option<FolderPicker>,
+) -> Router {
     // The desktop public origin is its loopback address (ADR 0110 item 12).
     let workspace = if workspace.public_origin.is_none() {
         workspace.with_public_origin(&format!("http://127.0.0.1:{}", access.port))
@@ -130,7 +147,7 @@ pub fn local_router_with_drops(
     };
     let has_collections = collections.is_some();
     let work = workspace.work();
-    let (workspace_routes, handle) = workspace_router(workspace);
+    let (workspace_routes, handle, shared) = workspace_router_with_shared(workspace);
     handle.spawn_lock_watch();
     let collection_routes = collections.map(|place| {
         collections::routes(collections::CollectionsState {
@@ -159,14 +176,29 @@ pub fn local_router_with_drops(
         Some(routes) => local.merge(routes),
         None => local,
     };
+    let routes = if let Some(picker) = folder_picker {
+        routes.route(
+            "/api/v1/choose-folder",
+            post(routes::choose_folder)
+                .layer::<_, std::convert::Infallible>(axum::Extension(picker))
+                .layer::<_, std::convert::Infallible>(axum::Extension(shared)),
+        )
+    } else {
+        routes
+    };
     routes.layer(middleware::from_fn_with_state(access, access::check))
 }
 
 /// The routes of one workspace: `/api/v1` and `/app/v1`, with the workers
 /// attached. The router has no access layer and no UI routes. The caller
 /// adds its own access rules (ADR 0055 item 4).
-#[expect(clippy::too_many_lines, reason = "the function is one list of routes")]
 pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
+    let (router, handle, _) = workspace_router_with_shared(workspace);
+    (router, handle)
+}
+
+#[expect(clippy::too_many_lines, reason = "the function is one list of routes")]
+fn workspace_router_with_shared(workspace: Workspace) -> (Router, WorkspaceHandle, routes::Shared) {
     let queue = Arc::clone(&workspace.downloads);
     let announcer = Arc::clone(&workspace.announcer);
     let shared: routes::Shared = Arc::new(Mutex::new(workspace));
@@ -466,7 +498,10 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
             "/library",
             get(routes::get_library).put(routes::put_library),
         )
-        .route("/library/folders", get(routes::library_folders))
+        .route(
+            "/library/folders",
+            get(routes::library_folders).post(routes::make_library_folder),
+        )
         .route("/library/limits", put(routes::put_library_limits))
         .route("/library/scan", post(routes::scan_library))
         .route("/feeds/{id}/library-changes", post(routes::library_changes))
@@ -520,7 +555,7 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
         .nest("/api/v1", api)
         .nest("/app/v1", app_api)
         .merge(audio);
-    (router, WorkspaceHandle::new(shared))
+    (router, WorkspaceHandle::new(Arc::clone(&shared)), shared)
 }
 
 #[cfg(test)]

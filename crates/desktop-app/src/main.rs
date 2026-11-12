@@ -554,6 +554,22 @@ fn setup(app: &AppHandle) -> Result<(), String> {
         options.has_window = true;
         options.app_folder = Some(root.clone());
         options.collections = Some(collections);
+        let dialog_app = app.clone();
+        options.folder_picker = Some(std::sync::Arc::new(move |library_root| {
+            let dialog_app = dialog_app.clone();
+            Box::pin(async move {
+                let (sender, receiver) = oneshot::channel();
+                dialog_app
+                    .dialog()
+                    .file()
+                    .set_directory(library_root)
+                    .pick_folder(move |chosen| {
+                        let path = chosen.and_then(|file| file.into_path().ok());
+                        let _ = sender.send(path);
+                    });
+                receiver.await.ok().flatten()
+            })
+        }));
         let shutdown = async {
             let _ = receiver.await;
         };

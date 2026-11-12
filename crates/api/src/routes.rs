@@ -4015,19 +4015,73 @@ pub(crate) async fn list_release_files(
     .await
 }
 
-/// List folders in the library for the library-folder sheet (ADR 0167 item 6).
-pub(crate) async fn library_folders(State(shared): State<Shared>) -> ApiResult {
+/// List folders below the selected parent in the library-folder sheet (ADR 0180 item 9).
+pub(crate) async fn library_folders(
+    State(shared): State<Shared>,
+    Query(query): Query<LibraryFoldersQuery>,
+) -> ApiResult {
     blocking(shared, move |w| {
         if w.collection.asset_rules().is_some() && !w.holds_assets() {
             return Ok(Json(json!({ "folders": [] })));
         }
         let folders = w
             .library()?
-            .folders()
+            .folders_under(query.parent.as_deref().unwrap_or(""))
             .map_err(|error| ApiError::internal(error.to_string()))?;
         Ok(Json(json!({ "folders": folders })))
     })
     .await
+}
+
+#[derive(Deserialize)]
+pub(crate) struct LibraryFoldersQuery {
+    parent: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct MakeLibraryFolder {
+    parent: String,
+    name: String,
+}
+
+/// Make one folder in the library (ADR 0180 items 9 and 10).
+pub(crate) async fn make_library_folder(
+    State(shared): State<Shared>,
+    Json(body): Json<MakeLibraryFolder>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        if w.collection.asset_rules().is_some() && !w.holds_assets() {
+            return Err(ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "assets_unavailable",
+                "This server holds no library.",
+            ));
+        }
+        let library = w.library()?;
+        let path = library
+            .create_folder(&body.parent, &body.name)
+            .map_err(|error| {
+                ApiError::new(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "invalid_library_folder",
+                    error.to_string(),
+                )
+            })?;
+        Ok(Json(json!({ "parent": body.parent, "path": path })))
+    })
+    .await
+}
+
+/// Open the system folder dialog through the desktop app (ADR 0180 item 8).
+pub(crate) async fn choose_folder(
+    Extension(shared): Extension<Shared>,
+    Extension(picker): Extension<crate::FolderPicker>,
+) -> ApiResult {
+    let root = blocking(shared, |w| Ok(w.library()?.root().to_path_buf())).await?;
+    let path = picker(root)
+        .await
+        .map(|path| path.to_string_lossy().into_owned());
+    Ok(Json(json!({ "path": path })))
 }
 
 #[derive(Deserialize)]
@@ -4046,16 +4100,22 @@ pub(crate) async fn set_library_folder(
         if w.collection.asset_rules().is_some() && !w.holds_assets() {
             return Err(ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, "assets_unavailable", "This server holds no library, so the release has no library folder."));
         }
-        if !library::Library::is_folder_path(&body.path) {
+        let library = w.library()?;
+        let relative_path = std::path::Path::new(&body.path)
+            .strip_prefix(library.root())
+            .map_or_else(
+                |_| body.path.clone(),
+                |relative| relative.to_string_lossy().replace('\\', "/"),
+            );
+        if !library::Library::is_folder_path(&relative_path) {
             return Err(ApiError::new(StatusCode::UNPROCESSABLE_ENTITY, "invalid_library_folder", "Studio cannot move the folder there. Give a folder path inside the library folder, such as Artist/Album."));
         }
-        let library = w.library()?;
-        library::move_release_folder(&w.collection, &library, feed_id, &body.path)
+        library::move_release_folder(&w.collection, &library, feed_id, &relative_path)
             .map_err(|error| ApiError::new(StatusCode::CONFLICT, "library_move_failed", error.to_string()))?;
         Ok(Json(json!({
-            "library_folder": library.root().join(&body.path).to_string_lossy(),
+            "library_folder": library.root().join(&relative_path).to_string_lossy(),
             "default_library_folder": library.root().join(release_default_folder(w, feed_id)?).to_string_lossy(),
-            "library_folder_is_default": body.path == release_default_folder(w, feed_id)?,
+            "library_folder_is_default": relative_path == release_default_folder(w, feed_id)?,
         })))
     }).await
 }

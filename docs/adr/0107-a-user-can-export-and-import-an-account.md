@@ -6,6 +6,7 @@
 - Accepted: 2026-11-01 by the operator.
 - Amended: 2026-11-01 by the operator, from the mockups in `.studio-dev/mockup-107/site/move.js`. Item 4: an export of a vault that cannot move needs a recovery key first. Item 3: the desktop export is in Settings. Item 9: the desktop import is only on the empty Releases page.
 - Changed by: [ADR 0110](0110-a-connected-app-signs-each-request-with-its-own-key.md). Item 2: the index holds the public keys of the apps. Item 14: after an import, each app shows "Connect Again", and the account has no grant.
+- Changed by: [ADR 0176](0176-the-user-controls-each-collection.md). Item 3 and item 9 on the desktop app: the export and the import are in "Collections", and an import can replace a closed collection.
 - Changes: [ADR 0055](0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) items 2 and 3 (the user folder and its library), and item 7 (sign-up).
 - Uses: [ADR 0003](0003-user-unlocked-secret-vault.md) item 5 (one vault format in the two shells), [ADR 0013](0013-vault-format-and-cryptography.md), [ADR 0056](0056-server-sign-in-methods-and-vault-wrappers.md) (the sign-in methods and the wrappers), [ADR 0058](0058-grant-vaults-and-connected-apps-on-the-server.md) (grant vaults and the index of app tokens), [ADR 0059](0059-uploads-in-parts-and-the-home-screen-app.md) (uploads in parts) and [ADR 0105](0105-a-public-server-holds-no-assets.md) (a server that holds no assets).
 

@@ -6,6 +6,7 @@
 - Accepted: 2026-11-06 by the operator, from a mockup and a questionnaire.
 - Technical choices: items 3, 4, 10, 12, 13, 16, 18 and 19 are choices of the planning model.
 - Changes: [ADR 0107](0107-a-user-can-export-and-import-an-account.md) item 9 on the desktop app. The data folder of [ADR 0124](0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md).
+- Changed by: [ADR 0176](0176-the-user-controls-each-collection.md). Items 2, 6, 11, 12 and 17: no collection is special, each closed collection has rename, replace and delete, and the export is in "Collections".
 - Source: [findings of local use, findings 12, 13 and 17](../reviews/2026-11-06-local-use-findings.md)
 
 ## Context

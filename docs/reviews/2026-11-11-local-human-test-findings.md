@@ -209,3 +209,11 @@ Owner: [ADR 0129](../adr/0129-a-draft-takes-a-change-of-the-hosted-file.md) for 
 The draft of the artist feed "HeyCitizen" had two credits: an empty credit and HeyCitizen (musician). The empty credit had no name, no role, no group, no picture, no address and no npub. The hosted file had only HeyCitizen (musician). The cause of the empty credit is not known.
 
 The merge panel showed the empty credit as JSON text: `{"group":null,"href":null,"img":null,"name":"","npub":null,"role":null}`. The function `mergeValue` in `crates/api/ui/review.js` uses JSON text for an entry with no name.
+
+The fix shows an entry with no text as "No name". An examination of the code gave these facts:
+
+- The core writes a credit with no name as an empty `<podcast:person/>` tag. A test confirmed this. `write_list` in `crates/core/src/feed/sync.rs` has no filter for an empty entry.
+- The save of a draft (`replace_model` in `crates/core/src/pipeline.rs`) does not refuse a credit with no name.
+- The sheet "Add a Credit" refuses an empty name. The field "Name" of an open credit accepts an empty value.
+
+Thus the probable cause is a name that the user cleared in an open credit. This is not confirmed. A decision must give the rule: the save refuses a credit with no name, or the write leaves out a credit with no name and no npub. `Feed::credit_places` already treats such a credit as no credit.

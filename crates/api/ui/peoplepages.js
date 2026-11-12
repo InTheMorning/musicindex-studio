@@ -15,7 +15,7 @@ import {
   walletSheetReady, recipientTitle,
 } from './recipients.js';
 import {
-  peopleSections, PEOPLE_EMPTY, PEOPLE_SERVER_NOTE, suggestionRow, personRow, makePersonBody, initials,
+  peopleSections, PEOPLE_EMPTY, PEOPLE_SERVER_NOTE, suggestionRow, personRow, displayName, makePersonBody, initials,
   filterPeople, filterPayees, payeesWithNoPerson, peopleOrder, openChanges, whereEntries, changeRow, memberChoices,
   toggledItem, dismissBody, addPersonBody, moreAddLabel,
   checkedIds, toggledRow, reviewLabel, addResultLine, keyValue, keyFromValue, memberLine, walletGroups, addressOptions, isDefaultAddress, DEFAULT_HINT,
@@ -44,7 +44,7 @@ const merged = new Map();
 // Studio cannot read, shows the initials of the name.
 export function PersonArt({ person, large = false, small = false }) {
   const { src } = useImage(person.img);
-  return html`<span class=${large ? 'person-art large' : small ? 'person-art small' : 'person-art'} aria-hidden="true">${src ? html`<img src=${src} alt="" />` : initials(person.name)}</span>`;
+  return html`<span class=${large ? 'person-art large' : small ? 'person-art small' : 'person-art'} aria-hidden="true">${src ? html`<img src=${src} alt="" />` : initials(displayName(person))}</span>`;
 }
 
 // The profiles of Nostr keys, from `POST /nostr/resolve`. The value is null
@@ -369,7 +369,7 @@ const AddRow = ({ title, onClick }) => html`<button class="link-row add" type="b
 // has a mark. "Use" of a suggestion changes the value only (ADR 0113 item 8).
 function PersonFields({ values, saved, update, detail, profiles, titles, feeds, sources = {}, pageRows = { img: [], href: [] } }) {
   // A filled field shows the line of its source until Save or Discard (ADR 0117 item 14).
-  const field = (id, label, key) => html`<${Field} id=${id} label=${label} value=${values[key]} hint=${sources[key]}
+  const field = (id, label, key, hint = sources[key]) => html`<${Field} id=${id} label=${label} value=${values[key]} hint=${hint}
     class=${isPending(saved, values, key) ? 'pending' : undefined}
     onInput=${(e) => update({ [key]: e.target.value })} />`;
   // The suggestions of the core for one field.
@@ -391,7 +391,7 @@ function PersonFields({ values, saved, update, detail, profiles, titles, feeds, 
     return html`<p class="hint suggest-heading">${list.heading}</p><div class="group">${rows}</div>`;
   };
   return html`<div class="group rows">
-    ${field('person-name', 'Name', 'name')}
+    ${field('person-name', 'Name', 'name', sources.name || 'Studio puts this name in a new credit.')}
     <${RoleMenu} id="person-role" label="Usual role" role=${values.usual_role} group=${values.usual_group} hint="The start value of a new credit."
       pending=${isPending(saved, values, 'usual_role')}
       onChange=${(role, group) => update({ usual_role: role, usual_group: group })} />
@@ -796,6 +796,7 @@ export function PersonPage({ id, feeds, go }) {
   // (ADR 0116 items 1 to 6). The saved values come from each read of the person.
   const [values, setValues] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [nicknameOpen, setNicknameOpen] = useState(false);
   const [saveFailure, setSaveFailure] = useState(null);
   // The line of each filled field. Save, Discard and a new read clear it.
   const [sources, setSources] = useState({});
@@ -907,7 +908,7 @@ export function PersonPage({ id, feeds, go }) {
   });
   const sections = {
     profile: () => html`<${Fragment}><header class="person-head"><${PersonArt} person=${person} large />
-      <div class="text"><h1>${person.name}</h1>
+      <div class="text"><div class="person-name-line"><h1>${displayName(shown || person)}</h1><button class="button quiet icon-button" type="button" aria-label="Change the Nickname" onClick=${() => setNicknameOpen(true)}><${Icon} name="pencil" /></button></div>
         ${(profile.role || profile.members.length > 0) && html`<p class="hint">${profile.role}${profile.role && profile.members.length > 0 && ' · '}${profile.members.map((m, i) =>
           html`${i > 0 && ', '}<span class=${`dot ${m.dot || 'feed'}`} aria-hidden="true"></span><button class="button link" type="button" onClick=${() => go({ name: 'feed', id: m.id })}>${m.title}</button>${m.role && ` · ${m.role}`}`)}</p>`}
         ${person.keys.map((k) => html`<p class="hint key-hint" key=${k.id}><span class="key-hint-text">Nostr <span class=${keyRow(k.npub, profiles, person.name).mono ? 'mono key-text' : ''}>${keyRow(k.npub, profiles, person.name).title}</span> · ${keyEvidenceText(k.evidence)}</span>
@@ -1023,7 +1024,7 @@ export function PersonPage({ id, feeds, go }) {
       <button class="button" type="button" onClick=${() => withLeave(() => setMerging(true))}>Merge with a Person</button>
       <button class="button destructive" type="button" onClick=${() => withLeave(deletePerson)}>Delete Person</button></div></section>`,
   };
-  return html`<div><${Bar}><span class="bar-title">${person.name}</span>
+  return html`<div><${Bar}><span class="bar-title">${displayName(shown || person)}</span>
     <div class="draft-toolbar"><span class=${saveFailure ? 'draft-status field-error' : 'draft-status'} role="status">${saveFailure || pendingStatus(keys.length)}</span>
       <button class="button" type="button" disabled=${!dirty || saving} onClick=${discard}>Discard</button>
       <button class="button primary" type="button" disabled=${!dirty || saving} onClick=${save}>Save</button></div><//><section class="section">
@@ -1044,9 +1045,28 @@ export function PersonPage({ id, feeds, go }) {
     onQuery=${setFinding} onClose=${() => setFinding(null)} onPick=${setPicked} onLink=${update} />
   <${ValuesSheet} personId=${person.id} row=${picked} feeds=${feeds} shown=${shown}
     onBack=${() => { setPicked(null); setFinding(person.name); }} onClose=${() => setPicked(null)} onFill=${fill} />
+  <${NicknameSheet} open=${nicknameOpen} value=${shown.nickname} onChange=${(nickname) => update({ nickname })}
+    onClose=${() => setNicknameOpen(false)} />
   ${offers.length > 0 && html`<${CreditSheet} key=${`${offers[0].kind}${offers[0].feedId}`} offer=${offers[0]} person=${person}
     feeds=${feeds} position=${creditPosition(offerTotal - offers.length, offerTotal)}
     onMade=${(setId) => { made.current.push(setId); }} onNotNow=${nextOffer} />`}</div>`;
+}
+
+function NicknameSheet({ open, value, onChange, onClose }) {
+  const ref = useSheet(open);
+  const [nickname, setNickname] = useState(value || '');
+  useEffect(() => { if (open) setNickname(value || ''); }, [open, value]);
+  return html`<dialog ref=${ref} class="sheet small" aria-labelledby="nickname-title" onClose=${onClose}>
+    <header><h2 id="nickname-title">Change the Nickname</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button></header>
+    <form class="body" onSubmit=${(event) => { event.preventDefault(); onChange(nickname); ref.current.close(); }}>
+      <div class="group rows"><${Field} id="person-nickname" label="Nickname" value=${nickname}
+        hint="Only Studio shows the nickname. Studio does not put it in a feed. A new credit uses the field Name in Credits."
+        onInput=${(event) => setNickname(event.target.value)} /></div>
+      <footer><button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
+        <button class="button primary" type="submit">Change</button></footer>
+    </form>
+  </dialog>`;
 }
 
 // The sheets "Add {name} to the Credits of {feed}?" and "Remove {name} from

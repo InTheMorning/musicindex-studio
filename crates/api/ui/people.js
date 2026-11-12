@@ -105,7 +105,13 @@ export function personRow(person, feedTitles) {
   } else {
     lines.push('No payment address');
   }
-  return { title: person.name, lines, count: feedCount(feedsOf(person)) };
+  return { title: displayName(person), lines, count: feedCount(feedsOf(person)) };
+}
+
+// The name that Studio shows for a person (ADR 0182 items 13 and 14).
+export function displayName(person) {
+  const nickname = String(person.nickname ?? '').trim();
+  return nickname || person.name;
 }
 
 // The start state of the sheet "Check: {name}" (ADR 0111 item 7). An item
@@ -264,12 +270,13 @@ const PEOPLE_SORTS = ['az', 'newest'];
 
 // The People list in the order of `sort`, reversed when `reversed` is true
 // (musicindex ADR 0043 R-LIST-7). "A to Z" gives the letter groups of its
-// rows, and the letters follow the rows. "Newest" gives the person that the
+// rows, and the letters follow the rows. The sort and the letters use the
+// shown name of ADR 0182 item 14. "Newest" gives the person that the
 // user added last first.
 export function peopleOrder(people, { sort, reversed } = {}) {
   const sortKey = PEOPLE_SORTS.includes(sort) ? sort : PEOPLE_SORTS[0];
   const sorted = sortKey === 'az'
-    ? (people || []).slice().sort((a, b) => compareNames(a.name, b.name) || a.id - b.id)
+    ? (people || []).slice().sort((a, b) => compareNames(displayName(a), displayName(b)) || a.id - b.id)
     : (people || []).slice().sort((a, b) => (b.created_at ?? 0) - (a.created_at ?? 0) || b.id - a.id);
   if (reversed === true) sorted.reverse();
   return {
@@ -277,7 +284,7 @@ export function peopleOrder(people, { sort, reversed } = {}) {
     sorts: PEOPLE_SORTS,
     reversed: reversed === true,
     people: sorted,
-    letters: sortKey === 'az' ? letterGroups(sorted.map((p) => ({ id: p.id, title: p.name }))) : null,
+    letters: sortKey === 'az' ? letterGroups(sorted.map((p) => ({ id: p.id, title: displayName(p) }))) : null,
   };
 }
 
@@ -863,6 +870,7 @@ export const linkReady = (kind, values) => linkFields(kind, values).every((f) =>
 export function savedValues(person) {
   return {
     name: person.name ?? '',
+    nickname: person.nickname ?? '',
     usual_role: person.usual_role ?? '',
     usual_group: person.usual_group ?? '',
     img: person.img ?? '',
@@ -879,8 +887,8 @@ export function savedValues(person) {
 
 // The controls of the page, in their sequence. The usual role and its group
 // are one control. The field controls are sent in the `fields` of a save.
-const CONTROLS = ['name', 'usual_role', 'img', 'href', 'default_address', 'members', 'pages', 'wallets', 'keys'];
-const FIELD_CONTROLS = ['name', 'usual_role', 'img', 'href'];
+const CONTROLS = ['name', 'nickname', 'usual_role', 'img', 'href', 'default_address', 'members', 'pages', 'wallets', 'keys'];
+const FIELD_CONTROLS = ['name', 'nickname', 'usual_role', 'img', 'href'];
 // The list controls. Each added item is one pending change.
 const LIST_NAMES = { wallets: 'wallet', keys: 'npub' };
 
@@ -932,7 +940,7 @@ export function saveBody(saved, values) {
   if (keys.length === 0) return null;
   const body = {};
   if (keys.some((key) => FIELD_CONTROLS.includes(key))) {
-    body.fields = { name: values.name, usual_role: values.usual_role, usual_group: values.usual_group, img: values.img, href: values.href };
+    body.fields = { name: values.name, nickname: values.nickname, usual_role: values.usual_role, usual_group: values.usual_group, img: values.img, href: values.href };
   }
   if (keys.includes('default_address')) body.default_address = values.default_address === '' ? null : keyFromValue(values.default_address);
   if (keys.includes('member')) body.members = values.members.map(Number);
@@ -947,6 +955,7 @@ export function saveBody(saved, values) {
 // The names of the controls in the text of the leave sheet.
 const LEAVE_NAMES = {
   name: 'the name',
+  nickname: 'the nickname',
   usual_role: 'the usual role',
   img: 'the picture address',
   href: 'the information address',
@@ -1622,7 +1631,7 @@ export function recipientPickRows(people, recipients) {
     const start = recipientFromPerson(person);
     const found = (recipients || []).flatMap((e) => e.addresses || []).find((m) => sameKey(m, start));
     const member = { ...start, provider: found ? found.provider : null };
-    return { id: person.id, name: person.name, img: person.img, line: `Adds ${memberText(member)}`, identity: recipientIdentity(start), recipient: start, person };
+    return { id: person.id, name: displayName(person), img: person.img, line: `Adds ${memberText(member)}`, identity: recipientIdentity(start), recipient: start, person };
   });
   const payees = (recipients || []).filter((e) => e.saved_id === null || e.saved_id === undefined).flatMap((entry) => {
     const members = entry.addresses || [];
@@ -1657,7 +1666,7 @@ export function creditPickRows(people, persons) {
     const credit = creditFromPerson(person);
     const parts = [credit.role, credit.npub ? shortKey(credit.npub) : null].filter(Boolean);
     const taken = (credit.npub !== null && keys.has(credit.npub)) || names.has(lowerName(person.name));
-    return { id: person.id, name: person.name, line: parts.join(' · '), taken, credit, person };
+    return { id: person.id, name: displayName(person), line: parts.join(' · '), taken, credit, person };
   });
 }
 
@@ -1679,7 +1688,7 @@ export const fundingFromLink = (link) => ({ label: link.label ?? '', url: link.u
 export function supportPickRows(people, fundings) {
   const urls = new Set((fundings || []).map((f) => String(f.url ?? '').trim()).filter((u) => u !== ''));
   return (people || []).flatMap((person) => (person.support_links || []).map((link) => ({
-    id: `${person.id}-${link.id ?? link.url}`, name: link.label || link.url, line: `${person.name} · ${link.url}`,
+    id: `${person.id}-${link.id ?? link.url}`, name: link.label || link.url, line: `${displayName(person)} · ${link.url}`,
     taken: urls.has(String(link.url ?? '').trim()), funding: fundingFromLink(link), person,
   })));
 }

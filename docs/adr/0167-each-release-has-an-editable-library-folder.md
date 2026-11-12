@@ -8,6 +8,7 @@
 - Changed by: [ADR 0177](0177-the-files-page-has-one-way-to-move.md). Items 5, 7, 10 and 12: one row in the section "On this computer", with a line for the standard folder.
 - Changes: [ADR 0036](0036-library-records-host-inventory-and-host-operations.md) item 2 for a new release folder.
 - Uses: [ADR 0035](0035-a-release-library-is-the-master-of-each-feed.md), [ADR 0038](0038-published-feeds-downloads-folder-scan-and-feed-moves.md), [ADR 0088](0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) for the levels, [ADR 0149](0149-the-desktop-app-has-many-collections.md) for the library of a collection.
+- Changed by: [ADR 0180](0180-the-files-page-has-a-folder-picker-and-one-step-for-each-copy.md). Items 6, 7 and 10: the sheet of **Change…** has **Choose Folder…** and **Default**, and the row has no **Move to Default**.
 
 ## Context
 

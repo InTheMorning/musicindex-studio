@@ -4,6 +4,7 @@
 - Date: 2026-10-23
 - Owner: operator, with the technical choices of the planning model
 - Changed by: musicindex ADR 0023 R-CASE-1, on 2026-10-25. A button label is title case. [ADR 0010](0010-studio-uses-the-afterglow-direction.md#rules-that-musicindex-replaces) names the change.
+- Changed by: [ADR 0180](0180-the-files-page-has-a-folder-picker-and-one-step-for-each-copy.md). The examples of the action role replace "Move to hostB" and "Reference" with **Use This Copy**.
 
 ## Context
 
@@ -18,7 +19,7 @@ The HIG gives four roles: normal, primary, cancel and destructive. A primary but
    | Role | Class | Look | Use |
    | --- | --- | --- | --- |
    | Primary | `button primary` | Accent fill, white label | The most likely action of a sheet or a page, such as "Write to the host" or "Add 2 tracks". A maximum of one in each sheet, and one in each page. |
-   | Action | `button action` | Accent label on an accent tint | Each other action that adds or changes something, such as "Copy to hostB", "Move to hostB", "Reference", "Import files" or "Scan the hosts". |
+   | Action | `button action` | Accent label on an accent tint | Each other action that adds or changes something, such as "Copy to hostB", "Use This Copy", "Import files" or "Scan the hosts". |
    | Normal | `button` | Text label on a neutral fill | A selection with no change, such as "Cancel", "Examine the changes" or "Continue". |
    | Destructive | `button destructive` | Red label on a red tint | Each action that removes or deletes, such as "Delete", "Remove", "Remove the track" or "Discard the draft". |
 

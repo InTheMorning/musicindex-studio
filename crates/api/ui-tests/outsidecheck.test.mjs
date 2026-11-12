@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { outsideMark, outsideNotice, indexNotice, eachLimited, OUTSIDE_LIMIT, panelSet, stateMark } from '../ui/outsidecheck.js';
+import { outsideMark, outsideNotice, indexNotice, moveNotice, eachLimited, OUTSIDE_LIMIT, panelSet, stateMark } from '../ui/outsidecheck.js';
 import { pageSequence, tierError } from '../ui/pages.js';
 
 test('A tile has a mark for a change and a move, and none for an index difference (ADR 0150 items 2, 3 and 5)', () => {
@@ -27,6 +27,44 @@ test('The index notice gives both addresses (ADR 0150 item 5)', () => {
   const notice = indexNotice({ index_url: 'https://a/x.xml', own_url: 'https://b/x.xml' });
   assert.deepEqual([notice.index, notice.own], ['https://a/x.xml', 'https://b/x.xml']);
   assert.equal(indexNotice({ index_url: null }), null);
+});
+
+test('The Studio move notice gives each podping state and its action (ADR 0184 items 3 to 7)', () => {
+  const notice = moveNotice({ index_is_move_source: true, own_url: 'https://new.example/a.xml', last_move: {
+    moved_at: 100,
+    announcements: [
+      { url: 'https://new.example/a.xml', state: 'waiting', send_at: 110 },
+      { url: 'https://old.example/a.xml', state: 'sent', finished_at: 120 },
+      { url: 'https://new.example/a.xml', state: 'failed', finished_at: 130, error: 'timeout' },
+      { url: 'https://old.example/a.xml', state: 'not_sent' },
+    ],
+  } });
+  assert.equal(notice.tone, 'plain');
+  assert.match(notice.strong, /^You moved this feed at /);
+  assert.match(notice.lines[0].text, /^Podping: waiting, sends at /);
+  assert.match(notice.lines[1].text, /^Podping: sent at /);
+  assert.match(notice.lines[2].text, /^Podping: failed at .*: timeout\.$/);
+  assert.equal(notice.lines[2].action, 'Send the Podping Again');
+  assert.equal(notice.lines[3].text, 'Podping: not sent.');
+  assert.equal(notice.lines[3].action, 'Send the Podping');
+  assert.equal(notice.lines[0].action, undefined);
+  assert.equal(notice.lines[1].action, undefined);
+  assert.equal(moveNotice({ index_is_move_source: false, index_url: 'https://old.example/a.xml' }), null);
+  assert.ok(indexNotice({ index_url: 'https://old.example/a.xml', own_url: 'https://new.example/a.xml' }));
+});
+
+test('A Studio move notice has no send button with no public address (ADR 0184 item 11)', () => {
+  const notice = moveNotice({ index_is_move_source: true, own_url: null, last_move: {
+    moved_at: 100,
+    announcements: [
+      { url: 'https://new.example/a.xml', state: 'failed', finished_at: 130, error: null },
+      { url: 'https://old.example/a.xml', state: 'not_sent' },
+    ],
+  } });
+  assert.match(notice.lines[0].text, /^Podping: failed at .*[AP]?M?\.$/);
+  assert.doesNotMatch(notice.lines[0].text, /: \.$|: null/);
+  assert.equal(notice.lines[0].action, undefined);
+  assert.equal(notice.lines[1].action, undefined);
 });
 
 test('eachLimited runs at most the limit and continues after a failure (ADR 0150 item 11)', async () => {

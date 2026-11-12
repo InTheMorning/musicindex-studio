@@ -44,6 +44,18 @@ pub struct LastWrittenMove {
     pub announcements: Vec<MoveAnnouncement>,
 }
 
+/// Tell if the Music Index address is the source of the last written move.
+#[must_use]
+pub fn index_is_move_source(index_url: Option<&str>, movement: Option<&LastWrittenMove>) -> bool {
+    let (Some(index_url), Some(from_url)) = (
+        index_url,
+        movement.and_then(|movement| movement.from_url.as_deref()),
+    ) else {
+        return false;
+    };
+    plain_address(index_url.trim()) == plain_address(from_url.trim())
+}
+
 /// Give the last completed move and its queued announcement states (ADR 0184
 /// items 3 and 5).
 ///
@@ -312,6 +324,23 @@ mod tests {
 
     fn body(extra: &str) -> Vec<u8> {
         FEED.replace("ITEM", extra).into_bytes()
+    }
+
+    #[test]
+    fn an_index_address_matches_the_plain_source_address_of_the_last_move() {
+        let movement = LastWrittenMove {
+            from_url: Some("https://old.example/a.xml".to_owned()),
+            moved_at: 100,
+            announcements: Vec::new(),
+        };
+        assert!(index_is_move_source(
+            Some("https://op3.dev/e/old.example/a.xml"),
+            Some(&movement)
+        ));
+        assert!(!index_is_move_source(
+            Some("https://other.example/a.xml"),
+            Some(&movement)
+        ));
     }
 
     fn fixture() -> (Collection, FeedRow) {

@@ -2,7 +2,7 @@
 
 Decision: [ADR 0184](../adr/0184-after-a-move-studio-shows-the-podping-of-the-move.md).
 
-Status: In progress. Packets 120a and 120b are complete on 2026-11-12. 120a has its screenshot visual check. Packet 120c (the notice) is not started.
+Status: Complete on 2026-11-12. Packets 120a, 120b and 120c are complete. 120a and 120c have their screenshot visual checks. The human test with a real move between two file hosts is open.
 
 ## Goal
 

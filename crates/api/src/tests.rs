@@ -15128,6 +15128,35 @@ async fn the_outside_check_compares_the_address_of_musicindex_only_on_request() 
 }
 
 #[tokio::test]
+async fn the_outside_check_marks_the_source_address_of_the_last_move() {
+    let (app, server, id) = outside_app().await;
+    let collection =
+        studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+            .unwrap();
+    collection
+        .record_written_feed_move(
+            studio_core::collection::FeedId(id),
+            Some("https://old.example/album.xml"),
+            100,
+        )
+        .unwrap();
+    let answer = serde_json::to_vec(&json!({
+        "data": { "feed_url": "https://op3.dev/e/old.example/album.xml", "title": "A" }
+    }))
+    .unwrap();
+    server.set("/index/v1/feeds/-1", 200, answer);
+    let (status, body) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{id}/outside?index=true"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["index_is_move_source"], true, "{body}");
+}
+
+#[tokio::test]
 async fn the_outside_check_gives_the_last_move_and_its_announcement_states() {
     let (app, _, id) = outside_app().await;
     let collection =

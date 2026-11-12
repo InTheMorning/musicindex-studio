@@ -28,7 +28,7 @@ import { CONFIRMS } from './confirms.js';
 import { changeTitle, afterDiscard, changeLine } from './people.js';
 import { makeSettingsDraft, changeSetting, settingsDraftView, discardSettings, saveSettings, asksSettingsLeave } from './settingsdraft.js';
 import { PeoplePage, PersonPage, CheckPage, WalletPage } from './peoplepages.js';
-import { OUTSIDE_LIMIT, OUTSIDE_SETTING_LABEL, OUTSIDE_SETTING_HINT, outsideMark, outsideNotice, indexNotice, eachLimited, panelSet, stateMark } from './outsidecheck.js';
+import { OUTSIDE_LIMIT, OUTSIDE_SETTING_LABEL, OUTSIDE_SETTING_HINT, outsideMark, outsideNotice, indexNotice, moveNotice, eachLimited, panelSet, stateMark } from './outsidecheck.js';
 import { collectionMark, collectionRow, collectionSectionActions, collectionSheet, collectionAction, CLOSED_EXPORT_HINT, COLLECTIONS_HINT, OPENING_TEXT } from './collectionlist.js';
 import { localInputToIso, isoToLocalInput, zoneHint, nowInput, unreadDateHint } from './datetime.js';
 import { durationText, readDuration, DURATION_ERROR, unreadDurationHint } from './duration.js';
@@ -4767,13 +4767,18 @@ function useOutsideChecks(feeds, key) {
 // read of the feed checks again.
 function OutsideNotices({ feed, busy, refresh }) {
   const [check, setCheck] = useState(null);
-  const { error, run } = useAction();
+  const { busy: sending, error, run } = useAction();
   const load = () => api(`/feeds/${feed.id}/outside?index=true`).then(setCheck, () => {});
   useEffect(() => { setCheck(null); load(); }, [feed.id, feed.last_version]);
   const notice = outsideNotice(check);
-  const index = indexNotice(check);
+  const move = moveNotice(check);
+  const index = move ? null : indexNotice(check);
   const keep = () => run(async () => {
     await api(`/feeds/${feed.id}/outside/keep`, { method: 'POST' });
+    await load();
+  });
+  const sendPodping = () => run(async () => {
+    await api(`/feeds/${feed.id}/announcements`, { method: 'POST' });
     await load();
   });
   return html`${notice && html`<div class=${notice.tone === 'error' ? 'notice error' : 'notice'} role=${notice.tone === 'error' ? 'alert' : 'status'}>
@@ -4785,7 +4790,12 @@ function OutsideNotices({ feed, busy, refresh }) {
       </div>
       <${ErrorNotice} error=${error} />
     </div>`}
-    ${index && html`<div class="notice" role="status"><strong>${index.strong}</strong> <span class="mono">${index.index}</span>. Your feed is at <span class="mono">${index.own}</span>. ${index.after}</div>`}`;
+    ${index && html`<div class="notice" role="status"><strong>${index.strong}</strong> <span class="mono">${index.index}</span>. Your feed is at <span class="mono">${index.own}</span>. ${index.after}</div>`}
+    ${move && html`<div class="notice" role="status"><strong>${move.strong}</strong>
+      ${move.lines.map((line) => html`<p><span class="mono">${line.url}</span>. ${line.text}
+        ${line.action && html`<button class="button action" type="button" disabled=${busy || sending} onClick=${sendPodping}>${line.action}</button>`}</p>`)}
+      <${ErrorNotice} error=${error} />
+    </div>`}`;
 }
 
 // The check box of the check for a change from outside (ADR 0150 item 10).

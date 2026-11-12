@@ -157,3 +157,18 @@ The operator selected these answers in the questionnaire:
 - The button of ADR 0170 item 1 is **Add All Suggestions**.
 
 The same row of `peoplepages.js` shows each page suggestion: a picture, a website and a wallet. The ADR that records these answers must give the button for each kind of value.
+
+### Finding 13: Add A Person Has No Search Of Music Index
+
+Owner: [ADR 0099](../adr/0099-the-people-destination-and-the-page-of-a-person.md) and [ADR 0163](../adr/0163-one-sheet-finds-and-links-a-page-on-music-index.md).
+
+The sheet "Add a Person" has only the field "Name" and **Add the Person**. To link a page, the user adds the person, opens the page of the person and selects **Find on Music Index**. The sheet does not show a person that is in People already, so the user can add a second person with the same name.
+
+The operator selected this design in the questionnaire, as a drawing:
+
+- The field "Name" also searches People and Music Index while the user types.
+- The sheet shows the group "Already in People" with **Open**, and the group "On Music Index".
+- A result of Music Index adds the person and opens the sheet "From Music Index: {title}" of ADR 0163 items 4 to 11.
+- The button at the bottom is **Add "{name}" Without a Page**.
+
+A mockup of the real sheet comes before the ADR.

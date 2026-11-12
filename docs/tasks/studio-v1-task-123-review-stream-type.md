@@ -2,7 +2,7 @@
 
 Decision: [ADR 0187](../adr/0187-review-checks-the-stream-type-of-a-live-show.md).
 
-Status: Complete on 2026-11-12. Packet 123a: the diff and the write check each changed live stream in the core, also for a granted write. Packet 123b: Review shows the refusal with **Use {server label}** and no write, and the warning with the write. The screenshot visual check passed, with a real check of a loopback stream. The human test is open.
+Status: Complete on 2026-11-12. Packet 123a: the diff and the write check each changed live stream in the core, also for a granted write. Packet 123b: Review shows the refusal with **Use {server label}** and no write, and the warning with the write. The screenshot visual check passed, with a real check of a loopback stream. The human test passed in the release build of local `main` on 2026-11-12, with a real Icecast mount that was live.
 
 ## Goal
 
@@ -52,7 +52,7 @@ Visual, by the planning model:
 
 - Review with the error and with the warning, at 1280 px and at 390 px, in the light and dark themes.
 
-Human, by the operator. This gate stays open until it runs:
+Human, by the operator. This gate passed on 2026-11-12:
 
 - The human criterion of ADR 0187, with a real Icecast mount that is live.
 

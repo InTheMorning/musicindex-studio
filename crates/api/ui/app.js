@@ -47,7 +47,7 @@ import {
   mediumKind, feedKind, FIRST_CLASS_ROLES, roleWord, kindGlow, isEditable, isReadOnly, isPublisher, trackKey, isTrack,
   leftPanel, releasesList, listQuery, queryText, sortLabel, sortEntries, mosaicCells, otherFeedText, feedCover,
   startNav, pushNav, backNav, forwardNav, releasesView, canBack, canForward, setScroll,
-  isFeedView, openFeedView, navAtWidth, pageTabs, segmentKey } from './shell.js';
+  isFeedView, openFeedView, navAtWidth, pageTabs, segmentKey, levelFeedSet } from './shell.js';
 import {
   eventsToSign, signErrorText,
   npubOf, addressLines, linesText, invalidConfigField, blossomDefaultName, siteAddress, siteNameFromGuid, isNsec,
@@ -3136,6 +3136,7 @@ function Level({ panel, go, back }) {
   const [current, setCurrent] = useState(null);
   const { feeds } = useContext(OutsideContext);
   const head = panel.head;
+  const headMark = useStateMark(levelFeedSet(feeds, head.id));
   let cursor = back ? 1 : 0;
   const headIndex = cursor++;
   // A different level can have fewer rows, so the current row stays in range.
@@ -3149,10 +3150,11 @@ function Level({ panel, go, back }) {
   });
   return html`<div role="tree" aria-label=${head.title} onKeyDown=${(event) => onTreeKey(event, currentIndex, setCurrent)}>
     ${back && html`<button class="row" type="button" ...${rowAttrs(0, null)} onClick=${() => go(panel.back.view)}><${Chevron} direction="back" />${panel.back.label}</button>`}
-    <button class="outline-feed" type="button" ...${rowAttrs(headIndex, null, 'tree')} aria-expanded="true" aria-label=${`${head.title}, ${head.typeLabel}`}
+    <button class="outline-feed" type="button" ...${rowAttrs(headIndex, null, 'tree')} aria-expanded="true" aria-label=${`${head.title}, ${head.typeLabel}${headMark ? `, ${headMark.text}` : ''}`}
       onClick=${() => go({ name: 'feed', id: head.id, page: 'album', from: head.from })}>
       <${ArtWithDot} dot=${head.dot}><${FeedArt} art=${head.art} glow=${head.glow} className="outline-cover" /><//>
       <div class="text"><span class="title">${head.title}</span><span class="sub">${head.typeLabel}</span></div>
+      <${StateMark} mark=${headMark} />
     </button>
     ${panel.sections.map((section) => html`<div class="destination-group">
       <h2 class="panel-heading">${section.heading}</h2>
@@ -3393,6 +3395,8 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
       </div>
       ${head && head.id !== null && html`<p class="releases-roles"><span class=${`dot ${head.dot}`} aria-hidden="true"></span>${head.typeLabel}</p>`}
       ${head && head.id === null && html`<p class="hint releases-roles">${head.note}</p>`}
+      ${releases.levelTile && html`<${LevelFeedTile} tile=${releases.levelTile} view=${releases.view}
+        outside=${outside[releases.levelTile.id]} onOpen=${onOpen} />`}
       <${ErrorNotice} error=${addAction.error} />
       ${releases.letters && html`<${LetterBar} letters=${releases.letters} idOf=${(id) => `release-${id}`} />`}
       ${hasRows
@@ -3420,6 +3424,24 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
     ${adding && html`<${AddFeedRowSheet} open="album" connectors=${connectors} feeds=${feeds}
       start=${more.start} onAdded=${addedRelease} onClose=${() => setAdding(false)} />`}
   </div>`;
+}
+
+// The feed of an open level comes before its releases, in the same view
+// (ADR 0181 item 2). It stays outside the release RowList, so the list keeps
+// its ADR 0172 keyboard model.
+function LevelFeedTile({ tile, view, outside, onOpen }) {
+  const changed = outsideMark(outside);
+  const label = `${tile.title}, ${tile.typeLabel}, ${tile.draftLabel}`;
+  return html`<ul class=${`releases-list ${view}`}><li>
+    <button class=${view === 'tiles' ? 'releases-tile' : 'releases-row'} type="button" aria-label=${label} onClick=${() => onOpen(tile.id)}>
+    <${ArtWithDot} dot=${tile.dot}><${ImageThumb} url=${tile.image} glow=${tile.glow} className="releases-cover" always /><//>
+    <span class="releases-text">
+      <span class="title">${tile.title}</span>
+      <span class="sub">${tile.typeLabel}</span>
+      ${changed && html`<span class=${`sub outside-mark ${changed.tone}`}>${changed.text}</span>`}
+      <span class="sub">${tile.draftLabel}</span>
+    </span>
+  </button></li></ul>`;
 }
 
 // The Welcome page of a collection with no feed (ADR 0119 items 1 to 3). Each

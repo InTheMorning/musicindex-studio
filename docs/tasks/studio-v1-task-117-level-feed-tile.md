@@ -2,7 +2,7 @@
 
 Decision: [ADR 0181](../adr/0181-a-level-shows-the-state-of-its-own-feed.md).
 
-Status: Not started.
+Status: Complete on 2026-11-12. The four commit checks are green. The screenshot visual check passed at 1280 px in the light and dark themes, in the list view and the tile view. The level feed uses the view of the releases. At 390 px the level is one stack, so the level feed shows as the head row.
 
 ## Goal
 

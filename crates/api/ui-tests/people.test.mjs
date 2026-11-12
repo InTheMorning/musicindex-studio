@@ -201,7 +201,33 @@ import {
   initials, personMatches, filterPeople, filterPayees, payeesWithNoPerson, peopleOrder, openChanges, changeTitle, feedsToWrite,
   whereEntries, whereSummary, whereLine,
   changeRow, afterDiscard, afterMissing, memberChoices, creditItemRow, payeeItemRow, toggledItem, dismissBody, addPersonBody,
+  addPersonView,
 } from '../ui/people.js';
+
+test('the Add a Person view searches People and gives its button text', () => {
+  const people = [
+    { id: 1, name: 'Mary Kate', nickname: 'MK', credit_names: [] },
+    { id: 2, name: 'Sam Fiddle', nickname: '', credit_names: [{ name: 'Mary Ultra' }] },
+  ];
+  assert.equal(addPersonView(people, ' M ').searching, false,
+    'ADR 0182 item 4: start search after two trimmed characters. Fix addPersonView in crates/api/ui/people.js.');
+  assert.equal(addPersonView(people, ' MK ').searching, true,
+    'ADR 0182 item 4: start search after two trimmed characters. Fix addPersonView in crates/api/ui/people.js.');
+  assert.deepEqual(addPersonView(people, 'mary').already.map(({ person }) => person.id), [1, 2],
+    'ADR 0182 item 9: find people by name without regard to capitals. Fix addPersonView in crates/api/ui/people.js.');
+  assert.deepEqual(addPersonView(people, 'mk').already.map(({ person }) => person.id), [1],
+    'ADR 0182 item 9: find people by nickname without regard to capitals. Fix addPersonView in crates/api/ui/people.js.');
+  assert.deepEqual(addPersonView(people, 'ultra').already.map(({ person }) => person.id), [2],
+    'ADR 0182 item 9: find people by credit name without regard to capitals. Fix addPersonView in crates/api/ui/people.js.');
+  assert.deepEqual(addPersonView(people, 'unknown').already, [],
+    'ADR 0182 item 5: show no People rows when no person matches. Fix addPersonView in crates/api/ui/people.js.');
+  assert.equal(addPersonView(people, ' Mary ').button, 'Add "Mary" Without a Page',
+    'ADR 0182 item 8: name the button with the trimmed query. Fix addPersonView in crates/api/ui/people.js.');
+  assert.equal(addPersonView(people, ' ').button, 'Add the Person',
+    'ADR 0182 item 8: name the button for an empty field. Fix addPersonView in crates/api/ui/people.js.');
+  assert.equal(addPersonView(people, ' ').disabled, true,
+    'ADR 0182 item 8: disable the button when the trimmed field is empty. Fix addPersonView in crates/api/ui/people.js.');
+});
 
 test('the search matches the name, an address and a key, with no regard to capitals', () => {
   const person = { name: 'Mary Kate', wallets: [{ key: { address: 'MK@fountain.fm' } }], keys: [{ npub: 'npub1abc' }] };

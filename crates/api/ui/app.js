@@ -3921,7 +3921,7 @@ function Shell({ vault, onLock }) {
     main = html`<${PeoplePage} feeds=${feeds} go=${go} sort=${view.sort} reversed=${view.reversed === true}
       onOrder=${(order) => go({ ...view, ...order }, { replace: true })} />`;
   } else if (view.name === 'person') {
-    main = html`<${PersonPage} key=${view.id} id=${view.id} feeds=${feeds} go=${go} />`;
+    main = html`<${PersonPage} key=${view.id} id=${view.id} feeds=${feeds} go=${go} pick=${view.pick} />`;
   } else if (view.name === 'check') {
     main = html`<${CheckPage} key=${view.id} id=${view.id} feeds=${feeds} go=${go} />`;
   } else if (view.name === 'wallet') {

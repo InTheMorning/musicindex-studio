@@ -33,7 +33,7 @@ import {
   CHECK_TITLE, checkSummary, differenceBlocks, openLabel, useValuesLabel,
   recipientChoices, creditChoices, fundingChoices, ALREADY_VALUE, FIND_HINT, FIND_EMPTY, FIND_WAIT, FILL_NOTE, lookupGroups, lookupKind, hasLine, fillRows, linkRow, linkFillLabel, ALREADY_LINKED, fillPatch, fillSource, musicindexFeedUrl,
   creditOffers, creditAddTitle, creditRemoveTitle, creditAddNote, creditPublicNote, creditRemoveNote, creditOperation, REMOVE_CREDIT_OPERATION,
-  lookupAddress, showFindEmpty,
+  lookupAddress, showFindEmpty, addPersonView, ADD_PAGE_HINT,
 } from './people.js';
 
 // The merges of this page load: the ID of each merged person, to the ID of
@@ -208,7 +208,7 @@ export function PeoplePage({ feeds, go, sort, reversed, onOrder }) {
   </section>
   <${CheckSuggestionSheet} suggestion=${making} people=${data ? data.people : []} feeds=${feeds} titles=${titles} go=${go}
     onClose=${() => setMaking(null)} onDismissed=${() => { setMaking(null); load(); }} />
-  <${AddPersonSheet} open=${adding} go=${go} onClose=${() => setAdding(false)} />
+  <${AddPersonSheet} open=${adding} people=${data ? data.people : []} go=${go} onClose=${() => setAdding(false)} />
   <${LinkedPageReview} people=${linkedReview} onClose=${() => setLinkedReview(null)} onDone=${load} /></div>`;
 }
 
@@ -317,17 +317,24 @@ function CheckSuggestionForm({ suggestion, people, feeds, titles, go, onCancel, 
 }
 
 // The sheet "Add a Person" with the field "Name" (ADR 0099 item 2).
-function AddPersonSheet({ open, go, onClose }) {
+function AddPersonSheet({ open, people, go, onClose }) {
   const ref = useSheet(open);
-  return html`<dialog ref=${ref} class="sheet small" aria-labelledby="add-person-title" onClose=${onClose}>
-    ${open && html`<${AddPersonForm} go=${go} onCancel=${() => ref.current.close()} />`}
+  const [name, setName] = useState('');
+  useEffect(() => { if (open) setName(''); }, [open]);
+  const view = addPersonView(people, name);
+  const { rows, searchedFor, error: lookupError } = useLookup(view.searching ? name : '', '/musicindex/search');
+  const pageRows = lookupError || searchedFor !== name.trim() ? [] : rows || [];
+  const hasGroups = view.already.length > 0 || pageRows.length > 0;
+  return html`<dialog ref=${ref} class=${hasGroups ? 'sheet' : 'sheet small'} aria-labelledby="add-person-title" onClose=${onClose}>
+    ${open && html`<${AddPersonForm} name=${name} setName=${setName} view=${view} rows=${pageRows}
+      go=${go} onCancel=${() => ref.current.close()} />`}
   </dialog>`;
 }
 
-function AddPersonForm({ go, onCancel }) {
-  const [name, setName] = useState('');
+function AddPersonForm({ name, setName, view, rows, go, onCancel }) {
   const { busy, error, run } = useAction();
   const body = addPersonBody(name);
+  const already = view.already;
   const add = (e) => {
     e.preventDefault();
     if (body.name === '') return;
@@ -336,6 +343,10 @@ function AddPersonForm({ go, onCancel }) {
       go({ name: 'person', id: added.id });
     });
   };
+  const addFromPage = (row) => run(async () => {
+    const added = await api('/people', { method: 'POST', body });
+    go({ name: 'person', id: added.id, pick: row });
+  });
   return html`<header>
       <h2 id="add-person-title">Add a Person</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${onCancel}>✕</button>
@@ -343,9 +354,17 @@ function AddPersonForm({ go, onCancel }) {
     <form class="body" id="add-person-form" onSubmit=${add}>
       <div class="group rows"><${Field} id="add-person-name" label="Name" required value=${name}
         onInput=${(e) => setName(e.target.value)} /></div>
+      ${already.length > 0 && html`<section class="page-section"><h2>Already in People</h2><div class="group">
+        ${already.map(({ person, name: shownName }) => html`<div class="link-row static" key=${person.id}>
+          <${PersonArt} person=${person} /><span class="text"><span class="label">${shownName}</span></span>
+          <button class="button action" type="button" aria-label=${`Open ${shownName}`} onClick=${() => { onCancel(); go({ name: 'person', id: person.id }); }}>Open</button>
+        </div>`)}</div></section>`}
+      ${rows.length > 0 && html`<section class="page-section"><h2>On Music Index</h2><p class="hint">${ADD_PAGE_HINT}</p>
+        <div class="group">${rows.map((row) => html`<${LookupRow} key=${row.feed_guid} row=${row} onClick=${() => addFromPage(row)} />`)}</div>
+      </section>`}
       <${ErrorNotice} error=${error} />
     </form>
-    <footer><button class="button primary" type="submit" form="add-person-form" disabled=${busy || body.name === ''}>${busy ? 'Adding…' : 'Add the Person'}</button></footer>`;
+    <footer><button class="button primary" type="submit" form="add-person-form" disabled=${busy || view.disabled}>${busy ? 'Adding…' : view.button}</button></footer>`;
 }
 
 // ---- The page of a person (ADR 0099 items 4 to 12) ----
@@ -734,7 +753,7 @@ function FillRow({ row, checked, onToggle }) {
 
 // The page of a person (ADR 0099 item 4). The sections come from
 // `pageSequence('person')`.
-export function PersonPage({ id, feeds, go }) {
+export function PersonPage({ id, feeds, go, pick = null }) {
   const { data, error, run, reload } = usePerson(id);
   const [suggestions, setSuggestions] = useState([]);
   const [sheet, setSheet] = useState(null);
@@ -747,7 +766,10 @@ export function PersonPage({ id, feeds, go }) {
   // The search of "Find on musicindex" (its text, or null when closed), and the
   // row that the values sheet shows (ADR 0117 items 2 and 8).
   const [finding, setFinding] = useState(null);
-  const [picked, setPicked] = useState(null);
+  const [picked, setPicked] = useState(pick);
+  // ADR 0182 item 7: the sheet opens once. The history entry drops `pick`, so
+  // that Back does not open the sheet again.
+  useEffect(() => { if (pick) go({ name: 'person', id }, { replace: true }); }, []);
   const [whereCurrent, setWhereCurrent] = useState(0);
   const [whereOpen, setWhereOpen] = useState({});
   // The credit offers of the last Save that changed the links (ADR 0132 items

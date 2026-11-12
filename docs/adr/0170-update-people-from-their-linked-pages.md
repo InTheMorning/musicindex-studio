@@ -6,6 +6,7 @@
 - Accepted: 2026-11-10 by the operator, during the rc.21 human test. The operator asked for one button that updates the linked people from their publisher feeds in a batch.
 - Technical choices: items 1 to 6 are choices of the planning model. The screenshots of the task show the button and the review to the operator before the commit.
 - Uses: [ADR 0159](0159-a-person-can-link-to-a-page-on-music-index.md) items 8, 9 and 13 to 15, [ADR 0116](0116-the-page-of-a-person-has-save-and-discard.md), [ADR 0132](0132-a-person-can-be-part-of-many-artists-and-labels.md).
+- Changed by: [ADR 0182](0182-the-page-of-a-person-starts-with-its-links-and-has-a-nickname.md). Items 1, 2 and 5: the button is **Add All Suggestions**, and each row of the update sheet shows its value.
 
 ## Context
 

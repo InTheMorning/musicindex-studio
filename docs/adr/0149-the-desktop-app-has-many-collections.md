@@ -8,6 +8,7 @@
 - Changes: [ADR 0107](0107-a-user-can-export-and-import-an-account.md) item 9 on the desktop app. The data folder of [ADR 0124](0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md).
 - Changed by: [ADR 0176](0176-the-user-controls-each-collection.md). Items 2, 6, 11, 12 and 17: no collection is special, each closed collection has rename, replace and delete, and the export is in "Collections".
 - Source: [findings of local use, findings 12, 13 and 17](../reviews/2026-11-06-local-use-findings.md)
+- Changed by: [ADR 0183](0183-each-collection-row-has-one-actions-menu.md). Item 6: the actions of a collection are in the menu of its row.
 
 ## Context
 

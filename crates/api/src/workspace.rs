@@ -1,7 +1,7 @@
 //! The state of one local user: the collection and the vault.
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
@@ -60,6 +60,21 @@ const LOCK_WATCH_INTERVAL: Duration = Duration::from_secs(30);
 #[derive(Debug, Clone)]
 pub struct WorkspaceHandle {
     shared: Arc<Mutex<Workspace>>,
+}
+
+/// Run the remote file records in a background task when they wait for
+/// the unlock (ADR 0038 item 3, task 126). The unlock response does not
+/// wait for the pass.
+pub(crate) fn schedule_remote_records_if_waiting(
+    shared: Arc<Mutex<Workspace>>,
+) -> tokio::task::JoinHandle<()> {
+    tokio::task::spawn_blocking(move || match lock_workspace(&shared) {
+        Ok(workspace) if workspace.take_remote_records_wait() => {
+            workspace.record_all_remote_files();
+        }
+        Ok(_) => {}
+        Err(error) => eprintln!("studio: the remote file records could not start: {error:?}"),
+    })
 }
 
 impl WorkspaceHandle {
@@ -132,7 +147,9 @@ impl WorkspaceHandle {
     pub async fn unlock_with_passphrase(&self, passphrase: &str) -> Result<(), ApiError> {
         let passphrase = passphrase.to_owned();
         self.run(move |w| w.unlock_with_passphrase(&passphrase))
-            .await
+            .await?;
+        drop(schedule_remote_records_if_waiting(Arc::clone(&self.shared)));
+        Ok(())
     }
 
     /// Open the vault with the vault key, as base64.
@@ -143,7 +160,9 @@ impl WorkspaceHandle {
     /// correct.
     pub async fn unlock_with_key(&self, key_base64: &str) -> Result<(), ApiError> {
         let key = key_base64.to_owned();
-        self.run(move |w| w.unlock_with_key(&key)).await
+        self.run(move |w| w.unlock_with_key(&key)).await?;
+        drop(schedule_remote_records_if_waiting(Arc::clone(&self.shared)));
+        Ok(())
     }
 
     /// Open the vault with its recovery key.
@@ -155,7 +174,9 @@ impl WorkspaceHandle {
     pub async fn unlock_with_recovery_key(&self, recovery_key: &str) -> Result<(), ApiError> {
         let recovery_key = recovery_key.to_owned();
         self.run(move |w| w.unlock_with_recovery_key(&recovery_key))
-            .await
+            .await?;
+        drop(schedule_remote_records_if_waiting(Arc::clone(&self.shared)));
+        Ok(())
     }
 
     /// Open the vault with the PRF output of a passkey (ADR 0056 item 22).
@@ -172,7 +193,9 @@ impl WorkspaceHandle {
     ) -> Result<(), ApiError> {
         let credential_id = credential_id.to_owned();
         self.run(move |w| w.unlock_with_passkey(&credential_id, &prf_output))
-            .await
+            .await?;
+        drop(schedule_remote_records_if_waiting(Arc::clone(&self.shared)));
+        Ok(())
     }
 
     /// Add the wrapper of a passkey to the open vault, and save the vault.
@@ -854,6 +877,8 @@ pub struct Workspace {
     pub(crate) signer_generation: u64,
     /// The count of the writes and the uploads that run (ADR 0124 item 17).
     work: crate::work::Work,
+    /// True when the remote file records wait for the vault unlock (task 126).
+    remote_records_wait: AtomicBool,
 }
 
 /// The folder of the temporary area in the user folder (ADR 0122 item 9).
@@ -991,6 +1016,7 @@ impl Workspace {
             nip46_relays: vec![DEFAULT_NIP46_RELAY.to_owned()],
             signer_generation: 0,
             work: crate::work::Work::new(),
+            remote_records_wait: AtomicBool::new(false),
         })
     }
 
@@ -2059,6 +2085,11 @@ impl Workspace {
     /// An error for one feed goes into the log, and the other feeds still
     /// run.
     pub fn record_all_remote_files(&self) {
+        if self.vault_state() == VaultState::Locked {
+            self.remote_records_wait.store(true, Ordering::SeqCst);
+            eprintln!("studio: the remote file records wait for the vault unlock");
+            return;
+        }
         let Ok(library) = self.library() else {
             return;
         };
@@ -2080,6 +2111,11 @@ impl Workspace {
                 }
             }
         }
+    }
+
+    /// Clear the wait of the remote file records, and give its old value.
+    pub(crate) fn take_remote_records_wait(&self) -> bool {
+        self.remote_records_wait.swap(false, Ordering::SeqCst)
     }
 
     /// Put each download that the collection kept as `queued` into the

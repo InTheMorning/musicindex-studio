@@ -171,11 +171,16 @@ pub(crate) async fn unlock_vault(
     State(shared): State<Shared>,
     Json(body): Json<Unlock>,
 ) -> ApiResult {
-    blocking(shared, move |w| {
+    let deferred = Arc::clone(&shared);
+    let result = blocking(shared, move |w| {
         w.unlock_with_passphrase(&body.passphrase)?;
         Ok(Json(json!({ "vault": w.vault_state() })))
     })
-    .await
+    .await?;
+    drop(crate::workspace::schedule_remote_records_if_waiting(
+        deferred,
+    ));
+    Ok(result)
 }
 
 #[derive(Deserialize)]
@@ -217,7 +222,8 @@ pub(crate) async fn unlock_vault_with_key(
     State(shared): State<Shared>,
     Json(body): Json<UnlockKey>,
 ) -> ApiResult {
-    blocking(shared, move |w| {
+    let deferred = Arc::clone(&shared);
+    let result = blocking(shared, move |w| {
         w.unlock_with_key(&body.key).map_err(|error| {
             if error.code() == "wrong_key" {
                 ApiError::new(
@@ -231,7 +237,11 @@ pub(crate) async fn unlock_vault_with_key(
         })?;
         Ok(Json(json!({ "vault": w.vault_state() })))
     })
-    .await
+    .await?;
+    drop(crate::workspace::schedule_remote_records_if_waiting(
+        deferred,
+    ));
+    Ok(result)
 }
 
 /// The first Nostr wrapper of the vault file. The vault can be closed.

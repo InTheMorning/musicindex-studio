@@ -4415,6 +4415,73 @@ fn feed_with_enclosures(title: &str, second: bool) -> String {
 }
 
 #[tokio::test]
+async fn remote_file_records_wait_for_unlock_and_run_once() {
+    let data = tempfile::tempdir().unwrap();
+    let mut workspace = Workspace::open(data.path()).unwrap();
+    workspace.create_vault(Some(PASSPHRASE), false).unwrap();
+    workspace.lock();
+    workspace.record_all_remote_files();
+    assert!(
+        workspace.take_remote_records_wait(),
+        "ADR 0038 item 3, task 126: with a locked vault the pass must wait for the unlock. Set remote_records_wait in record_all_remote_files"
+    );
+    assert!(
+        workspace
+            .collection
+            .library_files(studio_core::collection::FeedId(1))
+            .unwrap()
+            .is_empty(),
+        "ADR 0038 item 3, task 126: with a locked vault the pass must add no row. Return before the hosts are read"
+    );
+
+    workspace.record_all_remote_files();
+    let shared = std::sync::Arc::new(std::sync::Mutex::new(workspace));
+    {
+        let mut workspace = shared.lock().unwrap();
+        workspace.unlock_with_passphrase(PASSPHRASE).unwrap();
+    }
+    crate::workspace::schedule_remote_records_if_waiting(std::sync::Arc::clone(&shared))
+        .await
+        .unwrap();
+    assert!(
+        !shared.lock().unwrap().take_remote_records_wait(),
+        "ADR 0038 item 3, task 126: the unlock must clear the wait and run the pass. Call schedule_remote_records_if_waiting after each unlock"
+    );
+    {
+        let mut workspace = shared.lock().unwrap();
+        workspace.lock();
+        workspace.unlock_with_passphrase(PASSPHRASE).unwrap();
+    }
+    crate::workspace::schedule_remote_records_if_waiting(std::sync::Arc::clone(&shared))
+        .await
+        .unwrap();
+    assert!(
+        !shared.lock().unwrap().take_remote_records_wait(),
+        "ADR 0038 item 3, task 126: a second unlock must not set the wait again. Use swap in take_remote_records_wait"
+    );
+}
+
+#[tokio::test]
+async fn remote_file_records_run_at_once_with_an_open_vault() {
+    let data = tempfile::tempdir().unwrap();
+    let mut workspace = Workspace::open(data.path()).unwrap();
+    workspace.create_vault(None, false).unwrap();
+    workspace.record_all_remote_files();
+    assert!(
+        !workspace.take_remote_records_wait(),
+        "ADR 0038 item 3, task 126: with an open vault the pass must run at once. Check only VaultState::Locked"
+    );
+    assert!(
+        workspace
+            .collection
+            .library_files(studio_core::collection::FeedId(1))
+            .unwrap()
+            .is_empty(),
+        "ADR 0038 item 3, task 126: a pass with no feed must add no row"
+    );
+}
+
+#[tokio::test]
 async fn a_published_feed_gets_its_folder_its_xml_and_remote_rows_and_a_refresh_keeps_them_current()
 {
     let server = studio_core::testing::TestServer::start(Vec::new());

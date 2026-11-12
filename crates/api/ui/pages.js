@@ -55,14 +55,15 @@ const PAGES = {
   ],
   person: () => [
     { id: 'profile', tier: 'identity' },
+    // Linked pages give the suggestions below (ADR 0182 item 10).
+    { id: 'member', tier: 'identity' },
+    { id: 'credits', tier: 'identity' },
     // Where the feeds pay and credit the person (ADR 0156 item 1).
     { id: 'where', tier: 'identity' },
     { id: 'check', tier: 'identity' },
     { id: 'more', tier: 'content' },
     { id: 'payment', tier: 'content' },
-    { id: 'credits', tier: 'details' },
     { id: 'support', tier: 'details' },
-    { id: 'member', tier: 'details' },
     { id: 'change', tier: 'setup' },
     { id: 'delete', tier: 'limits' },
   ],

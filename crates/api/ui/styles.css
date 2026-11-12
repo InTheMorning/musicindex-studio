@@ -2175,6 +2175,10 @@ button.outline-feed {
 .recipient-head .hint { overflow-wrap: anywhere; }
 .recipient-actions { padding: 0 4px; }
 .use-row { cursor: pointer; }
+/* One value of the update sheet, with its label above the address (ADR 0182 item 19). */
+.review-row { align-items: flex-start; }
+.review-value { display: flex; align-items: center; gap: 12px; margin-top: 8px; min-width: 0; }
+.review-value .text { min-width: 0; }
 .link-row.static { cursor: default; }
 .link-row.static:hover { background: none; }
 .link-row .status { flex: none; color: var(--muted); font-size: var(--text-callout); }

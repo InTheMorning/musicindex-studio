@@ -29,7 +29,7 @@ import {
   walletToPersonLabel, correctCount, correctButtonLabel, correctTitle, correctFeedIds, correctStart, correctKeyStart, correctOptions,
   correctKeyChoices, correctBody, correctAnySelected, correctRows, CORRECT_OMITTED, CORRECT_EMPTY,
   moreRows, NO_OTHER_TEXT, mergeTitle, mergeHint, mergeLinks, mergeResult, mergeBody, afterMissing,
-  detailList, LINK_HINT, LINK_EMPTY, linkChoices, linkRows, pickLink, pageSuggestions, useAllPageSuggestions, hasPageSuggestions, hasLinkedPages, linkedPageChanges, linkedPageSelection, linkedPageChangeLines, creditPosition, afterCredits, savedValues, pendingKeys, pendingStatus, isPending, saveBody, leaveText, checkGroups, checkFeedLines, checkKeys, checkIntro, CHANGE_ROWS, CHANGE_NOTE,
+  detailList, LINK_HINT, LINK_EMPTY, linkChoices, linkRows, pickLink, pageSuggestions, addAllPageSuggestions, hasPageSuggestions, hasLinkedPages, linkedPageChanges, linkedPageSelection, linkedPageChangeLines, creditPosition, afterCredits, savedValues, pendingKeys, pendingStatus, isPending, saveBody, leaveText, checkGroups, checkFeedLines, checkKeys, checkIntro, CHANGE_ROWS, CHANGE_NOTE,
   CHECK_TITLE, checkSummary, differenceBlocks, openLabel, useValuesLabel,
   recipientChoices, creditChoices, fundingChoices, ALREADY_VALUE, FIND_HINT, FIND_EMPTY, FIND_WAIT, FILL_NOTE, lookupGroups, lookupKind, hasLine, fillRows, linkRow, linkFillLabel, ALREADY_LINKED, fillPatch, fillSource, musicindexFeedUrl,
   creditOffers, creditAddTitle, creditRemoveTitle, creditAddNote, creditPublicNote, creditRemoveNote, creditOperation, REMOVE_CREDIT_OPERATION,
@@ -234,10 +234,12 @@ function LinkedPageReview({ people, onClose, onDone }) {
     ${people && html`<header><h2 id="linked-review-title">Update from Linked Pages</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button></header>
       <div class="body">${people.length === 0 && html`<p class="note">${LINKED_NONE}</p>`}
-        ${people.length > 0 && html`<div class="group rows">${people.map((row) => html`<label class="link-row use-row" key=${row.person_id}>
+        ${people.length > 0 && html`<div class="group rows">${people.map((row) => html`<label class="link-row use-row review-row" key=${row.person_id}>
         <input type="checkbox" checked=${selected.includes(row.person_id)} onChange=${() => setSelected((ids) => ids.includes(row.person_id)
           ? ids.filter((id) => id !== row.person_id) : [...ids, row.person_id])} />
-        <span class="text"><span class="label">${row.name}</span>${linkedPageChangeLines(row).map((line) => html`<span class="summary" key=${line}>${line}</span>`)}</span></label>`)}</div>`}
+        <span class="text"><span class="label">${row.name}</span>${linkedPageChangeLines(row).map((line) => html`<span class="review-value" key=${`${line.kind}-${line.value}`}>
+          ${line.kind === 'picture' && html`<${PersonArt} person=${{ img: line.value, name: row.name }} small />`}
+          <span class="text"><span class="label">${line.label}</span><span class="summary mono address-text">${line.value}</span></span></span>`)}</span></label>`)}</div>`}
         <${ErrorNotice} error=${error} /></div><footer><button class="button" type="button" disabled=${busy} onClick=${() => ref.current.close()}>Cancel</button>
         <button class="button primary" type="button" disabled=${busy || selected.length === 0} onClick=${save}>Update</button></footer>`}
   </dialog>`;
@@ -379,8 +381,8 @@ function PersonFields({ values, saved, update, detail, profiles, titles, feeds, 
     const rows = list.rows.map((row) => html`<div class="link-row static" key=${row.value}>
       ${key === 'img' && html`<${PersonArt} person=${{ img: row.value, name: '' }} />`}
       <span class="text"><span class="summary mono address-text">${row.value}</span><span class="summary">${row.line}</span></span>
-      <button class="button action" type="button" aria-label=${`Use ${row.value}`}
-        onClick=${() => update({ [key]: row.value })}>Use</button></div>`);
+      <button class="button action" type="button" aria-label=${`Add ${row.value}`}
+        onClick=${() => update({ [key]: row.value })}>Add</button></div>`);
     // A collapsed list has no heading: its summary line names the values
     // (ADR 0113 item 6).
     if (list.state === 'collapsed') {
@@ -890,11 +892,11 @@ export function PersonPage({ id, feeds, go }) {
   const check = checkRow(person);
   const where = whereEntries(person.places, feeds);
   const fromPages = pageSuggestions(pageNotes, shown);
-  // One row of a page suggestion, with "Use" (ADR 0159 item 8).
+  // One row of a page suggestion (ADR 0182 item 3).
   const pageRow = (row, onUse, art = false) => html`<div class="link-row static" key=${`${row.guid}-${row.value}`}>
     ${art && html`<${PersonArt} person=${{ img: row.value, name: '' }} />`}
     <span class="text">${row.recipient_name && html`<span class="label">${row.recipient_name}</span>`}<span class="summary mono address-text">${row.value}</span><span class="summary">${row.line}</span></span>
-    <button class="button action" type="button" aria-label=${`Use ${row.value}`} onClick=${onUse}>Use</button></div>`;
+    <button class="button action" type="button" aria-label=${row.ariaLabel} onClick=${onUse}>${row.button}</button></div>`;
   const feedOf = (feedId) => (feeds || []).find((f) => f.id === feedId);
   const remove = (kind, linkId) => withLeave(() => act(() => api(`/people/${id}/${kind}/${linkId}`, { method: 'DELETE' })));
   const removeButton = (kind, linkId, label) => html`<button class="button destructive" type="button" aria-label=${label}
@@ -1012,7 +1014,7 @@ export function PersonPage({ id, feeds, go }) {
           <button class="button destructive" type="button" aria-label=${`Remove the link to ${row.title}`}
             onClick=${() => update(row.page ? { pages: shown.pages.filter((p) => p.feed_guid !== row.page) } : { members: shown.members.filter((feedId) => feedId !== row.id) })}>Remove</button></div>`)}</div>
       ${hasPageSuggestions(fromPages) && html`<div class="actions">
-        <button class="button action" type="button" onClick=${() => update(useAllPageSuggestions(pageNotes, shown))}>Use All Suggestions</button>
+        <button class="button action" type="button" onClick=${() => update(addAllPageSuggestions(pageNotes, shown))}>Add All Suggestions</button>
       </div>`}
       <div class="group"><${AddRow} title="Link to an Artist or Label Page" onClick=${() => setFinding(person.name)} /></div></section>`;
     },

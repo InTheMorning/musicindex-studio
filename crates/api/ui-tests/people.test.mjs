@@ -1802,7 +1802,7 @@ test('a page that differs gives suggestions, and a page that agrees gives none (
   ]]);
   const one = [{ ...differs[0], other_recipients: differs[0].other_recipients.slice(0, 1) }];
   assert.deepEqual(pageSuggestions(one, values).otherRecipients.map((fold) => fold.title), ['1 other recipient on Ann Bell Music']);
-  // "Use" makes a pending value, and the row goes.
+  // Add makes a pending value, and the row goes.
   const used = { ...values, img: 'https://img.example/a.png', href: 'https://ann.example', keys: ['npub1ann'],
     wallets: [
       { key: { address: 'Ann@x.example' }, recipient_type: 'lnaddress' },
@@ -1816,31 +1816,48 @@ test('a page that differs gives suggestions, and a page that agrees gives none (
   assert.deepEqual(pageSuggestions(differs, { ...values, pages: [] }).img, [], 'A removed page gives no suggestion.');
 });
 
-import { useAllPageSuggestions, hasPageSuggestions, hasLinkedPages, linkedPageChanges, linkedPageSelection, linkedPageChangeLines } from '../ui/people.js';
+test('page suggestions give Add and its accessible name for every value type (ADR 0182 item 1)', () => {
+  const values = { img: '', href: '', keys: [], wallets: [], pages: [PAGE] };
+  const page = { ...PAGE, missing: false, picture: 'https://img.example/a.png', website: 'https://ann.example', npub: 'npub1ann',
+    wallets: [{ key: { address: 'ann@x.example' }, recipient_type: 'lnaddress' }],
+    other_recipients: [{ key: { address: 'other@x.example' }, recipient_type: 'node' }] };
+  const rows = pageSuggestions([page], values);
+  const all = [...rows.img, ...rows.href, ...rows.keys, ...rows.wallets, ...rows.otherRecipients.flatMap((fold) => fold.rows)];
+  assert.deepEqual(all.map((row) => [row.button, row.ariaLabel]), [
+    ['Add', 'Add https://img.example/a.png'], ['Add', 'Add https://ann.example'], ['Add', 'Add npub1ann'],
+    ['Add', 'Add ann@x.example'], ['Add', 'Add other@x.example'],
+  ], 'ADR 0182 item 1: name each Add button for its value. Fix pageSuggestions in crates/api/ui/people.js.');
+});
 
-test('linked page updates use matching wallets and review each changed value', () => {
+import { addAllPageSuggestions, hasPageSuggestions, hasLinkedPages, linkedPageChanges, linkedPageSelection, linkedPageChangeLines } from '../ui/people.js';
+
+test('linked page updates add matching wallets and review each changed value', () => {
   const values = { img: '', href: '', keys: [], wallets: [], pages: [PAGE] };
   const pages = [{ ...PAGE, missing: false, picture: 'https://img.example/a.png', website: 'https://ann.example', npub: 'npub1ann',
     wallets: [{ key: { address: 'ann@x.example' }, recipient_type: 'lnaddress' }],
     other_recipients: [{ key: { address: 'other@x.example' }, recipient_type: 'lnaddress' }] }];
-  assert.deepEqual(useAllPageSuggestions(pages, values), { ...values, img: 'https://img.example/a.png', href: 'https://ann.example',
+  assert.deepEqual(addAllPageSuggestions(pages, values), { ...values, img: 'https://img.example/a.png', href: 'https://ann.example',
     keys: ['npub1ann'], wallets: [{ key: { address: 'ann@x.example' }, recipient_type: 'lnaddress' }] });
   const batch = linkedPageChanges([{ person_id: 1, name: 'Ann', img: null, href: null, keys: [], wallets: [] },
     { person_id: 2, name: 'Cy', img: 'https://img.example/c.png', href: null, keys: ['npub1cy'], wallets: [{ key: { address: 'cy@x.example' } }] }]);
   assert.equal(batch.length, 1);
-  assert.deepEqual(linkedPageChangeLines(batch[0]), ['Picture', 'Nostr key', 'Wallet: cy@x.example']);
+  assert.deepEqual(linkedPageChangeLines(batch[0]), [
+    { kind: 'picture', label: 'Picture', value: 'https://img.example/c.png' },
+    { kind: 'key', label: 'Nostr key', value: 'npub1cy' },
+    { kind: 'wallet', label: 'Wallet', value: 'cy@x.example' },
+  ], 'ADR 0182 item 19: show each added value. Fix linkedPageChangeLines in crates/api/ui/people.js.');
   assert.deepEqual(linkedPageSelection(batch), [2], 'Each person starts selected.');
   assert.equal(hasLinkedPages([{ pages: [] }, { pages: [PAGE] }]), true);
   assert.equal(hasLinkedPages([{ pages: [] }]), false);
 });
 
-test('"Use All Suggestions" shows only with a suggestion, and the other recipients do not count (ADR 0170 items 1 and 2)', () => {
+test('"Add All Suggestions" shows only with a suggestion, and the other recipients do not count (ADR 0170 items 1 and 2)', () => {
   const values = { img: '', href: '', keys: [], wallets: [], pages: [PAGE] };
   const only = [{ ...PAGE, missing: false, picture: null, website: null, npub: null, wallets: [],
     other_recipients: [{ key: { address: 'other@x.example' }, recipient_type: 'lnaddress', name: 'Other' }] }];
   assert.equal(hasPageSuggestions(pageSuggestions(only, values)), false);
   assert.equal(hasPageSuggestions(pageSuggestions([{ ...only[0], website: 'https://ann.example' }], values)), true);
-  assert.deepEqual(useAllPageSuggestions(only, values).wallets, []);
+  assert.deepEqual(addAllPageSuggestions(only, values).wallets, []);
 });
 
 import { linkFillLabel, linkRow, LINK_READ_ONLY_LINE, LINK_OWN_LINE } from '../ui/people.js';

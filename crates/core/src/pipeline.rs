@@ -16,7 +16,7 @@ use crate::change_set::is_fee;
 use crate::checked_time::{BuildDateOutcome, CheckedTime, new_build_date};
 use crate::collection::{
     Collection, CollectionError, ConnectorId, DraftFeedMove, DraftOperationKind, DraftRow, FeedId,
-    FeedRow, LibraryFile, LibraryFileId, SnapshotId,
+    FeedRow, FileMark, LibraryFile, LibraryFileId, SnapshotId,
 };
 use crate::connector::{
     Connector, ConnectorError, ConnectorErrorKind, Expected, HostChanges, PlannedDelete,
@@ -148,6 +148,25 @@ pub struct PipelineError {
     kind: PipelineErrorKind,
     message: String,
     bad_move_link: Option<Box<BadMoveLink>>,
+    existing_file: Option<Box<ExistingFile>>,
+}
+
+/// The file that a [`PipelineErrorKind::FileExists`] refusal of a feed move
+/// names (ADR 0178 item 4).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct ExistingFile {
+    /// The path of the file.
+    pub path: String,
+    /// The ID of the host that has the file.
+    pub connector_id: i64,
+    /// The name of that host.
+    pub host: String,
+    /// The title of the file when it is a feed.
+    pub title: Option<String>,
+    /// The `podcast:guid` of the file when it has one.
+    pub guid: Option<String>,
+    /// The size of the file in bytes.
+    pub size: u64,
 }
 
 impl PipelineError {
@@ -156,7 +175,31 @@ impl PipelineError {
             kind,
             message: message.into(),
             bad_move_link: None,
+            existing_file: None,
         }
+    }
+
+    /// The `FileExists` error of a feed move, with the file that it names
+    /// (ADR 0178 item 4).
+    fn file_exists(collection: &Collection, host: ConnectorId, path: &str, bytes: &[u8]) -> Self {
+        let (title, guid) = feed_facts(bytes);
+        let name = collection
+            .connector(host)
+            .map(|row| row.name)
+            .unwrap_or_default();
+        let mut error = Self::new(
+            PipelineErrorKind::FileExists,
+            format!("a file exists at {path} on the new file host already"),
+        );
+        error.existing_file = Some(Box::new(ExistingFile {
+            path: path.to_owned(),
+            connector_id: host.0,
+            host: name,
+            title,
+            guid,
+            size: bytes.len() as u64,
+        }));
+        error
     }
 
     /// The error of a refusal in stage 1 (ADR 0126 item 10).
@@ -165,6 +208,7 @@ impl PipelineError {
             kind: PipelineErrorKind::BadMoveLink,
             message: refusal.to_string(),
             bad_move_link: Some(Box::new(refusal)),
+            existing_file: None,
         }
     }
 
@@ -179,6 +223,13 @@ impl PipelineError {
     #[must_use]
     pub fn bad_move_link(&self) -> Option<&BadMoveLink> {
         self.bad_move_link.as_deref()
+    }
+
+    /// The file of a [`PipelineErrorKind::FileExists`] error of a feed
+    /// move, when the core could read it (ADR 0178 item 4).
+    #[must_use]
+    pub fn existing_file(&self) -> Option<&ExistingFile> {
+        self.existing_file.as_deref()
     }
 }
 
@@ -405,6 +456,12 @@ pub struct FeedMove {
     /// The file at the path on the new host is a pointer file of this feed,
     /// and the feed XML replaces it (ADR 0126 item 21).
     pub replaces_pointer: bool,
+    /// The file at the path on the new host is an old copy of this feed,
+    /// and the feed XML replaces it (ADR 0178 item 3).
+    pub replaces_copy: bool,
+    /// The different file at the path that the user chose to replace
+    /// (ADR 0178 item 6).
+    pub replaces_file: Option<FileMark>,
 }
 
 /// The kind of a [`HostOperation`] (ADR 0036 items 10 and 12).
@@ -865,9 +922,11 @@ fn public_target(
     if row.connector_id.is_some() {
         return Ok(None);
     }
-    Ok(collection
-        .draft_feed_move(row.id)?
-        .map(|DraftFeedMove { connector_id, path }| (connector_id, path)))
+    Ok(collection.draft_feed_move(row.id)?.map(
+        |DraftFeedMove {
+             connector_id, path, ..
+         }| (connector_id, path),
+    ))
 }
 
 /// The template of a new feed: `rss` version 2.0 with an empty `channel`
@@ -2432,9 +2491,15 @@ fn feed_move(
     hosts: &Hosts,
     row: &FeedRow,
 ) -> Result<Option<FeedMove>, PipelineError> {
-    let Some(DraftFeedMove { connector_id, path }) = collection.draft_feed_move(row.id)? else {
+    let Some(DraftFeedMove {
+        connector_id,
+        path,
+        replace,
+    }) = collection.draft_feed_move(row.id)?
+    else {
         return Ok(None);
     };
+    let replaces_copy = collection.is_placed_feed_file(connector_id, &path, row.id)?;
     if row.connector_id.is_none() {
         // A feed with no host: Studio writes nothing at the old address.
         return Ok(Some(FeedMove {
@@ -2444,6 +2509,8 @@ fn feed_move(
             from_url: row.public_url.clone(),
             method: FeedMoveMethod::None,
             replaces_pointer: false,
+            replaces_copy,
+            replaces_file: replace,
         }));
     }
     let (from_id, from_path) = writable(row)?;
@@ -2466,6 +2533,8 @@ fn feed_move(
             .or_else(|| row.public_url.clone()),
         method,
         replaces_pointer,
+        replaces_copy,
+        replaces_file: replace,
     }))
 }
 
@@ -2489,6 +2558,19 @@ fn feed_move_bytes(feed_move: Option<&FeedMove>) -> Vec<u8> {
     if feed_move.replaces_pointer {
         bytes.push(0);
         bytes.extend_from_slice(b"replaces-pointer");
+    }
+    // The same for the two replaces of ADR 0178 items 3 and 6.
+    if feed_move.replaces_copy {
+        bytes.push(0);
+        bytes.extend_from_slice(b"replaces-copy");
+    }
+    if let Some(mark) = &feed_move.replaces_file {
+        bytes.push(0);
+        bytes.extend_from_slice(b"replaces-file");
+        bytes.push(0);
+        bytes.extend_from_slice(mark.guid.as_deref().unwrap_or_default().as_bytes());
+        bytes.push(0);
+        bytes.extend_from_slice(mark.size.to_string().as_bytes());
     }
     bytes
 }
@@ -2694,6 +2776,43 @@ pub fn set_feed_host(
     id: FeedId,
     target: ConnectorId,
 ) -> Result<(), PipelineError> {
+    set_feed_host_replacing(collection, hosts, library, id, target, false)
+}
+
+/// What [`set_feed_host`] found at the feed path on the new host, when the
+/// collection has no record of the file there (ADR 0178).
+enum FileAtPath {
+    /// No file, or a file that the move can replace with no question.
+    Free,
+    /// A copy of this feed. The collection records it as a placed file
+    /// (ADR 0178 item 2).
+    CopyOfFeed,
+    /// A different file that the user chose to replace (ADR 0178 item 6).
+    Chosen(FileMark),
+}
+
+/// The same as [`set_feed_host`]. With `replace`, a different file at the
+/// path on the new host does not refuse the move. The draft move then holds
+/// the mark of that file, and the write replaces the file only when it still
+/// matches the mark (ADR 0178 items 6 and 7).
+///
+/// A file at the path that the collection has no record of is read from the
+/// new host. A feed with the `podcast:guid` of the draft is recorded as a
+/// placed file of the feed, and the move continues (ADR 0178 items 1 and 2).
+///
+/// # Errors
+///
+/// Gives the errors of [`set_feed_host`]. [`PipelineError::existing_file`]
+/// gives the file of a [`PipelineErrorKind::FileExists`] error (ADR 0178
+/// item 4).
+pub fn set_feed_host_replacing(
+    collection: &Collection,
+    hosts: &Hosts,
+    library: Option<&Library>,
+    id: FeedId,
+    target: ConnectorId,
+    replace: bool,
+) -> Result<(), PipelineError> {
     let row = collection.feed(id)?;
     let (from_id, path) = if row.connector_id.is_some() {
         let (from_id, path) = writable(&row)?;
@@ -2722,15 +2841,14 @@ pub fn set_feed_host(
     }
     // ADR 0126 items 19 and 21: a placed file or a pointer file of this
     // feed is not a different file.
-    if collection.host_file(target, path)?.is_some()
+    let found = if collection.host_file(target, path)?.is_some()
         && !collection.is_placed_feed_file(target, path, id)?
         && !collection.is_pointer_of_feed(target, path, id)?
     {
-        return Err(PipelineError::new(
-            PipelineErrorKind::FileExists,
-            format!("a file exists at {path} on the new file host already"),
-        ));
-    }
+        file_at_feed_path(collection, hosts, target, path, &draft, replace)?
+    } else {
+        FileAtPath::Free
+    };
     let url = hosts.get(target)?.public_url(path).ok_or_else(|| {
         PipelineError::new(
             PipelineErrorKind::NoPublicAddress,
@@ -2739,7 +2857,15 @@ pub fn set_feed_host(
             ),
         )
     })?;
-    collection.set_draft_feed_move(id, target, path)?;
+    let mark = match found {
+        FileAtPath::Free => None,
+        FileAtPath::CopyOfFeed => {
+            collection.add_placed_feed_file(target, path, id)?;
+            None
+        }
+        FileAtPath::Chosen(mark) => Some(mark),
+    };
+    collection.set_draft_feed_move(id, target, path, mark.as_ref())?;
     // ADR 0128 item 1: the feed names its own new URL by the tag, also
     // when it has no self link. A tag of the draft gets the new value.
     edit_draft(collection, id, |feed| {
@@ -2750,6 +2876,72 @@ pub fn set_feed_host(
     // GUID (ADR 0122 item 8).
     assign_real_guids(collection, hosts, library, &[id])?;
     Ok(())
+}
+
+/// Read the file at `path` on `target`, which the collection has no record
+/// of (ADR 0178). A feed with the `podcast:guid` of `draft` is a copy of
+/// the feed. Any other file refuses the move, unless `replace` is true.
+///
+/// # Errors
+///
+/// Gives [`PipelineErrorKind::FileExists`] for a different file, with the
+/// file in the error. A host that gives no file or no answer gives the same
+/// kind with no file, and the move stays refused (ADR 0178 consequences).
+fn file_at_feed_path(
+    collection: &Collection,
+    hosts: &Hosts,
+    target: ConnectorId,
+    path: &str,
+    draft: &DraftRow,
+    replace: bool,
+) -> Result<FileAtPath, PipelineError> {
+    // The inventory has the file, so a host that gives no file or no answer
+    // keeps the refusal of ADR 0126 item 19. A new scan then decides.
+    let Ok(Some(found)) = hosts.get(target)?.read(path) else {
+        return Err(PipelineError::new(
+            PipelineErrorKind::FileExists,
+            format!("a file exists at {path} on the new file host already"),
+        ));
+    };
+    // A record of another feed at this path makes the file a different file,
+    // also when it has the same GUID.
+    let recorded =
+        collection.is_any_placed_file(target, path)? || collection.is_feed_pointer(target, path)?;
+    if !recorded && has_guid_of(&found.bytes, draft) {
+        return Ok(FileAtPath::CopyOfFeed);
+    }
+    if replace {
+        return Ok(FileAtPath::Chosen(mark_of(&found.bytes)));
+    }
+    Err(PipelineError::file_exists(
+        collection,
+        target,
+        path,
+        &found.bytes,
+    ))
+}
+
+/// The title and the `podcast:guid` of `bytes`, when it is a feed.
+fn feed_facts(bytes: &[u8]) -> (Option<String>, Option<String>) {
+    Document::parse_bytes(bytes)
+        .ok()
+        .and_then(|doc| Feed::read(&doc).ok())
+        .map_or((None, None), |feed| (feed.title, feed.podcast_guid))
+}
+
+/// The mark of the file `bytes` (ADR 0178 item 6).
+fn mark_of(bytes: &[u8]) -> FileMark {
+    let (title, guid) = feed_facts(bytes);
+    FileMark {
+        title,
+        guid,
+        size: bytes.len() as u64,
+    }
+}
+
+/// True when `bytes` has the GUID and the size of `mark` (ADR 0178 item 7).
+fn matches_mark(bytes: &[u8], mark: Option<&FileMark>) -> bool {
+    mark.is_some_and(|mark| mark.size == bytes.len() as u64 && feed_facts(bytes).1 == mark.guid)
 }
 
 /// Remove the feed move of a draft, and put back the links that the move
@@ -3086,7 +3278,9 @@ fn host_operations(
     let moved_row;
     let mut planning_rows: Vec<&FeedRow> = Vec::new();
     match collection.draft_feed_move(feed_row.id)? {
-        Some(DraftFeedMove { connector_id, path }) => {
+        Some(DraftFeedMove {
+            connector_id, path, ..
+        }) => {
             moved_row = FeedRow {
                 files_connector_id: Some(connector_id),
                 path: Some(path),
@@ -4228,13 +4422,21 @@ pub fn write_draft_signed(
         if let Some(web) = public {
             check_public_base(&row, web, &draft)?;
         }
-        // A placed file of this feed is replaced (ADR 0126 item 19).
-        if connector.read(&path)?.is_some()
+        // A placed file of this feed is replaced (ADR 0126 item 19). A file
+        // that still matches the mark of the user is replaced too (ADR 0178
+        // item 7).
+        if let Some(found) = connector.read(&path)?
             && !collection.is_placed_feed_file(connector_id, &path, id)?
+            && !matches_mark(
+                &found.bytes,
+                feed_move.as_ref().and_then(|m| m.replaces_file.as_ref()),
+            )
         {
-            return Err(PipelineError::new(
-                PipelineErrorKind::FileExists,
-                format!("a file exists at {path} on the new file host already"),
+            return Err(PipelineError::file_exists(
+                collection,
+                connector_id,
+                &path,
+                &found.bytes,
             ));
         }
         None
@@ -5052,7 +5254,8 @@ fn has_guid_of(found: &[u8], draft: &DraftRow) -> bool {
 /// Put `draft` on a new host at `path`. A file with the same bytes from an
 /// earlier, stopped write is a finished step. A placed file of this feed
 /// or pointer file of this feed with the `podcast:guid` of the draft is
-/// replaced (ADR 0126 items 19 and 21).
+/// replaced (ADR 0126 items 19 and 21). A file that still matches `mark` is
+/// replaced too (ADR 0178 item 7).
 ///
 /// # Errors
 ///
@@ -5064,12 +5267,14 @@ fn place_feed_file(
     (host, connector_id): (&dyn Connector, ConnectorId),
     path: &str,
     draft: &DraftRow,
+    mark: Option<&FileMark>,
 ) -> Result<Version, PipelineError> {
-    let exists = || {
-        PipelineError::new(
+    let exists = |found: Option<&[u8]>| match found {
+        Some(bytes) => PipelineError::file_exists(collection, connector_id, path, bytes),
+        None => PipelineError::new(
             PipelineErrorKind::FileExists,
             format!("a file exists at {path} on the new file host already"),
-        )
+        ),
     };
     match host.write(path, &draft.draft_xml, &Expected::Absent) {
         Ok(version) => Ok(version),
@@ -5079,26 +5284,31 @@ fn place_feed_file(
             // user can finish the move. Other bytes are a different file,
             // unless they are a placed file of this feed.
             let Some(found) = host.read(path)? else {
-                return Err(exists());
+                return Err(exists(None));
             };
             if found.bytes == draft.draft_xml {
                 return Ok(found.version);
             }
-            if (collection.is_placed_feed_file(connector_id, path, id)?
+            if ((collection.is_placed_feed_file(connector_id, path, id)?
                 || collection.is_pointer_of_feed(connector_id, path, id)?)
-                && has_guid_of(&found.bytes, draft)
+                && has_guid_of(&found.bytes, draft))
+                || matches_mark(&found.bytes, mark)
             {
                 return host
-                    .write(path, &draft.draft_xml, &Expected::Version(found.version))
+                    .write(
+                        path,
+                        &draft.draft_xml,
+                        &Expected::Version(found.version.clone()),
+                    )
                     .map_err(|error| {
                         if error.kind() == ConnectorErrorKind::Conflict {
-                            exists()
+                            exists(Some(&found.bytes))
                         } else {
                             error.into()
                         }
                     });
             }
-            Err(exists())
+            Err(exists(Some(&found.bytes)))
         }
         Err(error) => Err(error.into()),
     }
@@ -5123,6 +5333,7 @@ fn write_to_new_host(
         (new_host, moved.connector_id),
         &moved.path,
         draft,
+        moved.replaces_file.as_ref(),
     )
 }
 
@@ -5298,18 +5509,24 @@ fn put_public_feed_file(
     {
         Ok(version) => version,
         Err(error) if error.kind() == ConnectorErrorKind::Conflict => {
-            // Only a placed file of this feed is replaced, and the same
+            // Only a placed file of this feed, or a file that still matches
+            // the mark of the user (ADR 0178 item 7), is replaced. The same
             // bytes are not a finished step here.
             let found = target.connector.read(target.path)?;
-            let replaced = match found {
+            let mark = moved.and_then(|m| m.replaces_file.as_ref());
+            let replaced = match &found {
                 Some(found)
-                    if collection.is_placed_feed_file(target.connector_id, target.path, id)?
-                        && has_guid_of(&found.bytes, draft) =>
+                    if (collection.is_placed_feed_file(
+                        target.connector_id,
+                        target.path,
+                        id,
+                    )? && has_guid_of(&found.bytes, draft))
+                        || matches_mark(&found.bytes, mark) =>
                 {
                     Some(target.connector.write(
                         target.path,
                         &draft.draft_xml,
-                        &Expected::Version(found.version),
+                        &Expected::Version(found.version.clone()),
                     ))
                 }
                 _ => None,
@@ -5320,13 +5537,21 @@ fn put_public_feed_file(
                     return Err(error.into());
                 }
                 _ => {
-                    return Err(PipelineError::new(
-                        PipelineErrorKind::FileExists,
-                        format!(
-                            "a file exists at {} on the new file host already",
-                            target.path
+                    return Err(match &found {
+                        Some(found) => PipelineError::file_exists(
+                            collection,
+                            target.connector_id,
+                            target.path,
+                            &found.bytes,
                         ),
-                    ));
+                        None => PipelineError::new(
+                            PipelineErrorKind::FileExists,
+                            format!(
+                                "a file exists at {} on the new file host already",
+                                target.path
+                            ),
+                        ),
+                    });
                 }
             }
         }

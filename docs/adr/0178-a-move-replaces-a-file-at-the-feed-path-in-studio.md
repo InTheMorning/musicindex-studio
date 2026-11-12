@@ -25,7 +25,7 @@ On 2026-11-11, the operator moved only the feed file of a test release to a seco
 
 4. When the file has a different `podcast:guid`, or it is not a feed, `set_feed_host` refuses with `FileExists`. The refusal gives the path, the host, the title of the file when it is a feed, and its `podcast:guid` when it has one.
 5. The move sheet shows this refusal with **Replace the File**. It does not show "Something went wrong."
-6. **Replace the File** puts the move in the draft with a mark on that path. The core stores the title, the GUID and the size of the file that the user saw. Review shows the row with a warning that gives the title or the path. Nothing changes on a host before the write.
+6. **Replace the File** puts the move in the draft with a mark on that path. The core reads the file again at that time, and it stores the title, the GUID and the size of the file. Review shows the row with a warning that gives the title or the path. Nothing changes on a host before the write.
 7. The write replaces the file only when the file on the host still has the GUID and the size that the core stored. Otherwise the write gives `FileExists`, and the sheet asks again.
 
 ### The Sheet

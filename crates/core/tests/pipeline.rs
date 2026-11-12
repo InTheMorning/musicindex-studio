@@ -311,7 +311,7 @@ fn read_again_moves_a_draft_with_no_edits_and_keeps_each_other_draft() {
 
     // A draft with a move keeps its base.
     s.collection
-        .set_draft_feed_move(s.feed, ConnectorId(1), "album.xml")
+        .set_draft_feed_move(s.feed, ConnectorId(1), "album.xml", None)
         .unwrap();
     let moved = FEED.replace("<title>", "<title>Moved ");
     fs::write(&path, &moved).unwrap();

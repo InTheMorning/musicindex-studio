@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { outcomeText, operationLine } from '../ui/recipients.js';
 import { changeTitle, changeRow, afterDiscard } from '../ui/people.js';
-import { MOVE_SCOPES, fileHostRows, planRows, stayRows, deleteLabel, waitingView, readyNotice, partMoveNotice } from '../ui/releasemove.js';
+import { MOVE_SCOPES, fileHostRows, planRows, stayRows, deleteLabel, waitingView, readyNotice, partMoveNotice, existsRefusalView, addDisabled, replacesCopyNote, replaceWarning, REPLACE_LABEL } from '../ui/releasemove.js';
 
 const hosts = [{ id: 1, name: 'Old Host' }, { id: 2, name: 'New Host' }];
 const empty = { count: 0, bytes: 0 };
@@ -108,4 +108,42 @@ test('planRows gives no count of zero file hosts when no known host has the file
   const rows = planRows({ ...plan, from_connector_ids: [] }, hosts);
   assert.ok(rows.every((r) => !r.value.startsWith('0 file hosts')), JSON.stringify(rows));
   assert.ok(rows.some((r) => r.value.startsWith('Their addresses →')), JSON.stringify(rows));
+});
+
+const exists = {
+  code: 'file_exists',
+  message: 'a file exists at TestAlbum/test.xml on the new file host already',
+  details: { path: 'TestAlbum/test.xml', connector_id: 2, host: 'New Host', title: 'Other Album', guid: 'g-9', size: 2048 },
+};
+
+test('the refusal of a different file at the feed path gives "Replace the File" and no add (ADR 0178 items 5 and 8)', () => {
+  const view = existsRefusalView(exists);
+  assert.equal(view.replace, 'Replace the File');
+  assert.equal(REPLACE_LABEL, 'Replace the File');
+  assert.match(view.text, /^New Host has a file at TestAlbum\/test\.xml/);
+  assert.deepEqual(view.facts.map((row) => row.label), ['File', 'Title', 'GUID', 'Size']);
+  assert.equal(view.facts[1].value, 'Other Album');
+  assert.equal(addDisabled(plan, false, exists), true, 'ADR 0178 item 8: no add while the refusal shows');
+  assert.equal(addDisabled(plan, false, null), false);
+  assert.equal(addDisabled(plan, false, { code: 'conflict', message: 'x' }), false);
+  assert.equal(addDisabled(plan, true, null), true);
+});
+
+test('a file that is not a feed has no GUID row, and another error has no refusal view', () => {
+  const view = existsRefusalView({ ...exists, details: { ...exists.details, title: null, guid: null } });
+  assert.deepEqual(view.facts.map((row) => row.label), ['File', 'Title', 'Size']);
+  assert.equal(view.facts[1].value, 'Not a feed that Studio can read');
+  assert.equal(existsRefusalView({ code: 'file_exists', message: 'x' }), null);
+  assert.equal(existsRefusalView({ code: 'not_found', details: exists.details }), null);
+  assert.equal(existsRefusalView(null), null);
+});
+
+test('Review rows of a move that replaces a copy or a different file (ADR 0178 items 3 and 6)', () => {
+  assert.equal(replacesCopyNote({ replaces_copy: true }), 'Replaces an old copy of this feed');
+  assert.equal(replacesCopyNote({ replaces_copy: false }), null);
+  const titled = replaceWarning({ path: 'a.xml', replaces_file: { title: 'Other Album', guid: 'g', size: 1 } });
+  assert.match(titled.text, /"Other Album"/);
+  const plain = replaceWarning({ path: 'a.xml', replaces_file: { title: null, guid: null, size: 1 } });
+  assert.match(plain.text, /a\.xml/);
+  assert.equal(replaceWarning({ path: 'a.xml', replaces_file: null }), null);
 });

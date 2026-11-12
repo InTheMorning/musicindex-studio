@@ -6,11 +6,12 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;
 
+use studio_core::collection::FileMark;
 use studio_core::collection::{Collection, ConnectorId, FeedId};
 use studio_core::connector::{Connector, Expected, LocalFolder};
 use studio_core::discover::{FailKind, ReadFailure};
 use studio_core::feed::Feed;
-use studio_core::inventory::Hosts;
+use studio_core::inventory::{self, Hosts};
 use studio_core::library::Library;
 use studio_core::move_link::{
     self, Condition, DraftLinks, FeedBody, FeedReader, Hop, HopResult, LinkNotice, Repair,
@@ -1530,4 +1531,157 @@ fn a_repair_of_a_draft_gets_a_date_at_its_diff_and_keeps_the_id_of_a_second_diff
     pipeline::set_build_date(&e.collection, e.feed, Some(checked)).unwrap();
     let second = pipeline::diff(&e.collection, &e.hosts, &e.library, e.feed).unwrap();
     assert_eq!(first.id, second.id);
+}
+
+const OTHER_GUID: &str = "00000000-0000-0000-0000-000000000000";
+
+/// A file of a different feed at the feed path of host B, in the inventory.
+fn put_other_feed(e: &Env) -> String {
+    let other = e
+        .original
+        .replace(GUID, OTHER_GUID)
+        .replace("<title>Album</title>", "<title>Other Album</title>");
+    fs::write(e.dir_b.path().join("album.xml"), &other).unwrap();
+    inventory::scan(&e.collection, &e.hosts, e.b).unwrap();
+    other
+}
+
+#[test]
+fn an_unrecorded_copy_of_the_same_feed_is_recorded_and_the_write_replaces_it() {
+    let mut e = env(URL);
+    let old = e
+        .original
+        .replace("<title>Album</title>", "<title>Album (Old)</title>");
+    fs::write(e.dir_b.path().join("album.xml"), &old).unwrap();
+    inventory::scan(&e.collection, &e.hosts, e.b).unwrap();
+    assert!(
+        !e.collection
+            .is_placed_feed_file(e.b, "album.xml", e.feed)
+            .unwrap()
+    );
+
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, e.b).unwrap();
+    assert!(
+        e.collection
+            .is_placed_feed_file(e.b, "album.xml", e.feed)
+            .unwrap(),
+        "ADR 0178 item 2: the collection records the copy as a placed file. Fix: record it in set_feed_host."
+    );
+    let diff = pipeline::diff(&e.collection, &e.hosts, &e.library, e.feed).unwrap();
+    let moved = diff.feed_move.unwrap();
+    assert!(moved.replaces_copy, "ADR 0178 item 3");
+    assert_eq!(moved.replaces_file, None);
+
+    let draft = e.collection.draft(e.feed).unwrap().unwrap().draft_xml;
+    let reader = ScriptedReader::empty().with_body(DEST, draft_body(&e, DEST));
+    e.write(&reader).unwrap();
+    assert_eq!(files(e.dir_b.path()).get("album.xml").unwrap(), &draft);
+    assert_eq!(e.collection.feed(e.feed).unwrap().connector_id, Some(e.b));
+}
+
+#[test]
+fn a_file_with_a_different_guid_refuses_with_its_title_and_guid() {
+    let e = env(URL);
+    let other = put_other_feed(&e);
+    let error = pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, e.b).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::FileExists);
+    let file = error.existing_file().expect("ADR 0178 item 4: the file");
+    assert_eq!(file.path, "album.xml");
+    assert_eq!(file.connector_id, e.b.0);
+    assert_eq!(file.host, "B");
+    assert_eq!(file.title.as_deref(), Some("Other Album"));
+    assert_eq!(file.guid.as_deref(), Some(OTHER_GUID));
+    assert_eq!(file.size, other.len() as u64);
+    assert!(e.collection.draft_feed_move(e.feed).unwrap().is_none());
+    assert_eq!(
+        fs::read_to_string(e.dir_b.path().join("album.xml")).unwrap(),
+        other
+    );
+}
+
+#[test]
+fn a_file_that_is_not_a_feed_refuses_with_no_title_and_no_guid() {
+    let e = env(URL);
+    fs::write(e.dir_b.path().join("album.xml"), b"not a feed").unwrap();
+    inventory::scan(&e.collection, &e.hosts, e.b).unwrap();
+    let error = pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, e.b).unwrap_err();
+    let file = error.existing_file().expect("the file");
+    assert_eq!((file.title.as_deref(), file.guid.as_deref()), (None, None));
+    assert_eq!(file.size, 10);
+}
+
+#[test]
+fn a_marked_move_replaces_a_different_file_that_did_not_change() {
+    let mut e = env(URL);
+    let other = put_other_feed(&e);
+    pipeline::set_feed_host_replacing(&e.collection, &e.hosts, None, e.feed, e.b, true).unwrap();
+    let mark = e
+        .collection
+        .draft_feed_move(e.feed)
+        .unwrap()
+        .unwrap()
+        .replace;
+    assert_eq!(
+        mark,
+        Some(FileMark {
+            title: Some("Other Album".into()),
+            guid: Some(OTHER_GUID.into()),
+            size: other.len() as u64,
+        }),
+        "ADR 0178 item 6: the draft move holds what the user saw"
+    );
+    let diff = pipeline::diff(&e.collection, &e.hosts, &e.library, e.feed).unwrap();
+    let moved = diff.feed_move.unwrap();
+    assert_eq!(moved.replaces_file, mark);
+    assert!(!moved.replaces_copy);
+    assert_eq!(
+        fs::read_to_string(e.dir_b.path().join("album.xml")).unwrap(),
+        other,
+        "nothing changes on a host before the write"
+    );
+
+    let draft = e.collection.draft(e.feed).unwrap().unwrap().draft_xml;
+    let reader = ScriptedReader::empty().with_body(DEST, draft_body(&e, DEST));
+    e.write(&reader).unwrap();
+    assert_eq!(files(e.dir_b.path()).get("album.xml").unwrap(), &draft);
+}
+
+#[test]
+fn a_marked_move_gives_file_exists_when_the_file_changed_after_the_mark() {
+    let mut e = env(URL);
+    put_other_feed(&e);
+    pipeline::set_feed_host_replacing(&e.collection, &e.hosts, None, e.feed, e.b, true).unwrap();
+    let changed = format!("{}\n", put_other_feed(&e));
+    fs::write(e.dir_b.path().join("album.xml"), &changed).unwrap();
+    let reader = ScriptedReader::empty().with_body(DEST, draft_body(&e, DEST));
+    let error = e.write(&reader).unwrap_err();
+    assert_eq!(
+        error.kind(),
+        PipelineErrorKind::FileExists,
+        "ADR 0178 item 7: a file that changed after the mark is not replaced."
+    );
+    assert_eq!(error.existing_file().unwrap().size, changed.len() as u64);
+    assert_eq!(
+        fs::read_to_string(e.dir_b.path().join("album.xml")).unwrap(),
+        changed
+    );
+    assert_eq!(
+        files(e.dir_a.path()).get("album.xml").unwrap(),
+        e.original.as_bytes()
+    );
+}
+
+#[test]
+fn a_move_that_names_no_mark_does_not_replace_a_different_file() {
+    let mut e = env(URL);
+    pipeline::set_feed_host(&e.collection, &e.hosts, None, e.feed, e.b).unwrap();
+    // The file came after the move was in the draft.
+    let other = put_other_feed(&e);
+    let reader = ScriptedReader::empty().with_body(DEST, draft_body(&e, DEST));
+    let error = e.write(&reader).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::FileExists);
+    assert_eq!(
+        fs::read_to_string(e.dir_b.path().join("album.xml")).unwrap(),
+        other
+    );
 }

@@ -4102,11 +4102,16 @@ fn release_default_folder(w: &Workspace, id: FeedId) -> Result<String, ApiError>
 #[derive(Deserialize)]
 pub(crate) struct SetFeedHost {
     connector_id: Option<i64>,
+    /// Replace a different file at the path (ADR 0178 item 6).
+    #[serde(default)]
+    replace: bool,
 }
 
 /// Put the feed XML on a different host through the draft (ADR 0038
-/// item 16). The host of the feed removes the move. A host that has a file
-/// at the path gives 409 `file_exists`. Gives the new diff summary.
+/// item 16). The host of the feed removes the move. A host that has a
+/// different file at the path gives 409 `file_exists` with the file in
+/// `error.details`, unless `replace` is true (ADR 0178 items 4 and 6).
+/// Gives the new diff summary.
 ///
 /// A feed with no connector chooses its first host here, and the body
 /// `{ "connector_id": null }` removes the choice (ADR 0067 item 5). A feed
@@ -4129,12 +4134,13 @@ pub(crate) async fn set_feed_host(
                 }
                 let hosts = w.hosts()?;
                 let library = w.library().ok();
-                pipeline::set_feed_host(
+                pipeline::set_feed_host_replacing(
                     &w.collection,
                     &hosts,
                     library.as_ref(),
                     id,
                     ConnectorId(target),
+                    body.replace,
                 )?;
             }
             None if has_connector => {
@@ -4763,11 +4769,19 @@ fn apply_release_move(
     id: FeedId,
     plan: &ReleaseMovePlan,
     wait_days: Option<u32>,
+    replace: bool,
 ) -> Result<(), ApiError> {
     ensure_draft(w, id)?;
     if plan.feed_moves {
         let library = w.library().ok();
-        pipeline::set_feed_host(&w.collection, hosts, library.as_ref(), id, plan.target)?;
+        pipeline::set_feed_host_replacing(
+            &w.collection,
+            hosts,
+            library.as_ref(),
+            id,
+            plan.target,
+            replace,
+        )?;
     }
     if !plan.unwritten.is_empty() {
         pipeline::edit_draft(&w.collection, id, |feed| {
@@ -4830,6 +4844,9 @@ pub(crate) struct MoveRelease {
     /// The value of "What moves" (ADR 0177 item 3).
     #[serde(default)]
     what: MoveScope,
+    /// Replace a different file at the feed path (ADR 0178 item 6).
+    #[serde(default)]
+    replace: bool,
 }
 
 fn default_wait_days() -> u32 {
@@ -4853,7 +4870,7 @@ pub(crate) async fn move_release(
         }
         let plan = release_move_plan(w, &hosts, &feed_row, ConnectorId(body.connector_id))?
             .limited(body.what);
-        apply_release_move(w, &hosts, feed_id, &plan, wait_days)?;
+        apply_release_move(w, &hosts, feed_id, &plan, wait_days, body.replace)?;
         if plan.default_changes {
             w.collection
                 .set_files_connector(feed_id, Some(plan.target))?;
@@ -4945,7 +4962,7 @@ pub(crate) async fn move_all_releases(
                 let row = workspace.collection.feed(id)?;
                 let applied = plan_from_host(workspace, &hosts, &row, from, to).and_then(|plan| {
                     if plan.feed_moves || !plan.files.is_empty() {
-                        apply_release_move(workspace, &hosts, id, &plan, wait_days)?;
+                        apply_release_move(workspace, &hosts, id, &plan, wait_days, false)?;
                     }
                     Ok((plan.feed_moves, plan.files.len()))
                 });

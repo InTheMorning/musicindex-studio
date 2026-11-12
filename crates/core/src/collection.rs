@@ -615,6 +615,14 @@ CREATE TABLE feed_host_deletes (
     deleted_at INTEGER NOT NULL
 );
 ",
+    // ADR 0178 item 6: the mark of a feed move that replaces a different file
+    // at the feed path. It holds what the user saw: the size, the GUID and
+    // the title. A row with no size has no mark.
+    r"
+ALTER TABLE draft_feed_moves ADD COLUMN replace_size INTEGER;
+ALTER TABLE draft_feed_moves ADD COLUMN replace_guid TEXT;
+ALTER TABLE draft_feed_moves ADD COLUMN replace_title TEXT;
+",
 ];
 
 /// `root` as a relative path under `data_dir`, when it is a folder inside
@@ -978,6 +986,22 @@ pub struct DraftFeedMove {
     pub connector_id: ConnectorId,
     /// The path of the feed XML on the new host.
     pub path: String,
+    /// The different file that the user chose to replace at the path
+    /// (ADR 0178 item 6).
+    pub replace: Option<FileMark>,
+}
+
+/// What the user saw of a file that a feed move replaces: its title when it
+/// is a feed, its `podcast:guid` when it has one, and its size in bytes
+/// (ADR 0178 item 6).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct FileMark {
+    /// The title of the file when it is a feed.
+    pub title: Option<String>,
+    /// The `podcast:guid` of the file when it has one.
+    pub guid: Option<String>,
+    /// The size of the file in bytes.
+    pub size: u64,
 }
 
 /// A draft of a feed (ADR 0007).
@@ -1931,11 +1955,23 @@ impl Collection {
         feed: FeedId,
         connector: ConnectorId,
         path: &str,
+        replace: Option<&FileMark>,
     ) -> Result<(), CollectionError> {
         self.db.execute(
-            "INSERT INTO draft_feed_moves (feed_id, connector_id, path, added_at) VALUES (?1, ?2, ?3, ?4)
-             ON CONFLICT (feed_id) DO UPDATE SET connector_id = ?2, path = ?3, added_at = ?4",
-            params![feed.0, connector.0, path, now()],
+            "INSERT INTO draft_feed_moves
+                 (feed_id, connector_id, path, added_at, replace_size, replace_guid, replace_title)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+             ON CONFLICT (feed_id) DO UPDATE SET connector_id = ?2, path = ?3, added_at = ?4,
+                 replace_size = ?5, replace_guid = ?6, replace_title = ?7",
+            params![
+                feed.0,
+                connector.0,
+                path,
+                now(),
+                replace.map(|mark| i64::try_from(mark.size).unwrap_or(i64::MAX)),
+                replace.and_then(|mark| mark.guid.as_deref()),
+                replace.and_then(|mark| mark.title.as_deref()),
+            ],
         )?;
         Ok(())
     }
@@ -1949,12 +1985,20 @@ impl Collection {
         Ok(self
             .db
             .query_row(
-                "SELECT connector_id, path FROM draft_feed_moves WHERE feed_id = ?1",
+                "SELECT connector_id, path, replace_size, replace_guid, replace_title
+                 FROM draft_feed_moves WHERE feed_id = ?1",
                 [feed.0],
                 |r| {
+                    let size: Option<i64> = r.get(2)?;
+                    let (guid, title) = (r.get(3)?, r.get(4)?);
                     Ok(DraftFeedMove {
                         connector_id: ConnectorId(r.get(0)?),
                         path: r.get(1)?,
+                        replace: size.map(|size| FileMark {
+                            title,
+                            guid,
+                            size: u64::try_from(size).unwrap_or_default(),
+                        }),
                     })
                 },
             )
@@ -2573,6 +2617,28 @@ impl Collection {
             .query_row(
                 "SELECT 1 FROM placed_feed_files WHERE connector_id = ?1 AND path = ?2 AND feed_id = ?3",
                 params![connector.0, path, feed.0],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some())
+    }
+
+    /// True when any feed has the file at `path` on a host as a placed
+    /// file (ADR 0178 item 2).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn is_any_placed_file(
+        &self,
+        connector: ConnectorId,
+        path: &str,
+    ) -> Result<bool, CollectionError> {
+        Ok(self
+            .db
+            .query_row(
+                "SELECT 1 FROM placed_feed_files WHERE connector_id = ?1 AND path = ?2",
+                params![connector.0, path],
                 |_| Ok(()),
             )
             .optional()?

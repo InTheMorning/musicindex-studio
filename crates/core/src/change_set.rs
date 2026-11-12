@@ -1863,6 +1863,7 @@ fn set_person_name(collection: &Collection, id: PersonId, name: &str) -> Result<
         id,
         &people::PersonFields {
             name: name.to_owned(),
+            nickname: person.nickname,
             usual_role: person.usual_role,
             usual_group: person.usual_group,
             img: person.img,

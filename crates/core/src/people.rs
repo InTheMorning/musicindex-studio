@@ -187,6 +187,8 @@ pub struct Person {
     pub id: PersonId,
     /// The name.
     pub name: String,
+    /// The nickname, or empty text.
+    pub nickname: String,
     /// The usual role, as raw text.
     pub usual_role: String,
     /// The usual group for the usual role, as raw text (ADR 0112 item 7).
@@ -234,6 +236,9 @@ pub struct PersonPage {
 pub struct PersonFields {
     /// The name. A name of only spaces is refused.
     pub name: String,
+    /// The nickname, or empty text.
+    #[serde(default)]
+    pub nickname: String,
     /// The usual role.
     pub usual_role: String,
     /// The usual group for the usual role.
@@ -301,6 +306,7 @@ fn clean_fields(fields: &PersonFields) -> Result<PersonFields, CollectionError> 
     }
     Ok(PersonFields {
         name: name.to_owned(),
+        nickname: fields.nickname.trim().to_owned(),
         usual_role: fields.usual_role.trim().to_owned(),
         usual_group: fields.usual_group.trim().to_owned(),
         img: fields.img.trim().to_owned(),
@@ -311,14 +317,15 @@ fn clean_fields(fields: &PersonFields) -> Result<PersonFields, CollectionError> 
 fn insert_person(db: &Connection, fields: &PersonFields) -> Result<PersonId, CollectionError> {
     let fields = clean_fields(fields)?;
     db.execute(
-        "INSERT INTO people (name, usual_role, usual_group, img, href, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        "INSERT INTO people (name, usual_role, usual_group, img, href, created_at, nickname) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
         params![
             fields.name,
             fields.usual_role,
             fields.usual_group,
             fields.img,
             fields.href,
-            now()
+            now(),
+            fields.nickname
         ],
     )?;
     Ok(PersonId(db.last_insert_rowid()))
@@ -357,14 +364,15 @@ fn update_fields(
 ) -> Result<(), CollectionError> {
     let fields = clean_fields(fields)?;
     let changed = db.execute(
-        "UPDATE people SET name = ?2, usual_role = ?3, usual_group = ?6, img = ?4, href = ?5 WHERE id = ?1",
+        "UPDATE people SET name = ?2, usual_role = ?3, usual_group = ?6, img = ?4, href = ?5, nickname = ?7 WHERE id = ?1",
         params![
             id.0,
             fields.name,
             fields.usual_role,
             fields.img,
             fields.href,
-            fields.usual_group
+            fields.usual_group,
+            fields.nickname
         ],
     )?;
     if changed == 0 {
@@ -456,6 +464,7 @@ fn read_person(db: &Connection, id: PersonId) -> Result<Person, CollectionError>
     let mut person = db
         .query_row(
             "SELECT name, usual_role, img, href, default_address, default_custom_key, default_custom_value, usual_group,
+                    nickname,
                     created_at
              FROM people WHERE id = ?1",
             [id.0],
@@ -466,6 +475,7 @@ fn read_person(db: &Connection, id: PersonId) -> Result<Person, CollectionError>
                 Ok(Person {
                     id,
                     name: r.get(0)?,
+                    nickname: r.get(8)?,
                     usual_role: r.get(1)?,
                     usual_group: r.get(7)?,
                     img: r.get(2)?,
@@ -481,7 +491,7 @@ fn read_person(db: &Connection, id: PersonId) -> Result<Person, CollectionError>
                     support_links: Vec::new(),
                     members: Vec::new(),
                     pages: Vec::new(),
-                    created_at: r.get(8)?,
+                    created_at: r.get(9)?,
                 })
             },
         )
@@ -3092,6 +3102,22 @@ pub fn merge_people(
     let tx = collection.db().unchecked_transaction()?;
     check_person(&tx, keep)?;
     check_person(&tx, other)?;
+    let keep_nickname: String = tx.query_row(
+        "SELECT nickname FROM people WHERE id = ?1",
+        [keep.0],
+        |row| row.get(0),
+    )?;
+    if keep_nickname.trim().is_empty() {
+        let other_nickname: String = tx.query_row(
+            "SELECT nickname FROM people WHERE id = ?1",
+            [other.0],
+            |row| row.get(0),
+        )?;
+        tx.execute(
+            "UPDATE people SET nickname = ?2 WHERE id = ?1",
+            params![keep.0, other_nickname],
+        )?;
+    }
     for table in ["person_wallets", "person_support_links"] {
         // The links of `other` go after the links of `keep`.
         tx.execute(
@@ -3255,6 +3281,7 @@ pub fn save_page_suggestion_changes(
         let current = person(collection, change.person_id)?;
         let fields = (change.img.is_some() || change.href.is_some()).then(|| PersonFields {
             name: current.name.clone(),
+            nickname: current.nickname.clone(),
             usual_role: current.usual_role.clone(),
             usual_group: current.usual_group.clone(),
             img: change.img.clone().unwrap_or_else(|| current.img.clone()),
@@ -3789,6 +3816,8 @@ pub struct ExportPerson {
     pub id: PersonId,
     /// The name.
     pub name: String,
+    /// The nickname, or empty text.
+    pub nickname: String,
     /// The usual role, as raw text.
     pub usual_role: String,
     /// The usual group for the usual role, as raw text.
@@ -3886,6 +3915,7 @@ pub fn export<S: BuildHasher>(
             id: person.id,
             default_address: default_address(&person, lookups),
             name: person.name,
+            nickname: person.nickname,
             usual_role: person.usual_role,
             usual_group: person.usual_group,
             img: person.img,
@@ -3927,6 +3957,34 @@ mod tests {
             name: name.into(),
             ..PersonFields::default()
         }
+    }
+
+    #[test]
+    fn a_person_saves_and_loads_a_nickname_and_defaults_to_empty() {
+        let collection = Collection::open_in_memory().unwrap();
+        let ann = add_person(&collection, &fields("Ann")).unwrap();
+        let save: PersonSave = serde_json::from_value(serde_json::json!({
+            "fields": { "name": "Ann", "nickname": "  Annie  " }
+        }))
+        .unwrap();
+        save_person(&collection, ann, &save).unwrap();
+        assert_eq!(
+            person(&collection, ann).unwrap().nickname,
+            "Annie",
+            "ADR 0182 item 12: saving a person must trim and load its nickname."
+        );
+
+        let body: PersonSave = serde_json::from_value(serde_json::json!({
+            "fields": { "name": "Bea" }
+        }))
+        .unwrap();
+        let bea = add_person(&collection, &fields("Bea")).unwrap();
+        save_person(&collection, bea, &body).unwrap();
+        assert_eq!(
+            person(&collection, bea).unwrap().nickname,
+            "",
+            "ADR 0182 item 12: a person without a nickname must keep an empty nickname."
+        );
     }
 
     /// A lookup that gives the node `node` for the address `address`.
@@ -4948,6 +5006,9 @@ mod tests {
     fn the_export_gives_each_page_and_a_save_keeps_the_time_of_its_link() {
         let collection = Collection::open_in_memory().unwrap();
         let ann = add_person(&collection, &fields("Ann")).unwrap();
+        let mut fields = fields("Ann");
+        fields.nickname = "Annie".into();
+        change_person(&collection, ann, &fields).unwrap();
         let save = PersonSave {
             pages: Some(vec![page("g-1", "Ann Bell Music")]),
             ..PersonSave::default()
@@ -4964,6 +5025,10 @@ mod tests {
         save_person(&collection, ann, &save).unwrap();
         let exported = export(&collection, &HashMap::<String, Lookup>::new()).unwrap();
         let pages = &exported.people[0].pages;
+        assert_eq!(
+            exported.people[0].nickname, "Annie",
+            "ADR 0182 item 18: the export must give the person's nickname."
+        );
         assert_eq!(
             pages
                 .iter()
@@ -6239,6 +6304,32 @@ mod tests {
         );
         let owner = collection.change_set_row(set).unwrap().map(|c| c.person_id);
         assert_eq!(owner, Some(Some(keep.0)));
+    }
+
+    #[test]
+    fn a_merge_keeps_or_inherits_the_nickname_of_the_kept_person() {
+        let collection = Collection::open_in_memory().unwrap();
+        let mut kept_fields = fields("Ann");
+        kept_fields.nickname = "Annie".into();
+        let keep = add_person(&collection, &kept_fields).unwrap();
+        let mut other_fields = fields("Bea");
+        other_fields.nickname = "Bee".into();
+        let other = add_person(&collection, &other_fields).unwrap();
+        merge_people(&collection, keep, other).unwrap();
+        assert_eq!(
+            person(&collection, keep).unwrap().nickname,
+            "Annie",
+            "ADR 0182 item 17: a merge must keep the nickname of the kept person."
+        );
+
+        let keep = add_person(&collection, &fields("Cy")).unwrap();
+        let other = add_person(&collection, &other_fields).unwrap();
+        merge_people(&collection, keep, other).unwrap();
+        assert_eq!(
+            person(&collection, keep).unwrap().nickname,
+            "Bee",
+            "ADR 0182 item 17: an empty kept nickname must inherit the other nickname."
+        );
     }
 
     #[test]

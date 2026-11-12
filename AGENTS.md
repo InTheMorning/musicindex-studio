@@ -108,7 +108,7 @@ Keep development and check data in `.studio-dev/` at the repository root. Git ig
 - No write occurs without a diff that the user has seen, or a change that a show grant of the user covers ([ADR 0007](docs/adr/0007-draft-diff-write-and-announce.md), [ADR 0054](docs/adr/0054-live-items-connected-apps-and-show-grants.md)).
 - Studio uses the musicindex.org "Afterglow" visual direction ([ADR 0010](docs/adr/0010-studio-uses-the-afterglow-direction.md)).
 - musicindex ADRs 0020 to 0029 own the interface rules that musicindex.org, Studio and HitIt share. They replace parts of ADR 0010, ADR 0029 and ADR 0037, and ADR 0010 names each part. A change to a shared rule needs a record in `../musicindex`.
-- From 2026-11-11 the app v4vmm has the name HitIt (HitIt ADR 0096). In archived records, finished tasks, reviews, dated records and accepted ADRs, v4vmm means HitIt.
+- From 2026-11-11 the app v4vmm has the name HitIt (HitIt ADR 0096). In archived records, finished tasks, reviews, dated records and accepted ADRs, v4vmm means HitIt. The checkout of HitIt is `../HitIt`, and `../v4vmm` in these records means `../HitIt`.
 
 ## Working Rules
 

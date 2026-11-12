@@ -142,8 +142,9 @@ Studio can show these notices. None of them stops the write:
 
 ## When the hosted file changed
 
-If someone else or a different tool changed the hosted file after you started the draft, Studio shows "The hosted file changed after the draft started."
-Studio writes nothing.
+If the hosted file changed after you started the draft, Studio shows "The hosted file changed after your draft started. Studio did not write."
+The notice gives the time that your draft started and the time that the file changed.
+The change can come from a different collection, a different Studio version, a different tool or a different person. Compare the times with your writes from other places.
 Select **Apply My Edits to the New File**. Studio shows what stays and what comes from the hosted file:
 
 - **Your edits stay** lists your edits. Studio applies them to the new file.

@@ -628,6 +628,11 @@ ALTER TABLE draft_feed_moves ADD COLUMN replace_title TEXT;
     r"
 UPDATE library_files SET connector_id = NULL;
 ",
+    // ADR 0186 item 3: the time that a draft got its base file. A draft
+    // from before this migration has no start time.
+    r"
+ALTER TABLE drafts ADD COLUMN started_at INTEGER;
+",
 ];
 
 /// `root` as a relative path under `data_dir`, when it is a folder inside
@@ -1949,6 +1954,25 @@ impl Collection {
                 },
             )
             .optional()?)
+    }
+
+    /// The Unix time that the draft of a feed got its base file (ADR 0186
+    /// item 3). `None` when the feed has no draft, or the draft is from
+    /// before this time was kept.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn draft_started_at(&self, id: FeedId) -> Result<Option<i64>, CollectionError> {
+        Ok(self
+            .db
+            .query_row(
+                "SELECT started_at FROM drafts WHERE feed_id = ?1",
+                [id.0],
+                |r| r.get::<_, Option<i64>>(0),
+            )
+            .optional()?
+            .flatten())
     }
 
     /// Keep the move of the feed XML in the draft of a feed. A move that
@@ -4344,8 +4368,12 @@ impl RecipientAgg {
 /// Add or replace the draft of a feed on a connection or a transaction.
 fn put_draft(db: &Connection, id: FeedId, draft: &DraftRow) -> Result<(), CollectionError> {
     db.execute(
-        "INSERT INTO drafts (feed_id, base_version, base_xml, draft_xml, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)
-         ON CONFLICT (feed_id) DO UPDATE SET base_version = ?2, base_xml = ?3, draft_xml = ?4, updated_at = ?5",
+        "INSERT INTO drafts (feed_id, base_version, base_xml, draft_xml, updated_at, started_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?5)
+         ON CONFLICT (feed_id) DO UPDATE SET
+             started_at = CASE WHEN drafts.base_version IS ?2 AND drafts.base_xml = ?3
+                 THEN drafts.started_at ELSE ?5 END,
+             base_version = ?2, base_xml = ?3, draft_xml = ?4, updated_at = ?5",
         params![
             id.0,
             draft.base_version.as_ref().map(Version::as_str),

@@ -149,6 +149,7 @@ pub struct PipelineError {
     message: String,
     bad_move_link: Option<Box<BadMoveLink>>,
     existing_file: Option<Box<ExistingFile>>,
+    conflict_times: Option<(Option<i64>, Option<i64>)>,
 }
 
 /// The file that a [`PipelineErrorKind::FileExists`] refusal of a feed move
@@ -176,6 +177,7 @@ impl PipelineError {
             message: message.into(),
             bad_move_link: None,
             existing_file: None,
+            conflict_times: None,
         }
     }
 
@@ -209,6 +211,7 @@ impl PipelineError {
             message: refusal.to_string(),
             bad_move_link: Some(Box::new(refusal)),
             existing_file: None,
+            conflict_times: None,
         }
     }
 
@@ -230,6 +233,12 @@ impl PipelineError {
     #[must_use]
     pub fn existing_file(&self) -> Option<&ExistingFile> {
         self.existing_file.as_deref()
+    }
+
+    /// The draft start time and hosted file change time, in Unix seconds.
+    #[must_use]
+    pub fn conflict_times(&self) -> Option<(Option<i64>, Option<i64>)> {
+        self.conflict_times
     }
 }
 
@@ -2262,6 +2271,16 @@ fn unix_now() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs())
+}
+
+fn feed_build_seconds(bytes: &[u8]) -> Option<i64> {
+    let document = Document::parse_bytes(bytes).ok()?;
+    let feed = Feed::read(&document).ok()?;
+    crate::datetime::parse_rfc2822(feed.last_build_date.as_deref()?).map(|moment| moment.seconds)
+}
+
+fn hosted_change_seconds(bytes: &[u8], last_modified: Option<i64>) -> Option<i64> {
+    feed_build_seconds(bytes).or(last_modified)
 }
 
 /// The same as [`diff`], with the time `now` in seconds after the Unix
@@ -4401,10 +4420,16 @@ pub fn write_draft_signed(
         let live_version = live.as_ref().map(|f| &f.version);
         let gone = source_gone && live.is_none();
         if !gone && live_version != draft.base_version.as_ref() {
-            return Err(PipelineError::new(
+            let mut error = PipelineError::new(
                 PipelineErrorKind::Conflict,
                 format!("{path} changed on the file host after the draft started"),
-            ));
+            );
+            if let Some(file) = live.as_ref() {
+                let draft_started = collection.draft_started_at(id)?;
+                let changed = hosted_change_seconds(&file.bytes, file.last_modified);
+                error.conflict_times = Some((draft_started, changed));
+            }
+            return Err(error);
         }
         if deleting_feed {
             // The delete needs the stamp of the inventory (ADR 0036 item 16).
@@ -6170,5 +6195,16 @@ mod sort_tests {
             ["big", "small"],
             "ADR 0144 item 5"
         );
+    }
+
+    #[test]
+    fn conflict_time_prefers_last_build_date_then_uses_host_time() {
+        let with_date = br"<rss><channel><title>Test</title><lastBuildDate>Sun, 06 Nov 1994 08:49:37 GMT</lastBuildDate></channel></rss>";
+        let without_date = br"<rss><channel><title>Test</title></channel></rss>";
+        let build_time = crate::datetime::parse_rfc2822("Sun, 06 Nov 1994 08:49:37 GMT")
+            .expect("valid date")
+            .seconds;
+        assert_eq!(hosted_change_seconds(with_date, Some(12)), Some(build_time));
+        assert_eq!(hosted_change_seconds(without_date, Some(12)), Some(12));
     }
 }

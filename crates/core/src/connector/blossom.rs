@@ -374,6 +374,7 @@ impl Connector for BlossomHost {
                     return Ok(Some(FileRead {
                         bytes,
                         version: Version::new(version_of(&record.sha256)),
+                        last_modified: None,
                     }));
                 }
                 Ok(None) => {}

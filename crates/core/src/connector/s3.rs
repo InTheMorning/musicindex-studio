@@ -548,13 +548,23 @@ impl Connector for S3Bucket {
         let version = etag_of(&response)
             .map(Version::new)
             .ok_or_else(|| missing_etag(path))?;
+        let last_modified = response
+            .headers()
+            .get("last-modified")
+            .and_then(|value| value.to_str().ok())
+            .and_then(crate::datetime::parse_rfc2822)
+            .map(|moment| moment.seconds);
         let bytes = response
             .body_mut()
             .with_config()
             .limit(READ_LIMIT)
             .read_to_vec()
             .map_err(|e| read_error(path, &e))?;
-        Ok(Some(FileRead { bytes, version }))
+        Ok(Some(FileRead {
+            bytes,
+            version,
+            last_modified,
+        }))
     }
 
     fn write(

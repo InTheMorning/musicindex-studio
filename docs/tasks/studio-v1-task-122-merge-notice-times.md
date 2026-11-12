@@ -2,7 +2,7 @@
 
 Decision: [ADR 0186](../adr/0186-the-merge-notice-gives-the-times-of-the-change.md).
 
-Status: Not started.
+Status: Complete on 2026-11-12. The four commit checks are green. The collection keeps the time that a draft got its hosted file, and an edit keeps that time (ADR 0186 item 3). The local, S3 and SFTP connectors give the modified time of a file. The screenshot visual check passed at 1280 px and at 390 px, in the light and dark themes. The notice gives both times, and nothing touches the edge of a group.
 
 ## Goal
 

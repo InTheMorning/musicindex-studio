@@ -255,7 +255,14 @@ impl From<PipelineError> for ApiError {
             }
             _ => (StatusCode::BAD_GATEWAY, "pipeline"),
         };
-        Self::new(status, code, error.to_string())
+        let mut api_error = Self::new(status, code, error.to_string());
+        if let Some((draft_started, file_changed)) = error.conflict_times() {
+            api_error.details = Some(json!({
+                "draft_started": draft_started,
+                "file_changed": file_changed,
+            }));
+        }
+        api_error
     }
 }
 

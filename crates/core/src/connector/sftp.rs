@@ -729,6 +729,7 @@ impl Connector for SftpHost {
         let segments = segments_of(path)?;
         self.with_wire(|wire| {
             let target = Self::resolve(wire, self, &segments)?;
+            let last_modified = target.attrs.and_then(|attrs| attrs.mtime).map(i64::from);
             match target.attrs {
                 Some(Attrs {
                     kind: FileKind::File,
@@ -738,7 +739,11 @@ impl Connector for SftpHost {
             }
             Ok(read_file(wire, &target.full)?.map(|bytes| {
                 let version = content_version(&bytes);
-                FileRead { bytes, version }
+                FileRead {
+                    bytes,
+                    version,
+                    last_modified,
+                }
             }))
         })
     }

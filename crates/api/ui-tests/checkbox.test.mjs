@@ -32,3 +32,67 @@ test('no other rule gives a check box its own size', () => {
       `musicindex ADR 0063 R-CHECK-4: "${r.selector}" sets the size of a check box. Delete it: every check box has the look of input[type="checkbox"].`);
   }
 });
+
+// R-CHECK-1 item 3: the border of a box has a contrast of 3:1 on each surface of its theme.
+// The file styles.css has the values. The test composites a translucent color on the page color of its theme.
+const declarations = (selector) => {
+  const vars = {};
+  for (const m of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    if (m[1].trim() !== selector) continue;
+    for (const d of m[2].matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) vars[d[1]] = d[2].trim();
+  }
+  return vars;
+};
+const themes = {
+  dark: declarations(':root'),
+  light: { ...declarations(':root'), ...declarations(':root[data-theme="light"]') },
+};
+const resolve = (theme, value) => {
+  let v = value;
+  for (let i = 0; i < 8; i++) {
+    const m = v.match(/^var\((--[\w-]+)\)$/);
+    if (!m) break;
+    v = themes[theme][m[1]];
+  }
+  return v;
+};
+const parseColor = (text) => {
+  const hex = text.match(/^#([0-9a-f]{6})$/i);
+  if (hex) return { r: parseInt(hex[1].slice(0, 2), 16), g: parseInt(hex[1].slice(2, 4), 16), b: parseInt(hex[1].slice(4, 6), 16), a: 1 };
+  const rgba = text.match(/^rgba?\(\s*(\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\s*\)$/);
+  if (rgba) return { r: +rgba[1], g: +rgba[2], b: +rgba[3], a: rgba[4] === undefined ? 1 : +rgba[4] };
+  throw new Error(`checkbox.test.mjs cannot read the color "${text}".`);
+};
+const over = (top, under) => ({
+  r: top.r * top.a + under.r * (1 - top.a),
+  g: top.g * top.a + under.g * (1 - top.a),
+  b: top.b * top.a + under.b * (1 - top.a),
+  a: 1,
+});
+const luminance = (c) => {
+  const lin = (v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; };
+  return 0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b);
+};
+const contrast = (a, b) => {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+};
+// The surfaces that carry a box: body (--level-1), .group and dialog.sheet (--level-2), an open entry (--level-3).
+const surfaces = ['--level-1', '--level-2', '--level-3'];
+
+// Finding: in the light theme --check-border (#8e8e93) has 2.92:1 on #f2f2f7. The test is a todo until the
+// shared value of musicindex ADR 0063 R-CHECK-5 changes. A todo that fails does not fail the run.
+const knownBelow = (theme, surface) => theme === 'light' && surface !== '--level-2';
+for (const theme of ['dark', 'light']) {
+  for (const surface of surfaces) {
+    const options = knownBelow(theme, surface) ? { todo: 'finding: the ratio is below 3:1 (ADR 0063 R-CHECK-1 item 3)' } : {};
+    test(`the check box border has a contrast of 3:1 on ${surface} in the ${theme} theme`, options, () => {
+      const page = parseColor(resolve(theme, themes[theme]['--level-1']));
+      const border = over(parseColor(resolve(theme, themes[theme]['--check-border'])), page);
+      const ground = over(parseColor(resolve(theme, themes[theme][surface])), page);
+      const ratio = contrast(border, ground);
+      assert.ok(ratio >= 3,
+        `musicindex ADR 0063 R-CHECK-1 item 3: --check-border has a contrast of ${ratio.toFixed(2)}:1 on ${surface} in the ${theme} theme. It needs 3:1. Change --check-border in crates/api/ui/styles.css, or the surface, so that the ratio is 3:1 or more.`);
+    });
+  }
+}

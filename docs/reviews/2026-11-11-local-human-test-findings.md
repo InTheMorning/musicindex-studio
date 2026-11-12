@@ -144,3 +144,16 @@ Owner: [ADR 0172](../adr/0172-a-list-is-one-tab-stop.md).
 The focus ring on the first row of the left panel, "‹ Releases", had no top edge. The scroll area of the left panel had space only at its left and right sides, so it clipped the ring. The fix gives the scroll area 4 px of space at each side. The rows stay at the same positions.
 
 On the **Credits** page, the ring on the first credit row had four edges, but its two top corners were not complete. The group has a corner radius of 14 px and clips its content. The ring was 2 px inside the row, with a radius of 8 px, so the group clipped its corners. The fix gives that ring a radius of 12 px.
+
+### Finding 12: The Button "Use" Of A Page Suggestion
+
+Owner: [ADR 0159](../adr/0159-a-person-can-link-to-a-page-on-music-index.md) items 8 and 13 to 15, and [ADR 0170](../adr/0170-update-people-from-their-linked-pages.md) items 1 and 2.
+
+On the page of Matt Finlay, the operator clicked **Use** on the wallet `mattfinlay@phafe.com`. The wallet then showed in the payment section with "Not used". The button adds the wallet to the person. It does not put the wallet in a feed. Thus the words "Use" and "Not used" tell the user two different things.
+
+The operator selected these answers in the questionnaire:
+
+- The button of a page suggestion is **Add**.
+- The button of ADR 0170 item 1 is **Add All Suggestions**.
+
+The same row of `peoplepages.js` shows each page suggestion: a picture, a website and a wallet. The ADR that records these answers must give the button for each kind of value.

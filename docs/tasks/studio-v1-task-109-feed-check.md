@@ -4,7 +4,7 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Feed Moves".
 Decision: [ADR 0174](../adr/0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md).
 Source: [research request on a feed check with repairs](../plans/research-feed-check-request.md), item F1.
 
-Status: Complete. The human test is open. The operator accepted ADR 0174 on 2026-11-11.
+Status: Complete. The operator accepted ADR 0174 on 2026-11-11. On 2026-11-12 the human test passed in the release build of local `main`: the repair "No self link" went to Review, and the write put the self link on `bastone`. The AppImage part of the human test is open.
 
 Packet 109a is commit `011fea7`. Packet 109b is commit `f49cae7`. The operator confirmed the tab form of ADR 0174 item 17 on the mockup in `.studio-dev/task-109/out/` on 2026-11-11. Packet 109c is complete. Its screenshot visual check is in `.studio-dev/task-109/c/out/`, in Light and Dark, at 1280 px and at 390 px.
 

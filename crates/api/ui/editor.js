@@ -37,7 +37,7 @@ import {
 import { isExplicit } from './explicit.js';
 import { op3Hint, op3Page } from './op3.js';
 import { shortKey, keyRowView, feedKey, withFeedKey, sourceText, withPersonKey } from './nostrkey.js';
-import { usesAlbumCredits, withTrackCredits, withAlbumCredits } from './credits.js';
+import { usesAlbumCredits, withTrackCredits, withAlbumCredits, creditNameChange } from './credits.js';
 import { readDuration, durationText } from './duration.js';
 import { mediaSource, playerNotice, canPlay, playerError, isPlaceholderAddress, PLAYER_STARTING, PLAYER_STARTING_DELAY_MS, playerMark, playWasReplaced, playerProgress } from './media.js';
 import { shortType as formatLabel, propertiesSummary, propertiesOpen, propertyRows, propertiesNotice, needsMetadataRead, clockText } from './audio.js';
@@ -60,9 +60,9 @@ const BAD_ADDRESS = 'This is not a full web address. Start it with https://.';
 // A text field. An address field gives its model path in `address`. The
 // field then shows red text when the core finds the address not correct
 // (ADR 0023 item 4). `address` can be a list of model paths.
-export function TextField({ id, label, value, onChange, required = false, address, bad = [], ...rest }) {
+export function TextField({ id, label, value, onChange, required = false, address, bad = [], error: fieldError = null, ...rest }) {
   const paths = [].concat(address || []);
-  const error = paths.some((path) => hasBadAddress(bad, path)) ? BAD_ADDRESS : null;
+  const error = fieldError || (paths.some((path) => hasBadAddress(bad, path)) ? BAD_ADDRESS : null);
   return html`<${Field} id=${id} label=${label} value=${value ?? ''} error=${error} ...${rest}
     onInput=${(e) => onChange(required ? e.target.value : optional(e.target.value))} />`;
 }
@@ -282,17 +282,25 @@ function Persons({ prefix, persons, onChange, bad, path = 'persons' }) {
   const { feedId } = useContext(PickerContext) || {};
   const [adding, setAdding] = useState(false);
   const [current, setCurrent] = useState(0);
+  // The refused text of a name field, by credit (ADR 0185 item 1). The
+  // field shows it with the error, and the credit keeps its name.
+  const [refusedNames, setRefusedNames] = useState({});
   const roles = useRoleList();
   return html`${persons.length === 0 && html`<p class="hint">No people yet.</p>`}
     ${persons.map((p, i) => {
       const change = (name) => (value) => onChange(setAt(persons, i, set(p, name, value)));
+      const changeName = (value) => {
+        const result = creditNameChange(p, value);
+        setRefusedNames((refused) => ({ ...refused, [p._cid]: result.error ? { text: value, error: result.error } : null }));
+        if (!result.error) onChange(setAt(persons, i, result.person));
+      };
       const id = `${prefix}-person-${p._cid}`;
       const summary = html`<span class="title">${p.name || 'New person'}</span>
         <span class="sub">${roleSummary(p.role, p.group, roles || []) || 'host · cast'}</span>`;
       const currentIndex = Math.min(current, Math.max(0, persons.length - 1));
       return html`<${EntryRow} key=${p._cid} group=${`${prefix}-persons`} cid=${p._cid} summary=${summary}
         listIndex=${i} current=${currentIndex} setCurrent=${setCurrent}>
-        <${TextField} id=${`${id}-name`} label="Name" required value=${p.name} onChange=${change('name')} />
+        <${TextField} id=${`${id}-name`} label="Name" required value=${refusedNames[p._cid]?.text ?? p.name} error=${refusedNames[p._cid]?.error} onChange=${changeName} />
         <${RoleMenu} id=${`${id}-role`} role=${p.role} group=${p.group}
           onChange=${(role, group) => onChange(setAt(persons, i, { ...p, role: role || null, group: group || null }))} />
         <${PersonPicture} url=${p.img} />

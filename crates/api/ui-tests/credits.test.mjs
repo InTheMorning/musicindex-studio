@@ -1,7 +1,7 @@
 // The credits of a track (ADR 0064 item 8).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { usesAlbumCredits, withTrackCredits, withAlbumCredits } from '../ui/credits.js';
+import { usesAlbumCredits, withTrackCredits, withAlbumCredits, creditNameChange } from '../ui/credits.js';
 
 const album = [
   { _cid: 'a', key: 0, name: 'Ann', role: 'vocalist', group: 'music', img: null, href: 'https://example.com/ann' },
@@ -28,6 +28,14 @@ test('withAlbumCredits gives an empty list and usesAlbumCredits then gives true'
 
 test('usesAlbumCredits gives false for an item with one person', () => {
   assert.equal(usesAlbumCredits({ persons: [{ name: 'Ann' }] }), false);
+});
+
+test('creditNameChange refuses an empty name and keeps the prior credit', () => {
+  const person = { _cid: 'credit-1', name: 'Ann', role: 'vocals' };
+  const result = creditNameChange(person, '  \t');
+  assert.equal(result.person, person);
+  assert.equal(result.person.name, 'Ann');
+  assert.equal(result.error, 'A credit needs a name.');
 });
 
 test('withTrackCredits keeps the Nostr key of each person', () => {

@@ -19,3 +19,10 @@ export function withTrackCredits(item, albumPersons) {
 export function withAlbumCredits(item) {
   return { ...item, persons: [] };
 }
+
+// A change of the name of an open credit (ADR 0185 item 1). An empty name
+// gives the error, and the credit keeps its name from before.
+export function creditNameChange(person, name) {
+  if (name.trim() === '') return { person, error: 'A credit needs a name.' };
+  return { person: { ...person, name }, error: null };
+}

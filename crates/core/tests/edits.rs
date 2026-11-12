@@ -179,6 +179,16 @@ fn a_changed_credit_attribute_keeps_its_place_and_new_attributes_go_last() {
 }
 
 #[test]
+fn a_credit_without_a_name_or_nostr_key_is_not_written() {
+    let source = "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel><title>T</title><item><title>Song</title><guid>song</guid></item></channel></rss>";
+    let after = edit(source, |feed| {
+        feed.persons.push(Entry::new(Person::default()));
+        feed.items[0].persons.push(Entry::new(Person::default()));
+    });
+    assert_eq!(after.matches("<podcast:person").count(), 0, "{after}");
+}
+
+#[test]
 fn a_new_credit_above_a_changed_credit_does_not_change_its_hosted_pair() {
     let source = "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel><title>T</title><podcast:person img=\"https://example.com/ann.jpg\" role=\"vocals\">Ann</podcast:person></channel></rss>";
     let hosted = Document::parse(source).unwrap();

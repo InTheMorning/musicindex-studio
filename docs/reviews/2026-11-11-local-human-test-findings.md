@@ -172,3 +172,11 @@ The operator selected this design in the questionnaire, as a drawing:
 - The button at the bottom is **Add "{name}" Without a Page**.
 
 A mockup of the real sheet comes before the ADR.
+
+### Finding 14: The Linked Pages Are Low On The Page Of A Person
+
+Owner: [ADR 0099](../adr/0099-the-people-destination-and-the-page-of-a-person.md) and [ADR 0159](../adr/0159-a-person-can-link-to-a-page-on-music-index.md).
+
+The section "Linked artist and label pages" is below the sections "Payment", "Credits" and "Support links". The linked page gives the suggestions in these sections, but the user sees the link last. **Use All Suggestions** is also below the suggestions that it adds.
+
+The operator selected this design in the questionnaire, as a drawing: the section moves to the top of the page, below the head with **Find on Music Index** and above "Payment". The section keeps its rows and its buttons.

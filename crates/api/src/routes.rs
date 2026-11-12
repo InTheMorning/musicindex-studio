@@ -4534,6 +4534,40 @@ struct FileMove {
     download: bool,
 }
 
+/// One file of a release that has a copy on the target already (ADR 0179
+/// item 5). The move sends no upload. The draft gets the address of the
+/// copy, and a copy operation at the path of the copy. The write makes no
+/// host operation of it, and it removes the record of an old copy at that
+/// path (ADR 0148 item 13).
+struct TargetCopy {
+    file: LibraryFileId,
+    /// The path of the copy on the target.
+    path: String,
+    /// The copies on a file host that the feed uses. Each stays until the
+    /// user reviews its deletion.
+    old_copies: Vec<inventory::Copy>,
+    /// Each address in the feed that the address of the copy replaces.
+    old_addresses: Vec<String>,
+    to_url: String,
+}
+
+/// Each address of `file` that the feed uses: the address of each copy in
+/// `in_use`, and the source address of the file.
+fn used_addresses(
+    file: &LibraryFile,
+    in_use: &[inventory::Copy],
+    addresses: &[String],
+) -> Vec<String> {
+    let mut used: Vec<String> = in_use.iter().filter_map(|copy| copy.url.clone()).collect();
+    if let Some(source) = file.source_url.as_deref()
+        && is_in_use(Some(source), addresses)
+        && !used.iter().any(|address| address == source)
+    {
+        used.push(source.to_owned());
+    }
+    used
+}
+
 /// The changes of a move of one release (ADR 0148 items 2 and 3).
 struct ReleaseMovePlan {
     target: ConnectorId,
@@ -4543,6 +4577,10 @@ struct ReleaseMovePlan {
     /// The cause when the feed file cannot go to this file host.
     feed_stays: Option<&'static str>,
     files: Vec<FileMove>,
+    /// The files that the feed uses on a different file host and that have
+    /// a copy on the target (ADR 0179 item 5). The plan counts each one in
+    /// `on_target`.
+    target_copies: Vec<TargetCopy>,
     on_target: u64,
     /// Each file or address that does not move, with its cause.
     stays: Vec<(String, &'static str)>,
@@ -4563,6 +4601,11 @@ struct Unwritten {
 }
 
 impl ReleaseMovePlan {
+    /// True when the plan changes the address or the host of a release file.
+    fn moves_files(&self) -> bool {
+        !self.files.is_empty() || !self.target_copies.is_empty()
+    }
+
     /// Keep the new files on their planned file host. Each one then stays
     /// until the write of the draft.
     fn keep_unwritten(&mut self) {
@@ -4579,6 +4622,8 @@ impl ReleaseMovePlan {
         }
         if !scope.takes_files() {
             self.files.clear();
+            self.on_target -= self.target_copies.len() as u64;
+            self.target_copies.clear();
             self.default_changes = false;
             self.keep_unwritten();
         }
@@ -4599,6 +4644,7 @@ fn release_move_plan(
     let operations = w.collection.draft_operations(id)?;
     let mut known_addresses: Vec<String> = Vec::new();
     let mut files = Vec::new();
+    let mut target_copies = Vec::new();
     let mut on_target = 0;
     let mut stays = Vec::new();
     let mut unwritten = Vec::new();
@@ -4613,6 +4659,10 @@ fn release_move_plan(
                 && op.library_file_id == Some(file.id)
                 && op.connector_id == target
         });
+        let target_copy_path = copies
+            .iter()
+            .find(|copy| copy.connector_id == target)
+            .map(|copy| copy.path.clone());
         let in_use: Vec<inventory::Copy> = copies
             .into_iter()
             .filter(|copy| is_in_use(copy.url.as_deref(), &addresses))
@@ -4621,14 +4671,7 @@ fn release_move_plan(
             on_target += 1;
             continue;
         }
-        let mut old_addresses: Vec<String> =
-            in_use.iter().filter_map(|copy| copy.url.clone()).collect();
-        if let Some(source) = file.source_url.as_deref()
-            && is_in_use(Some(source), &addresses)
-            && !old_addresses.iter().any(|address| address == source)
-        {
-            old_addresses.push(source.to_owned());
-        }
+        let old_addresses = used_addresses(&file, &in_use, &addresses);
         if old_addresses.is_empty() {
             // A new file that the feed uses goes to its planned host at the
             // write. The move changes the default file host, so the draft
@@ -4649,6 +4692,19 @@ fn release_move_plan(
                     stays.push((file.path.clone(), "not_written"));
                 }
             }
+            continue;
+        }
+        if let Some(path) = target_copy_path {
+            // The copy has the same SHA-256, so the move needs no upload.
+            let to_url = reference_url(&w.collection, hosts, feed_row, &file, target)?;
+            on_target += 1;
+            target_copies.push(TargetCopy {
+                file: file.id,
+                path,
+                old_copies: in_use,
+                old_addresses,
+                to_url,
+            });
             continue;
         }
         let download = check_download(w, hosts, &file)?;
@@ -4680,6 +4736,7 @@ fn release_move_plan(
         feed_moves: !blossom && feed_from != Some(target),
         feed_stays: (blossom && feed_from != Some(target)).then_some("blossom"),
         files,
+        target_copies,
         on_target,
         stays,
         default_changes: feed_row.files_connector_id.or(feed_row.connector_id) != Some(target),
@@ -4696,7 +4753,7 @@ fn files_that_stay(w: &Workspace, hosts: &Hosts, feed_row: &FeedRow) -> Result<u
     };
     Ok(
         release_move_plan(w, hosts, feed_row, feed_move.connector_id)
-            .map_or(0, |plan| plan.files.len()),
+            .map_or(0, |plan| plan.files.len() + plan.target_copies.len()),
     )
 }
 
@@ -4732,7 +4789,7 @@ fn release_move_json(plan: &ReleaseMovePlan) -> Value {
         "stays": plan.stays.iter().map(|(name, reason)| json!({ "name": name, "reason": reason })).collect::<Vec<_>>(),
         "default_changes": plan.default_changes,
         "new_files": plan.unwritten.len(),
-        "nothing_to_move": !plan.feed_moves && plan.files.is_empty() && !plan.default_changes,
+        "nothing_to_move": !plan.feed_moves && !plan.moves_files() && !plan.default_changes,
         "wait_choices": moves::WAIT_CHOICES,
         "default_wait_days": moves::DEFAULT_WAIT_DAYS,
     })
@@ -4789,6 +4846,31 @@ fn apply_release_move(
                 reference_feed(feed, &file.from_url, &file.to_url);
             }
         })?;
+    }
+    for copy in &plan.target_copies {
+        w.collection.add_draft_operation(
+            id,
+            DraftOperationKind::Copy,
+            Some(copy.file),
+            plan.target,
+            &copy.path,
+        )?;
+        pipeline::edit_draft(&w.collection, id, |feed| {
+            for from in &copy.old_addresses {
+                reference_feed(feed, from, &copy.to_url);
+            }
+        })?;
+        if let Some(wait_days) = wait_days {
+            for old in &copy.old_copies {
+                w.collection.add_hold_operation(
+                    id,
+                    old.connector_id,
+                    &old.path,
+                    plan.target,
+                    wait_days,
+                )?;
+            }
+        }
     }
     for file_move in &plan.files {
         w.collection.add_draft_operation(
@@ -4907,6 +4989,11 @@ fn plan_from_host(
     for file in &mut plan.files {
         file.old_copies.retain(|copy| copy.connector_id == from);
     }
+    let kept = |copy: &TargetCopy| copy.old_copies.iter().any(|old| old.connector_id == from);
+    plan.target_copies.retain(kept);
+    for copy in &mut plan.target_copies {
+        copy.old_copies.retain(|old| old.connector_id == from);
+    }
     plan.feed_moves = plan.feed_moves && plan.feed_from == Some(from);
     Ok(plan)
 }
@@ -4939,7 +5026,7 @@ pub(crate) async fn move_all_releases(
         for row in workspace.collection.feeds()? {
             let on_host = row.connector_id == Some(from)
                 || plan_from_host(workspace, &hosts, &row, from, to)
-                    .is_ok_and(|plan| plan.feed_moves || !plan.files.is_empty());
+                    .is_ok_and(|plan| plan.feed_moves || plan.moves_files());
             if on_host {
                 feed_ids.push(row.id);
             }
@@ -4961,10 +5048,10 @@ pub(crate) async fn move_all_releases(
             &mut |id| {
                 let row = workspace.collection.feed(id)?;
                 let applied = plan_from_host(workspace, &hosts, &row, from, to).and_then(|plan| {
-                    if plan.feed_moves || !plan.files.is_empty() {
+                    if plan.feed_moves || plan.moves_files() {
                         apply_release_move(workspace, &hosts, id, &plan, wait_days, false)?;
                     }
-                    Ok((plan.feed_moves, plan.files.len()))
+                    Ok((plan.feed_moves, plan.files.len() + plan.target_copies.len()))
                 });
                 Ok(match applied {
                     Ok((feed_moves, files)) => change_set::moved(feed_moves, files),

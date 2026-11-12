@@ -15,6 +15,7 @@ use studio_core::connector::{self, HostEnv};
 use studio_core::discover::Found;
 use studio_core::feed::Feed;
 use studio_core::feed_reads::{FileReads, NetworkFacts};
+use studio_core::folder_scan;
 use studio_core::inventory::Hosts;
 use studio_core::library::Library;
 use studio_core::move_link::FeedReader;
@@ -1996,6 +1997,9 @@ impl Workspace {
     /// the hosted feed (ADR 0038 item 3). A feed with no release folder
     /// has no records.
     ///
+    /// The function first merges the library records that are one file
+    /// (ADR 0179 items 3 and 4).
+    ///
     /// An error goes into the log and does not stop the caller. The
     /// function never writes to a host.
     pub(crate) fn record_remote_files(&self, id: FeedId, feed: &Feed) {
@@ -2015,6 +2019,13 @@ impl Workspace {
             if row.folder.is_none() {
                 return Ok(());
             }
+            // A failed merge does not stop the remote records.
+            if let Err(message) = self.merge_duplicate_files(id) {
+                eprintln!(
+                    "studio: the merge of the duplicate records of feed {} failed: {message}",
+                    id.0
+                );
+            }
             let hosts = hosts().map_err(|e| format!("{e:?}"))?;
             remote::record_remote_files(&self.collection, &hosts, id, feed)
                 .map_err(|e| e.to_string())?;
@@ -2026,6 +2037,18 @@ impl Workspace {
                 id.0
             );
         }
+    }
+
+    /// Merge the library records of one feed that are one file (ADR 0179
+    /// items 3 and 4). Studio with no library folder yet has nothing to
+    /// merge.
+    fn merge_duplicate_files(&self, id: FeedId) -> Result<(), String> {
+        let Ok(library) = self.library() else {
+            return Ok(());
+        };
+        folder_scan::merge_duplicates(&self.collection, &library, id)
+            .map(|_| ())
+            .map_err(|e| e.to_string())
     }
 
     /// Keep the remote file records of each feed with a release folder

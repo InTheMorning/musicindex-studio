@@ -14583,6 +14583,45 @@ async fn the_plan_names_what_moves_and_what_stays() {
     assert_eq!(plan["nothing_to_move"], true, "{plan}");
 }
 
+/// ADR 0179 item 5 and item 6: a host that has a copy of a file gets no
+/// upload of it. The draft uses the copy, the plan counts the file on the
+/// target, and each old copy gets a hold.
+#[tokio::test]
+async fn a_move_to_a_host_with_a_copy_of_a_file_sends_no_upload() {
+    let app = move_app();
+    let (id, _, _, backup, folder) = album_on_home(&app).await;
+    // The same bytes are on "Backup" already, at the path of the move.
+    std::fs::create_dir_all(folder.path().join("album")).unwrap();
+    std::fs::copy(
+        media_path("tagged.mp3"),
+        folder.path().join("album/tagged.mp3"),
+    )
+    .unwrap();
+    let (status, _) = call(&app, "POST", &format!("/api/v1/hosts/{backup}/scan"), None).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let plan_path = format!("/api/v1/feeds/{id}/move/plan?connector_id={backup}&what=files");
+    let (_, plan) = call(&app, "GET", &plan_path, None).await;
+    assert_eq!(plan["audio"]["count"], 0, "{plan}");
+    assert_eq!(plan["on_target"], 1, "{plan}");
+    assert_eq!(plan["nothing_to_move"], false, "{plan}");
+
+    let diff = move_scoped(&app, id, backup, "files").await;
+    assert!(!has_copy(&diff), "{diff}");
+    let holds = diff["operations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|op| op["kind"] == "hold")
+        .count();
+    assert_eq!(holds, 1, "{diff}");
+    let (_, draft) = call(&app, "GET", &format!("/api/v1/feeds/{id}/draft"), None).await;
+    let url = draft["model"]["items"][0]["enclosure"]["url"]
+        .as_str()
+        .unwrap();
+    assert!(url.starts_with("https://backup.example/"), "{url}");
+}
+
 /// ADR 0177 item 3: a move takes only the part that "What moves" names.
 async fn move_scoped(app: &App, id: i64, to: i64, what: &str) -> Value {
     let (status, diff) = call(

@@ -5,7 +5,7 @@
 //! function decides when a move is ready. The core does not delete a file:
 //! the user reviews a deletion and writes it through `pipeline::write_draft`.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::collection::{ConnectorId, OldCopy};
 use crate::media::plain_address;
@@ -16,6 +16,34 @@ pub const DEFAULT_WAIT_DAYS: u32 = 30;
 
 /// The waiting times that a user can select (ADR 0148 item 6).
 pub const WAIT_CHOICES: [u32; 3] = [7, DEFAULT_WAIT_DAYS, 90];
+
+/// What a move of one release takes to the new file host (ADR 0177 item 3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MoveScope {
+    /// The feed file and the release files.
+    #[default]
+    Both,
+    /// Only the feed file.
+    Feed,
+    /// Only the release files. The default file host of the release changes
+    /// too (ADR 0177 item 4).
+    Files,
+}
+
+impl MoveScope {
+    /// True when the move takes the feed file.
+    #[must_use]
+    pub fn takes_feed(self) -> bool {
+        matches!(self, Self::Both | Self::Feed)
+    }
+
+    /// True when the move takes the release files.
+    #[must_use]
+    pub fn takes_files(self) -> bool {
+        matches!(self, Self::Both | Self::Files)
+    }
+}
 
 const SECONDS_PER_DAY: i64 = 86_400;
 
@@ -129,6 +157,13 @@ mod tests {
             moved_at,
             wait_days,
         }
+    }
+
+    #[test]
+    fn each_scope_takes_the_parts_that_its_name_gives() {
+        assert!(MoveScope::Both.takes_feed() && MoveScope::Both.takes_files());
+        assert!(MoveScope::Feed.takes_feed() && !MoveScope::Feed.takes_files());
+        assert!(!MoveScope::Files.takes_feed() && MoveScope::Files.takes_files());
     }
 
     #[test]

@@ -41,7 +41,7 @@ import { usesAlbumCredits, withTrackCredits, withAlbumCredits } from './credits.
 import { readDuration, durationText } from './duration.js';
 import { mediaSource, playerNotice, canPlay, playerError, isPlaceholderAddress, PLAYER_STARTING, PLAYER_STARTING_DELAY_MS, playerMark, playWasReplaced, playerProgress } from './media.js';
 import { shortType as formatLabel, propertiesSummary, propertiesOpen, propertyRows, propertiesNotice, needsMetadataRead, clockText } from './audio.js';
-import { planRows, stayRows, deleteLabel, deleteAllLabel, DELETE_NOTE_ON, DELETE_NOTE_OFF, waitLabel, waitingView, readyNotice, partMoveNotice } from './releasemove.js';
+import { MOVE_SCOPES, fileHostRows, planRows, stayRows, deleteLabel, deleteAllLabel, DELETE_NOTE_ON, DELETE_NOTE_OFF, waitLabel, waitingView, readyNotice, partMoveNotice } from './releasemove.js';
 import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary, artworkPreview } from './artwork.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, addsAsTrackFile, refusedText, wrongKindText, replacedAddresses, selectedFacts } from './picker.js';
 
@@ -4015,14 +4015,16 @@ function ChangeRow({ difference, file, busy, onAct }) {
   </div>`;
 }
 
-// The sheet "Move This Release…" (ADR 0148 items 1 to 6). The core gives the
-// plan of each file host. `start` is the first file host of the select.
+// The sheet "Move This Release…" (ADR 0148 items 1 to 6, ADR 0177 item 3).
+// The core gives the plan of each file host and each value of "What moves".
+// `start` is the first file host of the select.
 function MoveReleaseSheet({ open, feed, connectors, start, onDone, onClose }) {
   const ref = useSheet(open);
   const [target, setTarget] = useState(null);
   const [plan, setPlan] = useState(null);
   const [deleteLater, setDeleteLater] = useState(true);
   const [wait, setWait] = useState(30);
+  const [what, setWhat] = useState(MOVE_SCOPES[0].value);
   const { busy, error, run } = useAction();
   const other = connectors.find((c) => c.id !== feed.connector_id);
   const chosen = target ?? start ?? (other ? other.id : null);
@@ -4031,25 +4033,30 @@ function MoveReleaseSheet({ open, feed, connectors, start, onDone, onClose }) {
     let live = true;
     setPlan(null);
     run(async () => {
-      const found = await api(`/feeds/${feed.id}/move/plan?connector_id=${chosen}`);
+      const found = await api(`/feeds/${feed.id}/move/plan?connector_id=${chosen}&what=${what}`);
       if (live) { setPlan(found); setWait(found.default_wait_days); }
     });
     return () => { live = false; };
-  }, [open, chosen, feed.id]);
+  }, [open, chosen, what, feed.id]);
   const add = () => run(async () => {
-    await api(`/feeds/${feed.id}/move`, { method: 'POST', body: { connector_id: chosen, delete_later: deleteLater, wait_days: wait } });
+    await api(`/feeds/${feed.id}/move`, { method: 'POST', body: { connector_id: chosen, delete_later: deleteLater, wait_days: wait, what } });
     await onDone();
     ref.current.close();
   });
   const stays = plan ? stayRows(plan) : [];
   const hasOld = plan && plan.from_connector_ids.length > 0;
-  return html`<dialog ref=${ref} class="sheet small" aria-labelledby="move-release-title" onClose=${() => { setTarget(null); onClose(); }}>
+  return html`<dialog ref=${ref} class="sheet small" aria-labelledby="move-release-title" onClose=${() => { setTarget(null); setWhat(MOVE_SCOPES[0].value); onClose(); }}>
     <header>
       <h2 id="move-release-title">Move ${feed.title || 'This Release'}</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
     </header>
     <div class="body form">
       <div class="group move-group">
+        <div class="field"><label for="move-release-what">What moves</label>
+          <select id="move-release-what" class="button" value=${what} disabled=${busy}
+            onChange=${(e) => setWhat(e.target.value)}>
+            ${MOVE_SCOPES.map((scope) => html`<option value=${scope.value}>${scope.label}</option>`)}
+          </select></div>
         <div class="field"><label for="move-release-host">To this file host</label>
           <select id="move-release-host" class="button" value=${chosen} disabled=${busy}
             onChange=${(e) => setTarget(Number(e.target.value))}>
@@ -4340,11 +4347,6 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
     if (body.action === 'download' || body.action === 'restore') await loadDownloads();
   };
 
-  const setDefaultHost = (connectorId) => run(async () => {
-    await api(`/feeds/${feed.id}/hosts`, { method: 'PUT', body: { files_connector_id: connectorId } });
-    await load();
-  });
-
   // The pending move with its method and its two addresses, from the last
   // route answer. The files route gives only the host and the path, so a
   // page load asks the diff route.
@@ -4357,15 +4359,6 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
       (d) => { if (d.feed_move) setMoveInfo(d.feed_move); },
       () => { /* The hint keeps the pointer text with no addresses. */ });
   }, [feed.id, pendingMove && pendingMove.connector_id, reloadKey]);
-
-  // The route changes the self link of the draft, so the shell loads the
-  // draft again, as after a host operation.
-  const setFeedHost = (connectorId) => run(async () => {
-    const diff = await api(`/feeds/${feed.id}/feed-host`, { method: 'PUT', body: { connector_id: connectorId } });
-    setMoveInfo(diff.feed_move || null);
-    onOpsChanged();
-    await load();
-  });
 
   // "Review the Deletion" puts a deletion of each old copy in the draft, and
   // Review shows them (ADR 0148 items 10 and 12).
@@ -4419,8 +4412,8 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
   const defaultHost = data.files_connector_id ?? feed.connector_id;
   const mode = assetMode();
   const missing = mode.holdAssets ? 0 : missingCount(data.files);
-  const feedHost = data.feed_move ? data.feed_move.connector_id : feed.connector_id;
   const tag = newFeedAddress(feed);
+  const hostRows = fileHostRows(feed, data, connectors);
   const libraryRow = libraryFolderRow(data);
   const moveLibraryFolder = async (path) => {
     await api(`/feeds/${feed.id}/library-folder`, { method: 'PUT', body: { path } });
@@ -4445,50 +4438,40 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
       </div>
     </section>`}
 
-    <section class="page-section"><h2>Files</h2>
+    <section class="page-section"><h2>File hosts</h2>
+      <div class="group">
+        ${hostRows.map((row) => html`<div class="link-row static" key=${row.label}><span class="text">
+          <span class="label">${row.label}</span><span class="summary">${row.host}</span>
+          ${row.address && html`<span class="summary mono">${row.address}</span>`}</span></div>`)}
+      </div>
+      ${data.feed_move && html`<p class="hint">The feed moves to ${connectorName(connectors, data.feed_move.connector_id)} when you write${moveInfo && moveInfo.url ? html`, at <span class="mono">${moveInfo.url}</span>` : ''}.
+        The address from before${moveInfo && moveInfo.from_url ? html`, <span class="mono">${moveInfo.from_url}</span>,` : ''} gets ${moveMethod === 'redirect' ? 'a redirect' : 'a pointer file'}.</p>`}
+      ${tag && html`<p class="hint">The feed file names the new feed address <span class="mono">${tag.url}</span>.</p>`}
       <div class="actions">
-        <button class="button action" type="button" disabled=${scan.busy} onClick=${runScan}>
-          ${scan.busy ? 'Scanning…' : 'Scan the File Hosts'}</button>
-        ${mode.holdAssets && html`<button class="button action" type="button" disabled=${scan.busy} onClick=${runLibraryScan}>
-          Scan the Library Folder</button>`}
         ${connectors.length > 1 && html`<button class="button action" type="button" disabled=${busy}
           onClick=${() => setMoving({ start: null })}>Move This Release…</button>`}
+        <button class="button action" type="button" disabled=${scan.busy} onClick=${runScan}>
+          ${scan.busy ? 'Scanning…' : 'Scan the File Hosts'}</button>
       </div>
       <${ErrorNotice} error=${scan.error} />
       <${ErrorNotice} error=${opError} />
-      ${libraryRow && html`<div class="group">
-        <div class="link-row static"><span class="text"><span class="label">Library folder</span>
-          <span class="summary mono">${libraryRow.path}</span></span>
-          <button class="button" type="button" disabled=${busy} onClick=${() => setLibraryFolderOpen(true)}>Change…</button>
-        </div>
-        ${libraryRow.defaultPath && html`<div class="link-row static"><span class="text">
-          <span class="label">Default folder</span><span class="summary mono">${libraryRow.defaultPath}</span></span>
-          <button class="button" type="button" disabled=${busy} onClick=${() => run(() => moveLibraryFolder(libraryRow.moveToDefault))}>Move to Default</button>
-        </div>`}
-      </div>`}
     </section>
 
-    <section class="page-section"><h2>File hosts</h2>
+    ${libraryRow && html`<section class="page-section"><h2>On this computer</h2>
       <div class="group">
-        <div class="field">
-          <label for="files-default-host">Default file host of the release files</label>
-          <select id="files-default-host" class="button" value=${defaultHost} disabled=${busy}
-            onChange=${(e) => setDefaultHost(Number(e.target.value))}>
-            ${connectors.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
-          </select>
-        </div>
-        <div class="field">
-          <label for="files-feed-host">File host of the feed XML</label>
-          <select id="files-feed-host" class="button" value=${feedHost} disabled=${busy}
-            onChange=${(e) => setFeedHost(Number(e.target.value))}>
-            ${connectors.filter((c) => c.kind !== 'blossom').map((c) => html`<option value=${c.id}>${c.name}</option>`)}
-          </select>
-          ${data.feed_move && html`<p class="hint">The feed moves to ${connectorName(connectors, data.feed_move.connector_id)} when you write${moveInfo && moveInfo.url ? html`, at <span class="mono">${moveInfo.url}</span>` : ''}.
-            The address from before${moveInfo && moveInfo.from_url ? html`, <span class="mono">${moveInfo.from_url}</span>,` : ''} gets ${moveMethod === 'redirect' ? 'a redirect' : 'a pointer file'}.</p>`}
-          ${tag && html`<p class="hint">The feed file names the new feed address <span class="mono">${tag.url}</span>.</p>`}
+        <div class="link-row static"><span class="text"><span class="label">Release folder</span>
+          <span class="summary mono">${libraryRow.path}</span>
+          ${libraryRow.moveToDefault && html`<span class="summary">Not in the standard folder: <span class="mono">${libraryRow.moveToDefault}</span></span>`}</span>
+          <div class="actions">
+            <button class="button" type="button" disabled=${busy} onClick=${() => setLibraryFolderOpen(true)}>Change…</button>
+            ${libraryRow.moveToDefault && html`<button class="button" type="button" disabled=${busy}
+              onClick=${() => run(() => moveLibraryFolder(libraryRow.moveToDefault))}>Move to Standard Folder</button>`}
+          </div>
         </div>
       </div>
-    </section>
+      <div class="actions"><button class="button action" type="button" disabled=${scan.busy} onClick=${runLibraryScan}>
+        Scan the Library Folder</button></div>
+    </section>`}
 
     ${moves.length > 0 && html`<section class="page-section"><h2>Moves that wait</h2>
       ${moves.map((move) => html`<${WaitingMoveEntry} key=${move.records[0]} move=${move} connectors=${connectors} busy=${busy}

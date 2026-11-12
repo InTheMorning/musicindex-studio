@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { outcomeText, operationLine } from '../ui/recipients.js';
 import { changeTitle, changeRow, afterDiscard } from '../ui/people.js';
-import { planRows, stayRows, deleteLabel, waitingView, readyNotice, partMoveNotice } from '../ui/releasemove.js';
+import { MOVE_SCOPES, fileHostRows, planRows, stayRows, deleteLabel, waitingView, readyNotice, partMoveNotice } from '../ui/releasemove.js';
 
 const hosts = [{ id: 1, name: 'Old Host' }, { id: 2, name: 'New Host' }];
 const empty = { count: 0, bytes: 0 };
@@ -77,4 +77,23 @@ test('a move change set has its own words (ADR 0148 item 17)', () => {
     'Not changed · The draft already moves the feed file. Write or discard that draft first.');
   assert.equal(changeRow({ operation: moveAll, feeds: [] }).title, 'Move All Releases · Old Host to New Host');
   assert.deepEqual(afterDiscard({ operation: moveAll }), { name: 'hosts' });
+});
+
+test('the Files page gives two text rows for the file hosts and no select menu', () => {
+  const feed = { connector_id: 1, public_url: 'https://old.example/album.xml' };
+  const rows = fileHostRows(feed, { files_connector_id: null, feed_move: null }, hosts);
+  assert.deepEqual(rows, [
+    { label: 'Feed file', host: 'Old Host', address: 'https://old.example/album.xml' },
+    { label: 'Release files', host: 'Old Host', address: null },
+  ]);
+  for (const row of rows) assert.deepEqual(Object.keys(row), ['label', 'host', 'address']);
+  const moved = fileHostRows(feed, { files_connector_id: 2, feed_move: { connector_id: 2 } }, hosts);
+  assert.equal(moved[0].host, 'New Host');
+  assert.equal(moved[1].host, 'New Host');
+});
+
+test('What moves has the three values of ADR 0177, and the first is the start value', () => {
+  assert.deepEqual(MOVE_SCOPES.map((scope) => scope.label), [
+    'The feed file and the release files', 'Only the feed file', 'Only the release files']);
+  assert.deepEqual(MOVE_SCOPES.map((scope) => scope.value), ['both', 'feed', 'files']);
 });

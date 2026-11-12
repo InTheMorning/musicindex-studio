@@ -35,7 +35,7 @@ use studio_core::live::{self, LiveStatus};
 use studio_core::media;
 use studio_core::migrate;
 use studio_core::move_link;
-use studio_core::moves::{self, IndexAnswer};
+use studio_core::moves::{self, IndexAnswer, MoveScope};
 use studio_core::musicindex::{IndexSearchRequest, SearchNote, SearchPlan, plan_search};
 use studio_core::nostr_events::Signing;
 use studio_core::outside;
@@ -4565,6 +4565,24 @@ struct ReleaseMovePlan {
     on_target: u64,
     /// Each file or address that does not move, with its cause.
     stays: Vec<(String, &'static str)>,
+    /// True when the move sets a new default file host for the release
+    /// (ADR 0177 item 4).
+    default_changes: bool,
+}
+
+impl ReleaseMovePlan {
+    /// Keep only the parts that `scope` takes (ADR 0177 item 3).
+    fn limited(mut self, scope: MoveScope) -> Self {
+        if !scope.takes_feed() {
+            self.feed_moves = false;
+            self.feed_stays = None;
+        }
+        if !scope.takes_files() {
+            self.files.clear();
+            self.default_changes = false;
+        }
+        self
+    }
 }
 
 /// The plan to move a release to `target`. This changes nothing.
@@ -4652,6 +4670,7 @@ fn release_move_plan(
         files,
         on_target,
         stays,
+        default_changes: feed_row.files_connector_id.or(feed_row.connector_id) != Some(target),
     })
 }
 
@@ -4698,7 +4717,8 @@ fn release_move_json(plan: &ReleaseMovePlan) -> Value {
         "on_target": plan.on_target,
         "from_connector_ids": from,
         "stays": plan.stays.iter().map(|(name, reason)| json!({ "name": name, "reason": reason })).collect::<Vec<_>>(),
-        "nothing_to_move": !plan.feed_moves && plan.files.is_empty(),
+        "default_changes": plan.default_changes,
+        "nothing_to_move": !plan.feed_moves && plan.files.is_empty() && !plan.default_changes,
         "wait_choices": moves::WAIT_CHOICES,
         "default_wait_days": moves::DEFAULT_WAIT_DAYS,
     })
@@ -4707,6 +4727,8 @@ fn release_move_json(plan: &ReleaseMovePlan) -> Value {
 #[derive(Deserialize)]
 pub(crate) struct MovePlanQuery {
     connector_id: i64,
+    #[serde(default)]
+    what: MoveScope,
 }
 
 /// The plan of "Move This Release…" (ADR 0148 items 1 to 3).
@@ -4718,7 +4740,8 @@ pub(crate) async fn release_move_plan_route(
     blocking(shared, move |w| {
         let hosts = w.hosts()?;
         let feed_row = w.collection.feed(FeedId(id))?;
-        let plan = release_move_plan(w, &hosts, &feed_row, ConnectorId(query.connector_id))?;
+        let plan = release_move_plan(w, &hosts, &feed_row, ConnectorId(query.connector_id))?
+            .limited(query.what);
         Ok(Json(release_move_json(&plan)))
     })
     .await
@@ -4789,6 +4812,9 @@ pub(crate) struct MoveRelease {
     delete_later: bool,
     #[serde(default = "default_wait_days")]
     wait_days: u32,
+    /// The value of "What moves" (ADR 0177 item 3).
+    #[serde(default)]
+    what: MoveScope,
 }
 
 fn default_wait_days() -> u32 {
@@ -4810,8 +4836,13 @@ pub(crate) async fn move_release(
         if feed_row.connector_id.is_some() {
             writer(w, feed_id)?;
         }
-        let plan = release_move_plan(w, &hosts, &feed_row, ConnectorId(body.connector_id))?;
+        let plan = release_move_plan(w, &hosts, &feed_row, ConnectorId(body.connector_id))?
+            .limited(body.what);
         apply_release_move(w, &hosts, feed_id, &plan, wait_days)?;
+        if plan.default_changes {
+            w.collection
+                .set_files_connector(feed_id, Some(plan.target))?;
+        }
         w.sync_grant_vaults(Some(feed_id));
         Ok(())
     })
@@ -4837,6 +4868,7 @@ fn plan_from_host(
     to: ConnectorId,
 ) -> Result<ReleaseMovePlan, ApiError> {
     let mut plan = release_move_plan(w, hosts, feed_row, to)?;
+    plan.default_changes = false;
     plan.files
         .retain(|file| file.old_copies.iter().any(|copy| copy.connector_id == from));
     for file in &mut plan.files {

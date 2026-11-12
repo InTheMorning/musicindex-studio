@@ -28,17 +28,6 @@ export STUDIO_REPO="$PWD"
 export STUDIO_VERSION=0.1.0-rc.21
 ```
 
-## Check A: The First Close Of The Window
-
-Owner: the notes of 0.1.0-rc.21, step 22. The tray passed on 2026-11-10. The question at the first close did not show, because the data had the marker of an earlier run.
-
-```sh
-# With the AppImage open:
-mv ~/.local/share/musicindex-studio/collections/main/tray-notice-shown ~/tray-notice-shown.bak
-```
-
-Close the window. Expect one question. Close the window again. Expect no question.
-
 ## Check D: A Release Move And A Feed Return Between Two Real File Hosts
 
 Owner: the notes of 0.1.0-rc.21, steps 24 to 26, ADR 0128, human criterion, and task 091. The agent check of 2026-11-08 sent the bytes that Studio writes to a copy of Stophammer at `398d10f`, and each result was correct. This check uses the live index and two real file hosts.

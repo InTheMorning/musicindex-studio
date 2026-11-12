@@ -26,7 +26,7 @@ The step numbers are the steps of "What to test" in the [notes of 0.1.0-rc.21](.
 | 16–17 | The sort menus on the iPhone | Passed |
 | 18–19 | The field list above the keyboard | Passed, with finding 7 |
 | 20–21 | The time from Play to sound | Passed. About 1 second. |
-| 22 | The tray | Passed. The question at the first close was not seen, because the data had the marker of an earlier run. |
+| 22 | The tray | Passed. On 2026-11-11, the question showed at the first close with no `window-close` file. After **Quit on Close**, the next close quit with no question. |
 | 23 | The first page with an NVIDIA card | Passed. The page showed immediately on the GTX 750 Ti. |
 | 24–26 | A release move between two real file hosts | Open. The operator stopped before this step. |
 | 27 | The mark "Changed outside Studio" | Open. Skipped. |

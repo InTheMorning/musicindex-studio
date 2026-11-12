@@ -12,7 +12,10 @@ The operator built `studio-desktop-app` in the release profile from local `main`
 |---|---|---|
 | Build and start | — | Passed. The window opened on Releases. |
 | Settings: Discard with the real lock and close settings | ADR 0166, task 099 | Passed. After a tab change, the two changes stayed. Discard gave back the saved values, and the close followed the saved value. |
+| Settings: Save with the real lock and close settings | ADR 0166, task 099 | Passed. Save showed "Saved". The close followed the new value, the values stayed after a restart, and the vault locked after the lock time. |
 | Move with "Only the release files" | ADR 0177 | Passed. The media files went from `bastone` to `heycitizen`, at `https://music.cancelbandcamp.com/TestAlbum/test/`. Each new address answered `200`. The feed file stayed on `bastone` at its address. |
+| Move with "Only the feed file", on `7e66e56` | ADR 0177, ADR 0178 | Passed. The old copy at `TestAlbum/test.xml` on `heycitizen` did not stop the move. After the write at 11:37 UTC on 2026-11-12, the new address gave the feed. The old address gave the same feed, with `itunes:new-feed-url` set to the new address. Music Index still gave the old address after the write. |
+| Move with "The feed file and the release files", back to `bastone` | ADR 0177, ADR 0179 | Stopped before the write. Review showed duplicate uploads (finding 9). |
 
 ## Findings
 
@@ -69,3 +72,54 @@ On the **Files** page, a copy that the feed does not use has the button **Refere
 The operator agreed to the name **Use This Copy**. The other copy shows "Used by the feed", so the two rows use the same word.
 
 The row of one file also has three controls that change the copy that the feed uses: **Reference**, **Move to {host}** and the select menu "File host of this file". ADR 0177 gave the release one way to move. The operator agreed that the ADR of finding 1 also examines these three controls.
+
+### Finding 6: The Pencil Of A Group In The Left Panel
+
+Owner: [ADR 0165](../adr/0165-the-left-panel-marks-the-state-of-each-feed.md) items 1 to 4.
+
+The row "HeyCitizen" in the left panel showed the pencil and the number 4. The operator read it as "4 changes not written", and could not find the changes. The number is the count of releases. The pencil tells that at least one feed of the group has a draft that is not written.
+
+The page of the group then showed "No changes" on each of the four release tiles. The pencil thus came from the artist feed "HeyCitizen". The page of the group does not show the state of that feed, so the user cannot find the change from the mark.
+
+### Finding 7: The Merge Of The Artist Feed
+
+Owner: [ADR 0129](../adr/0129-a-draft-takes-a-change-of-the-hosted-file.md).
+
+Review of the artist feed "HeyCitizen" showed "The hosted file changed after the draft started." The operator uses **Read Again** before each write, and did not remember a change with a different tool.
+
+The agent read the hosted file. The host gave `Last-Modified: Fri, 06 Nov 2026 18:46:46 GMT`, and the feed gave the `lastBuildDate` 18:46:24 of the same day. Thus the draft started before a write on 2026-11-06. The probable cause is a write from a different Studio collection, or from the rc.21 AppImage, on the same hosts. This is not confirmed. If it is correct, the text "A different tool or a different person changed the file" is wrong.
+
+In **Examine the Changes**, the field "Credits" was in "Both changed. Select one". Each option of its select menu held the full value, so the open menu was wider than the screen. The fix shows the two values as text above a select menu with the short options "Your edit" and "Hosted file".
+
+### Finding 8: The Notice After A Move
+
+Owner: [ADR 0150](../adr/0150-studio-shows-a-change-from-outside-when-a-page-opens.md) item 5.
+
+Right after the move of the feed file, the release page showed "Music Index reads this feed from a different address." The notice ended with "A different collection or a different tool can hold this feed." Studio itself had moved the feed a few seconds before. Music Index needs time to read the new address. The notice does not tell this, and it points to a cause that is not correct.
+
+### Finding 9: A Move Back Gives Duplicate Uploads With New Names
+
+Owner: [ADR 0148](../adr/0148-a-move-keeps-the-old-files-until-the-user-reviews-the-deletion.md) items 2 and 3, and [ADR 0177](../adr/0177-the-files-page-has-one-way-to-move.md) item 3.
+
+After step 2b, the feed and the four media files of "HeyCitizen's Test Album" were on `heycitizen`. The operator then moved "The feed file and the release files" to `bastone`. The feed part of Review was correct, with the return warning. The media part was not correct:
+
+- Four uploads to `bastone` with new names: `TestAlbum/test/CheckYourPockets 2.mp3`, `Lofi-Experience 2.png`, `TestTickles 2.png` and `dancin-in-the-moonlight 2.mp3`. The feed used these names.
+- Three copies to `bastone` at the usual names, `CheckYourPockets.mp3`, `Lofi-Experience.png` and `TestTickles.png`, each with the text "A spare copy. The feed does not use it."
+- A "Keep" row for each old copy on `heycitizen`.
+
+The agent read `bastone` at `https://files.heycitizen.xyz/Songs/Albums/TestAlbum/test/`. `dancin-in-the-moonlight.mp3` was there, with 3961306 bytes, the size of the file in the feed, and `Last-Modified` 2026-10-27. The other three usual names gave 404. Thus the move sends three files two times, and it does not use the copy of `dancin-in-the-moonlight.mp3` that is on `bastone`. The operator did not write the draft.
+
+The agent read a copy of the collection database of the operator. The release has two library records for each of the four files, with the same SHA-256:
+
+| Record | Path | Added | Source address |
+|---|---|---|---|
+| 11, 12, 13, 63 | `CheckYourPockets.mp3` and the other usual names | 2026-11-02 | the old addresses on `bastone` |
+| 77 to 80 | the names with " 2" | 2026-11-12 11:24:46 UTC | the new addresses on `heycitizen` |
+
+The new records came from `record_remote_files` in `crates/core/src/remote.rs`. That function adds a record for each feed address that it does not know. It knows an address when the address is the planned address or the address of a copy of a library file.
+
+The function ignores an error in each of these two reads. Thus, when the read of the `heycitizen` inventory fails, the function does not know the `heycitizen` addresses. It then adds a second record with a free name for each address. The cause of the error at 11:24:46 is not known.
+
+At 11:40:01, **Add to the Draft** downloaded records 77 to 80 into the library folder. The draft then had a copy operation for each of the eight records.
+
+The plan in `release_move_plan` also makes a copy operation for record 13. But `bastone` has a file with the same SHA-256 at the target path. The write gives `FileExists` for that operation.

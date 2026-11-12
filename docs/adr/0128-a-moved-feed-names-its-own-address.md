@@ -7,6 +7,7 @@
 - Changed: on 2026-11-05 the operator added item 12, so that a person who reads the file finds the tag first. This changes [ADR 0012](0012-lossless-tree-with-a-typed-model.md) item 3 for this tag.
 - Source: the handoff note of the Stophammer session of 2026-11-04, `.idea/studio/stophammer-feed-contract-handoff.md` in `../stophammer`. Stophammer ADR 0083 owns the rule of the index.
 - Changes: [ADR 0038](0038-published-feeds-downloads-folder-scan-and-feed-moves.md) item 19, for the feed on the new host. [ADR 0126](0126-studio-refuses-a-bad-move-link.md) "Alternatives Considered", which left the tag in the new feed open.
+- Changed by: [ADR 0190](0190-review-gives-the-return-wait-of-music-index.md). Items 7, 8 and 10: the warning gives the time of the return wait from Music Index.
 - Uses: [ADR 0007](0007-draft-diff-write-and-announce.md), [ADR 0052](0052-announcements-through-the-podcast-index-hub.md) and [ADR 0065](0065-the-core-applies-each-feed-rule.md).
 
 ## Context

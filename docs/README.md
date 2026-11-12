@@ -191,6 +191,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0187: Review checks the stream type of a live show](adr/0187-review-checks-the-stream-type-of-a-live-show.md)
 - [ADR 0188: The README is a landing page for an artist](adr/0188-the-readme-is-a-landing-page-for-an-artist.md)
 - [ADR 0189: A move sends one podping of the old address](adr/0189-a-move-sends-one-podping-of-the-old-address.md)
+- [ADR 0190: Review gives the return wait of Music Index](adr/0190-review-gives-the-return-wait-of-music-index.md)
 
 ## Plans
 

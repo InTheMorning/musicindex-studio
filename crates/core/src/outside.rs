@@ -40,7 +40,7 @@ pub struct LastWrittenMove {
     pub from_url: Option<String>,
     /// The time of the move, in seconds after the Unix epoch.
     pub moved_at: i64,
-    /// The announcement state of each address, new address first.
+    /// The announcement state of the address that a move announces.
     pub announcements: Vec<MoveAnnouncement>,
 }
 
@@ -76,10 +76,8 @@ pub fn last_written_move(
         })
     };
     let mut announcements = Vec::new();
-    for url in [row.public_url.as_deref(), movement.from_url.as_deref()]
-        .into_iter()
-        .flatten()
-    {
+    let url = movement.from_url.as_deref().or(row.public_url.as_deref());
+    if let Some(url) = url {
         let status = match announced_at_move(url) {
             Some(announcement) => match announcement.state {
                 AnnouncementState::Waiting | AnnouncementState::Sending => MoveAnnouncement {
@@ -379,10 +377,17 @@ mod tests {
         let found = last_written_move(&collection, &row).unwrap().unwrap();
         assert_eq!(found.from_url.as_deref(), Some("https://old.example/a.xml"));
         assert_eq!(found.moved_at, 100);
-        assert_eq!(found.announcements.len(), 2);
+        assert_eq!(
+            found.announcements.len(),
+            1,
+            "ADR 0189 item 3: show one podping line for the address before the move. Fix: select movement.from_url."
+        );
         assert_eq!(found.announcements[0].state, "waiting");
         assert_eq!(found.announcements[0].send_at, Some(130));
-        assert_eq!(found.announcements[1].url, "https://old.example/a.xml");
+        assert_eq!(
+            found.announcements[0].url, "https://old.example/a.xml",
+            "ADR 0189 item 3: show the address before the move. Fix: select movement.from_url."
+        );
     }
 
     #[test]

@@ -2106,12 +2106,24 @@ struct MoveSetup {
 }
 
 fn move_setup(redirecting: bool) -> MoveSetup {
+    move_setup_with_address(redirecting, Some("https://a.example"))
+}
+
+fn move_setup_with_address(redirecting: bool, address: Option<&str>) -> MoveSetup {
     let dir_a = tempfile::tempdir().unwrap();
     let dir_b = tempfile::tempdir().unwrap();
-    let folder_a = LocalFolder::new(dir_a.path(), Some("https://a.example".into()));
+    let folder_a = LocalFolder::new(dir_a.path(), address.map(str::to_owned));
     let folder_b = LocalFolder::new(dir_b.path(), Some("https://b.example".into()));
+    let feed_xml = if address.is_some() {
+        MOVE_FEED.to_owned()
+    } else {
+        MOVE_FEED.replace(
+            "    <atom:link href=\"https://a.example/album.xml\" rel=\"self\" type=\"application/rss+xml\"/>\n",
+            "",
+        )
+    };
     folder_a
-        .write("album.xml", MOVE_FEED.as_bytes(), &Expected::Absent)
+        .write("album.xml", feed_xml.as_bytes(), &Expected::Absent)
         .unwrap();
     let mut collection = Collection::open(&dir_a.path().join("collection.sqlite")).unwrap();
     let a = collection
@@ -2141,13 +2153,14 @@ fn move_setup(redirecting: bool) -> MoveSetup {
     }
     hosts.insert(b, Box::new(folder_b));
     let library = Library::open(dir_a.path().join("library")).unwrap();
+    let feed_url = address.map(|address| format!("{address}/album.xml"));
     let feed = collection
-        .add_feed(Some("https://a.example/album.xml"), Some((a, "album.xml")))
+        .add_feed(feed_url.as_deref(), Some((a, "album.xml")))
         .unwrap();
     pipeline::refresh(&mut collection, reader.as_ref(), feed).unwrap();
     collection.set_feed_folder(feed, "album").unwrap();
     library
-        .write_feed_xml("album", "album.xml", MOVE_FEED.as_bytes())
+        .write_feed_xml("album", "album.xml", feed_xml.as_bytes())
         .unwrap();
     pipeline::start_draft(&collection, reader.as_ref(), feed).unwrap();
     MoveSetup {
@@ -2195,10 +2208,8 @@ fn a_feed_move_puts_the_feed_on_the_new_host_and_a_pointer_file_on_the_old_host(
     assert_eq!(diff.announce_skip, None);
     assert_eq!(
         announced(&diff),
-        [
-            ("https://b.example/album.xml".to_owned(), true),
-            ("https://a.example/album.xml".to_owned(), true),
-        ]
+        [("https://a.example/album.xml".to_owned(), true)],
+        "ADR 0189 item 1: plan one announcement for the address before the move. Fix: select from_url.",
     );
 
     let reader = destination_reader(&s.collection, s.feed, "https://b.example/album.xml");
@@ -3282,16 +3293,14 @@ fn a_feed_and_a_host_with_no_public_address_give_no_address_and_the_write_succee
 }
 
 #[test]
-fn a_feed_move_queues_the_new_address_and_the_address_from_before() {
+fn a_feed_move_queues_only_the_address_from_before() {
     let mut s = move_setup(false);
     pipeline::set_feed_host(&s.collection, &s.hosts, None, s.feed, s.b).unwrap();
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     assert_eq!(
         announced(&diff),
-        [
-            ("https://b.example/album.xml".to_owned(), true),
-            ("https://a.example/album.xml".to_owned(), true),
-        ]
+        [("https://a.example/album.xml".to_owned(), true)],
+        "ADR 0189 item 1: plan one announcement for the address before the move. Fix: select from_url.",
     );
     let reader = destination_reader(&s.collection, s.feed, "https://b.example/album.xml");
     pipeline::write_draft(
@@ -3312,7 +3321,20 @@ fn a_feed_move_queues_the_new_address_and_the_address_from_before() {
     urls.sort();
     assert_eq!(
         urls,
-        ["https://a.example/album.xml", "https://b.example/album.xml"]
+        ["https://a.example/album.xml"],
+        "ADR 0189 item 1: queue one announcement for the address before the move. Fix: select from_url.",
+    );
+}
+
+#[test]
+fn a_feed_move_without_an_old_address_plans_the_new_address() {
+    let s = move_setup_with_address(false, None);
+    pipeline::set_feed_host(&s.collection, &s.hosts, None, s.feed, s.b).unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert_eq!(
+        announced(&diff),
+        [("https://b.example/album.xml".to_owned(), true)],
+        "ADR 0189 item 2: plan one announcement of the new address. Fix: fall back to url."
     );
 }
 
@@ -4674,10 +4696,8 @@ fn the_write_of_a_moved_public_draft_puts_the_feed_on_the_target_and_nothing_at_
             .iter()
             .map(|(url, _)| url.as_str())
             .collect::<Vec<_>>(),
-        [
-            "https://b.example/album/album.xml",
-            format!("{}/album.xml", s.server.address).as_str(),
-        ]
+        [format!("{}/album.xml", s.server.address).as_str()],
+        "ADR 0189 item 1: use the address before the move. Fix: select from_url.",
     );
     s.server.requests.lock().unwrap().clear();
     let version = public_write(&mut s, &diff.id).unwrap();
@@ -4709,7 +4729,11 @@ fn the_write_of_a_moved_public_draft_puts_the_feed_on_the_target_and_nothing_at_
     assert!(s.collection.draft_feed_move(s.feed).unwrap().is_none());
     let in_library = fs::read(s.library.path("album", "album.xml")).unwrap();
     assert_eq!(in_library, on_target.as_bytes());
-    assert_eq!(queued(&s.collection, s.feed), 2);
+    assert_eq!(
+        queued(&s.collection, s.feed),
+        1,
+        "ADR 0189 item 1: queue one announcement of the address before the move. Fix: select from_url."
+    );
 }
 
 #[test]

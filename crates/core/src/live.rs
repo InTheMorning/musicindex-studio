@@ -453,7 +453,11 @@ pub fn problems(feed: &Feed) -> Vec<LiveProblem> {
             .filter(|t| !t.is_empty());
         match (url, media_type) {
             (None, _) => add(Refusal, "stream", "This show has no stream address."),
-            (Some(_), None) => add(Refusal, "stream", "This show has no stream type."),
+            (Some(_), None) => add(
+                Refusal,
+                "stream",
+                "Choose a stream type, or click Check to get the type from the stream server.",
+            ),
             (Some(url), Some(ty)) => {
                 if let Some(ext) = address_extension(url)
                     && !stream_type_agrees(&ext, ty)
@@ -740,12 +744,12 @@ mod tests {
             (
                 "no type",
                 no_type("https://example.com/live.mp3"),
-                "This show has no stream type.",
+                "Choose a stream type, or click Check to get the type from the stream server.",
             ),
             (
                 "blank type",
                 feed_with_stream("https://example.com/live.mp3", " "),
-                "This show has no stream type.",
+                "Choose a stream type, or click Check to get the type from the stream server.",
             ),
             (
                 "type that disagrees",

@@ -4,6 +4,7 @@
 - Date: 2026-11-09
 - Owner: operator
 - Accepted: 2026-11-09 through the orchestrator session, on its research request.
+- Item 9 changed: 2026-11-12, after the human check of ADR 0187. The operator selected a text that gives the next step for a show with no stream type.
 - Changes: [ADR 0054](0054-live-items-connected-apps-and-show-grants.md) item 4 and its mechanical check of the content link.
 - Uses: the [research request on the live stream](../plans/research-live-item-stream-request.md), musicindex ADR 0025 R-STATUS-1, [ADR 0065](0065-the-core-applies-each-feed-rule.md).
 
@@ -44,7 +45,7 @@ The UI has a copy of the rule of ADR 0054 item 4 in `live.js`. ADR 0065 does not
 6. The draft response gives the problems of the live items as `live_problems`. The live show page shows each problem of its show in the Status section. A refusal uses the Danger color, and a warning uses the Warning color of musicindex ADR 0025 R-STATUS-1. The UI keeps no copy of the rule (ADR 0065), and the function `liveProblems` of `live.js` goes.
 7. A granted write uses the same check, because it goes through the same write. A show with no stream gets no granted write until the user adds a stream and writes the feed.
 8. A read of a hosted feed does not change. Studio reads and shows a live item with each problem. The check runs only at a write.
-9. The texts of the refusals are "This show has no stream address.", "This show has no stream type." and "The stream type TYPE does not agree with the stream address, which ends in .EXT.".
+9. The texts of the refusals are "This show has no stream address.", "Choose a stream type, or click Check to get the type from the stream server." and "The stream type TYPE does not agree with the stream address, which ends in .EXT.".
 
 ## Consequences
 

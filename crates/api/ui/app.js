@@ -29,7 +29,7 @@ import { changeTitle, afterDiscard, changeLine } from './people.js';
 import { makeSettingsDraft, changeSetting, settingsDraftView, discardSettings, saveSettings, asksSettingsLeave } from './settingsdraft.js';
 import { PeoplePage, PersonPage, CheckPage, WalletPage } from './peoplepages.js';
 import { OUTSIDE_LIMIT, OUTSIDE_SETTING_LABEL, OUTSIDE_SETTING_HINT, outsideMark, outsideNotice, indexNotice, eachLimited, panelSet, stateMark } from './outsidecheck.js';
-import { collectionMark, collectionRow, collectionSheet, COLLECTIONS_HINT, OPENING_TEXT } from './collectionlist.js';
+import { collectionMark, collectionRow, collectionSheet, collectionAction, CLOSED_EXPORT_HINT, COLLECTIONS_HINT, OPENING_TEXT } from './collectionlist.js';
 import { localInputToIso, isoToLocalInput, zoneHint, nowInput, unreadDateHint } from './datetime.js';
 import { durationText, readDuration, DURATION_ERROR, unreadDurationHint } from './duration.js';
 import { coverOf } from './cover.js';
@@ -40,7 +40,7 @@ import { useDraft } from './draft.js';
 import { roleChoice, fromChoice, roleOptions, ROLE_PLACEHOLDER, OTHER_ROLE, OTHER_HINT, NO_ROLE_HINT } from './roles.js';
 import { RETRY_DELAYS, findUpload, missingParts, partCount, partRange, receivedBytes } from './upload.js';
 import {
-  exportView, EXPORT_DONE, RECOVERY_KEY_TEXT, importedNotice, showsImportNotice, sendingText, CHECKING_TEXT,
+  exportView, exportTitle, EXPORT_DONE, RECOVERY_KEY_TEXT, importedNotice, showsImportNotice, sendingText, CHECKING_TEXT,
   importFacts, importOpenView, importErrorText, importSelectText, IMPORT_HINT, DESKTOP_IMPORT_HINT,
 } from './move.js';
 import {
@@ -110,9 +110,10 @@ function applySession(session) {
 }
 
 // The mode of the server for the pages: `server` is true on a server, and
-// `holdAssets` is false when the server keeps no audio and no images.
+// `holdAssets` is false when the server keeps no audio and no images, and
+// `collections` is true when the shell has a list of collections.
 export function assetMode() {
-  return { server: serverMode, holdAssets: !serverMode || holdAssets };
+  return { server: serverMode, holdAssets: !serverMode || holdAssets, collections: hasCollections };
 }
 
 // Ask for an unlock. Parallel requests share one sheet.
@@ -4568,8 +4569,10 @@ function AccountPanel() {
 
 // The sheet that exports the account (screens 1 to 3). It reads the facts,
 // asks for a recovery key when no method opens the vault on a different
-// server, and then starts the download of the archive.
-function ExportSheet({ onClose }) {
+// server, and then starts the download of the archive. `folder` is the folder
+// of a collection that is not open (ADR 0176 item 7), or null for the account
+// that is open.
+function ExportSheet({ onClose, folder = null }) {
   const ref = useSheet(true);
   const [facts, setFacts] = useState(null);
   const [include, setInclude] = useState(true);
@@ -4577,9 +4580,10 @@ function ExportSheet({ onClose }) {
   const [kept, setKept] = useState(false);
   const [done, setDone] = useState(false);
   const { busy, error, run } = useAction();
-  const load = () => run(async () => { setFacts(await api('/account/export-facts')); });
+  const factsPath = folder ? `/collections/${folder}/export-facts` : '/account/export-facts';
+  const load = () => run(async () => { setFacts(await api(factsPath)); });
   useEffect(() => { load(); }, []);
-  const view = facts && exportView(facts, { server: serverMode, includeAssets: include });
+  const view = facts && exportView(facts, { server: serverMode, includeAssets: include, collection: hasCollections });
   const makeKey = () => run(async () => {
     const made = await api('/vault/recovery-key', { method: 'POST' });
     setKept(false);
@@ -4587,15 +4591,15 @@ function ExportSheet({ onClose }) {
   });
   // The vault can move now, so the sheet reads the facts again.
   const afterKey = () => run(async () => {
-    setFacts(await api('/account/export-facts'));
+    setFacts(await api(factsPath));
     setRecoveryKey(null);
   });
   const send = () => run(async () => {
-    const made = await api('/account/export', { method: 'POST', body: { include_assets: view.checkbox ? include : true } });
+    const made = await api(folder ? `/collections/${folder}/export` : '/account/export', { method: 'POST', body: { include_assets: view.checkbox ? include : true } });
     saveTicket(made.ticket, made.file_name);
     setDone(true);
   });
-  const title = view ? view.title : (serverMode ? 'Export Account' : 'Export Studio');
+  const title = view ? view.title : exportTitle(serverMode, hasCollections);
   let body = null;
   let footer = html`<button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>`;
   if (done) {
@@ -4615,10 +4619,10 @@ function ExportSheet({ onClose }) {
         <span class="text"><span class="label">${row.label}</span><span class="summary">${row.summary}</span></span></div>`)}</div>`}
       ${view.checkbox && html`<label class="check"><input type="checkbox" checked=${include} onChange=${(e) => setInclude(e.target.checked)} /> ${view.checkbox}</label>`}
       ${view.size && html`<p class="hint">${view.size}</p>`}
-      <p class="hint">${view.hint}</p>`;
+      <p class="hint">${folder && view.screen === 'warn' ? CLOSED_EXPORT_HINT : view.hint}</p>`;
     footer = html`<button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
-      <button class="button primary" type="button" disabled=${busy}
-        onClick=${view.screen === 'warn' ? makeKey : send}>${view.primary}</button>`;
+      ${!(folder && view.screen === 'warn') && html`<button class="button primary" type="button" disabled=${busy}
+        onClick=${view.screen === 'warn' ? makeKey : send}>${view.primary}</button>`}`;
   } else if (!error) {
     body = html`<p class="empty" role="status">Reading the account…</p>`;
   }
@@ -4761,12 +4765,19 @@ function OutsidePanel({ draft, draftState, changed, causes }) {
   </div></section>`;
 }
 
-// The text of the mark of a collection in the left panel (ADR 0149 item 17).
+const COLLECTIONS_CHANGED = 'studio-collections-changed';
+
+// The text of the mark of a collection in the left panel (ADR 0176 item 12).
 // A shell with no collections sends no request.
 function useCollectionMark() {
   const [mark, setMark] = useState(null);
   useEffect(() => {
-    if (hasCollections) api('/collections').then((r) => setMark(collectionMark(r.collections)), () => {});
+    if (!hasCollections) return undefined;
+    const read = () => api('/collections').then((r) => setMark(collectionMark(r.collections)), () => {});
+    read();
+    // The section "Collections" tells the panel after a change of the list.
+    addEventListener(COLLECTIONS_CHANGED, read);
+    return () => removeEventListener(COLLECTIONS_CHANGED, read);
   }, []);
   return mark;
 }
@@ -4809,14 +4820,66 @@ function CollectionSheet({ kind, openName, onDone, onClose }) {
   </dialog>`;
 }
 
+// The sheet of a row: rename, replace or delete (ADR 0176 items 5 to 9). The
+// core refuses a replace and a delete of the open collection, and the row has
+// no such button.
+function CollectionActionSheet({ kind, collection, onDone, onClose }) {
+  const ref = useSheet(true);
+  const words = collectionAction(kind, collection);
+  const [name, setName] = useState(words.start || '');
+  const [file, setFile] = useState(null);
+  const [exporting, setExporting] = useState(false);
+  const picker = useRef(null);
+  const { busy, error, run } = useAction();
+  const submit = (e) => {
+    e.preventDefault();
+    run(async () => {
+      if (kind === 'rename') await api(`/collections/${collection.folder}`, { method: 'PATCH', body: { name } });
+      else if (kind === 'replace') await sendReplace(collection.folder, file);
+      else await api(`/collections/${collection.folder}`, { method: 'DELETE' });
+      onDone();
+    });
+  };
+  const ready = kind === 'rename' ? name.trim() !== '' : kind !== 'replace' || file !== null;
+  return html`<dialog ref=${ref} class="sheet small" aria-labelledby="collection-action-title" onClose=${onClose}>
+    <header>
+      <h2 id="collection-action-title">${words.title}</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
+    </header>
+    <form class="body" id="collection-action-form" onSubmit=${submit}>
+      ${kind === 'rename' && html`<div class="group"><${Field} id="collection-name" label="Name" value=${name} onInput=${(e) => setName(e.target.value)} /></div>`}
+      ${words.lines.map((line) => html`<p class="hint" key=${line}>${line}</p>`)}
+      ${words.file && html`<input ref=${picker} type="file" accept=".tar,application/x-tar" hidden
+        onChange=${(e) => setFile(e.target.files[0] || null)} />
+        <div class="group rows"><div class="link-row static">
+          <span class="text"><span class="label">${file ? file.name : 'No file selected'}</span>${file && html`<span class="summary">${sizeText(file.size)}</span>`}</span>
+          <div class="actions"><button class="button action" type="button" disabled=${busy} onClick=${() => picker.current.click()}>Select the File</button></div>
+        </div></div>`}
+      <${ErrorNotice} error=${error} />
+    </form>
+    <footer>
+      ${words.exportFirst && html`<button class="button action" type="button" disabled=${busy} onClick=${() => setExporting(true)}>Export First…</button>`}
+      <button class=${`button ${words.destructive ? 'destructive' : 'primary'}`} type="submit" form="collection-action-form" disabled=${busy || !ready}>
+        ${busy ? words.busy : words.primary}</button>
+    </footer>
+    ${exporting && html`<${ExportSheet} folder=${collection.folder} onClose=${() => setExporting(false)} />`}
+  </dialog>`;
+}
+
 // The section "Collections" of the Settings page, in the desktop app only
-// (ADR 0149 items 5 and 6). The core keeps the list and applies each rule.
+// (ADR 0149 items 5 and 6, ADR 0176 items 2, 3 and 10). The core keeps the
+// list and applies each rule.
 function CollectionsPanel() {
   const [list, setList] = useState(null);
   const [sheet, setSheet] = useState(null);
+  const [action, setAction] = useState(null);
+  const [exporting, setExporting] = useState(false);
   const [opening, setOpening] = useState(false);
   const { error, run } = useAction();
-  const load = () => api('/collections').then((r) => setList(r.collections));
+  const load = () => api('/collections').then((r) => {
+    setList(r.collections);
+    dispatchEvent(new Event(COLLECTIONS_CHANGED));
+  });
   useEffect(() => { if (hasCollections) load().catch(() => {}); }, []);
   if (!list) return null;
   const openName = (list.find((c) => c.open) || {}).name || '';
@@ -4826,24 +4889,22 @@ function CollectionsPanel() {
     setOpening(true);
     setTimeout(() => setOpening(false), 10000);
   });
-  const remove = (collection) => run(async () => {
-    if (!await askConfirm(CONFIRMS.deleteCollection(collection.name))) return;
-    await api(`/collections/${collection.folder}`, { method: 'DELETE' });
-    await load();
-  });
   return html`<section class="page-section settings-section">
     <h2>Collections</h2><div class="group settings-group">
     <p class="hint">${COLLECTIONS_HINT}</p>
     <div class="group">
       ${list.map((collection) => {
         const row = collectionRow(collection);
+        const choose = (kind) => setAction({ kind, collection });
         return html`<div class="link-row static collection-row" key=${collection.folder}>
           <span class="text"><span class="label">${row.name}</span><span class="summary">${row.line}</span></span>
-          ${collection.open && html`<span class="tag-open">Open</span>`}
-          ${(row.canOpen || row.canDelete) && html`<div class="actions">
+          ${row.tag && html`<span class="tag-open">${row.tag}</span>`}
+          <div class="actions">
             ${row.canOpen && html`<button class="button action" type="button" disabled=${opening} onClick=${() => open(collection.folder)}>Open</button>`}
-            ${row.canDelete && html`<button class="button destructive" type="button" disabled=${opening} onClick=${() => remove(collection)}>Delete…</button>`}
-          </div>`}
+            ${row.canRename && html`<button class="button action" type="button" disabled=${opening} onClick=${() => choose('rename')}>Rename…</button>`}
+            ${row.canReplace && html`<button class="button action" type="button" disabled=${opening} onClick=${() => choose('replace')}>Replace with a File…</button>`}
+            ${row.canDelete && html`<button class="button destructive" type="button" disabled=${opening} onClick=${() => choose('delete')}>Delete…</button>`}
+          </div>
         </div>`;
       })}
     </div>
@@ -4853,9 +4914,13 @@ function CollectionsPanel() {
       <button class="button action" type="button" onClick=${() => setSheet('new')}>New Collection…</button>
       <button class="button action" type="button" onClick=${() => setSheet('copy')}>Copy This Collection…</button>
       <button class="button action" type="button" onClick=${() => setSheet('import')}>Import an Account File…</button>
+      <button class="button action" type="button" onClick=${() => setExporting(true)}>Export This Collection…</button>
     </div>
     <${CollectionSheet} kind=${sheet} openName=${openName} onClose=${() => setSheet(null)}
       onDone=${async (made) => { setSheet(null); await load(); await open(made.folder); }} />
+    ${action && html`<${CollectionActionSheet} kind=${action.kind} collection=${action.collection}
+      onClose=${() => setAction(null)} onDone=${async () => { setAction(null); await load(); }} />`}
+    ${exporting && html`<${ExportSheet} onClose=${() => setExporting(false)} />`}
   </div></section>`;
 }
 
@@ -4879,16 +4944,17 @@ function importCall(path, options = {}) {
     : api(`/import${path}`, { method: 'POST', ...options });
 }
 
-// Send the archive in parts (ADR 0059). The result is the ID of the upload.
-// A failed part is sent again like the part of a feed upload.
-async function sendImport(file, invite, onProgress) {
-  const made = await importCall('', { body: { size: file.size, invite: invite || null } });
+// Send a file in parts (ADR 0059). `routes` gives the calls of the upload:
+// `start`, `part(upload, n)` and `cancel(upload)`. The result is the ID of the
+// upload. A failed part is sent again like the part of a feed upload.
+async function sendParts(file, routes, onProgress) {
+  const made = await routes.start();
   try {
     for (let n = 0; n < partCount(file.size, made.part_size); n += 1) {
       const range = partRange(n, file.size, made.part_size);
       for (let tries = 0; ; tries += 1) {
         try {
-          await importCall(`/${made.upload}/parts/${n}`, { method: 'PUT', body: file.slice(range.start, range.end) });
+          await routes.part(made.upload, n, file.slice(range.start, range.end));
           break;
         } catch (e) {
           if (!canTryAgain(e) || tries >= RETRY_DELAYS.length) throw e;
@@ -4898,10 +4964,30 @@ async function sendImport(file, invite, onProgress) {
       onProgress(range.end);
     }
   } catch (e) {
-    importCall(`/${made.upload}`, { method: 'DELETE' }).catch(() => {});
+    routes.cancel(made.upload).catch(() => {});
     throw e;
   }
   return made.upload;
+}
+
+// Send the archive of an import. The result is the ID of the upload.
+function sendImport(file, invite, onProgress) {
+  return sendParts(file, {
+    start: () => importCall('', { body: { size: file.size, invite: invite || null } }),
+    part: (upload, n, body) => importCall(`/${upload}/parts/${n}`, { method: 'PUT', body }),
+    cancel: (upload) => importCall(`/${upload}`, { method: 'DELETE' }),
+  }, onProgress);
+}
+
+// Send the account file for the replace of a collection, and read it into
+// a new folder (ADR 0176 item 8). A file that is not good changes nothing.
+async function sendReplace(folder, file) {
+  const upload = await sendParts(file, {
+    start: () => api(`/collections/${folder}/replace`, { method: 'POST', body: { size: file.size } }),
+    part: (id, n, body) => api(`/collection-uploads/${id}/parts/${n}`, { method: 'PUT', body }),
+    cancel: (id) => api(`/collection-uploads/${id}`, { method: 'DELETE' }),
+  }, () => {});
+  return api(`/collection-uploads/${upload}/replace`, { method: 'POST', body: { folder } });
 }
 
 // The frame of an import page: a page with a card on a server, a sheet on the

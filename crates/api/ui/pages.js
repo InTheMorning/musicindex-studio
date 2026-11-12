@@ -66,7 +66,7 @@ const PAGES = {
     { id: 'change', tier: 'setup' },
     { id: 'delete', tier: 'limits' },
   ],
-  'studio-settings': ({ server, holdAssets = true }) => [
+  'studio-settings': ({ server, holdAssets = true, collections = true }) => [
     { id: 'scale', tier: 'setup', tab: 'general' },
     { id: 'lock', tier: 'setup', tab: 'general' },
     // Only the desktop app has a window to close (ADR 0124 item 29).
@@ -76,10 +76,11 @@ const PAGES = {
     { id: 'nostr', tier: 'setup', tab: 'nostr' },
     { id: 'outside', tier: 'setup', tab: 'general' },
     // The panel shows only in the desktop app (ADR 0149 item 5).
-    ...(server ? [] : [{ id: 'collections', tier: 'setup', tab: 'data' }]),
-    // The desktop moves its data from here. A server has "Export Account" in
-    // the Account panel (ADR 0107 item 3).
-    ...(server ? [] : [{ id: 'move', tier: 'setup', tab: 'data' }]),
+    ...(server || !collections ? [] : [{ id: 'collections', tier: 'setup', tab: 'data' }]),
+    // A shell with no list of collections moves its data from here (ADR 0176
+    // item 11). A server has "Export Account" in the Account panel (ADR 0107
+    // item 3), and the desktop app has the export in "Collections".
+    ...(server || collections ? [] : [{ id: 'move', tier: 'setup', tab: 'data' }]),
     // A server with `--hold-assets off` has no downloads into the library, so
     // the section "Files on this server" takes the place of the library
     // limits (ADR 0105 items 14 and 17).
@@ -89,7 +90,8 @@ const PAGES = {
 
 // The sections of the page `name`, in their sequence. Each call gives a new
 // copy, so a caller can change the copy. The page `studio-settings` leaves out
-// `account` when `options.server` is false. It shows `files` in the place of
+// `account` when `options.server` is false. It has `move` in the place of
+// `collections` on the desktop when `options.collections` is false. It shows `files` in the place of
 // `library` when `options.server` is true and `options.holdAssets` is false. The other pages ignore `options`.
 export function pageSequence(name, options = {}) {
   return PAGES[name](options);

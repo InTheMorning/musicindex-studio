@@ -129,14 +129,16 @@ pub fn local_router_with_drops(
         workspace
     };
     let has_collections = collections.is_some();
+    let work = workspace.work();
+    let (workspace_routes, handle) = workspace_router(workspace);
+    handle.spawn_lock_watch();
     let collection_routes = collections.map(|place| {
         collections::routes(collections::CollectionsState {
             place,
-            work: workspace.work(),
+            work,
+            handle: handle.clone(),
         })
     });
-    let (workspace_routes, handle) = workspace_router(workspace);
-    handle.spawn_lock_watch();
     let local = ui_router()
         .route(
             "/auth/v1/session",

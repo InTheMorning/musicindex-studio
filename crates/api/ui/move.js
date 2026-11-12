@@ -22,8 +22,9 @@ export function fullDay(seconds) {
 }
 
 // The sheet title: the Account panel of a server, or Settings of the desktop.
-export function exportTitle(server) {
-  return server ? 'Export Account' : 'Export Studio';
+export function exportTitle(server, collection = false) {
+  if (server) return 'Export Account';
+  return collection ? 'Export Collection' : 'Export Studio';
 }
 
 // The size of an archive, such as "about 3.4 MB". The numbers are estimates.
@@ -65,8 +66,8 @@ export const EXPORT_WARNING_DESKTOP = {
 // /account/export-facts`. `includeAssets` is the state of the check box. The
 // `screen` is `warn` (screen 3 of the mockups), `plain` (screen 1: the
 // archive has no choice) or `audio` (screen 2: the user chooses).
-export function exportView(facts, { server, includeAssets = true }) {
-  const title = exportTitle(server);
+export function exportView(facts, { server, includeAssets = true, collection = false }) {
+  const title = exportTitle(server, collection);
   if (!facts.movable) {
     return {
       screen: 'warn',

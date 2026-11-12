@@ -79,9 +79,9 @@ test('tierError gives a message that names ADR 0071 item 1 for an unknown tier',
 test('studio-settings has account only on a server', () => {
   const ids = (server) => pageSequence('studio-settings', { server }).map((s) => s.id);
   assert.deepEqual(ids(true), ['scale', 'lock', 'account', 'apps', 'nostr', 'outside', 'library']);
-  // ADR 0107 item 3: the desktop has the section "Move Studio" in the tier setup.
-  assert.deepEqual(ids(false), ['scale', 'lock', 'window', 'apps', 'nostr', 'outside', 'collections', 'move', 'library']);
-  const desktop = pageSequence('studio-settings', { server: false });
+  // ADR 0176 items 10 and 11: the desktop app has "Collections", and a shell with no list has "Move Studio".
+  assert.deepEqual(ids(false), ['scale', 'lock', 'window', 'apps', 'nostr', 'outside', 'collections', 'library']);
+  const desktop = pageSequence('studio-settings', { server: false, collections: false });
   assert.equal(desktop.find((s) => s.id === 'move').tier, 'setup');
   assert.equal(tierError('studio-settings', desktop), null);
 });
@@ -101,7 +101,7 @@ test('Settings tabs give the labels and sections of ADR 0166 item 1', () => {
   const desktop = settingsTabs({ server: false });
   assert.deepEqual(desktop.map(({ label }) => label), ['General', 'Nostr', 'Apps', 'Data']);
   assert.deepEqual(desktop.map(({ sections }) => sections.map(({ id }) => id)), [
-    ['scale', 'lock', 'window', 'outside'], ['nostr'], ['apps'], ['collections', 'move', 'library'],
+    ['scale', 'lock', 'window', 'outside'], ['nostr'], ['apps'], ['collections', 'library'],
   ]);
   const server = settingsTabs({ server: true, holdAssets: true });
   assert.deepEqual(server.map(({ label }) => label), ['General', 'Account', 'Nostr', 'Apps', 'Data']);

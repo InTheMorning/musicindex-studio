@@ -12,7 +12,7 @@ use rusqlite::OptionalExtension as _;
 use serde::{Deserialize, Serialize};
 
 use crate::account_archive::{LibraryPolicy, clear_queues, reset_library_root};
-use crate::collection::Collection;
+use crate::collection::{AccountCounts, Collection};
 
 /// The folder of the first collection.
 pub const MAIN_FOLDER: &str = "main";
@@ -60,7 +60,7 @@ pub enum CollectionsErrorKind {
     NameTaken,
     /// No collection has this folder.
     NotFound,
-    /// The operation does not apply to this collection (ADR 0149 item 12).
+    /// The operation does not apply to this collection (ADR 0176 item 3).
     Refused,
     /// The move at the first start found a file at its destination.
     MoveConflict,
@@ -76,7 +76,9 @@ pub struct CollectionsError {
 }
 
 impl CollectionsError {
-    fn new(kind: CollectionsErrorKind, message: impl Into<String>) -> Self {
+    /// An error of `kind` with `message`.
+    #[must_use]
+    pub fn new(kind: CollectionsErrorKind, message: impl Into<String>) -> Self {
         Self {
             kind,
             message: message.into(),
@@ -213,7 +215,7 @@ impl Collections {
     /// fails.
     pub fn create(&self, name: &str) -> Result<CollectionEntry, CollectionsError> {
         let mut list = self.read()?;
-        let name = checked_name(&list, name)?;
+        let name = checked_name(&list, None, name)?;
         let folder = free_folder(&self.root, &list, &name);
         let path = self.folder(&folder);
         private_folder(&path)?;
@@ -259,7 +261,7 @@ impl Collections {
     /// or SQLite fails.
     pub fn copy(&self, source: &Path, name: &str) -> Result<CollectionEntry, CollectionsError> {
         let mut list = self.read()?;
-        let name = checked_name(&list, name)?;
+        let name = checked_name(&list, None, name)?;
         let folder = free_folder(&self.root, &list, &name);
         let path = self.folder(&folder);
         private_folder(&path)?;
@@ -273,20 +275,17 @@ impl Collections {
         Ok(entry)
     }
 
-    /// Remove a collection and its local files (ADR 0149 items 12 and 13).
+    /// Remove a collection and its local files (ADR 0176 items 1 and 3).
     /// Nothing changes on a file host. The list changes first, so a stop
     /// leaves an unused folder and no entry with no folder.
     ///
     /// # Errors
     ///
-    /// Gives `Refused` for "Main collection", for the open collection and
-    /// for a folder that a shell holds. Gives `NotFound` for an unknown
-    /// folder, and `Io` when a file fails.
+    /// Gives `Refused` for the open collection and for a folder that a shell
+    /// holds. Gives `NotFound` for an unknown folder, and `Io` when a file
+    /// fails.
     pub fn delete(&self, folder: &str) -> Result<(), CollectionsError> {
         let mut list = self.read()?;
-        if folder == MAIN_FOLDER {
-            return Err(refused("Studio cannot delete the main collection."));
-        }
         if folder == list.open {
             return Err(refused("Studio cannot delete the open collection."));
         }
@@ -301,6 +300,140 @@ impl Collections {
         }
         self.write(&list)?;
         std::fs::remove_dir_all(&path).map_err(|e| CollectionsError::io(&path, &e))
+    }
+
+    /// Change the name of a collection (ADR 0176 item 5). The folder does
+    /// not change, and the open collection can change its name.
+    ///
+    /// # Errors
+    ///
+    /// Gives `InvalidName` or `NameTaken` for the name, `NotFound` for an
+    /// unknown folder, and `Io` when the write fails.
+    pub fn rename(&self, folder: &str, name: &str) -> Result<CollectionEntry, CollectionsError> {
+        let mut list = self.read()?;
+        let name = checked_name(&list, Some(folder), name)?;
+        let entry = list
+            .collections
+            .iter_mut()
+            .find(|c| c.folder == folder)
+            .ok_or_else(|| not_found(folder))?;
+        entry.name = name;
+        let entry = entry.clone();
+        self.write(&list)?;
+        Ok(entry)
+    }
+
+    /// Replace the files of a collection that is not open (ADR 0176 items 2
+    /// and 8). `fill` puts the new files in a new, empty folder. A `fill`
+    /// that fails removes the new folder and changes nothing. After a good
+    /// `fill`, one write of the list file moves the entry to the new folder,
+    /// and then the previous folder goes. The name stays.
+    ///
+    /// # Errors
+    ///
+    /// Gives `Refused` for the open collection and for a folder that a shell
+    /// holds. Gives `NotFound` for an unknown folder, the error of `fill`,
+    /// and `Io` when a file fails.
+    pub fn replace(
+        &self,
+        folder: &str,
+        fill: impl FnOnce(&Path) -> Result<(), CollectionsError>,
+    ) -> Result<CollectionEntry, CollectionsError> {
+        self.replace_with_steps(folder, fill, &mut |_| Ok(()))
+    }
+
+    /// [`Collections::replace`] with a call before the list write (step 1)
+    /// and before the removal of the previous folder (step 2), so that a
+    /// test can stop at each step.
+    fn replace_with_steps(
+        &self,
+        folder: &str,
+        fill: impl FnOnce(&Path) -> Result<(), CollectionsError>,
+        step: &mut dyn FnMut(usize) -> std::io::Result<()>,
+    ) -> Result<CollectionEntry, CollectionsError> {
+        let mut list = self.read()?;
+        if folder == list.open {
+            return Err(refused("Studio cannot replace the open collection."));
+        }
+        let index = list
+            .collections
+            .iter()
+            .position(|c| c.folder == folder)
+            .ok_or_else(|| not_found(folder))?;
+        let previous = self.folder(folder);
+        if is_held(&previous) {
+            return Err(refused("A different Studio uses this collection."));
+        }
+        let name = list.collections[index].name.clone();
+        let new_folder = free_folder(&self.root, &list, &name);
+        let path = self.folder(&new_folder);
+        private_folder(&path)?;
+        let filled = fill(&path).and_then(|()| {
+            step(1).map_err(|e| CollectionsError::io(&path, &e))?;
+            list.collections[index].folder.clone_from(&new_folder);
+            self.write(&list)
+        });
+        if let Err(error) = filled {
+            let _ = std::fs::remove_dir_all(&path);
+            return Err(error);
+        }
+        // The list names the new folder now. A stop here leaves the previous
+        // folder, which no entry names. Studio does not delete it.
+        step(2).map_err(|e| CollectionsError::io(&previous, &e))?;
+        std::fs::remove_dir_all(&previous).map_err(|e| CollectionsError::io(&previous, &e))?;
+        Ok(list.collections[index].clone())
+    }
+
+    /// The counts of a collection that Studio reads with no write and no
+    /// migration, for the sheet of an export. A collection with no database
+    /// has no counts.
+    ///
+    /// # Errors
+    ///
+    /// Gives `Io` when SQLite fails.
+    pub fn account_counts(&self, folder: &str) -> Result<AccountCounts, CollectionsError> {
+        let path = self.folder(folder).join(DATABASE);
+        let none = AccountCounts {
+            feeds: 0,
+            drafts: 0,
+            versions: 0,
+            people: 0,
+        };
+        if !path.exists() {
+            return Ok(none);
+        }
+        let fail = |e: rusqlite::Error| CollectionsError::io(&path, &e);
+        let db = rusqlite::Connection::open_with_flags(
+            &path,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .map_err(fail)?;
+        let count = |table: &str| -> Result<u64, CollectionsError> {
+            if !table_exists(&db, table).map_err(fail)? {
+                return Ok(0);
+            }
+            let n: i64 = db
+                .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))
+                .map_err(fail)?;
+            Ok(u64::try_from(n).unwrap_or(0))
+        };
+        Ok(AccountCounts {
+            feeds: count("feeds")?,
+            drafts: count("drafts")?,
+            versions: count("snapshots")?,
+            people: count("people")?,
+        })
+    }
+
+    /// The library folder that the archive of a collection holds: a library
+    /// outside its folder, or `library/` in it.
+    ///
+    /// # Errors
+    ///
+    /// Gives `Io` when SQLite fails.
+    pub fn archive_library(&self, folder: &str) -> Result<PathBuf, CollectionsError> {
+        let path = self.folder(folder);
+        Ok(outer_library(&path)?.unwrap_or_else(|| path.join(LIBRARY)))
     }
 }
 
@@ -489,8 +622,13 @@ fn refused(message: &str) -> CollectionsError {
     CollectionsError::new(CollectionsErrorKind::Refused, message)
 }
 
-/// The trimmed name, when it is valid and free.
-fn checked_name(list: &ListFile, name: &str) -> Result<String, CollectionsError> {
+/// The trimmed name, when it is valid and free. `own` is the folder of the
+/// collection that gets the name, so that it can keep its name.
+fn checked_name(
+    list: &ListFile,
+    own: Option<&str>,
+    name: &str,
+) -> Result<String, CollectionsError> {
     let name = name.trim();
     if name.is_empty() || name.chars().count() > MAX_NAME {
         return Err(CollectionsError::new(
@@ -501,7 +639,7 @@ fn checked_name(list: &ListFile, name: &str) -> Result<String, CollectionsError>
     if list
         .collections
         .iter()
-        .any(|c| c.name.eq_ignore_ascii_case(name))
+        .any(|c| Some(c.folder.as_str()) != own && c.name.eq_ignore_ascii_case(name))
     {
         return Err(CollectionsError::new(
             CollectionsErrorKind::NameTaken,
@@ -978,36 +1116,179 @@ mod tests {
     }
 
     #[test]
-    fn a_delete_removes_only_that_folder_and_refuses_main_and_the_open_one() {
-        let (_dir, collections) = ready();
+    fn a_delete_removes_main_when_a_different_collection_is_open() {
+        let (dir, collections) = ready();
         let other = collections.create("Other").unwrap();
         let open = collections.create("Open").unwrap();
         collections.set_open(&open.folder).unwrap();
         let main = collections.folder(MAIN_FOLDER);
-        std::fs::write(main.join("vault.json"), "keep").unwrap();
-        assert_eq!(
-            collections.delete(MAIN_FOLDER).unwrap_err().kind(),
-            CollectionsErrorKind::Refused
-        );
+        std::fs::write(main.join("vault.json"), "main").unwrap();
+        std::fs::write(collections.folder(&other.folder).join("vault.json"), "keep").unwrap();
         assert_eq!(
             collections.delete(&open.folder).unwrap_err().kind(),
-            CollectionsErrorKind::Refused
+            CollectionsErrorKind::Refused,
+            "ADR 0176 item 3"
         );
         assert_eq!(
             collections.delete("nothing").unwrap_err().kind(),
             CollectionsErrorKind::NotFound
         );
-        collections.delete(&other.folder).unwrap();
-        assert!(!collections.folder(&other.folder).exists());
-        assert!(main.join("vault.json").exists());
-        assert!(collections.folder(&open.folder).exists());
+        collections.delete(MAIN_FOLDER).unwrap();
+        assert!(!main.exists(), "ADR 0176 item 1");
+        assert!(
+            collections
+                .folder(&other.folder)
+                .join("vault.json")
+                .exists()
+        );
         let names: Vec<String> = collections
             .list()
             .unwrap()
             .into_iter()
             .map(|c| c.name)
             .collect();
-        assert_eq!(names, [MAIN_NAME, "Open"]);
+        assert_eq!(names, ["Other", "Open"]);
+        assert_eq!(
+            prepare(dir.path()).unwrap(),
+            collections.folder(&open.folder),
+            "ADR 0176 item 4: a start opens the entry that the list names"
+        );
+        assert!(!main.exists(), "ADR 0176 item 4: a start makes no main");
+    }
+
+    #[test]
+    fn a_rename_changes_the_list_file_only() {
+        let (dir, collections) = ready();
+        let other = collections.create("Other").unwrap();
+        let folders_before: Vec<_> = std::fs::read_dir(dir.path().join(COLLECTIONS))
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        let main = collections.rename(MAIN_FOLDER, "  Production ").unwrap();
+        assert_eq!(main.name, "Production");
+        assert_eq!(main.folder, MAIN_FOLDER);
+        let mut folders_after: Vec<_> = std::fs::read_dir(dir.path().join(COLLECTIONS))
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        let mut folders_before = folders_before;
+        folders_before.sort();
+        folders_after.sort();
+        assert_eq!(folders_before, folders_after, "ADR 0176 item 5");
+        assert_eq!(collections.open().unwrap(), MAIN_FOLDER);
+        // The same name in a different case is the name of the same entry.
+        assert_eq!(
+            collections.rename(MAIN_FOLDER, "PRODUCTION").unwrap().name,
+            "PRODUCTION"
+        );
+        for (folder, name, kind) in [
+            (MAIN_FOLDER, "other", CollectionsErrorKind::NameTaken),
+            (MAIN_FOLDER, " ", CollectionsErrorKind::InvalidName),
+            ("nothing", "New", CollectionsErrorKind::NotFound),
+        ] {
+            assert_eq!(collections.rename(folder, name).unwrap_err().kind(), kind);
+        }
+        assert_eq!(collections.list().unwrap()[1], other);
+    }
+
+    fn put_files(folder: &Path, vault: &str) {
+        std::fs::write(folder.join("vault.json"), vault).unwrap();
+        std::fs::create_dir_all(folder.join("library")).unwrap();
+        std::fs::write(folder.join("library/a.xml"), vault).unwrap();
+    }
+
+    fn fill(vault: &str) -> impl FnOnce(&Path) -> Result<(), CollectionsError> + use<'_> {
+        move |folder| {
+            put_files(folder, vault);
+            Ok(())
+        }
+    }
+
+    fn closed_pair() -> (tempfile::TempDir, Collections, CollectionEntry) {
+        let (dir, collections) = ready();
+        let closed = collections.create("Closed").unwrap();
+        put_files(&collections.folder(&closed.folder), "old");
+        (dir, collections, closed)
+    }
+
+    #[test]
+    fn a_replace_keeps_the_name_and_gives_the_entry_the_new_files() {
+        let (_dir, collections, closed) = closed_pair();
+        let made = collections.replace(&closed.folder, fill("new")).unwrap();
+        assert_eq!(made.name, "Closed", "ADR 0176 item 8");
+        assert_ne!(made.folder, closed.folder);
+        let listed = collections.list().unwrap();
+        assert_eq!(listed[1], made);
+        assert_eq!(collections.open().unwrap(), MAIN_FOLDER);
+        assert_eq!(
+            std::fs::read_to_string(collections.folder(&made.folder).join("vault.json")).unwrap(),
+            "new"
+        );
+        assert!(!collections.folder(&closed.folder).exists());
+    }
+
+    #[test]
+    fn a_replace_with_a_bad_read_changes_nothing() {
+        let (_dir, collections, closed) = closed_pair();
+        let before = std::fs::read_to_string(collections.root.join(LIST_FILE)).unwrap();
+        let error = collections
+            .replace(&closed.folder, |path| {
+                put_files(path, "partial");
+                Err(CollectionsError::new(CollectionsErrorKind::Io, "bad file"))
+            })
+            .unwrap_err();
+        assert_eq!(error.to_string(), "bad file");
+        assert_eq!(
+            std::fs::read_to_string(collections.root.join(LIST_FILE)).unwrap(),
+            before
+        );
+        assert_eq!(
+            std::fs::read_to_string(collections.folder(&closed.folder).join("vault.json")).unwrap(),
+            "old"
+        );
+        let folders = std::fs::read_dir(collections.root.join(COLLECTIONS))
+            .unwrap()
+            .count();
+        assert_eq!(folders, 2, "a bad read must leave no new folder");
+    }
+
+    #[test]
+    fn a_replace_of_the_open_or_an_unknown_collection_is_refused() {
+        let (_dir, collections, _closed) = closed_pair();
+        let error = collections.replace(MAIN_FOLDER, fill("new")).unwrap_err();
+        assert_eq!(
+            error.kind(),
+            CollectionsErrorKind::Refused,
+            "ADR 0176 item 3"
+        );
+        let error = collections.replace("nothing", fill("new")).unwrap_err();
+        assert_eq!(error.kind(), CollectionsErrorKind::NotFound);
+    }
+
+    #[test]
+    fn a_stop_before_and_after_the_list_write_leaves_an_entry_with_a_complete_folder() {
+        for stop in [1, 2] {
+            let (_dir, collections, closed) = closed_pair();
+            let result = collections.replace_with_steps(&closed.folder, fill("new"), &mut |step| {
+                if step == stop {
+                    Err(std::io::Error::other("stopped"))
+                } else {
+                    Ok(())
+                }
+            });
+            assert!(result.is_err());
+            let entry = collections.list().unwrap().remove(1);
+            assert_eq!(entry.name, "Closed");
+            let folder = collections.folder(&entry.folder);
+            let vault = std::fs::read_to_string(folder.join("vault.json")).unwrap();
+            let library = std::fs::read_to_string(folder.join("library/a.xml")).unwrap();
+            let wanted = if stop == 1 { "old" } else { "new" };
+            assert_eq!(
+                (vault.as_str(), library.as_str()),
+                (wanted, wanted),
+                "stop {stop}"
+            );
+        }
     }
 
     #[test]

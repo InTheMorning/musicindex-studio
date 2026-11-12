@@ -28,7 +28,7 @@ pub(crate) async fn recovery_key(State(shared): State<Shared>) -> ApiResult {
 
 /// True when a method of the vault opens it on a different server: a
 /// passphrase, a recovery key or a Nostr signer (ADR 0107 item 4).
-fn movable(methods: &[VaultMethod]) -> bool {
+pub(crate) fn movable(methods: &[VaultMethod]) -> bool {
     methods.iter().any(|m| {
         matches!(
             m,
@@ -57,32 +57,49 @@ fn library_of(w: &Workspace) -> Result<Option<std::path::PathBuf>, ApiError> {
     Ok(w.collection.library_root()?)
 }
 
+/// The facts of the export sheet for the account in `folder`, with its
+/// `library`, `counts` and `methods` (ADR 0107 items 4 and 5).
+pub(crate) fn facts_of(
+    w: &Workspace,
+    folder: &std::path::Path,
+    library: Option<&std::path::Path>,
+    counts: studio_core::collection::AccountCounts,
+    methods: &[VaultMethod],
+) -> Result<serde_json::Value, ApiError> {
+    let sizes = archive_sizes(folder, library).map_err(|e| ApiError::internal(e.to_string()))?;
+    // A server that holds no assets keeps only the files that wait for
+    // a write. They go in the archive, and the user has no choice.
+    let holds = w.holds_assets();
+    let default_bytes = sizes.with_assets;
+    Ok(json!({
+        "feeds": counts.feeds,
+        "drafts": counts.drafts,
+        "versions": counts.versions,
+        "people": counts.people,
+        "movable": movable(methods),
+        "methods": method_names(methods),
+        "passkeys": methods.iter().filter(|m| matches!(m, VaultMethod::Passkey { .. })).count(),
+        "holds_assets": holds,
+        "asset_bytes": sizes.with_assets.saturating_sub(sizes.without_assets),
+        "archive_bytes": default_bytes,
+        "archive_bytes_without_assets": sizes.without_assets,
+    }))
+}
+
 /// `GET /account/export-facts`: what the export sheet shows (ADR 0107
 /// items 4 and 5). It needs no unlock.
 pub(crate) async fn export_facts(State(shared): State<Shared>) -> ApiResult {
     blocking(shared, |w| {
         let methods = w.vault_methods()?;
         let library = library_of(w)?;
-        let sizes = archive_sizes(&w.data_dir, library.as_deref())
-            .map_err(|e| ApiError::internal(e.to_string()))?;
         let counts = w.collection.account_counts()?;
-        // A server that holds no assets keeps only the files that wait for
-        // a write. They go in the archive, and the user has no choice.
-        let holds = w.holds_assets();
-        let default_bytes = sizes.with_assets;
-        Ok(Json(json!({
-            "feeds": counts.feeds,
-            "drafts": counts.drafts,
-            "versions": counts.versions,
-            "people": counts.people,
-            "movable": movable(&methods),
-            "methods": method_names(&methods),
-            "passkeys": methods.iter().filter(|m| matches!(m, VaultMethod::Passkey { .. })).count(),
-            "holds_assets": holds,
-            "asset_bytes": sizes.with_assets.saturating_sub(sizes.without_assets),
-            "archive_bytes": default_bytes,
-            "archive_bytes_without_assets": sizes.without_assets,
-        })))
+        Ok(Json(facts_of(
+            w,
+            &w.data_dir,
+            library.as_deref(),
+            counts,
+            &methods,
+        )?))
     })
     .await
 }
@@ -108,30 +125,56 @@ pub(crate) async fn export(
     Json(body): Json<ExportRequest>,
 ) -> ApiResult {
     blocking(shared, move |w| {
-        w.require_recent_unlock()?;
-        if !movable(&w.vault_methods()?) {
-            return Err(ApiError::new(
-                StatusCode::CONFLICT,
-                "vault_not_movable",
-                "ADR 0107 item 4: only passkeys open this vault, and a passkey does not work on a different server. Make a recovery key first",
-            ));
-        }
-        let include_assets = if w.holds_assets() {
-            body.include_assets
-        } else {
-            true
-        };
-        let sizes = archive_sizes(&w.data_dir, library_of(w)?.as_deref())
-            .map_err(|e| ApiError::internal(e.to_string()))?;
-        let ticket = w.tickets.issue_archive(include_assets, Instant::now())?;
-        Ok(Json(json!({
-            "ticket": ticket,
-            "file_name": archive_name(crate::announcer::now()),
-            "include_assets": include_assets,
-            "archive_bytes": if include_assets { sizes.with_assets } else { sizes.without_assets },
-        })))
+        let methods = w.vault_methods()?;
+        let library = library_of(w)?;
+        let folder = w.data_dir.clone();
+        issue_export(
+            w,
+            &folder,
+            None,
+            library.as_deref(),
+            &methods,
+            body.include_assets,
+        )
     })
     .await
+}
+
+/// Make the ticket of an archive of the collection in `folder` (ADR 0107
+/// items 3, 4 and 7). `closed` is the folder of a collection that is not
+/// open, and `None` for the collection of the workspace. The vault that must
+/// show a recent unlock is the vault that is open, in both cases.
+pub(crate) fn issue_export(
+    w: &mut Workspace,
+    folder: &std::path::Path,
+    closed: Option<std::path::PathBuf>,
+    library: Option<&std::path::Path>,
+    methods: &[VaultMethod],
+    include_assets: bool,
+) -> ApiResult {
+    w.require_recent_unlock()?;
+    if !movable(methods) {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "vault_not_movable",
+            "ADR 0107 item 4: only passkeys open this vault, and a passkey does not work on a different server. Make a recovery key first",
+        ));
+    }
+    let include_assets = if w.holds_assets() {
+        include_assets
+    } else {
+        true
+    };
+    let sizes = archive_sizes(folder, library).map_err(|e| ApiError::internal(e.to_string()))?;
+    let ticket = w
+        .tickets
+        .issue_archive(include_assets, closed, Instant::now())?;
+    Ok(Json(json!({
+        "ticket": ticket,
+        "file_name": archive_name(crate::announcer::now()),
+        "include_assets": include_assets,
+        "archive_bytes": if include_assets { sizes.with_assets } else { sizes.without_assets },
+    })))
 }
 
 /// The file name of an archive: `studio-` and the date of the export.

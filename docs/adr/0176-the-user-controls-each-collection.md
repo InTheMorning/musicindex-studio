@@ -19,8 +19,8 @@ The export was in the section "Move Studio", and the import was in the section "
 ### No Collection Is Special
 
 1. No collection has a protection that a different collection does not have. The first collection keeps the folder `collections/main/`, and its start name stays "Main collection". The user can rename it and delete it.
-2. Each collection that is not open has "Open", "Rename…", "Replace With a File…" and "Delete…".
-3. The open collection has "Rename…" and the tag "Open now". It has no "Delete…" and no "Replace With a File…", because its files are in use.
+2. Each collection that is not open has "Open", "Rename…", "Replace with a File…" and "Delete…".
+3. The open collection has "Rename…" and the tag "Open now". It has no "Delete…" and no "Replace with a File…", because its files are in use.
 4. A start opens the collection that the list file names as open. A start does not make a new `collections/main/` when the list has no such entry.
 
 ### Rename
@@ -31,7 +31,7 @@ The export was in the section "Move Studio", and the import was in the section "
 
 6. A delete and a replace each need a confirmation sheet. The sheet gives the name, the count of feeds and the parts that go: the feeds, the drafts, the versions, the people and the vault. It says that nothing changes on a file host.
 7. The sheet has "Export First…", which makes an account file of that collection. The export rules of ADR 0107 items 4 and 5 apply.
-8. "Replace With a File…" reads the account file into a new folder first, with the checks of ADR 0107 item 11. After a good read, one write of the list file moves the entry to the new folder. Then Studio removes the previous folder. The name of the collection stays. A read that is not good changes nothing. After a stop, a folder that the list does not name can stay, and Studio does not delete it.
+8. "Replace with a File…" reads the account file into a new folder first, with the checks of ADR 0107 item 11. After a good read, one write of the list file moves the entry to the new folder. Then Studio removes the previous folder. The name of the collection stays. A read that is not good changes nothing. After a stop, a folder that the list does not name can stay, and Studio does not delete it.
 9. The vault of the replaced collection is the vault of the file. The user opens it with a method of the file.
 
 ### Export Next To Import

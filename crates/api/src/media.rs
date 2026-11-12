@@ -43,9 +43,12 @@ const BLOCK_BYTES: usize = 64 * 1024;
 enum Target {
     File(i64),
     /// The archive of the account (ADR 0107 item 7). The flag says if the
-    /// archive holds the audio and the images.
+    /// archive holds the audio and the images. `folder` is the folder of a
+    /// collection that is not open (ADR 0176 item 7), or `None` for the
+    /// collection of the workspace.
     Archive {
         include_assets: bool,
+        folder: Option<PathBuf>,
     },
 }
 
@@ -79,23 +82,42 @@ impl Tickets {
         self.insert(Target::File(file), now)
     }
 
-    /// Make a ticket for the archive of the account (ADR 0107 item 7).
+    /// Make a ticket for the archive of the account (ADR 0107 item 7), or
+    /// of the collection in `folder` (ADR 0176 item 7).
     pub(crate) fn issue_archive(
         &mut self,
         include_assets: bool,
+        folder: Option<PathBuf>,
         now: Instant,
     ) -> Result<String, ApiError> {
-        self.insert(Target::Archive { include_assets }, now)
+        self.insert(
+            Target::Archive {
+                include_assets,
+                folder,
+            },
+            now,
+        )
     }
 
     /// Use the archive ticket: the call removes it, so that it works one
-    /// time. Gives `include_assets` of the ticket.
-    pub(crate) fn take_archive(&mut self, ticket: &str, now: Instant) -> Option<bool> {
+    /// time. Gives `include_assets` and the folder of the ticket.
+    pub(crate) fn take_archive(
+        &mut self,
+        ticket: &str,
+        now: Instant,
+    ) -> Option<(bool, Option<PathBuf>)> {
         match self.tickets.get(ticket) {
-            Some((Target::Archive { include_assets }, expires)) if now < *expires => {
-                let include_assets = *include_assets;
-                self.tickets.remove(ticket);
-                Some(include_assets)
+            Some((Target::Archive { .. }, expires)) if now < *expires => {
+                match self.tickets.remove(ticket) {
+                    Some((
+                        Target::Archive {
+                            include_assets,
+                            folder,
+                        },
+                        _,
+                    )) => Some((include_assets, folder)),
+                    _ => None,
+                }
             }
             _ => None,
         }
@@ -462,9 +484,12 @@ struct ArchiveJob {
 /// Use the archive ticket, and collect what the stream needs. Gives `None`
 /// when the ticket is not an archive ticket.
 fn archive_job(w: &mut Workspace, ticket: &str) -> Result<Option<ArchiveJob>, ApiError> {
-    let Some(include_assets) = w.tickets.take_archive(ticket, Instant::now()) else {
+    let Some((include_assets, closed)) = w.tickets.take_archive(ticket, Instant::now()) else {
         return Ok(None);
     };
+    if let Some(folder) = closed {
+        return closed_archive_job(&folder, include_assets).map(Some);
+    }
     // The manifest holds the email of the account and the public key of
     // each Nostr method. It holds no secret (ADR 0107 item 6).
     let mut keys: Vec<String> = w.identity.pubkey.iter().cloned().collect();
@@ -481,6 +506,37 @@ fn archive_job(w: &mut Workspace, ticket: &str) -> Result<Option<ArchiveJob>, Ap
         manifest: studio_core::account_archive::Manifest::new(w.identity.email.clone(), keys),
         include_assets,
     }))
+}
+
+/// The job for a collection that is not open. The manifest has no email,
+/// because the identity of the workspace belongs to the open collection.
+fn closed_archive_job(
+    folder: &std::path::Path,
+    include_assets: bool,
+) -> Result<ArchiveJob, ApiError> {
+    let methods = studio_core::vault::VaultFile::load(&folder.join("vault.json"))?.methods();
+    let keys = methods
+        .into_iter()
+        .filter_map(|method| match method {
+            studio_core::vault::VaultMethod::Nostr { pubkey } => Some(pubkey),
+            _ => None,
+        })
+        .collect();
+    let root = folder.parent().and_then(std::path::Path::parent);
+    let library = match (root, folder.file_name().and_then(|n| n.to_str())) {
+        (Some(root), Some(name)) => Some(
+            studio_core::collections::Collections::new(root)
+                .archive_library(name)
+                .map_err(|e| ApiError::internal(e.to_string()))?,
+        ),
+        _ => None,
+    };
+    Ok(ArchiveJob {
+        folder: folder.to_path_buf(),
+        library,
+        manifest: studio_core::account_archive::Manifest::new(None, keys),
+        include_assets,
+    })
 }
 
 /// A writer that sends its bytes to the body of the response in blocks.

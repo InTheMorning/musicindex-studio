@@ -66,7 +66,7 @@ impl WorkspaceHandle {
         Self { shared }
     }
 
-    async fn run<T, F>(&self, work: F) -> Result<T, ApiError>
+    pub(crate) async fn run<T, F>(&self, work: F) -> Result<T, ApiError>
     where
         T: Send + 'static,
         F: FnOnce(&mut Workspace) -> Result<T, ApiError> + Send + 'static,

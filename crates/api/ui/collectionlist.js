@@ -2,22 +2,84 @@
 // and no browser state. The core keeps the list and applies each rule.
 
 // The text of the row at the bottom of the left panel, or null. The row shows
-// only when the open collection is not "Main collection" (ADR 0149 item 17).
+// when the list has more than one collection (ADR 0176 item 12).
 export function collectionMark(collections) {
-  const open = (collections || []).find((c) => c.open);
-  return open && !open.main ? `Collection: ${open.name}` : null;
+  const list = collections || [];
+  const open = list.find((c) => c.open);
+  return open && list.length > 1 ? `Collection: ${open.name}` : null;
 }
 
-// One row of the section "Collections" (ADR 0149 items 6 and 12).
+// The count of feeds of a collection, such as "1 feed".
+function feedsText(collection) {
+  return collection.feeds === 1 ? '1 feed' : `${collection.feeds} feeds`;
+}
+
+// One row of the section "Collections" and its actions (ADR 0176 items 2 and
+// 3). A collection that is open has its files in use, so it has no Replace and
+// no Delete. The core refuses both too.
 export function collectionRow(collection) {
-  const count = collection.feeds === 1 ? '1 feed' : `${collection.feeds} feeds`;
   return {
     name: collection.name,
-    line: count,
+    line: feedsText(collection),
+    tag: collection.open ? 'Open now' : null,
     canOpen: !collection.open,
-    canDelete: !collection.open && !collection.main,
+    canRename: true,
+    canReplace: !collection.open,
+    canDelete: !collection.open,
   };
 }
+
+const GOES = 'the feeds, the drafts, the versions, the people and the vault';
+
+// The words of the sheets of a row (ADR 0176 items 5 to 9). `kind` is
+// `rename`, `replace` or `delete`. The sheets of replace and delete give the
+// name, the count of feeds and the parts that go, and they offer the export.
+export function collectionAction(kind, collection) {
+  const name = collection.name;
+  switch (kind) {
+    case 'rename': return {
+      title: 'Rename Collection',
+      start: name,
+      lines: ['Only the name changes. The files stay where they are.'],
+      primary: 'Rename',
+      busy: 'Renaming…',
+      destructive: false,
+      exportFirst: false,
+      file: false,
+    };
+    case 'replace': return {
+      title: `Replace “${name}” with a File`,
+      start: null,
+      lines: [
+        `${name} holds ${feedsText(collection)} now. Studio reads the file first, and a file that is not good changes nothing.`,
+        `After a good read, ${GOES} of the file take the place of the current ones. Nothing changes on a file host.`,
+        'The vault of the file opens with a method of the file, not with the method of the vault that goes.',
+      ],
+      primary: 'Replace Collection',
+      busy: 'Replacing…',
+      destructive: true,
+      exportFirst: true,
+      file: true,
+    };
+    default: return {
+      title: `Delete “${name}”?`,
+      start: null,
+      lines: [
+        `${name} holds ${feedsText(collection)}. Studio removes ${GOES} from this computer. You cannot get them back.`,
+        'Nothing changes on a file host.',
+      ],
+      primary: 'Delete Collection',
+      busy: 'Deleting…',
+      destructive: true,
+      exportFirst: true,
+      file: false,
+    };
+  }
+}
+
+// The text of a closed collection whose vault no different Studio can open.
+// The recovery key belongs to the vault that is open.
+export const CLOSED_EXPORT_HINT = 'Open this collection, make a recovery key there, and export it again.';
 
 // The words of a sheet that makes a collection (ADR 0149 items 7 to 11).
 // `open` is the name of the open collection, and `size` is the text of the

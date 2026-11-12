@@ -173,6 +173,8 @@
    Experimental badge uses it (musicindex ADR 0034 R-EXPERIMENT-1). */
 :root { --warning: #ff9f0a; }
 :root[data-theme="light"] { --warning: #a05a00; }
+:root { --success: #30d158; }
+:root[data-theme="light"] { --success: #1a7f37; }
 
 /* Button role tints (ADR 0037): an action button and a destructive
    button each use a pale fill of their own color, not an entity color
@@ -2262,6 +2264,15 @@ button.outline-feed {
 /* The tag of the default address (ADR 0139 item 2). It has the radius of a badge (musicindex ADR 0024). */
 .default-tag { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; padding: 0 6px; border-radius: 6px; background: var(--accent-tint); color: var(--accent); font-size: var(--text-footnote); font-weight: 600; vertical-align: 1px; }
 .default-tag .icon { display: block; width: 12px; height: 12px; stroke-width: 3; }
+/* The status tag of a podping line (ADR 0189 item 7). It has the text size of the line, so that the state is easy to see. */
+.status-tag { display: inline-flex; align-items: center; gap: 5px; margin-right: 8px; padding: 2px 8px; border-radius: 6px; font-size: var(--text-callout); font-weight: 600; }
+.status-tag.waiting { color: var(--warning); background: color-mix(in srgb, var(--warning) 16%, transparent); }
+.status-tag.sent { color: var(--success); background: color-mix(in srgb, var(--success) 16%, transparent); }
+.status-tag.failed { color: var(--error); background: color-mix(in srgb, var(--error) 16%, transparent); }
+.status-tag.not_sent { color: var(--muted); background: var(--fill-soft); }
+.status-tag .player-wait, .status-tag .icon { display: block; flex: none; width: 12px; height: 12px; }
+.status-tag .icon { stroke-width: 3; }
+.podping-line { margin: 8px 0 0; overflow-wrap: anywhere; }
 /* At narrow width the buttons of a row go on their own line, so that the text keeps its width. */
 @media (max-width: 760px) {
   .more-row { flex-wrap: wrap; }

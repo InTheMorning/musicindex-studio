@@ -66,16 +66,21 @@ const localTime = (seconds) => new Date(seconds * 1000).toLocaleString();
 export function moveNotice(check) {
   if (!check || check.index_is_move_source !== true || !check.last_move) return null;
   const lines = (check.last_move.announcements || []).map((announcement) => {
-    const line = { url: announcement.url, text: 'Podping: not sent.' };
+    const line = { url: announcement.url, state: announcement.state, tag: '', time: null, text: '' };
     if (announcement.state === 'waiting') {
-      line.text = `Podping: waiting, sends at ${localTime(announcement.send_at)}.`;
+      line.tag = 'Waiting';
+      line.time = localTime(announcement.send_at);
     } else if (announcement.state === 'sent') {
-      line.text = `Podping: sent at ${localTime(announcement.finished_at)}.`;
+      line.tag = 'Sent';
+      line.time = localTime(announcement.finished_at);
     } else if (announcement.state === 'failed') {
-      line.text = `Podping: failed at ${localTime(announcement.finished_at)}${announcement.error ? `: ${announcement.error}` : ''}.`;
+      line.tag = 'Failed';
+      line.time = localTime(announcement.finished_at);
+      line.text = announcement.error || '';
       if (check.own_url) line.action = 'Send the Podping Again';
-    } else if (announcement.state === 'not_sent' && check.own_url) {
-      line.action = 'Send the Podping';
+    } else if (announcement.state === 'not_sent') {
+      line.tag = 'Not sent';
+      if (check.own_url) line.action = 'Send the Podping';
     }
     return line;
   });

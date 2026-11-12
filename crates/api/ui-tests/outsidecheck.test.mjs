@@ -41,11 +41,22 @@ test('The Studio move notice gives each podping state and its action (ADR 0184 i
   } });
   assert.equal(notice.tone, 'plain');
   assert.match(notice.strong, /^You moved this feed at /);
-  assert.match(notice.lines[0].text, /^Podping: waiting, sends at /);
-  assert.match(notice.lines[1].text, /^Podping: sent at /);
-  assert.match(notice.lines[2].text, /^Podping: failed at .*: timeout\.$/);
+  const expectedTime = (seconds) => new Date(seconds * 1000).toLocaleString();
+  for (const [index, state, tag, time] of [
+    [0, 'waiting', 'Waiting', 110],
+    [1, 'sent', 'Sent', 120],
+    [2, 'failed', 'Failed', 130],
+    [3, 'not_sent', 'Not sent', null],
+  ]) {
+    assert.equal(notice.lines[index].state, state, 'ADR 0189 item 7: each podping line gives its state.');
+    assert.equal(notice.lines[index].tag, tag, 'ADR 0189 item 7: each podping line gives its status tag.');
+    assert.equal(notice.lines[index].time, time === null ? null : expectedTime(time), 'ADR 0189 item 7: each podping line gives its time in the tag.');
+  }
+  assert.equal(notice.lines[0].text, '', 'ADR 0189 item 7: the waiting line text does not repeat its state or time.');
+  assert.equal(notice.lines[1].text, '', 'ADR 0189 item 7: the sent line text does not repeat its state or time.');
+  assert.equal(notice.lines[2].text, 'timeout', 'ADR 0189 item 7: a failed line gives its error text.');
   assert.equal(notice.lines[2].action, 'Send the Podping Again');
-  assert.equal(notice.lines[3].text, 'Podping: not sent.');
+  assert.equal(notice.lines[3].text, '');
   assert.equal(notice.lines[3].action, 'Send the Podping');
   assert.equal(notice.lines[0].action, undefined);
   assert.equal(notice.lines[1].action, undefined);
@@ -61,8 +72,10 @@ test('A Studio move notice has no send button with no public address (ADR 0184 i
       { url: 'https://old.example/a.xml', state: 'not_sent' },
     ],
   } });
-  assert.match(notice.lines[0].text, /^Podping: failed at .*[AP]?M?\.$/);
-  assert.doesNotMatch(notice.lines[0].text, /: \.$|: null/);
+  assert.equal(notice.lines[0].state, 'failed', 'ADR 0189 item 7: a failed line gives its state.');
+  assert.equal(notice.lines[0].tag, 'Failed', 'ADR 0189 item 7: a failed line gives its status tag.');
+  assert.equal(notice.lines[0].time, new Date(130000).toLocaleString(), 'ADR 0189 item 7: a failed line gives its time in the tag.');
+  assert.equal(notice.lines[0].text, '', 'ADR 0189 item 7: a failed line with no error has no sentence text.');
   assert.equal(notice.lines[0].action, undefined);
   assert.equal(notice.lines[1].action, undefined);
 });

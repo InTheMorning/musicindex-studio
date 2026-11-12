@@ -81,13 +81,9 @@ const contrast = (a, b) => {
 // The surfaces that carry a box: body (--level-1), .group and dialog.sheet (--level-2), an open entry (--level-3).
 const surfaces = ['--level-1', '--level-2', '--level-3'];
 
-// Finding: in the light theme --check-border (#8e8e93) has 2.92:1 on #f2f2f7. The test is a todo until the
-// shared value of musicindex ADR 0063 R-CHECK-5 changes. A todo that fails does not fail the run.
-const knownBelow = (theme, surface) => theme === 'light' && surface !== '--level-2';
 for (const theme of ['dark', 'light']) {
   for (const surface of surfaces) {
-    const options = knownBelow(theme, surface) ? { todo: 'finding: the ratio is below 3:1 (ADR 0063 R-CHECK-1 item 3)' } : {};
-    test(`the check box border has a contrast of 3:1 on ${surface} in the ${theme} theme`, options, () => {
+    test(`the check box border has a contrast of 3:1 on ${surface} in the ${theme} theme`, () => {
       const page = parseColor(resolve(theme, themes[theme]['--level-1']));
       const border = over(parseColor(resolve(theme, themes[theme]['--check-border'])), page);
       const ground = over(parseColor(resolve(theme, themes[theme][surface])), page);

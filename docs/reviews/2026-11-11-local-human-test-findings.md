@@ -50,6 +50,8 @@ The planning model keeps ADR 0167 item 6: the core refuses a folder that is not 
 
 ### Finding 2: The Line Of The Feed Address
 
+Decision: [ADR 0184](../adr/0184-after-a-move-studio-shows-the-podping-of-the-move.md).
+
 Owner: [ADR 0128](../adr/0128-a-moved-feed-names-its-own-address.md).
 
 After a move of only the media files, the **Files** page showed "The feed file names the new feed address `https://files.heycitizen.xyz/Songs/Albums/TestAlbum/test.xml`." That address is the current address, and it did not change. The word "new" tells the user that the address changed.
@@ -109,6 +111,8 @@ The operator selected this design in the questionnaire, as a drawing:
 
 ### Finding 7: The Merge Of The Artist Feed
 
+Decision: [ADR 0186](../adr/0186-the-merge-notice-gives-the-times-of-the-change.md).
+
 Owner: [ADR 0129](../adr/0129-a-draft-takes-a-change-of-the-hosted-file.md).
 
 Review of the artist feed "HeyCitizen" showed "The hosted file changed after the draft started." The operator uses **Read Again** before each write, and did not remember a change with a different tool.
@@ -120,6 +124,8 @@ On 2026-11-12 the operator opened Review of the artist feed in the release build
 In **Examine the Changes**, the field "Credits" was in "Both changed. Select one". Each option of its select menu held the full value, so the open menu was wider than the screen. The fix shows the two values as text above a select menu with the short options "Your edit" and "Hosted file".
 
 ### Finding 8: The Notice After A Move
+
+Decision: [ADR 0184](../adr/0184-after-a-move-studio-shows-the-podping-of-the-move.md).
 
 Owner: [ADR 0150](../adr/0150-studio-shows-a-change-from-outside-when-a-page-opens.md) item 5.
 
@@ -223,6 +229,8 @@ The sheet "Update from Linked Pages" showed the rows "Picture" and "Website" wit
 
 ### Finding 16: An Empty Credit In The Draft Of The Artist Feed
 
+Decision: [ADR 0185](../adr/0185-a-write-gives-only-real-changes-of-a-credit.md).
+
 Owner: [ADR 0129](../adr/0129-a-draft-takes-a-change-of-the-hosted-file.md) for the merge panel. The owner of the empty credit is not known.
 
 The draft of the artist feed "HeyCitizen" had two credits: an empty credit and HeyCitizen (musician). The empty credit had no name, no role, no group, no picture, no address and no npub. The hosted file had only HeyCitizen (musician). The cause of the empty credit is not known.
@@ -248,6 +256,8 @@ Owner: [ADR 0169](../adr/0169-an-open-credit-can-find-on-music-index.md) item 2.
 The operator selected this design in the questionnaire, as a drawing: a line below the row **Find on Music Index** names the filled fields, for example "Filled from Music Index: Picture address". The line stays until the next edit of the credit.
 
 ### Finding 18: A Write With A Stream Type That The Server Does Not Send
+
+Decision: [ADR 0187](../adr/0187-review-checks-the-stream-type-of-a-live-show.md).
 
 Owner: [ADR 0162](../adr/0162-studio-fills-and-checks-the-stream-of-a-live-show.md) items 8 and 9.
 
@@ -281,6 +291,8 @@ An export of a collection that is not open is new. At this time, only the delete
 The tag "Open now" of the open collection is blue text. It looks like an action. The operator selected the badge "✓ Current", in the style of the badge "✓ Default" of a wallet.
 
 ### Finding 20: A Value That Comes Back Changes The Order Of The Attributes
+
+Decision: [ADR 0185](../adr/0185-a-write-gives-only-real-changes-of-a-credit.md).
 
 Owner: the owner of the write of a person is not known. [ADR 0169](../adr/0169-an-open-credit-can-find-on-music-index.md) item 5 makes the fill a change of the draft.
 

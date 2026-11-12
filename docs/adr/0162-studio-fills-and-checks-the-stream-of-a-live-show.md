@@ -8,6 +8,7 @@
 - Item 5 clarified: 2026-11-10, after the human check of rc.21 step 15. A check did not fill an empty type, because an earlier selection on the page counted. The last sentence of item 5 is a choice of the planning model, and it corrects a defect.
 - Item 10 accepted: 2026-11-10 by the operator, after the human check of rc.21 step 8. The line showed "audio/mpeg" next to the menu entry "MP3". The operator selected the drawing with the menu name only.
 - Uses: [ADR 0161](0161-a-live-item-needs-a-stream-and-a-content-link-is-recommended.md), [ADR 0054](0054-live-items-connected-apps-and-show-grants.md), [ADR 0057](0057-the-private-network-guard-of-the-server.md), [ADR 0065](0065-the-core-applies-each-feed-rule.md).
+- Changed by: [ADR 0187](0187-review-checks-the-stream-type-of-a-live-show.md). Items 8 and 9: Review checks the stream of a changed live item, and a live stream with a different type stops the write.
 
 ## Context
 

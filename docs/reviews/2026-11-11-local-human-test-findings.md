@@ -17,6 +17,7 @@ The operator built `studio-desktop-app` in the release profile from local `main`
 | Move with "Only the feed file", on `7e66e56` | ADR 0177, ADR 0178 | Passed. The old copy at `TestAlbum/test.xml` on `heycitizen` did not stop the move. After the write at 11:37 UTC on 2026-11-12, the new address gave the feed. The old address gave the same feed, with `itunes:new-feed-url` set to the new address. Music Index still gave the old address after the write. |
 | Move with "The feed file and the release files", back to `bastone` | ADR 0177, ADR 0179 | Stopped before the write. Review showed duplicate uploads (finding 9). |
 | The same move again, on `7c581a8` | ADR 0177, ADR 0179 | Passed. The **Files** page showed no " 2" names. Review showed the return warning and no upload, because each media file had a copy on `bastone`. After the write at 13:47 UTC on 2026-11-12, both addresses gave the feed with `itunes:new-feed-url` set to the `bastone` address. Each media address in the feed was on `bastone` and answered. |
+| Keys of the left panel and of the Credits page, with a real keyboard | ADR 0172, task 108 | Passed in the release build of local `main`, not in the AppImage. Up, Down, Home, End, Tab, Shift+Tab, Enter and Left acted as the task gives. Right, Left, Enter and Tab acted on a credit row. The focus ring had defects (finding 11). |
 
 ## Findings
 
@@ -130,3 +131,11 @@ The plan in `release_move_plan` also makes a copy operation for record 13. But `
 Owner: [ADR 0007](../adr/0007-draft-diff-write-and-announce.md).
 
 After **Discard the Draft**, the sheet "Review changes" stayed open. It showed "The draft is saved. The hosted file does not change until you write it." and **Examine the Changes**. No draft was there. The operator closed the sheet with ✕. The fix closes the sheet after a discard.
+
+### Finding 11: The Focus Ring Of The First Row Of The Left Panel
+
+Owner: [ADR 0172](../adr/0172-a-list-is-one-tab-stop.md).
+
+The focus ring on the first row of the left panel, "‹ Releases", had no top edge. The scroll area of the left panel had space only at its left and right sides, so it clipped the ring. The fix gives the scroll area 4 px of space at each side. The rows stay at the same positions.
+
+On the **Credits** page, the ring on the first credit row had four edges, but its two top corners were not complete. The group has a corner radius of 14 px and clips its content. The ring was 2 px inside the row, with a radius of 8 px, so the group clipped its corners. The fix gives that ring a radius of 12 px.

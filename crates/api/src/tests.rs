@@ -14566,6 +14566,84 @@ async fn the_plan_names_what_moves_and_what_stays() {
     assert_eq!(plan["nothing_to_move"], true, "{plan}");
 }
 
+/// ADR 0177 item 3: a move takes only the part that "What moves" names.
+async fn move_scoped(app: &App, id: i64, to: i64, what: &str) -> Value {
+    let (status, diff) = call(
+        app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/move"),
+        Some(json!({ "connector_id": to, "delete_later": true, "wait_days": 30, "what": what })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    diff
+}
+
+fn has_copy(diff: &Value) -> bool {
+    diff["operations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|op| op["kind"] == "upload" || op["kind"] == "copy")
+}
+
+/// ADR 0177 item 3: "Only the feed file" moves no release file and keeps the
+/// default file host.
+#[tokio::test]
+async fn a_move_of_only_the_feed_file_moves_no_release_file() {
+    let app = move_app();
+    let (id, _, _, backup, _folder) = album_on_home(&app).await;
+    let plan_path = format!("/api/v1/feeds/{id}/move/plan?connector_id={backup}&what=feed");
+    let (_, plan) = call(&app, "GET", &plan_path, None).await;
+    assert_eq!(plan["feed"]["moves"], true, "{plan}");
+    assert_eq!(plan["audio"]["count"], 0, "{plan}");
+    assert_eq!(plan["default_changes"], false, "{plan}");
+
+    let diff = move_scoped(&app, id, backup, "feed").await;
+    assert!(!has_copy(&diff), "{diff}");
+    let (_, files) = call(&app, "GET", &format!("/api/v1/feeds/{id}/files"), None).await;
+    assert_eq!(files["feed_move"]["connector_id"], backup, "{files}");
+    assert!(files["files_connector_id"].is_null(), "{files}");
+}
+
+/// ADR 0177 items 3 and 4: "Only the release files" does not move the feed
+/// file, and it sets the default file host.
+#[tokio::test]
+async fn a_move_of_only_the_release_files_keeps_the_feed_file_and_sets_the_default() {
+    let app = move_app();
+    let (id, _, _, backup, _folder) = album_on_home(&app).await;
+    let plan_path = format!("/api/v1/feeds/{id}/move/plan?connector_id={backup}&what=files");
+    let (_, plan) = call(&app, "GET", &plan_path, None).await;
+    assert_eq!(plan["feed"]["moves"], false, "{plan}");
+    assert_eq!(plan["audio"]["count"], 1, "{plan}");
+
+    let diff = move_scoped(&app, id, backup, "files").await;
+    assert!(has_copy(&diff), "{diff}");
+    let (_, files) = call(&app, "GET", &format!("/api/v1/feeds/{id}/files"), None).await;
+    assert!(files["feed_move"].is_null(), "{files}");
+    assert_eq!(files["files_connector_id"], backup, "{files}");
+}
+
+/// ADR 0177 item 4 and Consequences: a release with no file on the previous
+/// host moves nothing, and only the default changes.
+#[tokio::test]
+async fn a_move_of_the_release_files_with_no_file_to_move_changes_the_default() {
+    let app = move_app();
+    let (id, _, _, backup, _folder) = album_on_home(&app).await;
+    move_scoped(&app, id, backup, "files").await;
+    let (_, home_list) = call(&app, "GET", "/api/v1/connectors", None).await;
+    let home = home_list[0]["id"].as_i64().unwrap();
+    // The files are on "Backup" in the draft. Moving back to "Home" changes
+    // the default only when no file needs a copy.
+    let plan_path = format!("/api/v1/feeds/{id}/move/plan?connector_id={backup}&what=files");
+    let (_, plan) = call(&app, "GET", &plan_path, None).await;
+    assert_eq!(plan["nothing_to_move"], true, "{plan}");
+    let plan_path = format!("/api/v1/feeds/{id}/move/plan?connector_id={home}&what=files");
+    let (_, plan) = call(&app, "GET", &plan_path, None).await;
+    assert_eq!(plan["default_changes"], true, "{plan}");
+    assert_eq!(plan["nothing_to_move"], false, "{plan}");
+}
+
 /// ADR 0148 item 15: the files route counts the files that stay behind a
 /// draft feed move.
 #[tokio::test]

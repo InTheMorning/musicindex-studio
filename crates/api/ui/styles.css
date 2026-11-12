@@ -1331,6 +1331,11 @@ select option { background: var(--level-3); color: var(--text); }
    window shows all of it (ADR 0073 item 2). */
 .link-row .text { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .link-row .text .summary { white-space: normal; overflow: visible; }
+/* A row with buttons. A narrow window puts the buttons below the text, so a
+   button does not cover text (ADR 0177 item 9). */
+@media (max-width: 760px) {
+  .link-row:has(> .actions) { flex-direction: column; align-items: stretch; }
+}
 /* The check boxes of the custom roles of a publisher feed (ADR 0082 item 7),
    in the field body below the Role menu. */
 .role-choices { display: grid; grid-template-columns: repeat(auto-fill, minmax(8.5em, 1fr)); gap: 0 12px; }

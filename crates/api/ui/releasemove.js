@@ -10,6 +10,35 @@ function hostName(connectors, id) {
   return found ? found.name : 'a removed file host';
 }
 
+// The values of "What moves" in the sheet "Move This Release…" (ADR 0177
+// item 3). `value` is the word that the move routes take. The first value is
+// the start value.
+export const MOVE_SCOPES = [
+  { value: 'both', label: 'The feed file and the release files' },
+  { value: 'feed', label: 'Only the feed file' },
+  { value: 'files', label: 'Only the release files' },
+];
+
+// The two text rows of the section "File hosts" (ADR 0177 item 1). `feed`
+// is the feed row, `files` is the answer of the Files route. A row has no
+// control: "Move This Release…" is the only move.
+export function fileHostRows(feed, files, connectors) {
+  const feedId = files.feed_move ? files.feed_move.connector_id : feed.connector_id;
+  const releaseId = files.files_connector_id ?? feed.connector_id;
+  return [
+    {
+      label: 'Feed file',
+      host: feedId ? hostName(connectors, feedId) : 'Not on a file host',
+      address: feed.public_url || null,
+    },
+    {
+      label: 'Release files',
+      host: releaseId ? hostName(connectors, releaseId) : 'Not on a file host',
+      address: null,
+    },
+  ];
+}
+
 // The file host or the file hosts that give the old files.
 function fromText(plan, connectors) {
   const ids = plan.from_connector_ids;

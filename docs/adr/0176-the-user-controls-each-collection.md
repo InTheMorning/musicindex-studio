@@ -7,6 +7,7 @@
 - Technical choices: items 4, 6, 8, 9 and 12 are choices of the planning model.
 - Changes: [ADR 0149](0149-the-desktop-app-has-many-collections.md) items 2, 6, 11, 12 and 17. [ADR 0107](0107-a-user-can-export-and-import-an-account.md) item 3 and item 9 on the desktop app.
 - Source: the human checks of 2026-11-11.
+- Changed by: [ADR 0183](0183-each-collection-row-has-one-actions-menu.md). Items 2, 3 and 10: one **Actions** menu on each row, and the badge "✓ Current".
 
 ## Context
 

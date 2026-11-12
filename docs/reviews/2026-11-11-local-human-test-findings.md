@@ -168,6 +168,8 @@ On the **Credits** page, the ring on the first credit row had four edges, but it
 
 ### Finding 12: The Button "Use" Of A Page Suggestion
 
+Decision: [ADR 0182](../adr/0182-the-page-of-a-person-starts-with-its-links-and-has-a-nickname.md).
+
 Owner: [ADR 0159](../adr/0159-a-person-can-link-to-a-page-on-music-index.md) items 8 and 13 to 15, and [ADR 0170](../adr/0170-update-people-from-their-linked-pages.md) items 1 and 2.
 
 On the page of Matt Finlay, the operator clicked **Use** on the wallet `mattfinlay@phafe.com`. The wallet then showed in the payment section with "Not used". The button adds the wallet to the person. It does not put the wallet in a feed. Thus the words "Use" and "Not used" tell the user two different things.
@@ -180,6 +182,8 @@ The operator selected these answers in the questionnaire:
 The same row of `peoplepages.js` shows each page suggestion: a picture, a website and a wallet. The ADR that records these answers must give the button for each kind of value.
 
 ### Finding 13: Add A Person Has No Search Of Music Index
+
+Decision: [ADR 0182](../adr/0182-the-page-of-a-person-starts-with-its-links-and-has-a-nickname.md).
 
 Owner: [ADR 0099](../adr/0099-the-people-destination-and-the-page-of-a-person.md) and [ADR 0163](../adr/0163-one-sheet-finds-and-links-a-page-on-music-index.md).
 
@@ -196,6 +200,8 @@ A mockup of the real sheet comes before the ADR.
 
 ### Finding 14: The Linked Pages Are Low On The Page Of A Person
 
+Decision: [ADR 0182](../adr/0182-the-page-of-a-person-starts-with-its-links-and-has-a-nickname.md).
+
 Owner: [ADR 0099](../adr/0099-the-people-destination-and-the-page-of-a-person.md) and [ADR 0159](../adr/0159-a-person-can-link-to-a-page-on-music-index.md).
 
 The section "Linked artist and label pages" is below the sections "Payment", "Credits" and "Support links". The linked page gives the suggestions in these sections, but the user sees the link last. **Use All Suggestions** is also below the suggestions that it adds.
@@ -208,6 +214,8 @@ After the update of task 102, the operator also asked for these changes:
 - A pencil next to the name in the head changes the name of the person in People. That name is the field "Name" in "Credits". **Rename** in "Change your feeds" changes the name in the feeds. The mockup must keep the two actions clearly separate.
 
 ### Finding 15: The Update Sheet Does Not Show Each Value
+
+Decision: [ADR 0182](../adr/0182-the-page-of-a-person-starts-with-its-links-and-has-a-nickname.md).
 
 Owner: [ADR 0170](../adr/0170-update-people-from-their-linked-pages.md) item 5.
 
@@ -231,6 +239,8 @@ Thus the probable cause is a name that the user cleared in an open credit. This 
 
 ### Finding 17: A Fill From Music Index Gives No Sign
 
+Decision: [ADR 0182](../adr/0182-the-page-of-a-person-starts-with-its-links-and-has-a-nickname.md).
+
 Owner: [ADR 0169](../adr/0169-an-open-credit-can-find-on-music-index.md) item 2.
 
 **Find on Music Index** fills each empty field of a credit with no sign. The operator could not see which fields changed.
@@ -252,6 +262,8 @@ The operator selected "Warn in Review" in the questionnaire, with this note: the
 No decision exists at this time. An ADR must give these three cases.
 
 ### Finding 19: The Scope Of The Collection Buttons Is Not Clear
+
+Decision: [ADR 0183](../adr/0183-each-collection-row-has-one-actions-menu.md).
 
 Owner: [ADR 0176](../adr/0176-the-user-controls-each-collection.md) items 2, 3 and 10.
 

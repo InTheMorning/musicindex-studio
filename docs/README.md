@@ -183,6 +183,8 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0179: A release keeps one library record for each file](adr/0179-a-release-keeps-one-library-record-for-each-file.md)
 - [ADR 0180: The Files page has a folder picker and one step for each copy](adr/0180-the-files-page-has-a-folder-picker-and-one-step-for-each-copy.md)
 - [ADR 0181: A level shows the state of its own feed](adr/0181-a-level-shows-the-state-of-its-own-feed.md)
+- [ADR 0182: The page of a person starts with its links and has a nickname](adr/0182-the-page-of-a-person-starts-with-its-links-and-has-a-nickname.md)
+- [ADR 0183: Each collection row has one Actions menu](adr/0183-each-collection-row-has-one-actions-menu.md)
 
 ## Plans
 

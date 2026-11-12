@@ -8,6 +8,7 @@
 - Changes: [ADR 0099](0099-the-people-destination-and-the-page-of-a-person.md) items 3 to 5 and 7. These are the sheet of a suggestion, the page of a person, "Where used" and the page of a wallet with no person. [ADR 0103](0103-one-person-collects-the-items-of-many-suggestions.md) items 8 and 9, "Add to a Person". [ADR 0098](0098-the-people-module.md) item 20, with one more operation.
 - Changed by: [ADR 0116](0116-the-page-of-a-person-has-save-and-discard.md). Item 2: the page keeps pending changes until Save. [ADR 0118](0118-member-of-offers-a-credit-on-the-artist-feed.md). Item 3: the hint of "Member of". [ADR 0132](0132-a-person-can-be-part-of-many-artists-and-labels.md). Item 3: the section gets a list of links.
 - Uses: [ADR 0091](0091-a-change-set-edits-one-recipient-in-many-feeds.md) for the change set, [ADR 0095](0095-a-lightning-address-and-its-node-key-are-one-recipient.md) for the wallets, [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) for the tiers, and [ADR 0112](0112-a-credit-role-comes-from-a-list.md) for the roles.
+- Changed by: [ADR 0182](0182-the-page-of-a-person-starts-with-its-links-and-has-a-nickname.md). Item 1: the linked pages and "Credits" come after the head, and "Payment" comes after "More from your feeds".
 
 ## Context
 

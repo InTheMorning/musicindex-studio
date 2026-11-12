@@ -7,6 +7,7 @@
 - Technical choices: items 1, 4 and 5 are choices of the planning model. In the code, an open credit is a row of the Credits page, not a sheet.
 - Changes: [ADR 0145](0145-each-sheet-that-adds-a-value-has-one-layout.md) item 8 for an open credit.
 - Uses: [ADR 0145](0145-each-sheet-that-adds-a-value-has-one-layout.md) items 3 and 5, [ADR 0168](0168-a-search-sheet-keeps-its-field-still.md).
+- Changed by: [ADR 0182](0182-the-page-of-a-person-starts-with-its-links-and-has-a-nickname.md). Item 2: a line names the filled fields.
 
 ## Context
 

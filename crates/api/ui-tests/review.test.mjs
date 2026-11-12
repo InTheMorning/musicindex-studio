@@ -156,6 +156,13 @@ test('a merge plan gives the words of each row and waits for each choice', () =>
   assert.equal(mergeReady(plan, { title: 'mine', 'items/b': 'hosted' }), true);
 });
 
+test('a merge row gives a list of credits as names and roles, not as JSON', () => {
+  const credits = [{ name: 'Ann', role: 'Vocals', npub: null, href: null }, { name: 'Bo', role: null }];
+  const rows = mergeRows({ conflicts: [{ id: 'credits', track: null, key: 'credits', mine: credits, hosted: [] }] });
+  assert.equal(rows.conflicts[0].mine, 'Ann (Vocals), Bo');
+  assert.equal(rows.conflicts[0].hosted, 'none');
+});
+
 
 test('Examine the Changes shows only with no result or with a result that is not current', () => {
   const diff = { changed: false };

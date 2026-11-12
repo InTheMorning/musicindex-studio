@@ -1262,6 +1262,8 @@ select option { background: var(--level-3); color: var(--text); }
 .audio-values > .actions { margin: 0; }
 .merge-panel { display: grid; gap: 20px; }
 .merge-panel > .actions { margin: 0; }
+/* A long value with no space must not make the row wider than the sheet. */
+.merge-panel .hint { overflow-wrap: anywhere; }
 .page-section > .note { padding: 0 4px; color: var(--muted); font-size: var(--text-callout); }
 .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 0 4px; }
 .section-head > h2 { font-size: var(--text-footnote); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }

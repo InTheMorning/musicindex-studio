@@ -31,7 +31,7 @@ import { platformBlocks } from './listing.js';
 import { pageSequence } from './pages.js';
 import { nextStep, firstStart, releaseAdd, FIRST_STEPS, HOST_STEP } from './welcome.js';
 import {
-  fileState, fileStatus, canDownloadToDevice, canCopyOrMove, missingCount, missingNotice, reviewNotice, dayText,
+  fileState, fileStatus, canDownloadToDevice, canCopyFile, missingCount, missingNotice, reviewNotice, dayText,
   SERVER_NOTICE, ADD_TRACKS_NOTICE, ENTRY_TEXT,
 } from './assets.js';
 import { isExplicit } from './explicit.js';
@@ -3754,9 +3754,8 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
 }
 
 // ---- The Files page (task 021g, ADR 0036 items 4, 7 to 14) ----
-// The user sets the host of each file, starts a copy, a move or a
-// deletion, and sees each host file of the release folder that is not a
-// copy of a library file.
+// The user starts a copy or a deletion, and sees each host file of the
+// release folder that is not a copy of a library file.
 
 // The summary text of a file that is not in the library (ADR 0038 items
 // 6 and 7). `download` is the row of the downloads route, or undefined.
@@ -3802,13 +3801,10 @@ function DownloadControls({ download, busy, onDownload, onStop }) {
 // The text of a pending operation on a file.
 const PENDING_TEXT = { delete: 'Deletion pending', hold: 'Stays after the write' };
 
-// One copy of a library file on a host (ADR 0036 items 12 and 13, ADR
-// 0037). A pending operation takes over the row with "Undo". The copy
-// that the feed uses shows no Reference button and no Delete button: it
-// offers "Move to" each other host instead, so the user can move the use
-// of the file in one click. A copy that the feed does not use offers
-// "Reference", to put the feed on this copy, and "Delete".
-function CopyRow({ copy, connectors, busy, onMoveTo, onReference, onDelete, onUndo }) {
+// One copy of a library file on a host (ADR 0180 items 13 to 16). The copy
+// that the feed uses has no action. Every other copy can become the copy
+// that the feed uses, or can be deleted.
+function CopyRow({ copy, connectors, busy, onReference, onDelete, onUndo }) {
   const name = connectorName(connectors, copy.connector_id);
   if (copy.pending) {
     const text = PENDING_TEXT[copy.pending.kind] || 'Copy pending';
@@ -3822,16 +3818,11 @@ function CopyRow({ copy, connectors, busy, onMoveTo, onReference, onDelete, onUn
     </div>`;
   }
   if (copy.in_use) {
-    const targets = connectors.filter((c) => c.id !== copy.connector_id);
     return html`<div class="copy-row">
       <span class="title">${name}</span>
       <span class="sub mono">${copy.path}</span>
       ${copy.url && html`<span class="sub mono">${copy.url}</span>`}
       <span class="sub">Used by the feed</span>
-      ${targets.length > 0 && html`<div class="actions">
-        ${targets.map((c) => html`<button key=${c.id} class="button action" type="button" disabled=${busy}
-          onClick=${() => onMoveTo(copy.connector_id, c.id)}>Move to ${c.name}</button>`)}
-      </div>`}
     </div>`;
   }
   return html`<div class="copy-row">
@@ -3839,7 +3830,7 @@ function CopyRow({ copy, connectors, busy, onMoveTo, onReference, onDelete, onUn
     <span class="sub mono">${copy.path}</span>
     ${copy.url && html`<span class="sub mono">${copy.url}</span>`}
     <div class="actions">
-      <button class="button action" type="button" disabled=${busy} onClick=${() => onReference(copy.connector_id)}>Reference</button>
+      <button class="button action" type="button" disabled=${busy} onClick=${() => onReference(copy.connector_id)}>Use This Copy</button>
       <button class="button destructive" type="button" disabled=${busy} onClick=${() => onDelete(copy.connector_id, copy.path)}>Delete</button>
     </div>
   </div>`;
@@ -3852,8 +3843,8 @@ function CopyRow({ copy, connectors, busy, onMoveTo, onReference, onDelete, onUn
 //
 // The entry shows one "Copy to" button for each host that has no copy of
 // the file and no pending copy of it yet (ADR 0037). Each pending copy of
-// the file, from `pending_copies`, shows its own row with "Undo".
-function FileEntry({ feedId, file, defaultHost, connectors, busy, download, onDownload, onStop, onOperation, onUndo, onChanged, onAgain, onSave }) {
+// the file, from `pending_copies`, shows its own row with its actions.
+function FileEntry({ file, defaultHost, connectors, busy, download, onDownload, onStop, onOperation, onUndo, onAgain, onSave }) {
   // On a server that holds no assets, the status line names the state of
   // the file (ADR 0105). `mode.holdAssets` is true on the desktop.
   const mode = assetMode();
@@ -3867,27 +3858,20 @@ function FileEntry({ feedId, file, defaultHost, connectors, busy, download, onDo
   const hostName = connectorName(connectors, file.own_connector_id ?? defaultHost);
   const reference = (connectorId) => onOperation({ op: 'reference', file: file.id, connector_id: connectorId, from_url: file.url });
   const del = (connectorId, path) => onOperation({ op: 'delete', connector_id: connectorId, path });
-  // A copy or a move of a remote file asks first (ADR 0038 item 12). The
-  // size comes from the row.
+  // A copy of a remote file asks first (ADR 0038 item 12). The size comes
+  // from the row.
   const askFirst = async () => file.local || !mode.holdAssets
     || await askConfirm(CONFIRMS.downloadFirst(file.size > 0 ? fileSize(file.size) : null));
   const copyTo = async (connectorId) => {
     if (await askFirst()) onOperation({ op: 'copy', file: file.id, connector_id: connectorId });
   };
-  const moveTo = async (from, to) => {
-    if (await askFirst()) onOperation({ op: 'move', file: file.id, from, to });
-  };
   const sizeDiffers = file.local && file.length_in_feed != null && file.length_in_feed > 0
     && file.length_in_feed !== file.size;
-  const setHost = (value) => onChanged(`/feeds/${feedId}/files/${file.id}/host`, { connector_id: value });
-  // A file with no host of its own uses the default host of the release
-  // (ADR 0036 item 8).
-  const hostValue = file.own_connector_id ?? '';
   const takenHosts = [
     ...file.copies.map((c) => c.connector_id),
     ...file.pending_copies.map((p) => p.connector_id),
   ];
-  const copyTargets = canCopyOrMove(file) ? connectors.filter((c) => !takenHosts.includes(c.id)) : [];
+  const copyTargets = canCopyFile(file) ? connectors.filter((c) => !takenHosts.includes(c.id)) : [];
   return html`<${EntryRow} group="library-files" cid=${file.id} summary=${summary}>
     <div class="file-rows">
       ${state === 'removed' && html`<div class="notice error" role="alert"><strong>${ENTRY_TEXT.removed().strong}</strong> ${ENTRY_TEXT.removed().text}</div>
@@ -3904,27 +3888,20 @@ function FileEntry({ feedId, file, defaultHost, connectors, busy, download, onDo
       ${canDownloadToDevice(file, mode) && html`<div class="actions">
         <button class="button action" type="button" disabled=${busy} onClick=${() => onSave(file.id)}>Download to This Device</button>
       </div>`}
-      ${canCopyOrMove(file) && file.copies.map((copy) => html`<${CopyRow} key=${`${copy.connector_id}-${copy.path}`} copy=${copy}
-        connectors=${connectors} busy=${busy} onMoveTo=${moveTo} onReference=${reference} onDelete=${del} onUndo=${onUndo} />`)}
+      ${canCopyFile(file) && file.copies.map((copy) => html`<${CopyRow} key=${`${copy.connector_id}-${copy.path}`} copy=${copy}
+        connectors=${connectors} busy=${busy} onReference=${reference} onDelete=${del} onUndo=${onUndo} />`)}
       ${file.pending_copies.map((pending) => html`<div class="copy-row" key=${`pending-${pending.operation_id}`}>
         <span class="title">Copy to ${connectorName(connectors, pending.connector_id)} pending</span>
         <span class="sub mono">${pending.path}</span>
         <div class="actions">
-          <button class="button" type="button" disabled=${busy} onClick=${() => onUndo(pending.operation_id)}>Undo</button>
+          <button class="button action" type="button" disabled=${busy} onClick=${() => reference(pending.connector_id)}>Use This Copy</button>
+          <button class="button destructive" type="button" disabled=${busy} onClick=${() => onUndo(pending.operation_id)}>Delete</button>
         </div>
       </div>`)}
       ${copyTargets.length > 0 && html`<div class="actions">
         ${copyTargets.map((c) => html`<button key=${c.id} class="button action" type="button" disabled=${busy}
           onClick=${() => copyTo(c.id)}>Copy to ${c.name}</button>`)}
       </div>`}
-      <div class="field">
-        <label for=${`file-host-${file.id}`}>File host of this file</label>
-        <select id=${`file-host-${file.id}`} class="button" value=${hostValue} disabled=${busy}
-          onChange=${(e) => setHost(e.target.value === '' ? null : Number(e.target.value))}>
-          <option value="">Use the default file host of the release</option>
-          ${connectors.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
-        </select>
-      </div>
     </div>
   <//>`;
 }
@@ -4550,7 +4527,7 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
       </div>`}
       ${data.files.length === 0 && html`<p class="hint">No files yet.</p>`}
       ${data.files.length > 0 && html`<div class="group">
-        ${byName(data.files, (file) => file.path).map((file) => html`<${FileEntry} key=${file.id} feedId=${feed.id} file=${file} defaultHost=${defaultHost}
+        ${byName(data.files, (file) => file.path).map((file) => html`<${FileEntry} key=${file.id} file=${file} defaultHost=${defaultHost}
           connectors=${connectors} busy=${busy} onOperation=${addOperation} onUndo=${undoOperation}
           download=${downloads.find((d) => d.file_id === file.id)}
           onDownload=${(fileId) => startDownloads({ files: [fileId] })} onStop=${stopDownload}

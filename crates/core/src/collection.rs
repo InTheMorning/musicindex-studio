@@ -623,6 +623,11 @@ ALTER TABLE draft_feed_moves ADD COLUMN replace_size INTEGER;
 ALTER TABLE draft_feed_moves ADD COLUMN replace_guid TEXT;
 ALTER TABLE draft_feed_moves ADD COLUMN replace_title TEXT;
 ",
+    // ADR 0180 item 17: each library file uses the default host of its
+    // release. Its source address and each feed address stay unchanged.
+    r"
+UPDATE library_files SET connector_id = NULL;
+",
 ];
 
 /// `root` as a relative path under `data_dir`, when it is a folder inside
@@ -681,6 +686,11 @@ const RECIPIENT_PLACES_MIGRATION: usize = 29;
 /// split to each place (ADR 0156 item 5). A run that applies it refills the
 /// credit index and the payment index from the library copies.
 const PLACE_NUMBERS_MIGRATION: usize = 32;
+
+/// The index in `MIGRATIONS` of the migration that clears the host of each
+/// library file (ADR 0180 item 17).
+#[cfg(test)]
+const FILE_HOST_MIGRATION: usize = 36;
 
 /// An upload in parts that is not finished (ADR 0059 item 1).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -6082,7 +6092,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("collection.sqlite");
         let db = Connection::open(&path).unwrap();
-        let previous = MIGRATIONS.len() - 1;
+        let previous = FILE_HOST_MIGRATION - 1;
         for migration in &MIGRATIONS[..previous] {
             db.execute_batch(migration).unwrap();
         }
@@ -6314,6 +6324,67 @@ mod tests {
         drop(collection);
         let collection = Collection::open(&path).unwrap();
         assert_eq!(crate::apps::apps(&collection).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn the_file_host_migration_clears_overrides_and_keeps_the_source_address() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("collection.sqlite");
+        let db = Connection::open(&path).unwrap();
+        assert!(
+            MIGRATIONS[FILE_HOST_MIGRATION]
+                .contains("UPDATE library_files SET connector_id = NULL")
+        );
+        let previous = FILE_HOST_MIGRATION;
+        for migration in &MIGRATIONS[..previous] {
+            db.execute_batch(migration).unwrap();
+        }
+        db.pragma_update(None, "user_version", i64::try_from(previous).unwrap())
+            .unwrap();
+        db.execute_batch(
+            "INSERT INTO connectors (id, kind, name, config, created_at) VALUES
+                 (1, 'local', 'Release host', '{}', 0),
+                 (2, 'local', 'File host', '{}', 0);
+             INSERT INTO feeds (id, public_url, connector_id, path, files_connector_id, created_at)
+                 VALUES (1, 'https://feed.example/album.xml', 1, 'album.xml', 1, 0);
+             INSERT INTO library_files
+                 (id, feed_id, path, size, sha256, media_type, local, source_url, connector_id, added_at)
+                 VALUES (1, 1, 'song.mp3', 10, 'abc', 'audio/mpeg', 0,
+                         'https://file.example/song.mp3', 2, 0);",
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO drafts (feed_id, base_version, base_xml, draft_xml, updated_at)
+             VALUES (1, NULL, ?1, ?2, 0)",
+            params![
+                b"<rss><channel/> </rss>".as_slice(),
+                b"<rss><channel><enclosure url=\"https://file.example/song.mp3\"/></channel></rss>"
+                    .as_slice(),
+            ],
+        )
+        .unwrap();
+        drop(db);
+
+        let collection = Collection::open(&path).unwrap();
+        let file = collection.library_file(LibraryFileId(1)).unwrap();
+        assert_eq!(file.connector_id, None);
+        assert_eq!(
+            file.source_url.as_deref(),
+            Some("https://file.example/song.mp3")
+        );
+        let draft_address: Vec<u8> = collection
+            .db()
+            .query_row(
+                "SELECT draft_xml FROM drafts WHERE feed_id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(
+            String::from_utf8(draft_address)
+                .unwrap()
+                .contains("https://file.example/song.mp3")
+        );
     }
 
     #[test]

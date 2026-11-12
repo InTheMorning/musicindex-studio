@@ -4221,33 +4221,6 @@ pub(crate) async fn set_feed_host(
     .await
 }
 
-#[derive(Deserialize)]
-pub(crate) struct SetFileHost {
-    connector_id: Option<i64>,
-}
-
-/// Give one library file its own host, or clear it back to the default
-/// host of the release (ADR 0036 item 4 and item 8).
-pub(crate) async fn set_file_host(
-    State(shared): State<Shared>,
-    Path((id, file)): Path<(i64, i64)>,
-    Json(body): Json<SetFileHost>,
-) -> ApiResult {
-    blocking(shared, move |w| {
-        let id = FeedId(id);
-        writer(w, id)?;
-        let file_row = feed_library_file(&w.collection, id, file)?;
-        let connector = body.connector_id.map(ConnectorId);
-        if let Some(connector) = connector {
-            w.collection.connector(connector)?;
-        }
-        w.collection
-            .set_library_file_connector(file_row.id, connector)?;
-        to_json(w.collection.library_file(file_row.id)?)
-    })
-    .await
-}
-
 /// The path and the address where Studio would put `file` on
 /// `connector_id` (ADR 0036 item 9). The function forces the host for
 /// this one computation. It does not change the host of `file` in the
@@ -4320,7 +4293,14 @@ fn reference_operation(
     let on_target = inventory::copies(&w.collection, hosts, &file)?
         .iter()
         .any(|copy| copy.connector_id == target);
-    if !on_target {
+    // A copy to the target that waits in the draft is the copy that the
+    // reference uses (ADR 0180 item 15). A second copy is not necessary.
+    let copy_waits = w.collection.draft_operations(id)?.iter().any(|op| {
+        op.kind == DraftOperationKind::Copy
+            && op.library_file_id == Some(file.id)
+            && op.connector_id == target
+    });
+    if !on_target && !copy_waits {
         let planned = planned_path_on(&w.collection, hosts, feed_row, &file, target)?;
         w.collection.add_draft_operation(
             id,
@@ -4461,10 +4441,6 @@ pub(crate) enum FileOperation {
     /// Put a library file on a different host, with no change of the
     /// feed.
     Copy { file: i64, connector_id: i64 },
-    /// Copy a library file to a host and reference the new copy. The copy
-    /// on the first host stays until the user reviews its deletion (ADR
-    /// 0148 item 7).
-    Move { file: i64, from: i64, to: i64 },
     /// Delete a file from a host.
     Delete { connector_id: i64, path: String },
     /// Delete each copy of a library file at one of these addresses that
@@ -4523,43 +4499,6 @@ pub(crate) async fn add_operation(
                     Some(file.id),
                     ConnectorId(connector_id),
                     &planned.path,
-                )?;
-                start_download(w, &file, download)?;
-            }
-            FileOperation::Move { file, from, to } => {
-                let file = feed_library_file(&w.collection, id, file)?;
-                let download = check_download(w, &hosts, &file)?;
-                let from_connector = ConnectorId(from);
-                let to_connector = ConnectorId(to);
-                let from_path = inventory::copies(&w.collection, &hosts, &file)?
-                    .into_iter()
-                    .find(|copy| copy.connector_id == from_connector)
-                    .map_or(
-                        planned_path_on(&w.collection, &hosts, &feed_row, &file, from_connector)?
-                            .path,
-                        |copy| copy.path,
-                    );
-                let from_url =
-                    reference_url(&w.collection, &hosts, &feed_row, &file, from_connector)?;
-                let to_planned =
-                    planned_path_on(&w.collection, &hosts, &feed_row, &file, to_connector)?;
-                let to_url = reference_url(&w.collection, &hosts, &feed_row, &file, to_connector)?;
-                w.collection.add_draft_operation(
-                    id,
-                    DraftOperationKind::Copy,
-                    Some(file.id),
-                    to_connector,
-                    &to_planned.path,
-                )?;
-                pipeline::edit_draft(&w.collection, id, |feed| {
-                    reference_feed(feed, &from_url, &to_url);
-                })?;
-                w.collection.add_hold_operation(
-                    id,
-                    from_connector,
-                    &from_path,
-                    to_connector,
-                    moves::DEFAULT_WAIT_DAYS,
                 )?;
                 start_download(w, &file, download)?;
             }

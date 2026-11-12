@@ -2,7 +2,7 @@
 
 Decision: [ADR 0180](../adr/0180-the-files-page-has-a-folder-picker-and-one-step-for-each-copy.md).
 
-Status: In progress. Packets 116a and 116b are complete on 2026-11-12, with their screenshot visual checks. In 116b, the browser and the server show a list of folder rows. The desktop app shows **Choose Folder…**. The human test of the folder dialog of the system is open. The row "Media files", the three values of "What moves", the heading "Old files to delete" and the release folder row with only the path and **Change…** show.
+Status: In progress. Packets 116a, 116b and 116c are complete on 2026-11-12, with their screenshot visual checks. The screenshots of 116c show a written copy and a pending copy with **Use This Copy** and **Delete**. They do not show a copy that the feed uses. Packet 116d is not started. In 116b, the browser and the server show a list of folder rows. The desktop app shows **Choose Folder…**. The human test of the folder dialog of the system is open. The row "Media files", the three values of "What moves", the heading "Old files to delete" and the release folder row with only the path and **Change…** show.
 
 ## Goal
 
@@ -60,6 +60,15 @@ ADR 0180 items 13 to 17.
 - Add a migration that clears the host of each library file. Do not change the address of a file that the feed uses on a different host.
 - Find each other entry point of the operation "Move" of one file. When there is none, delete the operation, its route and its tests.
 - Add the Node tests and the Rust test of the ADR.
+
+### 116d: Remove The Host Of One File
+
+ADR 0180 item 17. After 116c, no route sets the host of one library file.
+
+- Delete `Collection::set_library_file_connector`. `host_of` in `crates/core/src/inventory.rs` gives the files host of the release, then the feed host.
+- Remove `own_connector_id` from the files route and from `FileEntry` in `editor.js`.
+- Delete or change the tests that set the host of one file: in `inventory.rs`, in `collection.rs` and in `crates/core/tests/pipeline.rs`.
+- Keep the column `library_files.connector_id`. A migration that removes it is not necessary.
 
 ## Acceptance Criteria
 

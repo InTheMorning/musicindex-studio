@@ -420,7 +420,6 @@ fn workspace_router_with_shared(workspace: Workspace) -> (Router, WorkspaceHandl
         )
         .route("/feeds/{id}/picker/release", get(routes::picker_release))
         .route("/feeds/{id}/feed-host", put(routes::set_feed_host))
-        .route("/feeds/{id}/files/{file}/host", put(routes::set_file_host))
         .route("/feeds/{id}/operations", post(routes::add_operation))
         .route("/change-sets/move", post(routes::move_all_releases))
         .route("/feeds/{id}/move", post(routes::move_release))

@@ -1,6 +1,6 @@
 # Studio V1 Task 105: Library Folder Of A Release
 
-Status: Complete, with its screenshot visual check on 2026-11-11. The operator accepted the screenshots. The human test with a real release folder is open.
+Status: Complete, with its screenshot visual check on 2026-11-11. The operator accepted the screenshots. The human test with a real release folder passed on 2026-11-12, in the release build of local `main`.
 
 A new release folder gets the default path when Studio imports or reads a published feed. `migrate.rs` keeps the folder names of ADR 0036. `feeds.folder` holds a path relative to the library folder, so no schema change was necessary. The routes are `PUT /feeds/{id}/library-folder` and `GET /library/folders`.
 

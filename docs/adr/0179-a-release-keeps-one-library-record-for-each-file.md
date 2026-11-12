@@ -59,4 +59,4 @@ Visual, by the planning model:
 
 Human, by the operator. This gate stays open until it runs:
 
-- In the desktop app, discard the draft of "HeyCitizen's Test Album" and restart. The **Files** page shows no " 2" names. Then move "The feed file and the release files" to `bastone`. Review shows three uploads, no spare copies, and `dancin-in-the-moonlight.mp3` on the new host.
+- In the desktop app, discard the draft of "HeyCitizen's Test Album" and restart. The **Files** page shows no " 2" names. Then move "The feed file and the release files" to `bastone`. Each media file has a copy on `bastone`, so Review shows no upload of a media file and no spare copy. The feed uses the address of each copy on `bastone`.

@@ -31,7 +31,7 @@ The export was in the section "Move Studio", and the import was in the section "
 
 6. A delete and a replace each need a confirmation sheet. The sheet gives the name, the count of feeds and the parts that go: the feeds, the drafts, the versions, the people and the vault. It says that nothing changes on a file host.
 7. The sheet has "Export First…", which makes an account file of that collection. The export rules of ADR 0107 items 4 and 5 apply.
-8. "Replace With a File…" reads the account file into a new folder first, with the checks of ADR 0107 item 11. After a good read, Studio removes the previous folder, and the new folder takes its name. The name of the collection stays. A read that is not good changes nothing.
+8. "Replace With a File…" reads the account file into a new folder first, with the checks of ADR 0107 item 11. After a good read, one write of the list file moves the entry to the new folder. Then Studio removes the previous folder. The name of the collection stays. A read that is not good changes nothing. After a stop, a folder that the list does not name can stay, and Studio does not delete it.
 9. The vault of the replaced collection is the vault of the file. The user opens it with a method of the file.
 
 ### Export Next To Import
@@ -53,6 +53,7 @@ The export was in the section "Move Studio", and the import was in the section "
 
 - A user can delete the only copy of data. The sheet offers an export first, and a delete changes nothing on a file host.
 - A replace uses disk space for two copies until Studio removes the previous folder.
+- The folder name of a collection can differ from its first folder name after a replace.
 
 ## Acceptance Criteria
 
@@ -61,7 +62,7 @@ Mechanical:
 - A core test: a delete of `main` while a different collection is open removes the folder and the list entry. The next start opens the remaining collection, and makes no `collections/main/`.
 - A core test: a delete or a replace of the open collection is refused.
 - A core test: a rename changes the list file only.
-- A core test: a replace with a bad file changes nothing. A replace with a good file keeps the name and the folder name, and holds the feeds of the file.
+- A core test: a replace with a bad file changes nothing. A replace with a good file keeps the name, and the entry holds the feeds of the file. A stop before and after the write of the list file gives an entry with a complete folder.
 - An API test: an export of a collection that is not open gives the same archive as an export of that collection when it is open.
 - A Node test: the UI model gives the actions of item 2 for a closed row and of item 3 for the open row.
 

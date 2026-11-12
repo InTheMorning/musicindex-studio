@@ -35,7 +35,7 @@ ADR 0176 items 1 to 9.
 - Remove the protection of `main` in `delete`. Refuse a delete of the open collection.
 - A start with no `main` entry in the list opens the open entry and makes no `collections/main/`.
 - Rename changes the list file only.
-- Replace: read the file into a new folder with the import checks, then interchange the folders. Refuse the open collection.
+- Replace: read the file into a new folder with the import checks, then write the list file with the new folder, then remove the previous folder (ADR 0176 item 8). Refuse the open collection.
 - The routes of rename, replace and an export of a collection that is not open.
 
 ### 112b: The Data Tab
@@ -64,7 +64,6 @@ Human, by the operator. This gate stays open until it runs:
 
 ## Stop And Ask When
 
-- An interchange of the folders can keep the collection with no folder after a stop.
 - The export of a collection that is not open needs its vault to be open.
 
 ## Final Report

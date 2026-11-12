@@ -4805,7 +4805,7 @@ function OutsideNotices({ feed, busy, refresh }) {
     </div>`}
     ${index && html`<div class="notice" role="status"><strong>${index.strong}</strong> <span class="mono">${index.index}</span>. Your feed is at <span class="mono">${index.own}</span>. ${index.after}</div>`}
     ${move && html`<div class="notice" role="status"><strong>${move.strong}</strong>
-      ${move.lines.map((line) => html`<p><span class="mono">${line.url}</span>. ${line.text}
+      ${move.lines.map((line) => html`<p class="podping-line"><span class=${'status-tag ' + line.state}>${line.state === 'waiting' && html`<span class="player-wait" aria-hidden="true"></span>`}${line.state === 'sent' && html`<${Icon} name="check" />`}${line.tag}${line.time ? ` · ${line.time}` : ''}</span> <span class="mono">${line.url}</span>${line.text && ` ${line.text}`}
         ${line.action && html`<button class="button action" type="button" disabled=${busy || sending} onClick=${sendPodping}>${line.action}</button>`}</p>`)}
       <${ErrorNotice} error=${error} />
     </div>`}`;

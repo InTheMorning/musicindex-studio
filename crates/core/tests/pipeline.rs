@@ -71,6 +71,22 @@ impl studio_core::stream::StreamCheck for StreamDown {
     }
 }
 
+struct StreamAnswer {
+    live: bool,
+    server_type: Option<&'static str>,
+    cause: Option<&'static str>,
+}
+
+impl studio_core::stream::StreamCheck for StreamAnswer {
+    fn check_stream(&self, _url: &str) -> studio_core::stream::StreamStatus {
+        studio_core::stream::StreamStatus {
+            live: self.live,
+            server_type: self.server_type.map(str::to_owned),
+            cause: self.cause.map(str::to_owned),
+        }
+    }
+}
+
 impl AddressCheck for PassAll {
     fn check(&self, _url: &str) -> Result<(), String> {
         Ok(())
@@ -128,6 +144,103 @@ fn setup_with(feed_xml: &str) -> Setup {
 
 fn live(s: &Setup) -> String {
     fs::read_to_string(s.dir.path().join("album.xml")).unwrap()
+}
+
+fn setup_live_item() -> Setup {
+    let feed = FEED.replace(
+        "  </channel>",
+        "    <podcast:liveItem status=\"pending\" start=\"2026-11-12T10:00:00Z\">\n      <title>Show</title>\n      <guid>live-1</guid>\n      <enclosure url=\"https://streams.example/live.aac\" type=\"audio/aac\" length=\"0\" />\n      <podcast:contentLink href=\"https://music.example/show\" />\n    </podcast:liveItem>\n  </channel>",
+    );
+    setup_with(&feed)
+}
+
+fn change_live_item(s: &Setup) {
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    pipeline::edit_draft(&s.collection, s.feed, |feed| {
+        feed.live_items[0].value.item.title = Some("Show changed".to_owned());
+    })
+    .unwrap();
+}
+
+#[test]
+fn a_changed_live_stream_with_a_different_type_stops_the_write() {
+    let mut s = setup_live_item();
+    change_live_item(&s);
+    let streams = StreamAnswer {
+        live: true,
+        server_type: Some("audio/mpeg"),
+        cause: None,
+    };
+    let diff =
+        pipeline::diff_checked(&s.collection, &s.hosts, &s.library, &streams, s.feed).unwrap();
+    assert_eq!(diff.stream_problems.len(), 1);
+    assert_eq!(
+        diff.stream_problems[0].text,
+        "The feed gives AAC, but the stream server sends MP3. Apps cannot play this stream."
+    );
+
+    let error = pipeline::write_draft_signed_checked(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        pipeline::LinkCheck::Check(&ScriptedReader::empty()),
+        &streams,
+        s.feed,
+        &diff.id,
+        &[],
+        1_800_000_000,
+        None,
+    )
+    .unwrap_err();
+    assert_eq!(error.to_string(), diff.stream_problems[0].text);
+}
+
+#[test]
+fn a_stream_that_is_not_live_warns_but_the_write_completes() {
+    let mut s = setup_live_item();
+    change_live_item(&s);
+    let streams = StreamDown;
+    let diff =
+        pipeline::diff_checked(&s.collection, &s.hosts, &s.library, &streams, s.feed).unwrap();
+    assert_eq!(diff.stream_problems.len(), 1);
+    assert_eq!(
+        diff.stream_problems[0].text,
+        "Studio could not check the stream: The stream server answered with status 404."
+    );
+    pipeline::write_draft_signed_checked(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        pipeline::LinkCheck::Check(&ScriptedReader::empty()),
+        &streams,
+        s.feed,
+        &diff.id,
+        &[],
+        1_800_000_000,
+        None,
+    )
+    .unwrap();
+}
+
+#[test]
+fn aliases_of_one_stream_type_agree_in_the_diff() {
+    let feed = FEED
+        .replace(
+            "  </channel>",
+            "    <podcast:liveItem status=\"pending\" start=\"2026-11-12T10:00:00Z\">\n      <title>Show</title>\n      <guid>live-1</guid>\n      <enclosure url=\"https://streams.example/live.mp3\" type=\"audio/mpeg\" length=\"0\" />\n      <podcast:contentLink href=\"https://music.example/show\" />\n    </podcast:liveItem>\n  </channel>",
+        );
+    let s = setup_with(&feed);
+    change_live_item(&s);
+    let streams = StreamAnswer {
+        live: true,
+        server_type: Some("audio/mp3"),
+        cause: None,
+    };
+    let diff =
+        pipeline::diff_checked(&s.collection, &s.hosts, &s.library, &streams, s.feed).unwrap();
+    assert_eq!(diff.stream_problems.len(), 0);
 }
 
 #[test]
@@ -3466,6 +3579,41 @@ fn a_granted_go_live_with_a_stream_that_is_not_live_is_refused_and_recorded() {
     )
     .unwrap();
     assert!(live(&s).contains("status=\"ended\""));
+}
+
+#[test]
+fn a_granted_write_refuses_a_live_stream_with_a_different_type() {
+    let mut s = setup();
+    let guid = write_granted_show(&mut s);
+    let before = live(&s);
+    let streams = StreamAnswer {
+        live: true,
+        server_type: Some("audio/aac"),
+        cause: None,
+    };
+    let error = pipeline::write_granted(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        &streams,
+        s.feed,
+        &guid,
+        &GrantChange::SetLiveValue {
+            uri: "wss://example.com/value".to_owned(),
+            protocol: "socket.io".to_owned(),
+        },
+        "Show tool",
+        None,
+        during_show(),
+    )
+    .unwrap_err();
+    assert_eq!(
+        error.to_string(),
+        "The feed gives MP3, but the stream server sends AAC. Apps cannot play this stream."
+    );
+    assert_eq!(live(&s), before);
+    assert!(s.collection.draft(s.feed).unwrap().is_none());
 }
 
 #[test]

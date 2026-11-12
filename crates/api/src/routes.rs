@@ -3087,8 +3087,8 @@ async fn diff_after<P>(shared: Shared, id: FeedId, prepare: P) -> ApiResult
 where
     P: FnOnce(&mut Workspace) -> Result<(), ApiError> + Send + 'static,
 {
-    with_checked_time(
-        shared,
+    let (checked, urls) = with_checked_time(
+        shared.clone(),
         move |w| {
             prepare(w)?;
             // A draft with no change, or with its new date, needs no time
@@ -3101,18 +3101,61 @@ where
                 TimeNeed::None
             })
         },
-        move |w, checked| diff_json(w, id, checked),
+        move |w, checked| {
+            pipeline::set_build_date(&w.collection, id, checked)?;
+            Ok((
+                checked,
+                pipeline::changed_live_stream_urls(&w.collection, id)?,
+            ))
+        },
     )
+    .await?;
+    let streams = blocking(shared.clone(), |w| Ok(w.stream_checker())).await?;
+    let answers = blocking_unlocked(move || {
+        Ok(urls
+            .into_iter()
+            .map(|url| (url.clone(), streams.check_stream(&url)))
+            .collect())
+    })
+    .await?;
+    blocking(shared, move |w| {
+        diff_json_with_streams(w, id, checked, &AnsweredStreams(answers))
+    })
     .await
 }
 
 pub(crate) fn diff_json(w: &Workspace, id: FeedId, checked: Option<CheckedTime>) -> ApiResult {
+    let streams = w.stream_checker();
+    diff_json_with_streams(w, id, checked, streams.as_ref())
+}
+
+struct AnsweredStreams(HashMap<String, studio_core::stream::StreamStatus>);
+
+impl studio_core::stream::StreamCheck for AnsweredStreams {
+    fn check_stream(&self, url: &str) -> studio_core::stream::StreamStatus {
+        self.0
+            .get(url)
+            .cloned()
+            .unwrap_or_else(|| studio_core::stream::StreamStatus {
+                live: false,
+                server_type: None,
+                cause: Some("The stream check gave no answer.".to_owned()),
+            })
+    }
+}
+
+fn diff_json_with_streams(
+    w: &Workspace,
+    id: FeedId,
+    checked: Option<CheckedTime>,
+    streams: &dyn studio_core::stream::StreamCheck,
+) -> ApiResult {
     let hosts = w.hosts()?;
     let library = w.library()?;
     // The core sets the date one time for a change, so a second diff has
     // the same ID (ADR 0127 items 4 and 5).
     let build_date = pipeline::set_build_date(&w.collection, id, checked)?;
-    let diff = pipeline::diff(&w.collection, &hosts, &library, id)?;
+    let diff = pipeline::diff_checked(&w.collection, &hosts, &library, streams, id)?;
     // The app of each grant of the draft, for the review sheet (ADR 0110
     // item 19).
     let mut grant_apps = serde_json::Map::new();
@@ -3125,6 +3168,7 @@ pub(crate) fn diff_json(w: &Workspace, id: FeedId, checked: Option<CheckedTime>)
         "fields": diff.fields,
         "lines": diff.lines,
         "uncovered": diff.uncovered,
+        "stream_problems": diff.stream_problems,
         "changed": diff.changed,
         "files": diff.files,
         "operations": diff.operations,
@@ -3213,12 +3257,14 @@ pub(crate) async fn write_feed(
         // write reads the public address through `w.web`, so that the
         // network policy applies (ADR 0057, ADR 0067 item 7).
         let public = w.collection.feed(id)?.connector_id.is_none();
-        pipeline::write_draft_signed(
+        let streams = w.stream_checker();
+        pipeline::write_draft_signed_checked(
             &mut w.collection,
             &hosts,
             &library,
             addresses,
             pipeline::LinkCheck::Check(w.link_reader.0.as_ref()),
+            streams.as_ref(),
             id,
             &approved,
             &signed,

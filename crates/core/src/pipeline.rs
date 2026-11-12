@@ -4,7 +4,7 @@
 //! ID of the diff that the user approved.
 
 use std::borrow::Cow;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 use std::path::Path;
 
@@ -419,6 +419,8 @@ pub struct Diff {
     /// The number of changes that the field changes do not explain
     /// (ADR 0114 item 4).
     pub uncovered: usize,
+    /// The stream checks of changed live items (ADR 0187).
+    pub stream_problems: Vec<crate::live::LiveProblem>,
 }
 
 /// How the host from before points to the new address of the feed XML
@@ -2266,6 +2268,21 @@ pub fn diff(
     diff_at(collection, hosts, library, id, unix_now())
 }
 
+/// Give the diff and check each changed live stream (ADR 0187 item 1).
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the feed, host or library cannot be read.
+pub fn diff_checked(
+    collection: &Collection,
+    hosts: &Hosts,
+    library: &Library,
+    streams: &dyn crate::stream::StreamCheck,
+    id: FeedId,
+) -> Result<Diff, PipelineError> {
+    diff_checked_at(collection, hosts, library, streams, id, unix_now())
+}
+
 /// The time of the computer, in seconds after the Unix epoch.
 fn unix_now() -> u64 {
     std::time::SystemTime::now()
@@ -2299,7 +2316,54 @@ pub fn diff_at(
     id: FeedId,
     now: u64,
 ) -> Result<Diff, PipelineError> {
-    diff_planned(collection, hosts, library, id, now, false)
+    diff_planned(collection, hosts, library, id, now, false, None)
+}
+
+/// The same as [`diff_checked`], with the time `now` in seconds after the
+/// Unix epoch.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the feed, host or library cannot be read.
+pub fn diff_checked_at(
+    collection: &Collection,
+    hosts: &Hosts,
+    library: &Library,
+    streams: &dyn crate::stream::StreamCheck,
+    id: FeedId,
+    now: u64,
+) -> Result<Diff, PipelineError> {
+    diff_planned(collection, hosts, library, id, now, false, Some(streams))
+}
+
+/// Give the addresses of live streams that the draft adds or changes.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the feed has no draft or cannot be read.
+pub fn changed_live_stream_urls(
+    collection: &Collection,
+    id: FeedId,
+) -> Result<Vec<String>, PipelineError> {
+    let draft = one_cover(current_draft(collection, id)?)?;
+    let base = Document::parse_bytes(&draft.base_xml)
+        .ok()
+        .and_then(|document| Feed::read(&document).ok())
+        .unwrap_or_default();
+    let next = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
+    Ok(changed_live_items(&base, &next)
+        .filter_map(|entry| {
+            entry
+                .value
+                .item
+                .enclosure
+                .as_ref()
+                .and_then(|enclosure| enclosure.url.as_deref())
+                .map(str::trim)
+                .filter(|url| !url.is_empty())
+                .map(str::to_owned)
+        })
+        .collect())
 }
 
 /// The diff of a draft. `granted` is true for the diff of a granted write,
@@ -2311,6 +2375,7 @@ fn diff_planned(
     id: FeedId,
     now: u64,
     granted: bool,
+    streams: Option<&dyn crate::stream::StreamCheck>,
 ) -> Result<Diff, PipelineError> {
     let feed_row = collection.feed(id)?;
     let draft = one_cover(current_draft(collection, id)?)?;
@@ -2367,6 +2432,9 @@ fn diff_planned(
         .header("live", "draft")
         .to_string();
     let review = crate::review::review(&draft.base_xml, &draft.draft_xml);
+    let stream_problems = streams.map_or_else(Vec::new, |streams| {
+        changed_stream_problems(&draft.base_xml, &draft.draft_xml, streams)
+    });
     Ok(Diff {
         id: diff_id,
         unified,
@@ -2382,7 +2450,120 @@ fn diff_planned(
         fields: review.fields,
         lines: review.lines,
         uncovered: review.uncovered,
+        stream_problems,
     })
+}
+
+/// Each live item of `draft` that `base` does not have, or that differs
+/// from its item in `base` with the same GUID (ADR 0187 item 1).
+fn changed_live_items<'a>(
+    base: &'a Feed,
+    draft: &'a Feed,
+) -> impl Iterator<Item = &'a Entry<crate::feed::LiveItem>> + 'a {
+    draft.live_items.iter().filter(move |entry| {
+        let guid = entry.value.item.guid.as_deref();
+        base.live_items
+            .iter()
+            .find(|old| old.value.item.guid.as_deref() == guid)
+            .is_none_or(|old| old.value != entry.value)
+    })
+}
+
+fn changed_stream_problems(
+    base_xml: &[u8],
+    draft_xml: &[u8],
+    streams: &dyn crate::stream::StreamCheck,
+) -> Vec<crate::live::LiveProblem> {
+    let base = Document::parse_bytes(base_xml)
+        .ok()
+        .and_then(|document| Feed::read(&document).ok())
+        .unwrap_or_default();
+    let draft = Document::parse_bytes(draft_xml)
+        .ok()
+        .and_then(|document| Feed::read(&document).ok())
+        .unwrap_or_default();
+    changed_live_items(&base, &draft)
+        .filter_map(|entry| {
+            let item = &entry.value;
+            let guid = item.item.guid.clone().unwrap_or_default();
+            let enclosure = item.item.enclosure.as_ref()?;
+            let url = enclosure.url.as_deref()?.trim();
+            if url.is_empty() {
+                return None;
+            }
+            let media_type = enclosure.media_type.as_deref().unwrap_or_default();
+            let status = streams.check_stream(url);
+            let (level, text) = stream_check_problem(&status, media_type)?;
+            Some(crate::live::LiveProblem {
+                guid,
+                field: "stream".to_owned(),
+                level,
+                text,
+            })
+        })
+        .collect()
+}
+
+fn stream_check_problem(
+    status: &crate::stream::StreamStatus,
+    media_type: &str,
+) -> Option<(crate::live::LiveProblemLevel, String)> {
+    use crate::live::LiveProblemLevel::{Refusal, Warning};
+
+    if !status.live {
+        let cause = status
+            .cause
+            .as_deref()
+            .unwrap_or("The stream server sent no answer.");
+        return Some((
+            Warning,
+            format!("Studio could not check the stream: {cause}"),
+        ));
+    }
+    let Some(server_type) = status.server_type.as_deref() else {
+        return Some((
+            Warning,
+            "Studio could not check the stream: The stream server sent no type.".to_owned(),
+        ));
+    };
+    if media_type.trim().is_empty() || crate::live::stream_types_agree(media_type, server_type) {
+        return None;
+    }
+    Some((
+        Refusal,
+        format!(
+            "The feed gives {}, but the stream server sends {}. Apps cannot play this stream.",
+            crate::live::stream_type_label(media_type),
+            crate::live::stream_type_label(server_type)
+        ),
+    ))
+}
+
+struct CachedStreamCheck<'a> {
+    source: &'a dyn crate::stream::StreamCheck,
+    answers: std::cell::RefCell<HashMap<String, crate::stream::StreamStatus>>,
+}
+
+impl<'a> CachedStreamCheck<'a> {
+    fn new(source: &'a dyn crate::stream::StreamCheck) -> Self {
+        Self {
+            source,
+            answers: std::cell::RefCell::new(HashMap::new()),
+        }
+    }
+}
+
+impl crate::stream::StreamCheck for CachedStreamCheck<'_> {
+    fn check_stream(&self, url: &str) -> crate::stream::StreamStatus {
+        if let Some(status) = self.answers.borrow().get(url) {
+            return status.clone();
+        }
+        let status = self.source.check_stream(url);
+        self.answers
+            .borrow_mut()
+            .insert(url.to_owned(), status.clone());
+        status
+    }
 }
 
 /// The changes of a write on each host, in the sequence of the host IDs
@@ -4247,10 +4428,6 @@ fn invalid_signature(message: &str) -> PipelineError {
     clippy::too_many_arguments,
     reason = "write_draft gives its arguments and the two new values"
 )]
-#[expect(
-    clippy::too_many_lines,
-    reason = "the write is one sequence of steps, and it reads best in one function"
-)]
 pub fn write_draft_signed(
     collection: &mut Collection,
     hosts: &Hosts,
@@ -4262,6 +4439,70 @@ pub fn write_draft_signed(
     signed: &[nostr::prelude::Event],
     now: u64,
     public: Option<&crate::web::Web>,
+) -> Result<Version, PipelineError> {
+    write_draft_signed_inner(
+        collection, hosts, library, addresses, links, id, approved, signed, now, public, None,
+    )
+}
+
+/// The same as [`write_draft_signed`], with checks of changed live streams.
+///
+/// # Errors
+///
+/// Gives the errors of [`write_draft_signed`], or the stream type error of
+/// ADR 0187 item 2.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the checked write needs the arguments of write_draft_signed"
+)]
+pub fn write_draft_signed_checked(
+    collection: &mut Collection,
+    hosts: &Hosts,
+    library: &Library,
+    addresses: &dyn AddressCheck,
+    links: LinkCheck<'_>,
+    streams: &dyn crate::stream::StreamCheck,
+    id: FeedId,
+    approved: &DiffId,
+    signed: &[nostr::prelude::Event],
+    now: u64,
+    public: Option<&crate::web::Web>,
+) -> Result<Version, PipelineError> {
+    write_draft_signed_inner(
+        collection,
+        hosts,
+        library,
+        addresses,
+        links,
+        id,
+        approved,
+        signed,
+        now,
+        public,
+        Some(streams),
+    )
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the write has the arguments of write_draft_signed and its optional checker"
+)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "the write is one sequence of steps, and it reads best in one function"
+)]
+fn write_draft_signed_inner(
+    collection: &mut Collection,
+    hosts: &Hosts,
+    library: &Library,
+    addresses: &dyn AddressCheck,
+    links: LinkCheck<'_>,
+    id: FeedId,
+    approved: &DiffId,
+    signed: &[nostr::prelude::Event],
+    now: u64,
+    public: Option<&crate::web::Web>,
+    streams: Option<&dyn crate::stream::StreamCheck>,
 ) -> Result<Version, PipelineError> {
     let row = collection.feed(id)?;
     // A feed with no connector writes to the host of its draft feed move.
@@ -4405,6 +4646,16 @@ pub fn write_draft_signed(
         return Err(PipelineError::new(
             PipelineErrorKind::BadLiveItem,
             format!("a live item is not correct: {}", texts.join(" ")),
+        ));
+    }
+    if let Some(streams) = streams
+        && let Some(problem) = changed_stream_problems(&draft.base_xml, &draft.draft_xml, streams)
+            .into_iter()
+            .find(|problem| problem.level == crate::live::LiveProblemLevel::Refusal)
+    {
+        return Err(PipelineError::new(
+            PipelineErrorKind::BadLiveItem,
+            problem.text,
         ));
     }
     // ADR 0122 item 10: the file of an expired temporary area is gone, so
@@ -4764,14 +5015,24 @@ pub fn write_granted(
     checked: Option<CheckedTime>,
     now: u64,
 ) -> Result<Version, PipelineError> {
-    let apply = |feed: &mut Feed| apply_grant_change(feed, item_guid, change, streams);
+    let streams = CachedStreamCheck::new(streams);
+    let apply = |feed: &mut Feed| apply_grant_change(feed, item_guid, change, &streams);
     let written_at = i64::try_from(now).unwrap_or(i64::MAX);
     // ADR 0110 item 26: the live value check is in the core. It runs
     // before the host read, with the origin that the grant keeps.
     let value_check = check_granted_change(collection, feed_id, item_guid, change);
     let version = match value_check.and_then(|()| {
         write_granted_with(
-            collection, hosts, library, addresses, feed_id, item_guid, apply, checked, now,
+            collection,
+            hosts,
+            library,
+            addresses,
+            Some(&streams),
+            feed_id,
+            item_guid,
+            apply,
+            checked,
+            now,
         )
     }) {
         Ok(version) => version,
@@ -4819,7 +5080,7 @@ pub fn write_granted_edit(
     now: u64,
 ) -> Result<Version, PipelineError> {
     write_granted_with(
-        collection, hosts, library, addresses, feed_id, item_guid, edit, None, now,
+        collection, hosts, library, addresses, None, feed_id, item_guid, edit, None, now,
     )
 }
 
@@ -4891,9 +5152,21 @@ fn apply_grant_change(
                 .as_ref()
                 .and_then(|e| e.url.as_deref())
                 .unwrap_or_default();
-            match streams.check_stream(url).refusal() {
-                Some(text) => Err(PipelineError::new(PipelineErrorKind::StreamNotLive, text)),
-                None => Ok(()),
+            let status = streams.check_stream(url);
+            if let Some(text) = status.refusal() {
+                return Err(PipelineError::new(PipelineErrorKind::StreamNotLive, text));
+            }
+            let media_type = live_item
+                .item
+                .enclosure
+                .as_ref()
+                .and_then(|enclosure| enclosure.media_type.as_deref())
+                .unwrap_or_default();
+            match stream_check_problem(&status, media_type) {
+                Some((crate::live::LiveProblemLevel::Refusal, text)) => {
+                    Err(PipelineError::new(PipelineErrorKind::BadLiveItem, text))
+                }
+                _ => Ok(()),
             }
         }
         GrantChange::End => live::set_status(live_item, LiveStatus::Ended).map_err(bad_status),
@@ -4936,6 +5209,7 @@ fn write_granted_with(
     hosts: &Hosts,
     library: &Library,
     addresses: &dyn AddressCheck,
+    streams: Option<&dyn crate::stream::StreamCheck>,
     feed_id: FeedId,
     item_guid: &str,
     edit: impl FnOnce(&mut Feed) -> Result<(), PipelineError>,
@@ -5025,11 +5299,11 @@ fn write_granted_with(
         // Step 5: the diff and the write. A plan of an earlier diff does
         // not apply to this draft.
         collection.remove_signing_plan(feed_id)?;
-        let diff = diff_planned(collection, hosts, library, feed_id, now, true)?;
+        let diff = diff_planned(collection, hosts, library, feed_id, now, true, None)?;
         if !diff.operations.is_empty() || !diff.blocked.is_empty() || diff.feed_move.is_some() {
             return Err(not_covered());
         }
-        write_draft_signed(
+        write_draft_signed_inner(
             collection,
             hosts,
             library,
@@ -5040,6 +5314,7 @@ fn write_granted_with(
             &[],
             now,
             None,
+            streams,
         )
     })();
     if result.is_err() {

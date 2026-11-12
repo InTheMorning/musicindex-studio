@@ -358,9 +358,7 @@ pub fn stream_type_label(media_type: &str) -> String {
 pub fn stream_type_warning(server_type: &str, media_type: Option<&str>) -> Option<String> {
     let current = media_type.map(str::trim).filter(|t| !t.is_empty())?;
     let server = server_type.trim();
-    if server.is_empty()
-        || filled_stream_type(server).eq_ignore_ascii_case(&filled_stream_type(current))
-    {
+    if server.is_empty() || stream_types_agree(server, current) {
         return None;
     }
     Some(format!(
@@ -394,6 +392,12 @@ fn stream_type_agrees(ext: &str, media_type: &str) -> bool {
         .trim()
         .to_ascii_lowercase();
     accepted.contains(&base.as_str())
+}
+
+/// Whether two stream types name the same type in ADR 0161 item 3.
+#[must_use]
+pub fn stream_types_agree(left: &str, right: &str) -> bool {
+    filled_stream_type(left).eq_ignore_ascii_case(&filled_stream_type(right))
 }
 
 /// Give the problems of the live items of a feed.

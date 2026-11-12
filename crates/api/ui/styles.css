@@ -261,8 +261,10 @@ code, .mono {
   border-radius: 8px;
 }
 
-/* A group clips its content, so the ring of a row is inside the row. */
-.group .link-row:focus-visible, .group summary:focus-visible { outline-offset: -2px; }
+/* A group clips its content, so the ring of a row is inside the row. The ring is 2 px
+   inside the 14 px corner of the group, so its radius is 12 px. A smaller radius lets
+   the group clip the corners of the ring on the first and the last row. */
+.group .link-row:focus-visible, .group summary:focus-visible { outline-offset: -2px; border-radius: 12px; }
 
 /* ---- Controls: a minimum of 44 px high (ADR 0010). ---- */
 
@@ -592,15 +594,15 @@ input[type="checkbox"]:disabled { opacity: .5; cursor: default; }
   overflow: hidden;
 }
 /* The scroll area of the left panel lies between the brand and the footer. The padding
-   keeps the focus ring of a row in view. */
+   on each side keeps the focus ring of a row in view, also of the first and the last row. */
 .sidebar-scroll {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin: 0 -4px;
-  padding: 0 4px;
+  margin: -4px;
+  padding: 4px;
   overflow-y: auto;
 }
 .sidebar header { display: flex; align-items: center; justify-content: space-between; padding: 0 6px 8px; }

@@ -916,7 +916,6 @@ mod tests {
         );
     }
 
-
     #[tokio::test]
     async fn a_copy_gives_the_vault_to_the_copy_and_waits_for_a_write() {
         let fixture = fixture();
@@ -971,5 +970,4 @@ mod tests {
         let (_, session) = call(&router, "GET", "/auth/v1/session", None, true).await;
         assert_eq!(session["collections"], json!(false));
     }
-
 }

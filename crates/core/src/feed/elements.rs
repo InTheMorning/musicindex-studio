@@ -12,6 +12,7 @@ macro_rules! element_type {
     (
         $(#[$meta:meta])*
         $ty:ident = ($ns:expr, $name:literal) {
+            $( @match_hosted $match_hosted:literal; )?
             $(@text $(#[$tmeta:meta])* $text:ident;)?
             $($(#[$fmeta:meta])* $field:ident => $attr:literal,)*
         }
@@ -26,6 +27,7 @@ macro_rules! element_type {
         impl Modeled for $ty {
             const NS: Ns = $ns;
             const NAME: &'static str = $name;
+            const MATCH_HOSTED_VALUES: bool = false $(|| $match_hosted)?;
 
             fn read(element: &Element) -> Self {
                 Self {
@@ -38,6 +40,16 @@ macro_rules! element_type {
                 $(element.set_attribute($attr, self.$field.as_deref());)*
                 $(set_model_text(element, &self.$text);)?
             }
+
+            fn matches(&self, element: &Element) -> bool {
+                Self::MATCH_HOSTED_VALUES && *self == Self::read(element)
+            }
+
+            $(
+                fn matches_hosted_name(&self, element: &Element) -> bool {
+                    Self::MATCH_HOSTED_VALUES && self.$text == model_text(element)
+                }
+            )?
         }
     };
 }
@@ -118,6 +130,7 @@ element_type! {
 element_type! {
     /// `podcast:person`: a person who made the feed or the item.
     Person = (Ns::Podcast, "person") {
+        @match_hosted true;
         @text
         /// The name of the person.
         name;

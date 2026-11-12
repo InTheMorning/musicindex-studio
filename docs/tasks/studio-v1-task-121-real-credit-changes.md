@@ -2,7 +2,7 @@
 
 Decision: [ADR 0185](../adr/0185-a-write-gives-only-real-changes-of-a-credit.md).
 
-Status: Not started.
+Status: In progress. Packet 121a is complete on 2026-11-12. The four commit checks are green. A credit entry finds its hosted tag by its values, then by its name, so a credit above it does not change the pair. Packet 121b is not started.
 
 ## Goal
 

@@ -138,6 +138,8 @@ pub(crate) trait Modeled: Sized {
     const NS: Ns;
     /// The local name of the element.
     const NAME: &'static str;
+    /// Whether this type can match a hosted element by its modeled values.
+    const MATCH_HOSTED_VALUES: bool = false;
 
     /// Read the value from its element.
     fn read(element: &Element) -> Self;
@@ -147,6 +149,16 @@ pub(crate) trait Modeled: Sized {
     /// The function must not change a part of the element that already holds
     /// the value.
     fn apply(&self, element: &mut Element, names: &mut Names);
+
+    /// True when this value has the same modeled fields as `element`.
+    fn matches(&self, _element: &Element) -> bool {
+        false
+    }
+
+    /// Whether this value has the same name text as `element`.
+    fn matches_hosted_name(&self, _element: &Element) -> bool {
+        false
+    }
 
     /// Give the entries of each nested list the source elements of the draft
     /// value (ADR 0022). A value with no nested list has nothing to do.
@@ -166,11 +178,14 @@ pub(crate) fn read_list<T: Modeled>(parent: &Element) -> Vec<Entry<T>> {
 }
 
 /// The namespace and the local name of an element: the pair that
-/// [`Element::is`] tests (ADR 0031).
+/// [`Element::is`] tests (ADR 0031). It also holds the hosted element, so
+/// that a list writer can find the hosted tag of an entry (ADR 0185). The
+/// writer copies the sequence for each list, so the element is shared.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct HostedType {
     namespace: Option<String>,
     local: String,
+    element: std::sync::Arc<Element>,
 }
 
 impl HostedType {
@@ -179,6 +194,7 @@ impl HostedType {
         Self {
             namespace: element.namespace().map(str::to_owned),
             local: element.local_name().to_owned(),
+            element: std::sync::Arc::new(element.clone()),
         }
     }
 
@@ -336,14 +352,36 @@ pub(crate) fn write_list<T: Modeled>(
     hosted: Option<&[HostedType]>,
     names: &mut Names,
 ) {
+    let mut used_hosted = std::collections::HashSet::new();
     let rendered: Vec<Element> = entries
         .iter()
         .map(|entry| {
-            let mut element = match &entry.origin {
+            let hosted_match = hosted.and_then(|sequence| {
+                let mut candidates = sequence.iter().enumerate().filter(|(index, item)| {
+                    item.is(T::NS, T::NAME) && !used_hosted.contains(index)
+                });
+                let exact = candidates
+                    .clone()
+                    .find(|(_, item)| entry.value.matches(&item.element));
+                let selected = exact.or_else(|| {
+                    candidates.find(|(_, item)| entry.value.matches_hosted_name(&item.element))
+                });
+                selected.map(|(index, item)| {
+                    used_hosted.insert(index);
+                    &*item.element
+                })
+            });
+            let exact_match = hosted_match.filter(|element| entry.value.matches(element));
+            let mut element = match exact_match.or(entry.origin.as_ref()) {
                 Some(origin) => origin.clone(),
                 None => names.element(T::NS, T::NAME),
             };
             entry.value.apply(&mut element, names);
+            if exact_match.is_none()
+                && let Some(hosted_match) = hosted_match
+            {
+                order_attributes(&mut element, hosted_match);
+            }
             element
         })
         .collect();
@@ -392,6 +430,42 @@ pub(crate) fn write_list<T: Modeled>(
     }
     for index in new {
         xml::format_new(parent, index);
+    }
+}
+
+/// Order the attributes of `element` as `hosted` does, then keep new
+/// attributes in their current order.
+fn order_attributes(element: &mut Element, hosted: &Element) {
+    let current: Vec<_> = element
+        .attributes()
+        .iter()
+        .map(|attribute| (attribute.name().to_owned(), attribute.value().to_owned()))
+        .collect();
+    let hosted_names: Vec<_> = hosted
+        .attributes()
+        .iter()
+        .map(|attribute| attribute.name().to_owned())
+        .collect();
+    let mut ordered = Vec::with_capacity(current.len());
+    for name in &hosted_names {
+        if let Some((_, value)) = current
+            .iter()
+            .find(|(current_name, _)| current_name == name)
+        {
+            ordered.push((name.clone(), value.clone()));
+        }
+    }
+    ordered.extend(
+        current
+            .iter()
+            .filter(|(name, _)| !hosted_names.contains(name))
+            .cloned(),
+    );
+    for (name, _) in &current {
+        element.set_attribute(name, None);
+    }
+    for (name, value) in ordered {
+        element.set_attribute(&name, Some(&value));
     }
 }
 

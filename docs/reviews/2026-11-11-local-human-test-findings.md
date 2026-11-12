@@ -21,6 +21,7 @@ The operator built `studio-desktop-app` in the release profile from local `main`
 | A repair from the **Check** tab | ADR 0174, task 109 | Passed in the release build of local `main`, not in the AppImage. "HeyCitizen's Test Album" showed the notice "No self link". **Add the Link** put the Atom namespace, a new `lastBuildDate` and `<atom:link rel="self">` with the `bastone` address in Review. After the write at 14:03 UTC on 2026-11-12, the hosted feed had the link, and **Check Again** showed no problem. |
 | Move of a real release folder | ADR 0167, task 105 | Passed. **Move to Standard Folder** moved `library/test` to `library/HeyCitizen/HeyCitizen's Test Album`. The new folder held the seven files with their sizes, and the old folder was not there. After **Scan the Library Folder**, the **Files** page showed the same six media files, with no new name. |
 | Wallets of the linked page of Matt Finlay | ADR 0159, task 101 | Passed. The one matching wallet was `mattfinlay@phafe.com`, with the name "Matt Finlay". `podcastindex@getalby.com` and `chadf@getalby.com` were in the fold "2 other recipients on Matt Finlay", each with its recipient name. |
+| Update from linked pages | ADR 0170, task 102 | Passed. The sheet listed the person "Matt" with "Picture", "Website" and the wallet `mattfinlay@phafe.com`, and not the other recipients of the page. After **Update**, the page of the person had the picture, the wallet as the default and the information address `https://phafe.com/mattfinlay`, with no **Save** bar and no suggestion. The rows of the sheet had a defect (finding 15). |
 
 ## Findings
 
@@ -180,3 +181,14 @@ Owner: [ADR 0099](../adr/0099-the-people-destination-and-the-page-of-a-person.md
 The section "Linked artist and label pages" is below the sections "Payment", "Credits" and "Support links". The linked page gives the suggestions in these sections, but the user sees the link last. **Use All Suggestions** is also below the suggestions that it adds.
 
 The operator selected this design in the questionnaire, as a drawing: the section moves to the top of the page, below the head with **Find on Music Index** and above "Payment". The section keeps its rows and its buttons.
+
+After the update of task 102, the operator also asked for these changes:
+
+- The section "Credits" comes after the linked pages, then "Payment", then "Support links".
+- A pencil next to the name in the head changes the name of the person in People. That name is the field "Name" in "Credits". **Rename** in "Change your feeds" changes the name in the feeds. The mockup must keep the two actions clearly separate.
+
+### Finding 15: The Update Sheet Does Not Show Each Value
+
+Owner: [ADR 0170](../adr/0170-update-people-from-their-linked-pages.md) item 5.
+
+The sheet "Update from Linked Pages" showed the rows "Picture" and "Website" with no value. The row of the wallet showed its address. Thus the user cannot see the new website `https://phafe.com/mattfinlay` or the picture before **Update**. ADR 0170 item 5 gives "the values that change", so each row must show its value: the address of the website, and a small picture or its address.

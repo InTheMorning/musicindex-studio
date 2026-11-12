@@ -1,6 +1,6 @@
 # Studio V1 Task 102: Update From Linked Pages
 
-Status: Complete, with its screenshot visual check on 2026-11-11. The operator accepted the screenshots. The screenshots used fixed answers in place of Music Index. The human test is open.
+Status: Complete, with its screenshot visual check on 2026-11-11. The operator accepted the screenshots. The screenshots used fixed answers in place of Music Index. The human test passed on 2026-11-12, in the release build of local `main`. The rows of the sheet show no value for a picture or a website (finding 15 of the human checks of 2026-11-11).
 
 The routes are `GET /people/linked-page-changes` (read) and `POST /people/linked-page-changes` (save). A suggestion has no hidden state (ADR 0170 item 3), so the batch has no hidden filter. The People button shows when a person has a linked page (ADR 0170 item 4).
 

@@ -255,7 +255,14 @@ fn a_draft_that_changed_after_the_approval_does_not_write() {
 fn a_file_that_changed_on_the_host_after_the_draft_started_does_not_write() {
     let mut s = setup();
     pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    let started = s.collection.draft_started_at(s.feed).unwrap();
+    assert!(started.is_some());
     pipeline::edit_draft(&s.collection, s.feed, |f| f.title = Some("Mine".into())).unwrap();
+    assert_eq!(
+        s.collection.draft_started_at(s.feed).unwrap(),
+        started,
+        "ADR 0186 item 3: an edit keeps the start time of the draft. Fix: put_draft keeps started_at while the base is the same."
+    );
     let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
     let theirs = FEED.replace("Track One", "Track One (edited elsewhere)");
     fs::write(s.dir.path().join("album.xml"), &theirs).unwrap();
@@ -270,6 +277,19 @@ fn a_file_that_changed_on_the_host_after_the_draft_started_does_not_write() {
     )
     .unwrap_err();
     assert_eq!(error.kind(), PipelineErrorKind::Conflict);
+    // ADR 0186 items 2 and 3: with no lastBuildDate, the file time of the
+    // host is the time of the change.
+    let modified = fs::metadata(s.dir.path().join("album.xml"))
+        .unwrap()
+        .modified()
+        .unwrap()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    assert_eq!(
+        error.conflict_times(),
+        Some((started, Some(i64::try_from(modified).unwrap())))
+    );
     assert_eq!(live(&s), theirs);
     assert_eq!(s.collection.snapshots(s.feed).unwrap(), Vec::new());
     assert!(s.collection.draft(s.feed).unwrap().is_some());

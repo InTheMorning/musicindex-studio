@@ -19,7 +19,7 @@ On 2026-11-12, Review of the artist feed "HeyCitizen" showed "The hosted file ch
     - "Draft started {time}" and "File changed {time}".
     - "The change can come from a different collection, a different Studio version, a different tool or a different person."
 2. The time of the change is the `lastBuildDate` of the hosted file. With no `lastBuildDate`, it is the `Last-Modified` time that the file host gives. With neither, the line "File changed" does not show.
-3. The core gives the two times. The UI calculates no time.
+3. The core gives the two times. The UI calculates no time. The time that the draft started is the time that the draft got the hosted file that it starts from. The collection keeps that time with the draft, and an edit does not change it. A draft from before this decision has no start time, and its line "Draft started" does not show.
 4. The button **Apply My Edits to the New File** does not change.
 
 ## Alternatives Considered

@@ -26,6 +26,7 @@ import { announceLines, announceStatus, isWaiting } from './announce.js';
 import { npubOf, eventsToSign, signAll, signErrorText, signSummary, signProgressLabel, SignError, remoteSigner, signerChoice } from './signing.js';
 import { SignerConnect } from './signer.js';
 import { progressPercent } from './upload.js';
+import { conflictNotice } from './conflict.js';
 import { coverOf, coverConflict } from './cover.js';
 import { platformBlocks } from './listing.js';
 import { pageSequence } from './pages.js';
@@ -2066,6 +2067,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
     return () => clearInterval(timer);
   }, [open, waiting, feedId]);
   const conflict = error && error.code === 'conflict';
+  const conflictText = conflictNotice(error && error.details);
   // The refusal of the check, else the refusal of the last write.
   const refusal = (links && links.refusal) || refusalOfError(error);
   // Studio cannot write while an address of the draft is not correct. A
@@ -2097,8 +2099,9 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
               return { ...m, choices };
             })} />`
         : conflict
-        ? html`<div class="notice error" role="alert"><strong>The hosted file changed after the draft started.</strong>
-            Studio did not write. A different tool or a different person changed the file.
+        ? html`<div class="notice error" role="alert"><strong>${conflictText.heading}</strong>
+            ${conflictText.times.map((line) => html`<div>${line}</div>`)}
+            ${conflictText.cause}
             <div class="actions"><button class="button" type="button" disabled=${busy} onClick=${startMerge}>Apply My Edits to the New File</button></div></div>`
         : stale
           ? html`<div class="notice error" role="alert"><strong>The draft changed after you examined it.</strong>Examine the changes again.</div>`

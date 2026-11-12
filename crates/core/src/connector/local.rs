@@ -164,7 +164,16 @@ impl Connector for LocalFolder {
         match fs::read(&full) {
             Ok(bytes) => {
                 let version = version_of(&bytes);
-                Ok(Some(FileRead { bytes, version }))
+                let last_modified = fs::metadata(&full)
+                    .ok()
+                    .and_then(|meta| meta.modified().ok())
+                    .and_then(|time| time.duration_since(std::time::UNIX_EPOCH).ok())
+                    .and_then(|duration| i64::try_from(duration.as_secs()).ok());
+                Ok(Some(FileRead {
+                    bytes,
+                    version,
+                    last_modified,
+                }))
             }
             Err(e) if e.kind() == ErrorKind::NotFound => Ok(None),
             Err(e) => Err(io_error(&full, &e)),

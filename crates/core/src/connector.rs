@@ -70,6 +70,8 @@ pub struct FileRead {
     pub bytes: Vec<u8>,
     /// The version marker of the file.
     pub version: Version,
+    /// The file host's modification time, in Unix seconds, when available.
+    pub last_modified: Option<i64>,
 }
 
 /// The limits of a file list (ADR 0019).

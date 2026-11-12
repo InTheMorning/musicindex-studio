@@ -609,6 +609,7 @@ impl Connector for NsiteHost {
                     return Ok(Some(FileRead {
                         bytes,
                         version: Version::new(version_of(&sha256)),
+                        last_modified: None,
                     }));
                 }
                 Ok(None) => {}

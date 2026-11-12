@@ -3405,7 +3405,13 @@ pub(crate) async fn send_announcement(
     blocking(shared, move |w| {
         let id = FeedId(id);
         let row = w.collection.feed(id)?;
-        let Some(url) = outside::address_of(&row) else {
+        let last_move = outside::last_written_move(&w.collection, &row)?;
+        let url = last_move
+            .as_ref()
+            .and_then(|movement| movement.announcements.first())
+            .map(|announcement| announcement.url.clone())
+            .or_else(|| outside::address_of(&row));
+        let Some(url) = url else {
             return Err(ApiError::new(
                 StatusCode::UNPROCESSABLE_ENTITY,
                 "no_public_address",

@@ -2792,8 +2792,8 @@ fn feed_move_bytes(feed_move: Option<&FeedMove>) -> Vec<u8> {
 
 /// The addresses that a write announces, before the first change on a host
 /// (ADR 0052 items 7 and 8). Without a feed move, it is the public address
-/// of the feed file. With a feed move, it is the new address and then the
-/// address from before. An address that is not known goes out.
+/// of the feed file. With a feed move, it is the address from before, or the
+/// new address when the old address is not known.
 ///
 /// # Errors
 ///
@@ -2805,9 +2805,11 @@ fn announce_addresses(
     feed_move: Option<&FeedMove>,
 ) -> Result<Vec<String>, PipelineError> {
     if let Some(moved) = feed_move {
-        return Ok([moved.url.clone(), moved.from_url.clone()]
+        return Ok(moved
+            .from_url
+            .clone()
+            .or_else(|| moved.url.clone())
             .into_iter()
-            .flatten()
             .collect());
     }
     // A feed with no host has only the address of its row.

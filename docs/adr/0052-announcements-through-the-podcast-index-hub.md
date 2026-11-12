@@ -7,6 +7,7 @@
 - Amended: 2026-10-26 by operator decision. [ADR 0054](0054-live-items-connected-apps-and-show-grants.md) item 18 adds one exception to the invariant: a change that a show grant of the user covers.
 - Amended: 2026-10-28 by operator decision. [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) item 14 moves the two settings from the Hosts page to the Settings page.
 - Changed by: [ADR 0184](0184-after-a-move-studio-shows-the-podping-of-the-move.md). Item 21: the notice after a move by Studio has a button that sends the podping.
+- Changed by: [ADR 0189](0189-a-move-sends-one-podping-of-the-old-address.md). Item 8: a move write announces only the address before the move.
 
 ## Context
 

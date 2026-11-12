@@ -5252,8 +5252,13 @@ async fn the_feed_host_route_puts_a_feed_move_into_the_diff() {
     );
     assert_eq!(diff["feed_move"]["method"], "pointer");
     assert_eq!(
-        diff["announcements"][0]["url"],
-        "https://new.example/album.xml"
+        diff["announcements"].as_array().unwrap().len(),
+        1,
+        "ADR 0189 item 1: plan one announcement for the old address. Fix: select from_url."
+    );
+    assert_eq!(
+        diff["announcements"][0]["url"], "https://music.example/album.xml",
+        "ADR 0189 item 1: announce the address before the move. Fix: select from_url.",
     );
     assert_eq!(diff["announce_skip"], Value::Null);
 
@@ -6524,6 +6529,57 @@ async fn a_send_without_a_write_queues_the_public_address() {
     assert_eq!(rows[0]["podping"], true);
     assert_eq!(rows[0]["state"], "waiting");
     assert_eq!(hub.requests().len(), 0, "the queue must honor its wait");
+}
+
+#[tokio::test]
+async fn a_send_after_a_move_queues_the_address_before_the_move() {
+    let hub = studio_core::testing::TestHub::start();
+    let (app, _) = announce_app(
+        &hub,
+        studio_core::announce::Timing {
+            first_wait: 3_600,
+            ..studio_core::announce::Timing::DEFAULT
+        },
+    );
+    let id = set_up(&app).await;
+    let collection =
+        studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+            .unwrap();
+    collection
+        .record_written_feed_move(
+            studio_core::collection::FeedId(id),
+            Some("https://old.example/album.xml"),
+            100,
+        )
+        .unwrap();
+
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/announcements"),
+        None,
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0189 item 4: accept a podping after a move. Fix: allow the selected move address. {body}"
+    );
+    assert_eq!(
+        body["url"], "https://old.example/album.xml",
+        "ADR 0189 item 4: queue the address before the move. Fix: use last_written_move.",
+    );
+    let rows =
+        studio_core::announce::recent(&collection, studio_core::collection::FeedId(id)).unwrap();
+    assert_eq!(
+        rows.len(),
+        1,
+        "ADR 0189 item 4: queue one address. Fix: queue the selected move address."
+    );
+    assert_eq!(
+        rows[0].url, "https://old.example/album.xml",
+        "ADR 0189 item 4: queue the address before the move. Fix: use last_written_move."
+    );
 }
 
 #[tokio::test]
@@ -15162,10 +15218,6 @@ async fn the_outside_check_gives_the_last_move_and_its_announcement_states() {
     let collection =
         studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
             .unwrap();
-    let feed = collection
-        .feed(studio_core::collection::FeedId(id))
-        .unwrap();
-    let current = feed.public_url.unwrap();
     collection
         .record_written_feed_move(
             studio_core::collection::FeedId(id),
@@ -15177,7 +15229,7 @@ async fn the_outside_check_gives_the_last_move_and_its_announcement_states() {
         &collection,
         studio_core::collection::FeedId(id),
         &[studio_core::announce::PlannedAnnouncement {
-            url: current.clone(),
+            url: "https://old.example/album.xml".to_owned(),
             podping: true,
         }],
         &studio_core::announce::Timing::DEFAULT,
@@ -15192,10 +15244,23 @@ async fn the_outside_check_gives_the_last_move_and_its_announcement_states() {
         "https://old.example/album.xml"
     );
     assert_eq!(body["last_move"]["moved_at"], 100);
-    assert_eq!(body["last_move"]["announcements"][0]["url"], current);
-    assert_eq!(body["last_move"]["announcements"][0]["state"], "waiting");
-    assert_eq!(body["last_move"]["announcements"][0]["send_at"], 130);
-    assert_eq!(body["last_move"]["announcements"][1]["state"], "not_sent");
+    assert_eq!(
+        body["last_move"]["announcements"].as_array().unwrap().len(),
+        1,
+        "ADR 0189 item 3: show one announcement line. Fix: select movement.from_url."
+    );
+    assert_eq!(
+        body["last_move"]["announcements"][0]["url"], "https://old.example/album.xml",
+        "ADR 0189 item 3: show the old address. Fix: select movement.from_url."
+    );
+    assert_eq!(
+        body["last_move"]["announcements"][0]["state"], "waiting",
+        "ADR 0189 item 3: show the queued state for the old address. Fix: match movement.from_url."
+    );
+    assert_eq!(
+        body["last_move"]["announcements"][0]["send_at"], 130,
+        "ADR 0189 item 3: show the queued time for the old address. Fix: match movement.from_url."
+    );
 }
 
 #[tokio::test]

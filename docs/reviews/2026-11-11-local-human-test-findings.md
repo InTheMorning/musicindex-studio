@@ -104,6 +104,8 @@ Review of the artist feed "HeyCitizen" showed "The hosted file changed after the
 
 The agent read the hosted file. The host gave `Last-Modified: Fri, 06 Nov 2026 18:46:46 GMT`, and the feed gave the `lastBuildDate` 18:46:24 of the same day. Thus the draft started before a write on 2026-11-06. The probable cause is a write from a different Studio collection, or from the rc.21 AppImage, on the same hosts. This is not confirmed. If it is correct, the text "A different tool or a different person changed the file" is wrong.
 
+On 2026-11-12 the operator opened Review of the artist feed in the release build of local `main`. The merge panel showed the two values as text above a short select menu. The value "Your edit" of "Credits" was an empty credit and the credit HeyCitizen (finding 16). The section "Your edits stay" did not show. The operator discarded the draft, and Review closed.
+
 In **Examine the Changes**, the field "Credits" was in "Both changed. Select one". Each option of its select menu held the full value, so the open menu was wider than the screen. The fix shows the two values as text above a select menu with the short options "Your edit" and "Hosted file".
 
 ### Finding 8: The Notice After A Move
@@ -199,3 +201,11 @@ After the update of task 102, the operator also asked for these changes:
 Owner: [ADR 0170](../adr/0170-update-people-from-their-linked-pages.md) item 5.
 
 The sheet "Update from Linked Pages" showed the rows "Picture" and "Website" with no value. The row of the wallet showed its address. Thus the user cannot see the new website `https://phafe.com/mattfinlay` or the picture before **Update**. ADR 0170 item 5 gives "the values that change", so each row must show its value: the address of the website, and a small picture or its address.
+
+### Finding 16: An Empty Credit In The Draft Of The Artist Feed
+
+Owner: [ADR 0129](../adr/0129-a-draft-takes-a-change-of-the-hosted-file.md) for the merge panel. The owner of the empty credit is not known.
+
+The draft of the artist feed "HeyCitizen" had two credits: an empty credit and HeyCitizen (musician). The empty credit had no name, no role, no group, no picture, no address and no npub. The hosted file had only HeyCitizen (musician). The cause of the empty credit is not known.
+
+The merge panel showed the empty credit as JSON text: `{"group":null,"href":null,"img":null,"name":"","npub":null,"role":null}`. The function `mergeValue` in `crates/api/ui/review.js` uses JSON text for an entry with no name.

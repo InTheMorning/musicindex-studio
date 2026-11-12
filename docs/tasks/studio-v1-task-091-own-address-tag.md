@@ -65,7 +65,9 @@ Human check, 2026-11-12, in the release build of local `main`, with the test alb
 
 - The move from bastone to heycitizen gave heycitizen in the index at 3:50:03 PM.
 - Review of the move back to bastone showed the return warning.
-- After the move back, the index crawled at 4:06:17 PM and kept the heycitizen address. The file at heycitizen names the bastone address in its tag. Inference: this is the second return of the day, and Stophammer ADR 0083 section 5 gives it a wait of 1 hour from the last return. The check of the index after the wait is open.
+- After the move back, the index crawled at 4:06:17 PM and kept the heycitizen address. The file at heycitizen names the bastone address in its tag. Inference: this is the second return of the day, and Stophammer ADR 0083 section 5 gives it a wait of 1 hour from the last return. The check of the index after the wait is open. At 4:51 PM, after the wait, the index still gave the heycitizen address and the read time of 4:06:17 PM. The index did not read the feed again when the wait ended.
+
+Open finding, 2026-11-12: the warning of ADR 0128 item 7 comes only in Review, gives no time, and does not tell the user that a test of moves can start a wait of up to 7 days. In the questionnaire, the operator selected a wait time from the index API. The operator takes the rule of Stophammer ADR 0083 section 5 to Stophammer first. The change of ADR 0128 waits for the result in Stophammer.
 
 The screenshot check of the warning did not run again at `c02910d`, because the sandbox of that session stops Chromium.
 

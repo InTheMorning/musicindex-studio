@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  changeSetView, peopleSections, PEOPLE_EMPTY, PEOPLE_SERVER_NOTE, suggestionRow, personRow, makePersonStart, makePersonBody, sheetFeeds,
+  changeSetView, peopleSections, PEOPLE_EMPTY, PEOPLE_SERVER_NOTE, suggestionRow, personRow, displayName, makePersonStart, makePersonBody, sheetFeeds,
   checkedIds, toggledRow, reviewLabel, operationBody, addResultLine,
   lookupAddress, showFindEmpty,
 } from '../ui/people.js';
@@ -83,6 +83,17 @@ test('the row of a person gives the role, the membership, the address and the co
   });
 });
 
+test('displayName and personRow use the trimmed nickname (ADR 0182 item 13)', () => {
+  assert.equal(displayName({ name: 'Official', nickname: '  Short  ' }), 'Short',
+    'ADR 0182 item 13: show the trimmed nickname. Fix displayName in crates/api/ui/people.js.');
+  assert.equal(displayName({ name: 'Official', nickname: '   ' }), 'Official',
+    'ADR 0182 item 13: use the name for an empty nickname. Fix displayName in crates/api/ui/people.js.');
+  assert.equal(displayName({ name: 'Official', nickname: '' }), 'Official',
+    'ADR 0182 item 13: use the name for an empty nickname. Fix displayName in crates/api/ui/people.js.');
+  assert.equal(personRow({ name: 'Official', nickname: 'Short', wallets: [] }, {}).title, 'Short',
+    'ADR 0182 item 14: show the nickname in the People list. Fix personRow in crates/api/ui/people.js.');
+});
+
 test('the row of a person with two wallets and no role gives the wallet count', () => {
   const person = {
     name: 'Jo', usual_role: '', members: [],
@@ -155,6 +166,9 @@ test('each operation of a person gives the body of task 064', () => {
   assert.deepEqual(operationBody('use_address', { key }), { kind: 'use_address', key });
   assert.deepEqual(operationBody('rename', { name: 'Ann', payment: true, credit: false }),
     { kind: 'rename', name: 'Ann', payment: true, credit: false });
+  assert.deepEqual(operationBody('rename', { name: 'Ann', nickname: 'Annie', payment: true, credit: false }),
+    { kind: 'rename', name: 'Ann', payment: true, credit: false },
+    'ADR 0182 item 16: Rename changes feed names only. Fix operationBody in crates/api/ui/people.js.');
   assert.deepEqual(operationBody('add_to_releases', { payee: true, percent: '5', credit: true, supportLink: 4 }),
     { kind: 'add_to_releases', payee_percent: 5, credit: true, support_link: 4 });
   assert.deepEqual(operationBody('add_to_releases', { payee: false, percent: '5', credit: true }),
@@ -246,6 +260,21 @@ test('the People list sorts A to Z or Newest, and reverses', () => {
   assert.equal(newest.letters, null);
   assert.deepEqual(peopleOrder(people, { sort: 'newest', reversed: true }).people.map((p) => p.id), [2, 3, 4, 1]);
   assert.equal(peopleOrder(people, { sort: 'unknown' }).sort, 'az');
+});
+
+// ADR 0182 item 14: the list shows the nickname, so "A to Z" sorts and
+// groups by the shown name.
+test('the People list sorts A to Z by the nickname when a person has one', () => {
+  const people = [
+    { id: 1, name: 'Robert Smith', nickname: 'Bobby' },
+    { id: 2, name: 'Anna Lee', nickname: '' },
+  ];
+  const az = peopleOrder(people, {});
+  assert.deepEqual(az.people.map((p) => p.id), [2, 1],
+    'ADR 0182 item 14: "A to Z" must sort by displayName(person), not by person.name.');
+  assert.deepEqual(az.letters.map((g) => g.letter), ['A', 'B'],
+    'ADR 0182 item 14: the letter groups must use displayName(person), not person.name.');
+  assert.equal(initials(displayName(people[0])), 'B');
 });
 
 test('a change row gives the operation, the subject and the feeds to write', () => {
@@ -358,7 +387,7 @@ test('the evidence of a key and the row Check your feeds have their texts', () =
 test('the saved values and the pending changes of a person (ADR 0116 items 1 to 3)', () => {
   const saved = savedValues(MK);
   assert.deepEqual(saved, {
-    name: 'Mary Kate', usual_role: 'Vocals', usual_group: '', img: '', href: '', default_address: keyValue(KEY('mk@x.example')), members: ['3'], pages: [],
+    name: 'Mary Kate', nickname: '', usual_role: 'Vocals', usual_group: '', img: '', href: '', default_address: keyValue(KEY('mk@x.example')), members: ['3'], pages: [],
     wallets: [], keys: [],
   });
   assert.deepEqual(pendingKeys(saved, saved), []);
@@ -368,11 +397,15 @@ test('the saved values and the pending changes of a person (ADR 0116 items 1 to 
   assert.equal(pendingStatus(2), '2 changes not saved');
   const name = { ...saved, name: 'Mary' };
   assert.deepEqual(pendingKeys(saved, name), ['name']);
-  assert.deepEqual(saveBody(saved, name), { fields: { name: 'Mary', usual_role: 'Vocals', usual_group: '', img: '', href: '' } });
+  assert.deepEqual(saveBody(saved, name), { fields: { name: 'Mary', nickname: '', usual_role: 'Vocals', usual_group: '', img: '', href: '' } });
   const role = { ...saved, usual_group: 'Band' };
   assert.deepEqual(pendingKeys(saved, role), ['usual_role'], 'ADR 0116 item 1: the role and its group are one control.');
   assert.ok(isPending(saved, role, 'usual_role'));
-  assert.deepEqual(saveBody(saved, role), { fields: { name: 'Mary Kate', usual_role: 'Vocals', usual_group: 'Band', img: '', href: '' } });
+  assert.deepEqual(saveBody(saved, role), { fields: { name: 'Mary Kate', nickname: '', usual_role: 'Vocals', usual_group: 'Band', img: '', href: '' } });
+  const nickname = { ...saved, nickname: 'MK' };
+  assert.deepEqual(pendingKeys(saved, nickname), ['nickname'], 'ADR 0116 item 1: a nickname edit is pending. Fix the person controls in crates/api/ui/people.js.');
+  assert.deepEqual(saveBody(saved, nickname), { fields: { name: 'Mary Kate', nickname: 'MK', usual_role: 'Vocals', usual_group: '', img: '', href: '' } },
+    'ADR 0182 item 13: save the nickname in fields. Fix saveBody in crates/api/ui/people.js.');
   const address = { ...saved, default_address: keyValue(KEY('new@x.example')) };
   assert.deepEqual(pendingKeys(saved, address), ['default_address']);
   assert.deepEqual(saveBody(saved, address), { default_address: KEY('new@x.example') });
@@ -380,7 +413,7 @@ test('the saved values and the pending changes of a person (ADR 0116 items 1 to 
   assert.deepEqual(saveBody(saved, { ...saved, members: ['3', '5'] }), { members: [3, 5] });
   assert.deepEqual(saveBody(saved, { ...saved, members: [] }), { members: [] });
   assert.deepEqual(saveBody(saved, { ...saved, img: 'https://x.example/p.jpg', name: 'Mary' }), {
-    fields: { name: 'Mary', usual_role: 'Vocals', usual_group: '', img: 'https://x.example/p.jpg', href: '' },
+    fields: { name: 'Mary', nickname: '', usual_role: 'Vocals', usual_group: '', img: 'https://x.example/p.jpg', href: '' },
   });
 });
 
@@ -548,7 +581,7 @@ test('the words of an address line and a change title follow ADR 0099 items 15 a
 import { recipientPickRows, recipientFromPerson } from '../ui/people.js';
 
 const PICK_PEOPLE = [
-  { id: 1, name: 'Mary Kate', img: '', default_address: { address: '03aa', custom_key: '696969', custom_value: 'acct1' },
+  { id: 1, name: 'Mary Kate', nickname: 'MK', img: '', default_address: { address: '03aa', custom_key: '696969', custom_value: 'acct1' },
     wallets: [{ key: { address: '03aa', custom_key: '696969', custom_value: 'acct1' }, recipient_type: 'node' }] },
   { id: 2, name: 'Jo Keys', img: '', default_address: null, wallets: [] },
 ];
@@ -559,7 +592,7 @@ const PICK_RECIPIENTS = [
 
 test('recipientPickRows gives a person row with its default address and leaves out a person with no wallet', () => {
   const { people, payees } = recipientPickRows(PICK_PEOPLE, PICK_RECIPIENTS);
-  assert.deepEqual(people.map((r) => r.name), ['Mary Kate']);
+  assert.deepEqual(people.map((r) => r.name), ['MK'], 'ADR 0182 item 14: show the nickname in the recipient picker. Fix recipientPickRows in crates/api/ui/people.js.');
   assert.equal(people[0].line, 'Adds fountain.fm node · account acct1');
   assert.deepEqual(payees.map((r) => r.name), ['BoostBot']);
   assert.equal(payees[0].line, 'LNURL address bot@x.example');
@@ -569,6 +602,8 @@ test('recipientFromPerson gives the name and the values of the default address, 
   assert.deepEqual(recipientFromPerson(PICK_PEOPLE[0]), {
     name: 'Mary Kate', recipient_type: 'node', address: '03aa', split: '', custom_key: '696969', custom_value: 'acct1', fee: null,
   });
+  assert.equal(recipientFromPerson(PICK_PEOPLE[0]).name, 'Mary Kate',
+    'ADR 0182 item 15: a new recipient uses the official name. Fix recipientFromPerson in crates/api/ui/people.js.');
 });
 
 test('the type menu of the value editor uses the words of ADR 0099 item 14', async () => {
@@ -591,7 +626,7 @@ test('a default address that is not a wallet row gets the type of its form', () 
 import { creditPickRows, creditFromPerson, supportPickRows, fundingFromLink, addPickLabel, nostrPickRows } from '../ui/people.js';
 
 const CREDIT_SRC = [
-  { id: 1, name: 'Mary Kate', usual_role: 'Vocals', img: 'https://x/mk.jpg', href: 'https://x', keys: [{ npub: 'npub1mku7abcdefghijklmnopq2xh' }, { npub: 'npub1second' }],
+  { id: 1, name: 'Mary Kate', nickname: 'MK', usual_role: 'Vocals', img: 'https://x/mk.jpg', href: 'https://x', keys: [{ npub: 'npub1mku7abcdefghijklmnopq2xh' }, { npub: 'npub1second' }],
     support_links: [{ id: 4, label: 'Support Mary Kate', url: 'https://x/support' }] },
   { id: 2, name: 'Jo Keys', usual_role: '', img: '', href: null, keys: [], support_links: [] },
 ];
@@ -599,6 +634,8 @@ const CREDIT_SRC = [
 test('creditFromPerson gives the start values of a credit', () => {
   assert.deepEqual(creditFromPerson(CREDIT_SRC[0]), { name: 'Mary Kate', role: 'Vocals', group: null, img: 'https://x/mk.jpg', href: 'https://x', npub: 'npub1mku7abcdefghijklmnopq2xh' });
   assert.deepEqual(creditFromPerson(CREDIT_SRC[1]), { name: 'Jo Keys', role: null, group: null, img: null, href: null, npub: null });
+  assert.equal(creditFromPerson(CREDIT_SRC[0]).name, 'Mary Kate',
+    'ADR 0182 item 15: a new credit uses the official name. Fix creditFromPerson in crates/api/ui/people.js.');
 });
 
 test('creditPickRows gives the role and key line and marks a person in the list', () => {
@@ -607,6 +644,7 @@ test('creditPickRows gives the role and key line and marks a person in the list'
   assert.match(rows[0].line, /^Vocals · /);
   assert.equal(rows[1].line, '');
   assert.equal(rows[0].taken, false);
+  assert.equal(rows[0].name, 'MK', 'ADR 0182 item 14: show the nickname in the credits picker. Fix creditPickRows in crates/api/ui/people.js.');
   assert.equal(creditPickRows(CREDIT_SRC, [{ name: 'other', npub: 'npub1mku7abcdefghijklmnopq2xh' }])[0].taken, true);
   assert.equal(creditPickRows(CREDIT_SRC, [{ name: ' jo keys ', npub: null }])[1].taken, true);
 });
@@ -615,7 +653,8 @@ test('supportPickRows gives each support link and marks an address in the list',
   const rows = supportPickRows(CREDIT_SRC, []);
   assert.equal(rows.length, 1);
   assert.equal(rows[0].name, 'Support Mary Kate');
-  assert.equal(rows[0].line, 'Mary Kate · https://x/support');
+  assert.equal(rows[0].line, 'MK · https://x/support',
+    'ADR 0182 item 14: show the nickname in the support picker. Fix supportPickRows in crates/api/ui/people.js.');
   assert.equal(rows[0].taken, false);
   assert.equal(supportPickRows(CREDIT_SRC, [{ label: 'a', url: 'https://x/support' }])[0].taken, true);
   assert.deepEqual(fundingFromLink(CREDIT_SRC[0].support_links[0]), { label: 'Support Mary Kate', url: 'https://x/support' });
@@ -1129,7 +1168,7 @@ test('a fill makes pending changes, and the save sends the added wallets and key
   assert.deepEqual(pendingKeys(PENDING, values2), ['img', 'href', 'wallet', 'npub']);
   assert.equal(pendingStatus(pendingKeys(PENDING, values2).length), '4 changes not saved');
   assert.deepEqual(saveBody(PENDING, values2), {
-    fields: { name: 'Mary Kate', usual_role: 'Vocals', usual_group: '', img: 'https://x.example/p.jpg', href: 'https://duh.example' },
+    fields: { name: 'Mary Kate', nickname: '', usual_role: 'Vocals', usual_group: '', img: 'https://x.example/p.jpg', href: 'https://duh.example' },
     wallets: [{ key: KEY('duh@x.example'), recipient_type: 'lnaddress' }],
     keys: ['npub1z'],
   });

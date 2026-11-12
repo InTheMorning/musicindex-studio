@@ -89,6 +89,13 @@ The row "HeyCitizen" in the left panel showed the pencil and the number 4. The o
 
 The page of the group then showed "No changes" on each of the four release tiles. The pencil thus came from the artist feed "HeyCitizen". The page of the group does not show the state of that feed, so the user cannot find the change from the mark.
 
+On 2026-11-12 the operator opened the group. The row "HeyCitizen · Artist" in the left panel had no pencil. The page of the artist feed showed "Saved, not written" and **Review**. Thus the open group did not show the mark of the feed with the draft, as ADR 0165 item 2 gives.
+
+The operator selected this design in the questionnaire, as a drawing:
+
+- The row of the artist feed in the open group shows the pencil.
+- The page of the group shows the artist feed as the first tile, above the releases, with its state.
+
 ### Finding 7: The Merge Of The Artist Feed
 
 Owner: [ADR 0129](../adr/0129-a-draft-takes-a-change-of-the-hosted-file.md).

@@ -2,7 +2,7 @@
 
 Decision: [ADR 0185](../adr/0185-a-write-gives-only-real-changes-of-a-credit.md).
 
-Status: In progress. Packet 121a is complete on 2026-11-12. The four commit checks are green. A credit entry finds its hosted tag by its values, then by its name, so a credit above it does not change the pair. Packet 121b is not started.
+Status: Complete on 2026-11-12. The four commit checks are green. In 121a, a credit entry finds its hosted tag by its values, then by its name, so a credit above it does not change the pair. In 121b, the write leaves out a credit with no name and no Nostr key. The screenshot visual check passed at 1280 px and at 390 px, in the light and dark themes. The empty field shows "A credit needs a name.", and the credit keeps its name.
 
 ## Goal
 

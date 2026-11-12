@@ -31,6 +31,22 @@ pub use value::{RecipientPlace, ValueBlock, ValueTimeSplit};
 
 use crate::xml::{Document, Element, Node, Ns};
 
+fn has_credit_identity(person: &Person) -> bool {
+    !person.name.trim().is_empty()
+        || person
+            .npub
+            .as_deref()
+            .is_some_and(|npub| !npub.trim().is_empty())
+}
+
+fn writable_credits(persons: &[Entry<Person>]) -> Vec<Entry<Person>> {
+    persons
+        .iter()
+        .filter(|entry| has_credit_identity(&entry.value))
+        .cloned()
+        .collect()
+}
+
 /// The elements of `channel` that come after its other elements.
 const CHANNEL_TAIL: &[(Ns, &str)] = &[(Ns::None, "item"), (Ns::Podcast, "liveItem")];
 
@@ -234,7 +250,7 @@ impl Feed {
         c.list(&self.blocks);
         c.list(&self.atom_links);
         c.list(&self.images);
-        c.list(&self.persons);
+        c.list(&writable_credits(&self.persons));
         c.list(&self.fundings);
         c.list(&self.txts);
         c.one(self.license.as_ref());
@@ -425,10 +441,7 @@ impl Feed {
         channel
             .chain(items)
             .chain(live)
-            .filter(|(_, person)| {
-                !person.name.trim().is_empty()
-                    || person.npub.as_deref().is_some_and(|n| !n.trim().is_empty())
-            })
+            .filter(|(_, person)| has_credit_identity(person))
             .collect()
     }
 }
@@ -784,7 +797,7 @@ impl Item {
         c.text(Ns::Itunes, "episode", self.itunes_episode.as_ref());
         c.href(Ns::Itunes, "image", self.image.as_ref());
         c.list(&self.images);
-        c.list(&self.persons);
+        c.list(&writable_credits(&self.persons));
         c.list(&self.fundings);
         c.list(&self.transcripts);
         c.list(&self.txts);

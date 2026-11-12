@@ -5,7 +5,8 @@ import { readFileSync } from 'node:fs';
 
 const css = readFileSync(new URL('../ui/styles.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
 const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({ selector: m[1].trim(), body: m[2] }));
-const selectsBox = (selector) => /checkbox|\.check\b|\.pick-box|\.use-row|\.choice\s+input/.test(selector);
+// A selector that only excludes check boxes, with :not(:where(...)), does not select one.
+const selectsBox = (selector) => /checkbox|\.check\b|\.pick-box|\.use-row|\.choice\s+input/.test(selector.replace(/:not\(:where\(\[type="checkbox"\]\)\)/g, ''));
 const boxRules = rules.filter((r) => selectsBox(r.selector));
 const mainRule = rules.find((r) => r.selector === 'input[type="checkbox"]');
 
@@ -96,3 +97,19 @@ for (const theme of ['dark', 'light']) {
     });
   }
 }
+
+// A rule for each input of a field must not reach a check box. The rule
+// ".field input" gave the boxes of "Hide from apps" and "Explicit" a height
+// of 44 px (2026-11-11).
+test('no general input rule changes the size or the fill of a check box', () => {
+  const shape = /(^|[;\s])(width|height|min-height|min-width|padding|background)\s*:/;
+  for (const r of rules) {
+    if (!shape.test(r.body)) continue;
+    for (const part of r.selector.split(',').map((x) => x.trim())) {
+      const last = part.split(/\s+|>|\+|~/).filter(Boolean).pop() || '';
+      if (!/^input\b/.test(last) || /^input\[type=/.test(last) || /^input\./.test(last)) continue;
+      assert.ok(last.includes(':not(:where([type="checkbox"]))'),
+        `musicindex ADR 0063 R-CHECK-1: "${part}" sets the size or the fill of each input, also of a check box. Add :not(:where([type="checkbox"])) to the input of that selector in crates/api/ui/styles.css. :where keeps the specificity of the touch rule.`);
+    }
+  }
+});

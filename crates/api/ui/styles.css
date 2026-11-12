@@ -323,7 +323,7 @@ code, .mono {
    group puts its label at the left of the body at a wide width (ADR 0029,
    task 014c step 8). */
 .field-body { display: grid; gap: 6px; min-width: 0; }
-.field input, .field textarea {
+.field input:not(:where([type="checkbox"])), .field textarea {
   width: 100%;
   min-height: var(--target);
   padding: 0 14px;
@@ -337,7 +337,7 @@ code, .mono {
 /* The buttons "Now" and "Clear" of a date and time field (ADR 0093). They
    wrap below the input when the body has no room. */
 .datetime-actions { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
-.field input:focus, .field textarea:focus { background: var(--fill); }
+.field input:not(:where([type="checkbox"])):focus, .field textarea:focus { background: var(--fill); }
 /* A field has a fill and no border (ADR 0029). The border shows the
    error only (ADR 0018). */
 .field input[aria-invalid="true"] { border: 1px solid var(--error); }

@@ -2,7 +2,7 @@
 
 Decision: [ADR 0187](../adr/0187-review-checks-the-stream-type-of-a-live-show.md).
 
-Status: Not started.
+Status: In progress. Packet 123a is complete on 2026-11-12: the diff and the write check each changed live stream in the core, also for a granted write. The four commit checks are green. Packet 123b (the Review UI) is not started.
 
 ## Goal
 

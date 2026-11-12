@@ -53,7 +53,11 @@ impl studio_core::stream::StreamCheck for StubStream {
         } else {
             studio_core::stream::StreamStatus {
                 live: true,
-                server_type: Some("audio/mpeg".to_owned()),
+                server_type: Some(if url.to_ascii_lowercase().ends_with(".m3u8") {
+                    "application/x-mpegURL".to_owned()
+                } else {
+                    "audio/mpeg".to_owned()
+                }),
                 cause: None,
             }
         }

@@ -185,6 +185,10 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0181: A level shows the state of its own feed](adr/0181-a-level-shows-the-state-of-its-own-feed.md)
 - [ADR 0182: The page of a person starts with its links and has a nickname](adr/0182-the-page-of-a-person-starts-with-its-links-and-has-a-nickname.md)
 - [ADR 0183: Each collection row has one Actions menu](adr/0183-each-collection-row-has-one-actions-menu.md)
+- [ADR 0184: After a move Studio shows the podping of the move](adr/0184-after-a-move-studio-shows-the-podping-of-the-move.md)
+- [ADR 0185: A write gives only real changes of a credit](adr/0185-a-write-gives-only-real-changes-of-a-credit.md)
+- [ADR 0186: The merge notice gives the times of the change](adr/0186-the-merge-notice-gives-the-times-of-the-change.md)
+- [ADR 0187: Review checks the stream type of a live show](adr/0187-review-checks-the-stream-type-of-a-live-show.md)
 
 ## Plans
 

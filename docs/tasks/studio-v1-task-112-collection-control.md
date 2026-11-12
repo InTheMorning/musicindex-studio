@@ -2,7 +2,7 @@
 
 Decision: [ADR 0176](../adr/0176-the-user-controls-each-collection.md).
 
-Status: Completed on 2026-11-11. The four commit checks are green. The visual check ran at 1280 px and 390 px. The human gate is open.
+Status: Completed on 2026-11-11. The four commit checks are green. The visual check ran at 1280 px and 390 px. The human gate passed on 2026-11-12, in the release build of local `main`.
 
 ## Goal
 

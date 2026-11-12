@@ -342,3 +342,10 @@ export function mergeReady(plan, choices) {
   return (plan.conflicts || []).every((field) => Boolean(choices[field.id]));
 }
 
+
+// True when the review sheet shows "Examine the Changes". The sheet examines
+// the draft each time that it opens. The button is necessary only when no
+// result shows, or when the draft changed after the last result.
+export function showsExamine({ merge, diff, stale }) {
+  return !merge && (!diff || stale);
+}

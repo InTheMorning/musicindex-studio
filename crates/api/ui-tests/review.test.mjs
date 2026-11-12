@@ -1,7 +1,7 @@
 // The lines of a review (ADR 0114 items 8 to 12).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { shownLines, localTime, localTimeNote, runs, commonIndent, moreLabel, stripIndent, normalizeView } from '../ui/review.js';
+import { shownLines, localTime, localTimeNote, runs, commonIndent, moreLabel, stripIndent, normalizeView, showsExamine } from '../ui/review.js';
 
 const part = (text, changed = false) => ({ text, changed });
 const same = (text) => ({ kind: 'same', parts: [part(text)], pair: null });
@@ -156,3 +156,11 @@ test('a merge plan gives the words of each row and waits for each choice', () =>
   assert.equal(mergeReady(plan, { title: 'mine', 'items/b': 'hosted' }), true);
 });
 
+
+test('Examine the Changes shows only with no result or with a result that is not current', () => {
+  const diff = { changed: false };
+  assert.equal(showsExamine({ merge: null, diff, stale: false }), false);
+  assert.equal(showsExamine({ merge: null, diff: null, stale: false }), true);
+  assert.equal(showsExamine({ merge: null, diff, stale: true }), true);
+  assert.equal(showsExamine({ merge: {}, diff: null, stale: true }), false);
+});

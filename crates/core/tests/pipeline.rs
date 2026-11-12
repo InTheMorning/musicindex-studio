@@ -178,6 +178,14 @@ fn a_changed_live_stream_with_a_different_type_stops_the_write() {
         diff.stream_problems[0].text,
         "The feed gives AAC, but the stream server sends MP3. Apps cannot play this stream."
     );
+    assert_eq!(
+        diff.stream_problems[0].server_type.as_deref(),
+        Some("audio/mpeg")
+    );
+    assert_eq!(
+        diff.stream_problems[0].server_type_label.as_deref(),
+        Some("MP3")
+    );
 
     let error = pipeline::write_draft_signed_checked(
         &mut s.collection,
@@ -208,6 +216,8 @@ fn a_stream_that_is_not_live_warns_but_the_write_completes() {
         diff.stream_problems[0].text,
         "Studio could not check the stream: The stream server answered with status 404."
     );
+    assert_eq!(diff.stream_problems[0].server_type_label, None);
+    assert_eq!(diff.stream_problems[0].server_type, None);
     pipeline::write_draft_signed_checked(
         &mut s.collection,
         &s.hosts,

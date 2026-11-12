@@ -18,6 +18,21 @@ export function isLiveItem(live, key) {
   return liveKey(live) === key || `cid-${live._cid}` === key;
 }
 
+// Set the stream type of one live item in the draft (ADR 0187 item 3).
+export function setLiveStreamType(model, guid, mediaType) {
+  return {
+    ...model,
+    live_items: (model.live_items || []).map((live) => {
+      if (!live.item || live.item.guid !== guid) return live;
+      const enclosure = live.item.enclosure || { url: null, length: null, media_type: null };
+      return {
+        ...live,
+        item: { ...live.item, enclosure: { ...enclosure, media_type: mediaType } },
+      };
+    }),
+  };
+}
+
 // The class of the type dot of a live item. Red is only for live now. A
 // show that is not live now uses the feed color (musicindex ADR 0012 item 3).
 export function liveDot(status) {

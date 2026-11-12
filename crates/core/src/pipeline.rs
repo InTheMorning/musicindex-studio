@@ -2493,12 +2493,15 @@ fn changed_stream_problems(
             }
             let media_type = enclosure.media_type.as_deref().unwrap_or_default();
             let status = streams.check_stream(url);
-            let (level, text) = stream_check_problem(&status, media_type)?;
+            let (level, text, server_type, server_type_label) =
+                stream_check_problem(&status, media_type)?;
             Some(crate::live::LiveProblem {
                 guid,
                 field: "stream".to_owned(),
                 level,
                 text,
+                server_type,
+                server_type_label,
             })
         })
         .collect()
@@ -2507,7 +2510,12 @@ fn changed_stream_problems(
 fn stream_check_problem(
     status: &crate::stream::StreamStatus,
     media_type: &str,
-) -> Option<(crate::live::LiveProblemLevel, String)> {
+) -> Option<(
+    crate::live::LiveProblemLevel,
+    String,
+    Option<String>,
+    Option<String>,
+)> {
     use crate::live::LiveProblemLevel::{Refusal, Warning};
 
     if !status.live {
@@ -2518,24 +2526,31 @@ fn stream_check_problem(
         return Some((
             Warning,
             format!("Studio could not check the stream: {cause}"),
+            None,
+            None,
         ));
     }
     let Some(server_type) = status.server_type.as_deref() else {
         return Some((
             Warning,
             "Studio could not check the stream: The stream server sent no type.".to_owned(),
+            None,
+            None,
         ));
     };
     if media_type.trim().is_empty() || crate::live::stream_types_agree(media_type, server_type) {
         return None;
     }
+    let server_type_label = crate::live::stream_type_label(server_type);
     Some((
         Refusal,
         format!(
             "The feed gives {}, but the stream server sends {}. Apps cannot play this stream.",
             crate::live::stream_type_label(media_type),
-            crate::live::stream_type_label(server_type)
+            server_type_label
         ),
+        Some(server_type.to_owned()),
+        Some(server_type_label),
     ))
 }
 
@@ -5163,7 +5178,7 @@ fn apply_grant_change(
                 .and_then(|enclosure| enclosure.media_type.as_deref())
                 .unwrap_or_default();
             match stream_check_problem(&status, media_type) {
-                Some((crate::live::LiveProblemLevel::Refusal, text)) => {
+                Some((crate::live::LiveProblemLevel::Refusal, text, _, _)) => {
                     Err(PipelineError::new(PipelineErrorKind::BadLiveItem, text))
                 }
                 _ => Ok(()),

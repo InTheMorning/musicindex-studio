@@ -2,7 +2,7 @@
 
 Decision: [ADR 0187](../adr/0187-review-checks-the-stream-type-of-a-live-show.md).
 
-Status: In progress. Packet 123a is complete on 2026-11-12: the diff and the write check each changed live stream in the core, also for a granted write. The four commit checks are green. Packet 123b (the Review UI) is not started.
+Status: Complete on 2026-11-12. Packet 123a: the diff and the write check each changed live stream in the core, also for a granted write. Packet 123b: Review shows the refusal with **Use {server label}** and no write, and the warning with the write. The screenshot visual check passed, with a real check of a loopback stream. The human test is open.
 
 ## Goal
 

@@ -5,6 +5,7 @@
 - Owner: operator, with the technical choices of the planning model
 - Accepted: 2026-11-04 by the operator. The operator accepted items 5, 7, 12 and 26 as written.
 - Changed by: [ADR 0128](0128-a-moved-feed-names-its-own-address.md). The feed on the new host also gets a tag that names its own URL. That decides the tag that "Alternatives Considered" left open.
+- Changed by: [ADR 0178](0178-a-move-replaces-a-file-at-the-feed-path-in-studio.md). Items 19 and 21: a file at the feed path with no record no longer stops a move.
 - Changed by: [ADR 0127](0127-a-changed-feed-gets-a-new-build-date.md). Items 8 and 26: Review and a granted write can send the time request of that record. That request reads no feed.
 - Changed: on 2026-11-05 the operator added item 28, from finding 9 of the [human test of `0.1.0-rc.17`](../reviews/2026-11-05-rc17-human-test-findings.md). The operator said that the box did not explain anything, and selected the full explanation.
 - Source: [research request on a feed check with repairs](../plans/research-feed-check-request.md), item F0. Research note `research_notes/aggregation/itunes-new-feed-url.md` in `../musicindex-research`.

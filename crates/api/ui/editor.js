@@ -10,7 +10,7 @@ import { AlbumPayments, TrackPayments } from './values.js';
 import { PickerLayout, PickFillRow, FindOneSheet, PickFold, TakenTag, useFieldList } from './pickers.js';
 import { PersonArt, useProfiles } from './peoplepages.js';
 import { onListKey, onTreeKey } from './listkeys.js';
-import { creditPickRows, supportPickRows, creditChoices, creditFillRows, creditFillValue, fundingChoices, nostrChoices, withPersonValues, filterRows, nostrPickRows, feedWord, memberRowLine, memberSectionNote } from './people.js';
+import { creditPickRows, supportPickRows, creditChoices, creditFillRows, creditFillValue, creditFillNote, creditFillNoteText, CREDIT_FIELD_LABELS, fundingChoices, nostrChoices, withPersonValues, filterRows, nostrPickRows, feedWord, memberRowLine, memberSectionNote } from './people.js';
 import { withCids, STATUS } from './draft.js';
 import { roleSummary } from './roles.js';
 import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName } from './shell.js';
@@ -222,8 +222,8 @@ function CreditForm({ persons, feedId, onAdd, onCancel }) {
 function CreditIndexFill({ person, onChange }) {
   const [finding, setFinding] = useState(false);
   const [replacements, setReplacements] = useState([]);
-  const fields = { name: 'Name', role: 'Role', group: 'Group', img: 'Picture address', href: 'Information address', npub: 'Nostr key' };
-  const replacementRows = replacements.map((row) => html`<${PickFillRow} key=${row.id} title=${fields[row.id] || row.id}
+  const [note, setNote] = useState(null);
+  const replacementRows = replacements.map((row) => html`<${PickFillRow} key=${row.id} title=${CREDIT_FIELD_LABELS[row.id] || row.id}
     line=${row.value} after=${html`<button class="button action" type="button" onClick=${() => {
       onChange({ ...person, [row.id]: creditFillValue(person, row) });
       setReplacements((current) => current.filter((item) => item.id !== row.id));
@@ -231,11 +231,13 @@ function CreditIndexFill({ person, onChange }) {
   const select = (page) => {
     const rows = creditFillRows(person, page);
     const fill = rows.filter((row) => row.action === 'fill');
-    if (fill.length) onChange(fill.reduce((next, row) => ({ ...next, [row.id]: creditFillValue(next, row) }), person));
+    const after = fill.reduce((next, row) => ({ ...next, [row.id]: creditFillValue(next, row) }), person);
+    if (fill.length) onChange(after);
+    setNote(creditFillNote(fill, after));
     setReplacements(rows.filter((row) => row.action === 'replace'));
   };
   return html`<${PickerLayout} id=${`credit-find-${person._cid}`} onSubmit=${(event) => event.preventDefault()}
-    fields=${null} musicindex=${{ title: 'Find on Music Index', summary: 'Fill empty fields and review other values.', onOpen: () => setFinding(true) }}
+    fields=${null} musicindex=${{ title: 'Find on Music Index', summary: 'Fill empty fields and review other values.', note: creditFillNoteText(note, person), onOpen: () => setFinding(true) }}
     lists=${replacements.length ? [{ title: 'Values from Music Index', rows: replacementRows }] : []} />
     <${FindOneSheet} open=${finding} start=${person.name} choices=${creditChoices} credits=${true} empty="Music Index has no values of this feed."
       onPick=${select} onClose=${() => setFinding(false)} />`;

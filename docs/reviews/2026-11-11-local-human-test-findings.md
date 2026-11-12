@@ -22,6 +22,7 @@ The operator built `studio-desktop-app` in the release profile from local `main`
 | Move of a real release folder | ADR 0167, task 105 | Passed. **Move to Standard Folder** moved `library/test` to `library/HeyCitizen/HeyCitizen's Test Album`. The new folder held the seven files with their sizes, and the old folder was not there. After **Scan the Library Folder**, the **Files** page showed the same six media files, with no new name. |
 | Wallets of the linked page of Matt Finlay | ADR 0159, task 101 | Passed. The one matching wallet was `mattfinlay@phafe.com`, with the name "Matt Finlay". `podcastindex@getalby.com` and `chadf@getalby.com` were in the fold "2 other recipients on Matt Finlay", each with its recipient name. |
 | Update from linked pages | ADR 0170, task 102 | Passed. The sheet listed the person "Matt" with "Picture", "Website" and the wallet `mattfinlay@phafe.com`, and not the other recipients of the page. After **Update**, the page of the person had the picture, the wallet as the default and the information address `https://phafe.com/mattfinlay`, with no **Save** bar and no suggestion. The rows of the sheet had a defect (finding 15). |
+| Find on Music Index for an open credit | ADR 0169, task 104 | Passed. The operator cleared the picture address of the credit HeyCitizen (Keyboardist) on "HeyCitizen's Test Album". **Find on Music Index** filled it again from the page HeyCitizen. The role "musician" of the page showed with **Replace**. The fill gave no sign (finding 17). |
 
 ## Findings
 
@@ -217,3 +218,11 @@ The fix shows an entry with no text as "No name". An examination of the code gav
 - The sheet "Add a Credit" refuses an empty name. The field "Name" of an open credit accepts an empty value.
 
 Thus the probable cause is a name that the user cleared in an open credit. This is not confirmed. A decision must give the rule: the save refuses a credit with no name, or the write leaves out a credit with no name and no npub. `Feed::credit_places` already treats such a credit as no credit.
+
+### Finding 17: A Fill From Music Index Gives No Sign
+
+Owner: [ADR 0169](../adr/0169-an-open-credit-can-find-on-music-index.md) item 2.
+
+**Find on Music Index** fills each empty field of a credit with no sign. The operator could not see which fields changed.
+
+The operator selected this design in the questionnaire, as a drawing: a line below the row **Find on Music Index** names the filled fields, for example "Filled from Music Index: Picture address". The line stays until the next edit of the credit.

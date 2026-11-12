@@ -319,6 +319,15 @@ const mergeLabel = (field) => {
 // A whole track shows its title, or that it is gone.
 const mergeValue = (field, value) => {
   if (!field.key) return value ? (value.title || 'Track') : 'No track';
+  // A list, such as the credits, shows one short text for each entry.
+  if (Array.isArray(value)) {
+    if (!value.length) return 'none';
+    return value.map((entry) => {
+      const name = brief(entry) || JSON.stringify(entry);
+      const role = entry && typeof entry === 'object' && entry.role && entry.role !== name ? ` (${entry.role})` : '';
+      return `${name}${role}`;
+    }).join(', ');
+  }
   return valueText(value, field.key, {});
 };
 

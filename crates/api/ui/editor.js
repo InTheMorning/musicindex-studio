@@ -1610,7 +1610,9 @@ export function DiffView({ diff }) {
 }
 
 // The merge of the hosted file into the draft (ADR 0129). The core gives the
-// plan. A field that both sides changed has a select menu with no start value.
+// plan. A field that both sides changed shows the two values as text, and a
+// short select menu with no start value, so a long value cannot make the
+// menu wider than the screen.
 function MergePanel({ merge, busy, onChoose, onApply }) {
   const rows = mergeRows(merge.plan);
   const list = (title, items, text) => items.length > 0 && html`<section class="page-section"><h2>${title}</h2>
@@ -1623,11 +1625,13 @@ function MergePanel({ merge, busy, onChoose, onApply }) {
     ${rows.conflicts.length > 0 && html`<section class="page-section"><h2>${MERGE_HEADINGS.conflicts}</h2>
       <div class="group">${rows.conflicts.map((row) => html`<div class="field" key=${row.id}>
         <label for=${`merge-${row.id}`}>${row.label}</label>
-        <div class="field-body"><select id=${`merge-${row.id}`} value=${merge.choices[row.id] || ''}
+        <div class="field-body"><span class="hint">Your edit: ${row.mine}</span>
+          <span class="hint">Hosted file: ${row.hosted}</span>
+          <select id=${`merge-${row.id}`} value=${merge.choices[row.id] || ''}
           onChange=${(e) => onChoose(row.id, e.target.value)}>
           <option value="">Select one</option>
-          <option value="mine">Your edit: ${row.mine}</option>
-          <option value="hosted">Hosted file: ${row.hosted}</option>
+          <option value="mine">Your edit</option>
+          <option value="hosted">Hosted file</option>
         </select></div></div>`)}</div></section>`}
     <div class="actions"><button class="button primary" type="button"
       disabled=${busy || !mergeReady(merge.plan, merge.choices)} onClick=${onApply}>Apply to the Draft</button></div>

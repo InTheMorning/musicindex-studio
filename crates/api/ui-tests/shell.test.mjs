@@ -4,10 +4,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   pageTabs, mediumKind, roleChoice, toggleRole, isEditable, isReadOnly, reviewHost, moveNote, isPublisher, isPlaylist, trackKey, isTrack,
-  leftPanel, releasesList, listQuery, queryText, sortLabel, sortEntries, compareNames, byName, segmentKey,
+  leftPanel, releasesList, listQuery, queryText, sortLabel, sortEntries, compareNames, byName, segmentKey, levelFeedSet,
   startNav, pushNav, backNav, forwardNav, canBack, canForward, setScroll, releasesView,
   narrowStack, openFeedView, navAtWidth, widthNav, wideView, publisherArt, mosaicCells, otherFeedText,
 } from '../ui/shell.js';
+import { stateMark } from '../ui/outsidecheck.js';
 
 const album = { id: 1, title: 'Night Songs', medium: 'music', connector_id: 'c1', path: 'night', added_at: 100, draft_state: 'none', image: null };
 const publisher = { id: 2, title: 'Label', medium: 'publisher', connector_id: 'c1', path: 'label', added_at: 200, draft_state: 'none' };
@@ -608,6 +609,33 @@ test('a level gives the way up, the head, the feeds below and the releases', () 
   const top = leftPanel({ view: { name: 'releases', group: 40 }, feeds: tree, model: null, vaultOpen: false });
   assert.equal(top.back.label, 'Releases', message);
   assert.deepEqual(top.back.view, { name: 'releases', marked: 40 }, message);
+});
+
+test('the head row mark uses the level feed and not its releases (ADR 0181 item 1)', () => {
+  const owner = { ...labelA, draft_state: 'none' };
+  const release = { ...album1, draft_state: 'changed' };
+  const headFeeds = levelFeedSet([owner, release], owner.id);
+  const results = { [owner.id]: { read: true }, [release.id]: { read: true } };
+  assert.deepEqual(headFeeds, [owner]);
+  assert.equal(stateMark(headFeeds, results), null);
+  assert.equal(stateMark([release], results).kind, 'pending');
+  assert.deepEqual(levelFeedSet([owner, release], 999), []);
+});
+
+test('the level tile model puts the level feed before its releases (ADR 0181 items 2 and 3)', () => {
+  const owner = { ...labelA, draft_state: 'changed' };
+  const release = { ...album1, draft_state: 'none' };
+  const list = releasesList({ feeds: [owner, release], connectors: [], sort: 'order', view: 'tiles', group: owner.id });
+  assert.deepEqual(list.levelTile, {
+    id: owner.id,
+    title: owner.title,
+    typeLabel: 'Label',
+    dot: 'label',
+    glow: 'var(--c-label)',
+    image: null,
+    draftLabel: 'Saved, not written',
+  });
+  assert.deepEqual(list.rows.map((row) => row.id), [release.id]);
 });
 
 test('a feed opened from a level goes back to that level', () => {

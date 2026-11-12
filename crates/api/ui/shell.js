@@ -368,6 +368,13 @@ function levelFeed(view, feeds) {
   return feeds.find((feed) => feed.id === view.group && isPublisher(feed)) || null;
 }
 
+// The feed set of an open level's head row (ADR 0181 item 1).
+export function levelFeedSet(feeds, id) {
+  if (!Array.isArray(feeds)) return [];
+  const feed = feeds.find((item) => item.id === id && isPublisher(item));
+  return feed ? [feed] : [];
+}
+
 // The view that "‹" opens from a level, or from a feed opened from a level.
 // `trail` is the list of the levels above, from the top. With no trail it
 // is Releases (ADR 0088 item 6).
@@ -658,12 +665,22 @@ export function releasesList({ feeds, connectors, sort, view, reversed, marked, 
     marked: feed.id === marked,
     note: noteOf(feed),
   }));
+  const levelTile = head && head.id !== null ? {
+    id: head.id,
+    title: head.title,
+    typeLabel: head.typeLabel,
+    dot: head.dot,
+    glow: kindGlow(feedKind(owner)),
+    image: feedCover(owner),
+    draftLabel: DRAFT_LABELS[owner.draft_state] || 'No changes',
+  } : null;
   return {
     sort: sortKey,
     sorts,
     reversed: isReversed,
     view: viewKey,
     head,
+    levelTile,
     rows,
     letters: sortKey === 'az' ? letterGroups(rows) : null,
   };

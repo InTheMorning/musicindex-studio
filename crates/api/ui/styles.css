@@ -40,6 +40,9 @@
   --muted:    #a1a1a6;
   --accent:   #2d7bff;
   --focus:    #2d7bff;
+  /* These two wait for the shared tokens of musicindex ADR 0063 R-CHECK-5. */
+  --check-border: #6a708a;
+  --on-accent: #0b0d13;
   --art-shadow: rgba(0, 0, 0, .5);
   --gloss-hi: rgba(255, 255, 255, .14);
   --veil-top: 25%;
@@ -131,6 +134,8 @@
   --muted:    #5c5c62;
   --accent:   #0a5bd6;
   --focus:    #005bd3;
+  --check-border: #8e8e93;
+  --on-accent: #ffffff;
   --art-shadow: rgba(0, 0, 0, .18);
   --gloss-hi: rgba(255, 255, 255, .7);
   --veil-top: 55%;
@@ -374,7 +379,57 @@ textarea.masked { -webkit-text-security: disc; }
 .meter.weak .bars span.on { background: var(--error); }
 .meter .label { color: var(--muted); font-size: var(--text-callout); }
 .check { display: flex; align-items: center; gap: 10px; min-height: var(--target); cursor: pointer; }
-.check input { width: 20px; height: 20px; accent-color: var(--accent); }
+
+/* The check box of musicindex ADR 0063: the app draws it. The box is 18 px
+   with a 4 px corner. The mark is a 14 px Lucide check or minus. The
+   ::after element gives a hit area of 28 px and adds no height to the row. */
+input[type="checkbox"] {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  flex: none;
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--check-border);
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+}
+input[type="checkbox"]::after { content: ""; position: absolute; inset: -6px; }
+input[type="checkbox"]::before {
+  content: "";
+  display: none;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 14px;
+  height: 14px;
+  transform: translate(-50%, -50%);
+  background-color: var(--on-accent);
+  -webkit-mask: var(--check-mark) center / contain no-repeat;
+  mask: var(--check-mark) center / contain no-repeat;
+  --check-mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
+}
+input[type="checkbox"]:indeterminate::before {
+  --check-mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12h14'/%3E%3C/svg%3E");
+}
+input[type="checkbox"]:checked, input[type="checkbox"]:indeterminate {
+  background-color: var(--accent);
+  border-color: var(--accent);
+}
+input[type="checkbox"]:checked::before, input[type="checkbox"]:indeterminate::before { display: block; }
+input[type="checkbox"]:focus-visible { border-radius: 4px; outline-offset: 2px; }
+input[type="checkbox"]:disabled { opacity: .5; cursor: default; }
+/* A box in a row does not show its own focus: the row shows it. */
+.link-row input[type="checkbox"]:focus-visible, .choice input[type="checkbox"]:focus-visible { outline: none; }
+.link-row:has(input[type="checkbox"]:focus-visible), .choice:has(input[type="checkbox"]:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+  border-radius: 8px;
+}
 
 .form { display: grid; gap: 18px; }
 .actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
@@ -933,7 +988,6 @@ dialog.sheet.small[open] { width: min(520px, calc(var(--window-width) - 32px)); 
   border: 1px solid var(--gloss-edge);
 }
 .choice.taken { cursor: default; opacity: .6; }
-.choice input { width: 20px; height: 20px; accent-color: var(--accent); flex: none; }
 .choice .text { display: grid; min-width: 0; }
 .choice .title { font-weight: 600; }
 .choice .sub { color: var(--muted); font-size: var(--text-callout); overflow-wrap: anywhere; }
@@ -1347,7 +1401,6 @@ select.position:focus { background: var(--fill); }
   flex: none;
   cursor: pointer;
 }
-.pick-row .pick-box input { width: 20px; height: 20px; accent-color: var(--accent); }
 .pick-row .text { flex: 1; min-width: 0; display: grid; }
 .pick-row .text .sub { color: var(--muted); font-size: var(--text-callout); overflow-wrap: anywhere; }
 .pick-row.taken { opacity: .6; }
@@ -2106,7 +2159,6 @@ button.outline-feed {
 .recipient-head .hint { overflow-wrap: anywhere; }
 .recipient-actions { padding: 0 4px; }
 .use-row { cursor: pointer; }
-.use-row input { flex: none; width: 20px; height: 20px; accent-color: var(--accent); }
 .link-row.static { cursor: default; }
 .link-row.static:hover { background: none; }
 .link-row .status { flex: none; color: var(--muted); font-size: var(--text-callout); }

@@ -17,6 +17,20 @@ export const VIEW_HINTS = {
 };
 export const CONTEXT_LINES = 3;
 
+// The stream check rows that Review shows for changed live items (ADR 0187).
+export function streamProblemRows(problems, liveItems = []) {
+  return (problems || []).map((problem) => {
+    const live = liveItems.find((entry) => entry.item && entry.item.guid === problem.guid);
+    const refusal = problem.level === 'refusal';
+    return {
+      ...problem,
+      title: live && live.item.title || 'Untitled show',
+      button: refusal && problem.server_type_label && problem.server_type ? `Use ${problem.server_type_label}` : null,
+      blocksWrite: refusal,
+    };
+  });
+}
+
 // A stored value that is not a view gives the default view.
 export function normalizeView(value) {
   return VIEWS.includes(value) ? value : 'simplified';

@@ -1,7 +1,8 @@
 // The lines of a review (ADR 0114 items 8 to 12).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { shownLines, localTime, localTimeNote, runs, commonIndent, moreLabel, stripIndent, normalizeView, showsExamine } from '../ui/review.js';
+import { shownLines, localTime, localTimeNote, runs, commonIndent, moreLabel, stripIndent, normalizeView, showsExamine, streamProblemRows } from '../ui/review.js';
+import { setLiveStreamType } from '../ui/live.js';
 
 const part = (text, changed = false) => ({ text, changed });
 const same = (text) => ({ kind: 'same', parts: [part(text)], pair: null });
@@ -52,6 +53,33 @@ test('moreLabel and normalizeView', () => {
   assert.equal(moreLabel(12), 'Show 12 more lines');
   assert.equal(normalizeView('x'), 'simplified');
   assert.equal(normalizeView('detailed'), 'detailed');
+});
+
+test('Review blocks a refused stream type and allows a stream warning', () => {
+  const rows = streamProblemRows([
+    { guid: 'show-1', field: 'stream', level: 'refusal', text: 'The feed gives AAC, but the stream server sends MP3. Apps cannot play this stream.', server_type: 'audio/mpeg', server_type_label: 'MP3' },
+    { guid: 'show-2', field: 'stream', level: 'warning', text: 'Studio could not check the stream: The stream server sent no type.' },
+  ], [
+    { item: { guid: 'show-1', title: 'Morning Show' } },
+    { item: { guid: 'show-2', title: 'Evening Show' } },
+  ]);
+  assert.deepEqual(rows.map(({ title, button, blocksWrite }) => ({ title, button, blocksWrite })), [
+    { title: 'Morning Show', button: 'Use MP3', blocksWrite: true },
+    { title: 'Evening Show', button: null, blocksWrite: false },
+  ]);
+  assert.equal(rows[0].text, 'The feed gives AAC, but the stream server sends MP3. Apps cannot play this stream.');
+  assert.equal(rows[1].text, 'Studio could not check the stream: The stream server sent no type.');
+});
+
+test('Use server type changes only the matching live item in the draft model', () => {
+  const model = { live_items: [
+    { item: { guid: 'show-1', enclosure: { url: 'https://stream.example/live', length: '0', media_type: 'audio/aac' } } },
+    { item: { guid: 'show-2', enclosure: { url: 'https://stream.example/other', length: '0', media_type: 'audio/aac' } } },
+  ] };
+  const changed = setLiveStreamType(model, 'show-1', 'audio/mpeg');
+  assert.equal(changed.live_items[0].item.enclosure.media_type, 'audio/mpeg');
+  assert.equal(changed.live_items[1].item.enclosure.media_type, 'audio/aac');
+  assert.equal(model.live_items[0].item.enclosure.media_type, 'audio/aac');
 });
 
 // ---- What changes (task 077c) ----

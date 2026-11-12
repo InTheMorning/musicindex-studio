@@ -74,6 +74,12 @@ pub struct LiveProblem {
     pub level: LiveProblemLevel,
     /// The text for the user.
     pub text: String,
+    /// The server media type for a stream type refusal (ADR 0187 item 3).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server_type: Option<String>,
+    /// The server type label for a stream type refusal (ADR 0187 item 3).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server_type_label: Option<String>,
 }
 
 /// Make a live item with a new UUID v4 `guid`, the status `pending`, the
@@ -413,6 +419,8 @@ pub fn problems(feed: &Feed) -> Vec<LiveProblem> {
                 field: field.to_owned(),
                 level,
                 text: text.to_owned(),
+                server_type: None,
+                server_type_label: None,
             });
         };
         // A blank start is the same as no start, because the editor can

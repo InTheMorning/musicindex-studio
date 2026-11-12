@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { versionLabel, hasSpace, spaceNotice, newFeedAddress } from '../ui/feedfacts.js';
+import { versionLabel, hasSpace, spaceNotice, newFeedAddress, newFeedAddressLine } from '../ui/feedfacts.js';
 
 test('a version label has no quote mark and no weak prefix', () => {
   assert.equal(versionLabel('"6ae0bb73-3c71da"'), '6ae0bb73-3c71da');
@@ -31,4 +31,10 @@ test('the tag shows when the feed has it, with the comparison of the core (ADR 0
   assert.equal(own.note, 'This is the address of this feed.');
   const noAddress = newFeedAddress({ new_feed_url: url, public_url: null, address_differences: [] });
   assert.equal(noAddress.note, null);
+});
+
+test('the Files page line shows only for a new feed address (ADR 0184 items 1 and 2)', () => {
+  const url = 'https://next.example/feed.xml';
+  assert.equal(newFeedAddressLine({ new_feed_url: url, new_feed_address_is_new: true }), url);
+  assert.equal(newFeedAddressLine({ new_feed_url: url, new_feed_address_is_new: false }), null);
 });

@@ -18,7 +18,7 @@ import { isLiveItem, liveKey, liveDot, nextAction, canRecord, hasRecording, show
 import { grantControl, draftBlockedNotice } from './apps.js';
 import { checkRows, unreadableRows, hasShowGrant, checkTexts } from './feedcheck.js';
 import { buildDateNotices } from './builddate.js';
-import { versionLabel, LOCK_HELP, hasSpace, spaceNotice, ROW_SPACE_NOTE, newFeedAddress, libraryFolderRow } from './feedfacts.js';
+import { versionLabel, LOCK_HELP, hasSpace, spaceNotice, ROW_SPACE_NOTE, newFeedAddress, newFeedAddressLine, libraryFolderRow } from './feedfacts.js';
 import { refusalView, refusalOfError, noticeViews, blocksWrite, repairRoute, returnWarning, REPLACES_POINTER_NOTE } from './movelink.js';
 import { pickFromIndex, remoteItemFromPick, addTrack, hasTrack, removeTrack, trackRow, tracksSummary } from './playlist.js';
 import { moveTo, moveAmong } from './order.js';
@@ -4470,7 +4470,7 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
   const defaultHost = data.files_connector_id ?? feed.connector_id;
   const mode = assetMode();
   const missing = mode.holdAssets ? 0 : missingCount(data.files);
-  const tag = newFeedAddress(feed);
+  const newAddress = newFeedAddressLine(data);
   const hostRows = fileHostRows(feed, data, connectors);
   const libraryRow = libraryFolderRow(data);
   const moveLibraryFolder = async (path) => {
@@ -4504,7 +4504,7 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
       </div>
       ${data.feed_move && html`<p class="hint">The feed moves to ${connectorName(connectors, data.feed_move.connector_id)} when you write${moveInfo && moveInfo.url ? html`, at <span class="mono">${moveInfo.url}</span>` : ''}.
         The address from before${moveInfo && moveInfo.from_url ? html`, <span class="mono">${moveInfo.from_url}</span>,` : ''} gets ${moveMethod === 'redirect' ? 'a redirect' : 'a pointer file'}.</p>`}
-      ${tag && html`<p class="hint">The feed file names the new feed address <span class="mono">${tag.url}</span>.</p>`}
+      ${newAddress && html`<p class="hint">The feed file names the new feed address <span class="mono">${newAddress}</span>.</p>`}
       <div class="actions">
         ${connectors.length > 1 && html`<button class="button action" type="button" disabled=${busy}
           onClick=${() => setMoving({ start: null })}>Move This Release…</button>`}

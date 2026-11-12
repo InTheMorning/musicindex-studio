@@ -3635,6 +3635,14 @@ fn feed_lengths(feed: Option<&Feed>) -> std::collections::HashMap<String, u64> {
     lengths
 }
 
+/// True when the draft names a new feed address that the hosted file lacks.
+fn new_feed_address_is_new(draft: Option<&Feed>, hosted: Option<&Feed>) -> bool {
+    let Some(url) = draft.and_then(|feed| feed.new_feed_url.as_deref()) else {
+        return false;
+    };
+    hosted.and_then(|feed| feed.new_feed_url.as_deref()) != Some(url)
+}
+
 /// True when `url` is one of the addresses that the draft gives (ADR 0036
 /// items 10 and 12).
 fn is_in_use(url: Option<&str>, addresses: &[String]) -> bool {
@@ -3930,6 +3938,16 @@ pub(crate) async fn list_release_files(
         let library_files = w.collection.library_files(id)?;
         let operations = w.collection.draft_operations(id)?;
         let compared = files_feed(w, id)?;
+        let hosted = match w.collection.draft(id)? {
+            Some(draft) => studio_core::xml::Document::parse_bytes(&draft.base_xml)
+                .ok()
+                .and_then(|document| Feed::read(&document).ok()),
+            None => compared.clone(),
+        };
+        let new_feed_url = compared
+            .as_ref()
+            .and_then(|feed| feed.new_feed_url.as_deref());
+        let new_feed_address_is_new = new_feed_address_is_new(compared.as_ref(), hosted.as_ref());
         let addresses = feed_address_list(compared.as_ref());
         let lengths = feed_lengths(compared.as_ref());
 
@@ -4033,6 +4051,8 @@ pub(crate) async fn list_release_files(
         };
 
         Ok(Json(json!({
+            "new_feed_url": new_feed_url,
+            "new_feed_address_is_new": new_feed_address_is_new,
             "folder": feed_row.folder,
             "library_folder": library_paths.0,
             "default_library_folder": library_paths.1,
@@ -7924,6 +7944,22 @@ pub(crate) async fn sign_with_signer(
 mod tests {
     use super::*;
     use studio_core::feed::RssImage;
+
+    #[test]
+    fn new_feed_address_is_new_only_when_the_hosted_value_differs() {
+        let url = "https://next.example/feed.xml";
+        let draft = Feed {
+            new_feed_url: Some(url.to_owned()),
+            ..Feed::default()
+        };
+        let hosted = Feed {
+            new_feed_url: Some(url.to_owned()),
+            ..Feed::default()
+        };
+        assert!(!new_feed_address_is_new(Some(&draft), Some(&hosted)));
+        assert!(new_feed_address_is_new(Some(&draft), None));
+        assert!(!new_feed_address_is_new(None, Some(&hosted)));
+    }
 
     fn demu_feed(url: &str) -> Feed {
         Feed {

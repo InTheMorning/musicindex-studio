@@ -32,6 +32,11 @@ export function newFeedAddress(feed) {
   };
 }
 
+// The Files page line for a new `itunes:new-feed-url` value (ADR 0184 items 1 and 2).
+export function newFeedAddressLine(files) {
+  return files?.new_feed_address_is_new ? files.new_feed_url : null;
+}
+
 // The row of the release folder in the section "On this computer" of the
 // Files page (ADR 0180 item 4). `files` is the answer of the Files route. A
 // server that holds no assets gives no folder, so no row.

@@ -2020,6 +2020,8 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
       setDiff(null);
       onOpsCleared();
       await draft.load();
+      // With no draft, Review has nothing to show, so the sheet closes.
+      onClose();
     });
   };
   // A merge keeps each edit of the draft (ADR 0129). The Review sheet then

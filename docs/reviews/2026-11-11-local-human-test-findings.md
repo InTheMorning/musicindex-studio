@@ -118,8 +118,14 @@ The agent read a copy of the collection database of the operator. The release ha
 
 The new records came from `record_remote_files` in `crates/core/src/remote.rs`. That function adds a record for each feed address that it does not know. It knows an address when the address is the planned address or the address of a copy of a library file.
 
-The function ignores an error in each of these two reads. Thus, when the read of the `heycitizen` inventory fails, the function does not know the `heycitizen` addresses. It then adds a second record with a free name for each address. The cause of the error at 11:24:46 is not known.
+The function ignores an error in each of these two reads. Thus, when the read of the `heycitizen` inventory fails, the function does not know the `heycitizen` addresses. It then adds a second record with a free name for each address. The probable cause of the error at 11:24:46 is a locked vault. On 2026-11-12, a build with the first part of task 115 gave this log line for the same release: "host 1 needs the vault, and the vault is locked".
 
 At 11:40:01, **Add to the Draft** downloaded records 77 to 80 into the library folder. The draft then had a copy operation for each of the eight records.
 
 The plan in `release_move_plan` also makes a copy operation for record 13. But `bastone` has a file with the same SHA-256 at the target path. The write gives `FileExists` for that operation.
+
+### Finding 10: Review Stays Open After A Discard
+
+Owner: [ADR 0007](../adr/0007-draft-diff-write-and-announce.md).
+
+After **Discard the Draft**, the sheet "Review changes" stayed open. It showed "The draft is saved. The hosted file does not change until you write it." and **Examine the Changes**. No draft was there. The operator closed the sheet with ✕. The fix closes the sheet after a discard.

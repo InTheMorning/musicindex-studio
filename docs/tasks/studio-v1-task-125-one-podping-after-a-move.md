@@ -2,7 +2,7 @@
 
 - Decision: [ADR 0189](../adr/0189-a-move-sends-one-podping-of-the-old-address.md)
 
-Status: Complete on 2026-11-12, with packet 125b. The mechanical checks passed. The screenshot visual check passed: the notice gives one line, for the address before the move, with **Send the Podping**. In the human test of 2026-11-12, the notice gave one line, and the button sent the address before the move: Music Index moved the record 21 seconds after the send time. The line did not show the sent state, because the notice did not load again. ADR 0189 item 6 corrects that. Packet 125b is complete: in the screenshot check, a waiting line changed to the sent state with no new page. The human check of the sent line is open.
+Status: Complete on 2026-11-12, with packet 125b. The mechanical checks passed. The screenshot visual check passed: the notice gives one line, for the address before the move, with **Send the Podping**. In the human test of 2026-11-12, the notice gave one line, and the button sent the address before the move: Music Index moved the record 21 seconds after the send time. The line did not show the sent state, because the notice did not load again. ADR 0189 item 6 corrects that. Packet 125b is complete: in the screenshot check, a waiting line changed to the sent state with no new page. The human check of the sent line passed on 2026-11-12, in the release build of local `main`: after the move back to bastone, the line changed to the sent state with no click. In that check the operator found the state of the line hard to see. ADR 0189 item 7 adds a status tag. Packet 125c gives that work, and it is open.
 
 ## Goal
 
@@ -30,7 +30,7 @@ Visual, by the planning model:
 
 - The notice with one line, at 1280 px, in the light theme.
 
-Human, by the operator. This gate stays open until it runs:
+Human, by the operator. This gate passed on 2026-11-12:
 
 - The human criterion of ADR 0189, after a real move between two file hosts.
 
@@ -44,3 +44,16 @@ Human, by the operator. This gate stays open until it runs:
 - `crates/api/ui/outsidecheck.js`: a model function gives the time of the next load of the notice. When a line of `moveNotice` waits, the time is some seconds after its `send_at`. When no line waits, it gives `null`.
 - `crates/api/ui/app.js`, `OutsideNotices`: a timer loads the notice again at that time. The timer stops when the page changes or the notice goes. **Read Again** (`refresh`) also loads the notice again.
 - A Node test of the model function, with a waiting line and with a line that does not wait.
+
+## Packet 125c: The Status Tag Of The Line (ADR 0189 Item 7)
+
+- `crates/api/ui/outsidecheck.js`: each line of `moveNotice` gives a state (`waiting`, `sent` or `failed`), the tag text and the time. The time is in the tag, not in the sentence.
+- `crates/api/ui/app.js`, `OutsideNotices`: the line shows the tag before the address. A waiting tag has the turning ring of `.player-wait`. A sent tag has the check icon.
+- `crates/api/ui/styles.css`: the tag uses the pattern of `.default-tag`. Waiting uses `--warning`. Sent uses a new token `--success`, with the values of musicindex ADR 0025 R-STATUS-1 from `assets/tokens.json`. Failed uses the danger color. With Reduce Motion, the ring does not turn.
+- Node tests: the state, the tag text and the time of each line, for a waiting line, a sent line and a failed line.
+
+Acceptance criteria:
+
+- Mechanical: the Node tests above, and the four checks.
+- Visual, by the planning model: the notice with a waiting tag and with a sent tag, at 1280 px and at 390 px, in the light and dark themes. `$edges()` gives no result.
+- Human, by the operator: the tag is easy to see in the release build. This gate stays open until it runs.

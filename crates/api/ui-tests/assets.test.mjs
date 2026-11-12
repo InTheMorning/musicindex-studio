@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  dayText, canCopyOrMove, fileState, fileStatus, canDownloadToDevice, missingCount, missingNotice,
+  dayText, canCopyFile, fileState, fileStatus, canDownloadToDevice, missingCount, missingNotice,
   reviewNotice, serverFilesRows, sizeText, SERVER_NOTICE, ADD_TRACKS_NOTICE,
 } from '../ui/assets.js';
 
@@ -99,7 +99,7 @@ test('sizeText gives a short size', () => {
   assert.equal(sizeText(1536), '1.5 KB');
 });
 
-test('a removed file has no copy and no move', () => {
-  assert.equal(canCopyOrMove(row({ removed_at: 5 })), false);
-  assert.equal(canCopyOrMove(row({ local: true })), true);
+test('a removed file cannot be copied', () => {
+  assert.equal(canCopyFile(row({ removed_at: 5 })), false);
+  assert.equal(canCopyFile(row({ local: true })), true);
 });

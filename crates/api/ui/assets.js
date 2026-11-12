@@ -46,9 +46,9 @@ export function canDownloadToDevice(file, { server }) {
   return Boolean(server) && file.removed_at == null && (file.local || file.copies.length > 0);
 }
 
-// A copy or a move reads the bytes of the file, so a removed file has neither
-// (ADR 0105 item 10). Studio gives the user only "Add the File Again".
-export function canCopyOrMove(file) {
+// A copy reads the file bytes, so a removed file cannot be copied (ADR 0105
+// item 10). Studio offers only "Add the File Again".
+export function canCopyFile(file) {
   return file.removed_at == null;
 }
 

@@ -3912,23 +3912,19 @@ async fn a_copy_operation_to_a_second_host_gives_a_copy_in_the_diff() {
     );
 }
 
-/// ADR 0036 item 12: a move is a copy to the new host, a reference of
-/// the new copy in the draft, and a delete of the copy on the old host.
+/// ADR 0180 item 15: **Copy to {host}**, then **Use This Copy** on the
+/// pending copy, gives one copy and the new address in one draft.
 #[tokio::test]
-async fn a_move_operation_gives_a_copy_a_reference_and_a_delete() {
+async fn use_this_copy_on_a_pending_copy_adds_no_second_copy() {
     let app = app();
     let id = set_up(&app).await;
     let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
     let (_, file) = upload(&app, id, "tagged.mp3", bytes).await;
     let file_id = file["library_file_id"].as_i64().unwrap();
     let from_url = file["url"].as_str().unwrap().to_owned();
-
-    let (_, connectors) = call(&app, "GET", "/api/v1/connectors", None).await;
-    let home_id = connectors[0]["id"].as_i64().unwrap();
     let backup_dir = tempfile::tempdir().unwrap();
     let backup_id = add_host(&app, "Backup", backup_dir.path(), "https://backup.example").await;
 
-    // The track refers to the file on its first host.
     let draft_path = format!("/api/v1/feeds/{id}/draft");
     let (_, draft) = call(&app, "GET", &draft_path, None).await;
     let mut model = draft["model"].clone();
@@ -3946,31 +3942,32 @@ async fn a_move_operation_gives_a_copy_a_reference_and_a_delete() {
     .await;
     assert_eq!(status, StatusCode::OK);
 
+    let operations_path = format!("/api/v1/feeds/{id}/operations");
     let (status, diff) = call(
         &app,
         "POST",
-        &format!("/api/v1/feeds/{id}/operations"),
-        Some(json!({ "op": "move", "file": file_id, "from": home_id, "to": backup_id })),
+        &operations_path,
+        Some(json!({ "op": "copy", "file": file_id, "connector_id": backup_id })),
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{diff}");
-    let operations = diff["operations"].as_array().unwrap();
-    assert!(
-        operations
-            .iter()
-            .any(|op| op["kind"] == "copy" && op["connector_id"] == backup_id),
-        "{operations:?}"
-    );
-    // ADR 0148 item 7: the old copy stays, so the draft has no deletion.
-    assert!(
-        operations
-            .iter()
-            .any(|op| op["kind"] == "hold" && op["connector_id"] == home_id),
-        "{operations:?}"
-    );
-    assert!(
-        !operations.iter().any(|op| op["kind"] == "delete"),
-        "{operations:?}"
+    let (status, diff) = call(
+        &app,
+        "POST",
+        &operations_path,
+        Some(json!({ "op": "reference", "file": file_id, "connector_id": backup_id, "from_url": from_url })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    let copies = diff["operations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|op| op["kind"] == "copy" && op["connector_id"] == backup_id)
+        .count();
+    assert_eq!(
+        copies, 1,
+        "ADR 0180 item 15: one copy for the two steps. {diff}"
     );
 
     let (_, draft) = call(&app, "GET", &draft_path, None).await;
@@ -14439,24 +14436,6 @@ async fn a_written_move_keeps_the_old_file_and_records_it() {
     assert_eq!(moves[0]["records"].as_array().unwrap().len(), 1);
     assert_eq!(moves[0]["ready"], false);
     assert_eq!(moves[0]["index"], "unknown");
-}
-
-/// ADR 0148 item 7: **Move to** on one file has 30 days.
-#[tokio::test]
-async fn move_to_on_one_file_waits_for_30_days() {
-    let app = move_app();
-    let (id, file, home, backup, _folder) = album_on_home(&app).await;
-    let (status, diff) = call(
-        &app,
-        "POST",
-        &format!("/api/v1/feeds/{id}/operations"),
-        Some(json!({ "op": "move", "file": file, "from": home, "to": backup })),
-    )
-    .await;
-    assert_eq!(status, StatusCode::OK, "{diff}");
-    write_the_draft(&app, id).await;
-    assert!(app.feeds.path().join("album/tagged.mp3").exists());
-    assert_eq!(waiting(&app, id).await[0]["wait_days"], 30);
 }
 
 /// ADR 0148 item 5: with the check box off, Studio keeps no record.

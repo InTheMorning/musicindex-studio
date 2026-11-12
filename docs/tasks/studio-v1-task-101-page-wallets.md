@@ -1,6 +1,6 @@
 # Studio V1 Task 101: Wallets Of A Linked Page
 
-Status: Complete, with its screenshot visual check on 2026-11-11. The screenshots used a page from a fixed answer, not from Music Index. The human test with the page of Matt Finlay is open. A recipient with no name goes to the fold.
+Status: Complete, with its screenshot visual check on 2026-11-11. The screenshots used a page from a fixed answer, not from Music Index. The human test with the page of Matt Finlay passed on 2026-11-12, in the release build of local `main`. A recipient with no name goes to the fold.
 
 Owner of the rules: [ADR 0159](../adr/0159-a-person-can-link-to-a-page-on-music-index.md) items 13 to 15. Evidence: finding 5 of the [rc.21 findings](../reviews/2026-11-10-rc21-human-test-findings.md).
 

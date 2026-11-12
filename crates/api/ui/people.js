@@ -114,6 +114,25 @@ export function displayName(person) {
   return nickname || person.name;
 }
 
+// The view of the search in the sheet "Add a Person" (ADR 0182 items 4, 5, 8 and 9).
+export function addPersonView(people, query) {
+  const text = String(query ?? '').trim();
+  const searching = text.length >= 2;
+  const needle = text.toLowerCase();
+  const already = searching ? (people || []).filter((person) => [
+    person.name, person.nickname, ...(person.credit_names || []).map((credit) => credit.name),
+  ].some((value) => String(value ?? '').toLowerCase().includes(needle)))
+    .map((person) => ({ person, name: displayName(person) })) : [];
+  return {
+    searching,
+    already,
+    button: text === '' ? 'Add the Person' : `Add "${text}" Without a Page`,
+    disabled: text === '',
+  };
+}
+
+export const ADD_PAGE_HINT = 'Select a page to add the person with a link to it.';
+
 // The start state of the sheet "Check: {name}" (ADR 0111 item 7). An item
 // with a different name starts not selected. The sheet has `memberOf` as text.
 // `profiles` is the result of `profileMap`, or null before it is known. A key

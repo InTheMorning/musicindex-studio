@@ -641,6 +641,10 @@ CREATE TABLE written_feed_moves (
     moved_at INTEGER NOT NULL
 );
 ",
+    // ADR 0182 item 12: each person has a nickname that starts empty.
+    r"
+ALTER TABLE people ADD COLUMN nickname TEXT NOT NULL DEFAULT '';
+",
 ];
 
 /// `root` as a relative path under `data_dir`, when it is a folder inside
@@ -6277,6 +6281,36 @@ mod tests {
             "ADR 0112 item 7: a person from before must get an empty usual group. Check the migration after APP_KEYS_MIGRATION."
         );
         assert_eq!(people[0].usual_role, "Vocalist");
+    }
+
+    #[test]
+    fn the_nickname_migration_gives_each_person_an_empty_nickname() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("collection.sqlite");
+        let db = Connection::open(&path).unwrap();
+        for migration in &MIGRATIONS[..MIGRATIONS.len() - 1] {
+            db.execute_batch(migration).unwrap();
+        }
+        db.pragma_update(
+            None,
+            "user_version",
+            i64::try_from(MIGRATIONS.len() - 1).unwrap(),
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO people (name, usual_role, img, href, created_at) VALUES ('Ann', 'Vocalist', '', '', 0)",
+            [],
+        )
+        .unwrap();
+        drop(db);
+
+        let collection = Collection::open(&path).unwrap();
+        assert_eq!(collection.schema_version().unwrap(), SCHEMA_VERSION);
+        let people = crate::people::people(&collection).unwrap();
+        assert_eq!(
+            people[0].nickname, "",
+            "ADR 0182 item 12: the migration must give an existing person an empty nickname."
+        );
     }
 
     /// Make a collection at the schema before the migration of the app keys,

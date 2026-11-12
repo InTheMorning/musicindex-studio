@@ -2,7 +2,7 @@
 
 Decision: [ADR 0182](../adr/0182-the-page-of-a-person-starts-with-its-links-and-has-a-nickname.md).
 
-Status: Not started.
+Status: In progress. Packet 118a is complete. A save with no nickname in its body gives an empty nickname, so packet 118b must send the nickname with each save of a person.
 
 ## Goal
 

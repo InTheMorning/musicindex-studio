@@ -11045,7 +11045,7 @@ async fn one_save_changes_a_person() {
         "POST",
         &format!("{base}/save"),
         Some(json!({
-            "fields": { "name": "Ann B", "img": "https://x.example/a.png" },
+            "fields": { "name": "Ann B", "nickname": "Annie", "img": "https://x.example/a.png" },
             "members": [label],
         })),
     )
@@ -11053,6 +11053,10 @@ async fn one_save_changes_a_person() {
     assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
     let (_, body) = call(&app, "GET", &base, None).await;
     assert_eq!(body["name"], "Ann B");
+    assert_eq!(
+        body["nickname"], "Annie",
+        "ADR 0182 item 12: GET must give the nickname saved by the API."
+    );
     assert_eq!(body["img"], "https://x.example/a.png");
     assert_eq!(body["members"], json!([label]));
     assert_eq!(body["linked_credits"], json!([]));

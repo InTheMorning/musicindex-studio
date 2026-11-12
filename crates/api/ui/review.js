@@ -323,7 +323,8 @@ const mergeValue = (field, value) => {
   if (Array.isArray(value)) {
     if (!value.length) return 'none';
     return value.map((entry) => {
-      const name = brief(entry) || JSON.stringify(entry);
+      // An entry with no text at all shows as 'No name', not as JSON.
+      const name = brief(entry) || 'No name';
       const role = entry && typeof entry === 'object' && entry.role && entry.role !== name ? ` (${entry.role})` : '';
       return `${name}${role}`;
     }).join(', ');

@@ -163,6 +163,11 @@ test('a merge row gives a list of credits as names and roles, not as JSON', () =
   assert.equal(rows.conflicts[0].hosted, 'none');
 });
 
+test('a merge row gives an empty credit as No name, not as JSON', () => {
+  const credits = [{ name: '', role: null, group: null, href: null, img: null, npub: null }, { name: 'Ann', role: 'Vocals' }];
+  const rows = mergeRows({ conflicts: [{ id: 'credits', track: null, key: 'credits', mine: credits, hosted: [] }] });
+  assert.equal(rows.conflicts[0].mine, 'No name, Ann (Vocals)');
+});
 
 test('Examine the Changes shows only with no result or with a result that is not current', () => {
   const diff = { changed: false };

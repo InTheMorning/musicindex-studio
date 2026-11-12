@@ -3,6 +3,7 @@
 - Status: Accepted. [ADR 0043](0043-phase-9-connectors-and-the-interface-change.md) replaces the confirmation of item 15 on 2026-10-25.
 - Date: 2026-10-23
 - Owner: operator, with the technical choices of the planning model
+- Changed by: [ADR 0180](0180-the-files-page-has-a-folder-picker-and-one-step-for-each-copy.md). Item 8: a library file has no host of its own. Item 12: the Files page names "Reference" **Use This Copy**, and has no "Move" for one file.
 
 ## Context
 

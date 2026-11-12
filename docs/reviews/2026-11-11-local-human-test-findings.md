@@ -30,6 +30,8 @@ The operator built `studio-desktop-app` in the release profile from local `main`
 
 ### Finding 1: The Files Page Of A Release
 
+Decision: [ADR 0180](../adr/0180-the-files-page-has-a-folder-picker-and-one-step-for-each-copy.md).
+
 Owner: [ADR 0177](../adr/0177-the-files-page-has-one-way-to-move.md) and [ADR 0167](../adr/0167-each-release-has-an-editable-library-folder.md).
 
 The operator found three defects on the **Files** page:
@@ -54,6 +56,8 @@ After a move of only the media files, the **Files** page showed "The feed file n
 
 ### Finding 3: The Name "Moves That Wait"
 
+Decision: [ADR 0180](../adr/0180-the-files-page-has-a-folder-picker-and-one-step-for-each-copy.md).
+
 Owner: [ADR 0148](../adr/0148-a-move-keeps-the-old-files-until-the-user-reviews-the-deletion.md) item 8, and [ADR 0177](../adr/0177-the-files-page-has-one-way-to-move.md) item 10.
 
 The move is complete when the section shows. Only the deletion of the old copies waits. The operator did not know what the name "Moves that wait" means.
@@ -74,6 +78,8 @@ The sheet also kept **Add to the Draft** available after the refusal.
 
 ### Finding 5: The Controls Of One Copy Of A File
 
+Decision: [ADR 0180](../adr/0180-the-files-page-has-a-folder-picker-and-one-step-for-each-copy.md).
+
 Owner: [ADR 0036](../adr/0036-library-records-host-inventory-and-host-operations.md) item 13, [ADR 0037](../adr/0037-button-roles.md) and [ADR 0177](../adr/0177-the-files-page-has-one-way-to-move.md).
 
 On the **Files** page, a copy that the feed does not use has the button **Reference**. The operator did not know what it does. It puts the address of that copy in the feed, in place of the current address.
@@ -82,9 +88,11 @@ The operator agreed to the name **Use This Copy**. The other copy shows "Used by
 
 The row of one file also has three controls that change the copy that the feed uses: **Reference**, **Move to {host}** and the select menu "File host of this file". ADR 0177 gave the release one way to move. The operator agreed that the ADR of finding 1 also examines these three controls.
 
-On 2026-11-12 the operator selected this answer in the questionnaire: the file row has no **Move to {host}**. The copy that the feed uses has no button. Each other copy has **Use This Copy** and **Delete**. A move of one file is these two steps. The move of the release on the **Files** page moves all files. The select menu "File host of this file" has no answer at this time.
+On 2026-11-12 the operator selected this answer in the questionnaire: the file row has no **Move to {host}**. The copy that the feed uses has no button. Each other copy has **Use This Copy** and **Delete**. A move of one file is these two steps. The move of the release on the **Files** page moves all files. On 2026-11-12 the operator also selected the removal of the select menu "File host of this file".
 
 ### Finding 6: The Pencil Of A Group In The Left Panel
+
+Decision: [ADR 0181](../adr/0181-a-level-shows-the-state-of-its-own-feed.md).
 
 Owner: [ADR 0165](../adr/0165-the-left-panel-marks-the-state-of-each-feed.md) items 1 to 4.
 

@@ -8,6 +8,7 @@
 - Changes: the deletion of a move in [ADR 0036](0036-library-records-host-inventory-and-host-operations.md) item 12. [ADR 0091](0091-a-change-set-edits-one-recipient-in-many-feeds.md) now also holds a move of releases. This ADR answers the open question of [ADR 0009](0009-studio-connects-to-hosts-and-moves-files.md) about the old copy of a moved file.
 - Changed by: [ADR 0177](0177-the-files-page-has-one-way-to-move.md). Item 1: the sheet has "What moves", and the button is in the section "File hosts".
 - Source: [findings of local use, finding 14](../reviews/2026-11-06-local-use-findings.md)
+- Changed by: [ADR 0180](0180-the-files-page-has-a-folder-picker-and-one-step-for-each-copy.md). Item 7: one file has no **Move to**. Item 8: the section has the name "Old files to delete".
 
 ## Context
 

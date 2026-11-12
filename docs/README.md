@@ -179,6 +179,10 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0175: The check shows what Music Index holds](adr/0175-the-check-shows-what-music-index-holds.md) (Proposed)
 - [ADR 0176: The user controls each collection](adr/0176-the-user-controls-each-collection.md)
 - [ADR 0177: The Files page has one way to move](adr/0177-the-files-page-has-one-way-to-move.md)
+- [ADR 0178: A move replaces a file at the feed path in Studio](adr/0178-a-move-replaces-a-file-at-the-feed-path-in-studio.md)
+- [ADR 0179: A release keeps one library record for each file](adr/0179-a-release-keeps-one-library-record-for-each-file.md)
+- [ADR 0180: The Files page has a folder picker and one step for each copy](adr/0180-the-files-page-has-a-folder-picker-and-one-step-for-each-copy.md)
+- [ADR 0181: A level shows the state of its own feed](adr/0181-a-level-shows-the-state-of-its-own-feed.md)
 
 ## Plans
 

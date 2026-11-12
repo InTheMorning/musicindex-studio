@@ -11,6 +11,7 @@
 - Changed: on 2026-11-04 the operator added items 22 to 25 and changed items 3 and 4, through the questionnaire, after the human test of `0.1.0-rc.16`. On Linux a drop did not reach the field, and Ctrl+Z did nothing. [WebKit bug 323277](https://bugs.webkit.org/show_bug.cgi?id=323277) gives the cause of the drop.
 - Changes: [ADR 0002](0002-rust-core-json-api-browser-ui.md) item 4, the form of the Tauri shell. The [distribution plan](../plans/distribution-phase-plan.md), milestone 2.
 - Uses: [ADR 0016](0016-ui-without-a-build-step.md), [ADR 0017](0017-local-api-access.md), [ADR 0058](0058-grant-vaults-and-connected-apps-on-the-server.md) for the granted writes, and the [Tauri desktop shell research](../research/2026-11-03-tauri-desktop-shell-research.md).
+- Changed by: [ADR 0180](0180-the-files-page-has-a-folder-picker-and-one-step-for-each-copy.md). Item 3: the local router of the app also has `POST /api/v1/choose-folder`.
 
 ## Context
 

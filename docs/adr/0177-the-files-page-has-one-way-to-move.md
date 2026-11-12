@@ -8,6 +8,7 @@
 - Changes: [ADR 0148](0148-a-move-keeps-the-old-files-until-the-user-reviews-the-deletion.md) item 1. [ADR 0167](0167-each-release-has-an-editable-library-folder.md) items 5, 7, 10 and 12.
 - Uses: [ADR 0036](0036-library-records-host-inventory-and-host-operations.md) item 8 for the default file host of a release.
 - Source: the human checks of 2026-11-11.
+- Changed by: [ADR 0180](0180-the-files-page-has-a-folder-picker-and-one-step-for-each-copy.md). Items 1, 3, 6 and 10: the names "Media files" and "Old files to delete", the values of "What moves", and a folder row with only the path.
 
 ## Context
 

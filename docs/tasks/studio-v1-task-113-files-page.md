@@ -2,7 +2,7 @@
 
 Decision: [ADR 0177](../adr/0177-the-files-page-has-one-way-to-move.md).
 
-Status: Not started.
+Status: Completed on 2026-11-11. The four commit checks are green. The visual check ran at 1280 px and 390 px. The human gate is open.
 
 ## Goal
 

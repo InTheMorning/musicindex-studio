@@ -387,7 +387,6 @@ pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
             delete(routes::stop_download),
         )
         .route("/feeds/{id}/picker/release", get(routes::picker_release))
-        .route("/feeds/{id}/hosts", put(routes::set_files_host))
         .route("/feeds/{id}/feed-host", put(routes::set_feed_host))
         .route("/feeds/{id}/files/{file}/host", put(routes::set_file_host))
         .route("/feeds/{id}/operations", post(routes::add_operation))

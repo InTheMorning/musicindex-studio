@@ -39,9 +39,11 @@ export function fileHostRows(feed, files, connectors) {
   ];
 }
 
-// The file host or the file hosts that give the old files.
+// The file host or the file hosts that give the old files. Studio can know
+// only the addresses of a file that is on no known file host.
 function fromText(plan, connectors) {
   const ids = plan.from_connector_ids;
+  if (ids.length === 0) return 'Their addresses';
   return ids.length === 1 ? hostName(connectors, ids[0]) : counted(ids.length, 'file host', 'file hosts');
 }
 
@@ -69,6 +71,9 @@ export function planRows(plan, connectors) {
   }
   if (plan.on_target > 0) {
     rows.push({ label: counted(plan.on_target, 'file', 'files'), value: `Already on ${to}` });
+  }
+  if (plan.new_files > 0) {
+    rows.push({ label: counted(plan.new_files, 'new file', 'new files'), value: `Studio uploads them to ${to} at the write` });
   }
   return rows;
 }

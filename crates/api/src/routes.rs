@@ -4156,31 +4156,6 @@ pub(crate) async fn set_feed_host(
 }
 
 #[derive(Deserialize)]
-pub(crate) struct SetFilesHost {
-    files_connector_id: Option<i64>,
-}
-
-/// Give a release its default host for files (ADR 0036 item 4 and item
-/// 8).
-pub(crate) async fn set_files_host(
-    State(shared): State<Shared>,
-    Path(id): Path<i64>,
-    Json(body): Json<SetFilesHost>,
-) -> ApiResult {
-    blocking(shared, move |w| {
-        let id = FeedId(id);
-        writer(w, id)?;
-        let connector = body.files_connector_id.map(ConnectorId);
-        if let Some(connector) = connector {
-            w.collection.connector(connector)?;
-        }
-        w.collection.set_files_connector(id, connector)?;
-        to_json(w.collection.feed(id)?)
-    })
-    .await
-}
-
-#[derive(Deserialize)]
 pub(crate) struct SetFileHost {
     connector_id: Option<i64>,
 }
@@ -4568,9 +4543,28 @@ struct ReleaseMovePlan {
     /// True when the move sets a new default file host for the release
     /// (ADR 0177 item 4).
     default_changes: bool,
+    /// Each file that is not on a file host yet, with its planned address
+    /// and its address on the target. The file follows the default file
+    /// host, so the draft must give the address on the target.
+    unwritten: Vec<Unwritten>,
+}
+
+/// A new file that the feed uses, before its first write.
+struct Unwritten {
+    path: String,
+    from_url: String,
+    to_url: String,
 }
 
 impl ReleaseMovePlan {
+    /// Keep the new files on their planned file host. Each one then stays
+    /// until the write of the draft.
+    fn keep_unwritten(&mut self) {
+        for file in self.unwritten.drain(..) {
+            self.stays.push((file.path, "not_written"));
+        }
+    }
+
     /// Keep only the parts that `scope` takes (ADR 0177 item 3).
     fn limited(mut self, scope: MoveScope) -> Self {
         if !scope.takes_feed() {
@@ -4580,6 +4574,7 @@ impl ReleaseMovePlan {
         if !scope.takes_files() {
             self.files.clear();
             self.default_changes = false;
+            self.keep_unwritten();
         }
         self
     }
@@ -4600,6 +4595,7 @@ fn release_move_plan(
     let mut files = Vec::new();
     let mut on_target = 0;
     let mut stays = Vec::new();
+    let mut unwritten = Vec::new();
     for file in w.collection.library_files(id)? {
         let copies = inventory::copies(&w.collection, hosts, &file)?;
         let planned = planned_or_none(&w.collection, hosts, feed_row, &file)?;
@@ -4629,10 +4625,20 @@ fn release_move_plan(
         }
         if old_addresses.is_empty() {
             // A new file that the feed uses goes to its planned host at the
-            // write, so a move can take it only after that write.
+            // write. The move changes the default file host, so the draft
+            // must give the address of the file on the target.
             if let Some(planned) = planned.filter(|p| is_in_use(p.url.as_deref(), &addresses)) {
                 if planned.connector_id == target {
                     on_target += 1;
+                } else if let (Some(from_url), Ok(to_url)) = (
+                    planned.url,
+                    reference_url(&w.collection, hosts, feed_row, &file, target),
+                ) {
+                    unwritten.push(Unwritten {
+                        path: file.path.clone(),
+                        from_url,
+                        to_url,
+                    });
                 } else {
                     stays.push((file.path.clone(), "not_written"));
                 }
@@ -4671,6 +4677,7 @@ fn release_move_plan(
         on_target,
         stays,
         default_changes: feed_row.files_connector_id.or(feed_row.connector_id) != Some(target),
+        unwritten,
     })
 }
 
@@ -4718,6 +4725,7 @@ fn release_move_json(plan: &ReleaseMovePlan) -> Value {
         "from_connector_ids": from,
         "stays": plan.stays.iter().map(|(name, reason)| json!({ "name": name, "reason": reason })).collect::<Vec<_>>(),
         "default_changes": plan.default_changes,
+        "new_files": plan.unwritten.len(),
         "nothing_to_move": !plan.feed_moves && plan.files.is_empty() && !plan.default_changes,
         "wait_choices": moves::WAIT_CHOICES,
         "default_wait_days": moves::DEFAULT_WAIT_DAYS,
@@ -4760,6 +4768,13 @@ fn apply_release_move(
     if plan.feed_moves {
         let library = w.library().ok();
         pipeline::set_feed_host(&w.collection, hosts, library.as_ref(), id, plan.target)?;
+    }
+    if !plan.unwritten.is_empty() {
+        pipeline::edit_draft(&w.collection, id, |feed| {
+            for file in &plan.unwritten {
+                reference_feed(feed, &file.from_url, &file.to_url);
+            }
+        })?;
     }
     for file_move in &plan.files {
         w.collection.add_draft_operation(
@@ -4869,6 +4884,7 @@ fn plan_from_host(
 ) -> Result<ReleaseMovePlan, ApiError> {
     let mut plan = release_move_plan(w, hosts, feed_row, to)?;
     plan.default_changes = false;
+    plan.keep_unwritten();
     plan.files
         .retain(|file| file.old_copies.iter().any(|copy| copy.connector_id == from));
     for file in &mut plan.files {

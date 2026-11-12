@@ -23,6 +23,7 @@ The operator built `studio-desktop-app` in the release profile from local `main`
 | Wallets of the linked page of Matt Finlay | ADR 0159, task 101 | Passed. The one matching wallet was `mattfinlay@phafe.com`, with the name "Matt Finlay". `podcastindex@getalby.com` and `chadf@getalby.com` were in the fold "2 other recipients on Matt Finlay", each with its recipient name. |
 | Update from linked pages | ADR 0170, task 102 | Passed. The sheet listed the person "Matt" with "Picture", "Website" and the wallet `mattfinlay@phafe.com`, and not the other recipients of the page. After **Update**, the page of the person had the picture, the wallet as the default and the information address `https://phafe.com/mattfinlay`, with no **Save** bar and no suggestion. The rows of the sheet had a defect (finding 15). |
 | Find on Music Index for an open credit | ADR 0169, task 104 | Passed. The operator cleared the picture address of the credit HeyCitizen (Keyboardist) on "HeyCitizen's Test Album". **Find on Music Index** filled it again from the page HeyCitizen. The role "musician" of the page showed with **Replace**. The fill gave no sign (finding 17). |
+| **Check Stream** with a real Icecast mount, on the desktop | ADR 0162 items 5, 9 and 10, task 100 | Passed in the release build of local `main`. The address was `https://bastone.heycitizen.xyz/stream`. The type was not set, and the check filled it. The result line was "Live · MP3". With the type DASH, the warning was "The stream server sends MP3, but the stream type is DASH." with **Use MP3**. The server part is open (finding 18). |
 
 ## Findings
 
@@ -226,3 +227,17 @@ Owner: [ADR 0169](../adr/0169-an-open-credit-can-find-on-music-index.md) item 2.
 **Find on Music Index** fills each empty field of a credit with no sign. The operator could not see which fields changed.
 
 The operator selected this design in the questionnaire, as a drawing: a line below the row **Find on Music Index** names the filled fields, for example "Filled from Music Index: Picture address". The line stays until the next edit of the credit.
+
+### Finding 18: A Write With A Stream Type That The Server Does Not Send
+
+Owner: [ADR 0162](../adr/0162-studio-fills-and-checks-the-stream-of-a-live-show.md) items 8 and 9.
+
+The warning of ADR 0162 item 9 shows only at the field of the live show. It does not stop a write, and Review does not show it. Thus a user can write a feed with a stream type that the apps cannot play.
+
+The operator selected "Warn in Review" in the questionnaire, with this note: the design needs more thought. The operator gave these ideas:
+
+- When the stream is live and the server sends a different type, Studio must not allow the write.
+- When the stream is offline, Studio cannot do the check. Then the write can be possible.
+- The stream type does not usually change. A connected app that finds a different type can correct the feed.
+
+No decision exists at this time. An ADR must give these three cases.

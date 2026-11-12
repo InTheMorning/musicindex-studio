@@ -1,6 +1,6 @@
 # Studio V1 Task 100: Stream Type Fixes
 
-Status: Complete, with its screenshot visual checks on 2026-11-11. For packet 100c, the operator selected [ADR 0173](../adr/0173-a-live-show-problem-shows-at-its-field.md): each problem of a live show shows at its field. The human test of a paste on the iPhone is open. The human test of **Check Stream** with a real Icecast mount is open.
+Status: Complete, with its screenshot visual checks on 2026-11-11. For packet 100c, the operator selected [ADR 0173](../adr/0173-a-live-show-problem-shows-at-its-field.md): each problem of a live show shows at its field. The human test of a paste on the iPhone is open. The human test of **Check Stream** with a real Icecast mount passed on the desktop on 2026-11-12, in the release build of local `main`. Its server part is open.
 
 Owner of the rules: [ADR 0162](../adr/0162-studio-fills-and-checks-the-stream-of-a-live-show.md) items 5 and 10. Evidence: [findings of rc.21](../reviews/2026-11-10-rc21-human-test-findings.md). Step 9: [ADR 0061](../adr/0061-a-text-value-has-no-space-at-its-ends.md).
 

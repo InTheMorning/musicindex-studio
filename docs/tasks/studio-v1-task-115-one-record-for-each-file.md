@@ -2,7 +2,7 @@
 
 Decision: [ADR 0179](../adr/0179-a-release-keeps-one-library-record-for-each-file.md).
 
-Status: Complete on 2026-11-12. The four commit checks are green. A move to a host with a copy of a file adds a copy operation at the path of that copy. The write makes no host operation of it, and it removes the record of an old copy at that path (ADR 0148 item 13). The human gate is open.
+Status: Complete on 2026-11-12. The four commit checks are green. A move to a host with a copy of a file adds a copy operation at the path of that copy. The write makes no host operation of it, and it removes the record of an old copy at that path (ADR 0148 item 13). The human gate passed on 2026-11-12: the merge removed the duplicate records, and the move back to `bastone` sent no upload.
 
 ## Goal
 

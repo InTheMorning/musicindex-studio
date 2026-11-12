@@ -2,7 +2,7 @@
 
 Decision: [ADR 0177](../adr/0177-the-files-page-has-one-way-to-move.md).
 
-Status: Completed on 2026-11-11. The four commit checks are green. The visual check ran at 1280 px and 390 px. The human gate is open.
+Status: Completed on 2026-11-11. The four commit checks are green. The visual check ran at 1280 px and 390 px. The human gate passed on 2026-11-12, with a move of each value of "What moves" between two real file hosts.
 
 ## Goal
 

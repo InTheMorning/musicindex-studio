@@ -86,6 +86,20 @@ export function moveNotice(check) {
   };
 }
 
+// The delay before the notice reads a waiting podping again (ADR 0189 item 6).
+// A podping that is late, for example with no network, gets a load each 30
+// seconds, not each second.
+export const LATE_NOTICE_LOAD = 30000;
+export function nextNoticeLoad(check, nowSeconds) {
+  if (!check || !check.last_move) return null;
+  const waiting = (check.last_move.announcements || [])
+    .filter((announcement) => announcement.state === 'waiting')
+    .map((announcement) => announcement.send_at);
+  if (waiting.length === 0) return null;
+  const delay = (Math.min(...waiting) + 5 - nowSeconds) * 1000;
+  return delay < 1000 ? LATE_NOTICE_LOAD : delay;
+}
+
 // Call `work` for each item, with at most `limit` calls at one time. A failed
 // call does not stop the others.
 export async function eachLimited(items, limit, work) {

@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { outsideMark, outsideNotice, indexNotice, moveNotice, eachLimited, OUTSIDE_LIMIT, panelSet, stateMark } from '../ui/outsidecheck.js';
+import { outsideMark, outsideNotice, indexNotice, moveNotice, nextNoticeLoad, LATE_NOTICE_LOAD, eachLimited, OUTSIDE_LIMIT, panelSet, stateMark } from '../ui/outsidecheck.js';
 import { pageSequence, tierError } from '../ui/pages.js';
 
 test('A tile has a mark for a change and a move, and none for an index difference (ADR 0150 items 2, 3 and 5)', () => {
@@ -65,6 +65,25 @@ test('A Studio move notice has no send button with no public address (ADR 0184 i
   assert.doesNotMatch(notice.lines[0].text, /: \.$|: null/);
   assert.equal(notice.lines[0].action, undefined);
   assert.equal(notice.lines[1].action, undefined);
+});
+
+test('ADR 0189 item 6: a waiting podping loads again five seconds after its send time', () => {
+  const check = { last_move: { announcements: [
+    { state: 'waiting', send_at: 110 },
+    { state: 'waiting', send_at: 108 },
+    { state: 'sent', send_at: 100 },
+  ] } };
+  assert.equal(nextNoticeLoad(check, 100), 13000);
+  assert.equal(nextNoticeLoad(check, 120), LATE_NOTICE_LOAD, 'ADR 0189 item 6: a late podping loads each 30 seconds. Fix: give LATE_NOTICE_LOAD after the send time.');
+});
+
+test('ADR 0189 item 6: sent, failed, not-sent, and absent notices have no next load', () => {
+  for (const state of ['sent', 'failed', 'not_sent']) {
+    assert.equal(nextNoticeLoad({ last_move: { announcements: [{ state, send_at: 110 }] } }, 100), null);
+  }
+  assert.equal(nextNoticeLoad({ last_move: { announcements: [] } }, 100), null);
+  assert.equal(nextNoticeLoad(null, 100), null);
+  assert.equal(nextNoticeLoad({ announcements: [{ state: 'waiting', send_at: 110 }] }, 100), null);
 });
 
 test('eachLimited runs at most the limit and continues after a failure (ADR 0150 item 11)', async () => {

@@ -77,6 +77,8 @@ The operator agreed to the name **Use This Copy**. The other copy shows "Used by
 
 The row of one file also has three controls that change the copy that the feed uses: **Reference**, **Move to {host}** and the select menu "File host of this file". ADR 0177 gave the release one way to move. The operator agreed that the ADR of finding 1 also examines these three controls.
 
+On 2026-11-12 the operator selected this answer in the questionnaire: the file row has no **Move to {host}**. The copy that the feed uses has no button. Each other copy has **Use This Copy** and **Delete**. A move of one file is these two steps. The move of the release on the **Files** page moves all files. The select menu "File host of this file" has no answer at this time.
+
 ### Finding 6: The Pencil Of A Group In The Left Panel
 
 Owner: [ADR 0165](../adr/0165-the-left-panel-marks-the-state-of-each-feed.md) items 1 to 4.

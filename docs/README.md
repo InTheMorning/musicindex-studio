@@ -189,6 +189,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0185: A write gives only real changes of a credit](adr/0185-a-write-gives-only-real-changes-of-a-credit.md)
 - [ADR 0186: The merge notice gives the times of the change](adr/0186-the-merge-notice-gives-the-times-of-the-change.md)
 - [ADR 0187: Review checks the stream type of a live show](adr/0187-review-checks-the-stream-type-of-a-live-show.md)
+- [ADR 0188: The README is a landing page for an artist](adr/0188-the-readme-is-a-landing-page-for-an-artist.md)
 
 ## Plans
 
@@ -199,6 +200,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Research request on the Phase 9 connectors](plans/research-phase-9-connectors-request.md)
 - [Research request on a feed check with repairs](plans/research-feed-check-request.md)
 - [Research request on the stream of a live item](plans/research-live-item-stream-request.md)
+- [Research request on the README](plans/research-readme-pilot-request.md)
 
 ## Tasks
 

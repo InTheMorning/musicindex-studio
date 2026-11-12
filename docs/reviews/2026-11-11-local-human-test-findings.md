@@ -68,6 +68,8 @@ The operator selected the name "Old files to delete" in the questionnaire.
 
 ### Finding 4: A Move Refuses An Old Copy Of The Same Feed
 
+Decision: [ADR 0178](../adr/0178-a-move-replaces-a-file-at-the-feed-path-in-studio.md). Task 114 gives the work, and it is complete.
+
 Owner: [ADR 0126](../adr/0126-studio-refuses-a-bad-move-link.md) items 19 and 21.
 
 The operator moved only the feed file of "HeyCitizen's Test Album" from `bastone` to `heycitizen`. The move sheet showed "Something went wrong." and "a file exists at TestAlbum/test.xml on the new file host already".
@@ -133,6 +135,8 @@ Right after the move of the feed file, the release page showed "Music Index read
 
 ### Finding 9: A Move Back Gives Duplicate Uploads With New Names
 
+Decision: [ADR 0179](../adr/0179-a-release-keeps-one-library-record-for-each-file.md). Task 115 gives the work, and it is complete.
+
 Owner: [ADR 0148](../adr/0148-a-move-keeps-the-old-files-until-the-user-reviews-the-deletion.md) items 2 and 3, and [ADR 0177](../adr/0177-the-files-page-has-one-way-to-move.md) item 3.
 
 After step 2b, the feed and the four media files of "HeyCitizen's Test Album" were on `heycitizen`. The operator then moved "The feed file and the release files" to `bastone`. The feed part of Review was correct, with the return warning. The media part was not correct:
@@ -160,11 +164,15 @@ The plan in `release_move_plan` also makes a copy operation for record 13. But `
 
 ### Finding 10: Review Stays Open After A Discard
 
+Fix: commit `7c581a8`. No decision is necessary.
+
 Owner: [ADR 0007](../adr/0007-draft-diff-write-and-announce.md).
 
 After **Discard the Draft**, the sheet "Review changes" stayed open. It showed "The draft is saved. The hosted file does not change until you write it." and **Examine the Changes**. No draft was there. The operator closed the sheet with ✕. The fix closes the sheet after a discard.
 
 ### Finding 11: The Focus Ring Of The First Row Of The Left Panel
+
+Fix: commit `dea1bb3`. No decision is necessary.
 
 Owner: [ADR 0172](../adr/0172-a-list-is-one-tab-stop.md).
 

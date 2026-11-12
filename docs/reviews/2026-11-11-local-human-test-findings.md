@@ -241,3 +241,18 @@ The operator selected "Warn in Review" in the questionnaire, with this note: the
 - The stream type does not usually change. A connected app that finds a different type can correct the feed.
 
 No decision exists at this time. An ADR must give these three cases.
+
+### Finding 19: The Scope Of The Collection Buttons Is Not Clear
+
+Owner: [ADR 0176](../adr/0176-the-user-controls-each-collection.md) items 2, 3 and 10.
+
+The section "Collections" showed nine buttons for two collections. **Copy This Collection…** and **Export This Collection…** are below the list, and the page does not tell that "This" is the open collection.
+
+The operator selected this design in the questionnaire, as a drawing:
+
+- Each row of a collection has one menu **Actions** with the actions of that collection only.
+- The open collection has **Rename…**, **Copy…** and **Export…**.
+- A collection that is not open has **Open**, **Rename…**, **Export…**, **Replace with a File…** and **Delete…**.
+- Below the list, only **New Collection…** and **Import an Account File…** stay.
+
+An export of a collection that is not open is new. At this time, only the delete sheet has **Export First…** for such a collection (ADR 0176 item 7).

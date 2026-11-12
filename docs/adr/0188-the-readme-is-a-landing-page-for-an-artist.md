@@ -1,9 +1,9 @@
 # ADR 0188: The README Is A Landing Page For An Artist
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-11-12
 - Owner: operator
-- Answers: on 2026-11-12, the operator selected the quick start with the installer, and no section "Contribute", through the questionnaire.
+- Accepted: 2026-11-12 by the operator, through the questionnaire. The operator selected the quick start with the installer, and no section "Contribute".
 - Technical choices: items 4, 7 and 8 are choices of the planning model.
 - Changes: the rule in `AGENTS.md` that `README.md` holds only links to `docs/user-guide/`. That rule named the global documentation rules as its owner, but no global rule has that text.
 - Source: P1 of the [research note on the README](../plans/research-readme-pilot-request.md), P1. It applies the README contract of the research repository.

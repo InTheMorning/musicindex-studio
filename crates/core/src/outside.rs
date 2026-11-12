@@ -5,6 +5,7 @@
 //! nothing to a host and changes no draft. A change still goes through a new
 //! read or the merge of ADR 0129.
 
+use crate::announce::{self, AnnouncementState};
 use crate::collection::{Collection, CollectionError, FeedId, FeedRow, OutsideRow};
 use crate::digest::sha256_hex;
 use crate::discover::MAX_FEED_BYTES;
@@ -16,6 +17,97 @@ use crate::web::Web;
 use crate::xml::Document;
 
 const SETTING: &str = "check_outside";
+
+/// The podping state for one address announced by the last move.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct MoveAnnouncement {
+    /// The address that Studio announced.
+    pub url: String,
+    /// `waiting`, `sent`, `failed`, or `not_sent`.
+    pub state: &'static str,
+    /// The next send time for a waiting announcement.
+    pub send_at: Option<i64>,
+    /// The completion time for a sent or failed announcement.
+    pub finished_at: Option<i64>,
+    /// The last error of a failed announcement.
+    pub error: Option<String>,
+}
+
+/// The last feed move that Studio completed and its announcement states.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct LastWrittenMove {
+    /// The address of the feed before the move.
+    pub from_url: Option<String>,
+    /// The time of the move, in seconds after the Unix epoch.
+    pub moved_at: i64,
+    /// The announcement state of each address, new address first.
+    pub announcements: Vec<MoveAnnouncement>,
+}
+
+/// Give the last completed move and its queued announcement states (ADR 0184
+/// items 3 and 5).
+///
+/// # Errors
+///
+/// Gives a [`CollectionError`] when SQLite fails.
+pub fn last_written_move(
+    collection: &Collection,
+    row: &FeedRow,
+) -> Result<Option<LastWrittenMove>, CollectionError> {
+    let Some(movement) = collection.written_feed_move(row.id)? else {
+        return Ok(None);
+    };
+    let queued = announce::recent(collection, row.id)?;
+    let announced_at_move = |url: &str| {
+        queued.iter().find(|announcement| {
+            announcement.url == url && announcement.created_at >= movement.moved_at
+        })
+    };
+    let mut announcements = Vec::new();
+    for url in [row.public_url.as_deref(), movement.from_url.as_deref()]
+        .into_iter()
+        .flatten()
+    {
+        let status = match announced_at_move(url) {
+            Some(announcement) => match announcement.state {
+                AnnouncementState::Waiting | AnnouncementState::Sending => MoveAnnouncement {
+                    url: url.to_owned(),
+                    state: "waiting",
+                    send_at: Some(announcement.next_at),
+                    finished_at: None,
+                    error: None,
+                },
+                AnnouncementState::Sent => MoveAnnouncement {
+                    url: url.to_owned(),
+                    state: "sent",
+                    send_at: None,
+                    finished_at: announcement.finished_at,
+                    error: None,
+                },
+                AnnouncementState::Failed => MoveAnnouncement {
+                    url: url.to_owned(),
+                    state: "failed",
+                    send_at: None,
+                    finished_at: announcement.finished_at,
+                    error: announcement.last_error.clone(),
+                },
+            },
+            None => MoveAnnouncement {
+                url: url.to_owned(),
+                state: "not_sent",
+                send_at: None,
+                finished_at: None,
+                error: None,
+            },
+        };
+        announcements.push(status);
+    }
+    Ok(Some(LastWrittenMove {
+        from_url: movement.from_url,
+        moved_at: movement.moved_at,
+        announcements,
+    }))
+}
 
 /// What the check found.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -229,6 +321,39 @@ mod tests {
             .unwrap();
         let row = collection.feed(id).unwrap();
         (collection, row)
+    }
+
+    #[test]
+    fn a_move_keeps_its_time_and_the_state_of_its_queued_podpings() {
+        let (collection, row) = fixture();
+        collection
+            .record_written_feed_move(row.id, Some("https://old.example/a.xml"), 100)
+            .unwrap();
+        announce::queue(
+            &collection,
+            row.id,
+            &[
+                announce::PlannedAnnouncement {
+                    url: "https://r2.example/a.xml".to_owned(),
+                    podping: true,
+                },
+                announce::PlannedAnnouncement {
+                    url: "https://old.example/a.xml".to_owned(),
+                    podping: true,
+                },
+            ],
+            &announce::Timing::DEFAULT,
+            100,
+        )
+        .unwrap();
+
+        let found = last_written_move(&collection, &row).unwrap().unwrap();
+        assert_eq!(found.from_url.as_deref(), Some("https://old.example/a.xml"));
+        assert_eq!(found.moved_at, 100);
+        assert_eq!(found.announcements.len(), 2);
+        assert_eq!(found.announcements[0].state, "waiting");
+        assert_eq!(found.announcements[0].send_at, Some(130));
+        assert_eq!(found.announcements[1].url, "https://old.example/a.xml");
     }
 
     #[test]

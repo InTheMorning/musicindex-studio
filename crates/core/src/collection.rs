@@ -633,6 +633,14 @@ UPDATE library_files SET connector_id = NULL;
     r"
 ALTER TABLE drafts ADD COLUMN started_at INTEGER;
 ",
+    // ADR 0184 item 3: keep the last feed move that Studio completed.
+    r"
+CREATE TABLE written_feed_moves (
+    feed_id INTEGER PRIMARY KEY REFERENCES feeds(id) ON DELETE CASCADE,
+    from_url TEXT,
+    moved_at INTEGER NOT NULL
+);
+",
 ];
 
 /// `root` as a relative path under `data_dir`, when it is a folder inside
@@ -947,6 +955,15 @@ pub struct OutsideRow {
     pub changed: bool,
     /// The new address when the last check found a move.
     pub moved_url: Option<String>,
+}
+
+/// The last feed move that Studio completed (ADR 0184 item 3).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct WrittenFeedMove {
+    /// The feed address before the move.
+    pub from_url: Option<String>,
+    /// The time of the move, in seconds after the Unix epoch.
+    pub moved_at: i64,
 }
 
 /// A feed as the collection keeps it.
@@ -1789,6 +1806,50 @@ impl Collection {
             })?;
         fill_addresses(&self.db, &mut row)?;
         Ok(row)
+    }
+
+    /// Record the last feed move that Studio completed.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn record_written_feed_move(
+        &self,
+        feed: FeedId,
+        from_url: Option<&str>,
+        moved_at: i64,
+    ) -> Result<(), CollectionError> {
+        self.db.execute(
+            "INSERT INTO written_feed_moves (feed_id, from_url, moved_at)
+             VALUES (?1, ?2, ?3)
+             ON CONFLICT (feed_id) DO UPDATE SET from_url = ?2, moved_at = ?3",
+            params![feed.0, from_url, moved_at],
+        )?;
+        Ok(())
+    }
+
+    /// Give the last feed move that Studio completed.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn written_feed_move(
+        &self,
+        feed: FeedId,
+    ) -> Result<Option<WrittenFeedMove>, CollectionError> {
+        Ok(self
+            .db
+            .query_row(
+                "SELECT from_url, moved_at FROM written_feed_moves WHERE feed_id = ?1",
+                [feed.0],
+                |row| {
+                    Ok(WrittenFeedMove {
+                        from_url: row.get(0)?,
+                        moved_at: row.get(1)?,
+                    })
+                },
+            )
+            .optional()?)
     }
 
     /// The counts that the export and the import show (ADR 0107 items 4

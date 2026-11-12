@@ -1652,25 +1652,24 @@ pub(crate) async fn outside_check(
     Query(query): Query<OutsideQuery>,
 ) -> ApiResult {
     let id = FeedId(id);
-    let start = blocking(Arc::clone(&shared), move |w| {
-        if !outside::is_on(&w.collection)? {
-            return Ok(None);
-        }
-        Ok(Some((
-            w.collection.feed(id)?,
-            w.web.clone(),
-            w.index.clone(),
-        )))
+    let (enabled, row, web, index, last_move) = blocking(Arc::clone(&shared), move |w| {
+        let enabled = outside::is_on(&w.collection)?;
+        let row = w.collection.feed(id)?;
+        let last_move = outside::last_written_move(&w.collection, &row)?;
+        Ok((enabled, row, w.web.clone(), w.index.clone(), last_move))
     })
     .await?;
-    let Some((row, web, index)) = start else {
-        return Ok(Json(
-            json!({ "enabled": false, "state": null, "read": false }),
-        ));
-    };
+    if !enabled {
+        return Ok(Json(json!({
+            "enabled": false,
+            "state": null,
+            "read": false,
+            "last_move": last_move,
+        })));
+    }
     let Some(address) = outside::address_of(&row) else {
         return Ok(Json(
-            json!({ "enabled": true, "state": null, "read": false }),
+            json!({ "enabled": true, "state": null, "read": false, "last_move": last_move }),
         ));
     };
     let ask_index = query.index;
@@ -1703,6 +1702,7 @@ pub(crate) async fn outside_check(
             "index_url": index_url,
             "own_url": address,
             "connected": row.connector_id.is_some(),
+            "last_move": last_move,
         })))
     })
     .await
@@ -3388,6 +3388,39 @@ pub(crate) async fn list_announcements(
         let id = FeedId(id);
         w.collection.feed(id)?;
         to_json(announce::recent(&w.collection, id)?)
+    })
+    .await
+}
+
+/// `POST /feeds/{id}/announcements`: queue a podping without a write
+/// (ADR 0184 item 10).
+pub(crate) async fn send_announcement(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let id = FeedId(id);
+        let row = w.collection.feed(id)?;
+        let Some(url) = outside::address_of(&row) else {
+            return Err(ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "no_public_address",
+                "This feed has no public address to announce.",
+            ));
+        };
+        let now = crate::announcer::now();
+        announce::queue(
+            &w.collection,
+            id,
+            &[announce::PlannedAnnouncement {
+                url: url.clone(),
+                podping: true,
+            }],
+            &w.announce_timing,
+            now,
+        )?;
+        w.announcer.wake();
+        Ok(Json(json!({ "url": url, "queued": true })))
     })
     .await
 }

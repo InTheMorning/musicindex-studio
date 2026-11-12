@@ -1638,6 +1638,22 @@ test('an open credit fills empty values and offers Replace or Add when values di
   assert.deepEqual(creditFillRows(credit, { wallets: ['a@x.example'], feed_guid: 'g-1' }), [], 'A key that is not a field of the credit gives no row.');
 });
 
+test('the line after a fill names the filled fields, and the next edit clears it (ADR 0182 item 20)', async () => {
+  const { creditFillRows, creditFillValue, creditFillNote, creditFillNoteText } = await import('../ui/people.js');
+  const credit = { name: 'Own name', img: null, href: '', npub: null };
+  const fill = creditFillRows(credit, { name: 'Page name', img: 'https://page.example/p.jpg', npub: 'npub1page' }).filter((row) => row.action === 'fill');
+  const after = fill.reduce((next, row) => ({ ...next, [row.id]: creditFillValue(next, row) }), credit);
+  const note = creditFillNote(fill, after);
+  assert.equal(creditFillNoteText(note, after), 'Filled from Music Index: Picture address, Nostr key',
+    'ADR 0182 item 20: name each filled field after the fill. Fix creditFillNote in crates/api/ui/people.js.');
+  assert.equal(creditFillNoteText(note, { ...after }), note.text,
+    'ADR 0182 item 20: a copy with the same values keeps the line. Fix creditFillNoteText in crates/api/ui/people.js.');
+  assert.equal(creditFillNoteText(note, { ...after, href: 'https://own.example' }), null,
+    'ADR 0182 item 20: the next edit of the credit clears the line. Fix creditFillNoteText in crates/api/ui/people.js.');
+  assert.equal(creditFillNote([], credit), null,
+    'ADR 0182 item 20: a fill with no filled field gives no line. Fix creditFillNote in crates/api/ui/people.js.');
+});
+
 test('addPickLabel uses title case and the plural', () => {
   assert.equal(addPickLabel(1, 'Person', 'People'), 'Add 1 Person');
   assert.equal(addPickLabel(2, 'Person', 'People'), 'Add 2 People');

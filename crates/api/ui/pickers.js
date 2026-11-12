@@ -215,7 +215,8 @@ export function PickFold({ id, title, note, lead, rows, startOpen = foldStartsOp
 
 // `fields` is the content of the form. With no `fields`, as in an open credit
 // (ADR 0169 item 1), the layout has no pinned section. `musicindex` gives the
-// title, the summary and `onOpen` of its row. Each entry of `lists` has a
+// title, the summary and `onOpen` of its row, and an optional `note` below the
+// row. Each entry of `lists` has a
 // title and rows.
 export function PickerLayout({ id, onSubmit, fields, notice, musicindex, lists }) {
   const form = useRef(null);
@@ -231,7 +232,8 @@ export function PickerLayout({ id, onSubmit, fields, notice, musicindex, lists }
       <div class="group"><button class="link-row" type="button" onClick=${musicindex.onOpen}>
         <span class="text"><span class="label">${musicindex.title}</span>
           <span class="summary">${musicindex.summary}</span></span>
-        <span class="go" aria-hidden="true">›</span></button></div></section>
+        <span class="go" aria-hidden="true">›</span></button></div>
+      ${musicindex.note && html`<p class="hint" role="status">${musicindex.note}</p>`}</section>
     ${lists.filter((list) => list.rows.length > 0).map((list) => html`<${PickFold} key=${list.title} title=${list.title} rows=${list.rows} onClick=${showForm} />`)}
   </form>`;
 }

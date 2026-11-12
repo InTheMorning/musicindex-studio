@@ -1769,6 +1769,22 @@ export function creditFillRows(current, page) {
   });
 }
 
+// The labels of the fields of an open credit, for the rows and the line of a
+// fill from Music Index.
+export const CREDIT_FIELD_LABELS = { name: 'Name', role: 'Role', group: 'Group', img: 'Picture address', href: 'Information address', npub: 'Nostr key' };
+
+// The line after a fill of an open credit (ADR 0182 item 20). `rows` are the
+// rows of `creditFillRows`, and `after` is the credit after the fill. With no
+// filled field, it gives null.
+export function creditFillNote(rows, after) {
+  const names = (rows || []).filter((row) => row.action === 'fill').map((row) => CREDIT_FIELD_LABELS[row.id] || row.id);
+  return names.length ? { text: `Filled from Music Index: ${names.join(', ')}`, values: JSON.stringify(after) } : null;
+}
+
+// The text of the line while the credit has the values of the fill. The next
+// edit of the credit changes its values, and the line goes (ADR 0182 item 20).
+export const creditFillNoteText = (note, person) => (note && note.values === JSON.stringify(person) ? note.text : null);
+
 // Apply one selected fill row while preserving any values already in a list.
 export function creditFillValue(current, row) {
   if (row.action === 'add') {

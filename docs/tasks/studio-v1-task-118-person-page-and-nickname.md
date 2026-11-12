@@ -2,7 +2,9 @@
 
 Decision: [ADR 0182](../adr/0182-the-page-of-a-person-starts-with-its-links-and-has-a-nickname.md).
 
-Status: In progress. Packets 118a to 118d are complete. Each save of a person sends the nickname. **Change** in the sheet "Change the Nickname" makes a change that is not saved, and **Save** keeps it. The People list sorts and groups "A to Z" by the shown name, and the initials use the shown name.
+Status: Complete on 2026-11-12, with packet 118e. The mechanical checks and the screenshot visual check passed. The human gate is open. Packets 118a to 118e are complete.
+
+Each save of a person sends the nickname. **Change** in the sheet "Change the Nickname" makes a change that is not saved, and **Save** keeps it. The People list sorts and groups "A to Z" by the shown name, and the initials use the shown name.
 
 In the screenshot check of 118b, the head, the sheet and the list showed the nickname. The check used 1280 px in the light theme and 390 px in the dark theme. `$edges()` and `$overflow()` gave no result.
 
@@ -15,6 +17,8 @@ In the screenshot check of 118d, the sheet "Add a Person" showed the groups "Alr
 In the same check, a click on the Music Index page added the person and opened the sheet "From Music Index: Ann Bell Music". After **Back** and **Forward**, the sheet did not open again. The check used 1280 px in the light theme and 390 px in the dark theme. `$edges()` and `$overflow()` gave no result.
 
 The search uses `GET /musicindex/search` and shows only its artist and label pages, so 118d added no route.
+
+In the screenshot check of 118e, a fill of an open credit showed the line "Filled from Music Index: Picture address, Information address" below **Find on Music Index**. The line stayed after the save of the draft. After an edit of the information address, the line went. The check used 1280 px in the light theme and 390 px in the dark theme. `$edges()` and `$overflow()` gave no result.
 
 ## Goal
 

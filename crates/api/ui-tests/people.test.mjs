@@ -5,6 +5,7 @@ import {
   changeSetView, peopleSections, PEOPLE_EMPTY, PEOPLE_SERVER_NOTE, suggestionRow, personRow, displayName, makePersonStart, makePersonBody, sheetFeeds,
   checkedIds, toggledRow, reviewLabel, operationBody, addResultLine,
   lookupAddress, showFindEmpty,
+  nicknameBody, afterNicknameSave,
 } from '../ui/people.js';
 import { pageSequence, tierError } from '../ui/pages.js';
 
@@ -471,9 +472,15 @@ test('the saved values and the pending changes of a person (ADR 0116 items 1 to 
   assert.ok(isPending(saved, role, 'usual_role'));
   assert.deepEqual(saveBody(saved, role), { fields: { name: 'Mary Kate', nickname: '', usual_role: 'Vocals', usual_group: 'Band', img: '', href: '' } });
   const nickname = { ...saved, nickname: 'MK' };
-  assert.deepEqual(pendingKeys(saved, nickname), ['nickname'], 'ADR 0116 item 1: a nickname edit is pending. Fix the person controls in crates/api/ui/people.js.');
-  assert.deepEqual(saveBody(saved, nickname), { fields: { name: 'Mary Kate', nickname: 'MK', usual_role: 'Vocals', usual_group: '', img: '', href: '' } },
-    'ADR 0182 item 13: save the nickname in fields. Fix saveBody in crates/api/ui/people.js.');
+  assert.deepEqual(nicknameBody(saved, 'MK'), { name: 'Mary Kate', nickname: 'MK', usual_role: 'Vocals', usual_group: '', img: '', href: '' },
+    'ADR 0194 item 2: the nickname save sends the saved fields and the new nickname. Fix nicknameBody in crates/api/ui/people.js.');
+  const pendingName = { ...saved, name: 'Mary' };
+  const nicknameSaved = afterNicknameSave(saved, pendingName, 'MK');
+  assert.equal(nicknameSaved.saved.name, 'Mary Kate');
+  assert.equal(nicknameSaved.shown.name, 'Mary');
+  assert.equal(nicknameSaved.shown.nickname, 'MK');
+  assert.deepEqual(pendingKeys(nicknameSaved.saved, nicknameSaved.shown), ['name'],
+    'ADR 0194 items 1 and 2: the nickname is not pending, and the name stays pending. Fix afterNicknameSave in crates/api/ui/people.js.');
   const address = { ...saved, default_address: keyValue(KEY('new@x.example')) };
   assert.deepEqual(pendingKeys(saved, address), ['default_address']);
   assert.deepEqual(saveBody(saved, address), { default_address: KEY('new@x.example') });
@@ -1900,7 +1907,7 @@ test('a page that differs gives suggestions, and a page that agrees gives none (
   assert.deepEqual(pageSuggestions(differs, { ...values, pages: [] }).img, [], 'A removed page gives no suggestion.');
 });
 
-test('page suggestions give Add and its accessible name for every value type (ADR 0182 item 1)', () => {
+test('page suggestions give Use for a picture and website and Add for each list value (ADR 0194 items 6 and 7)', () => {
   const values = { img: '', href: '', keys: [], wallets: [], pages: [PAGE] };
   const page = { ...PAGE, missing: false, picture: 'https://img.example/a.png', website: 'https://ann.example', npub: 'npub1ann',
     wallets: [{ key: { address: 'ann@x.example' }, recipient_type: 'lnaddress' }],
@@ -1908,12 +1915,12 @@ test('page suggestions give Add and its accessible name for every value type (AD
   const rows = pageSuggestions([page], values);
   const all = [...rows.img, ...rows.href, ...rows.keys, ...rows.wallets, ...rows.otherRecipients.flatMap((fold) => fold.rows)];
   assert.deepEqual(all.map((row) => [row.button, row.ariaLabel]), [
-    ['Add', 'Add https://img.example/a.png'], ['Add', 'Add https://ann.example'], ['Add', 'Add npub1ann'],
+    ['Use', 'Use https://img.example/a.png'], ['Use', 'Use https://ann.example'], ['Add', 'Add npub1ann'],
     ['Add', 'Add ann@x.example'], ['Add', 'Add other@x.example'],
-  ], 'ADR 0182 item 1: name each Add button for its value. Fix pageSuggestions in crates/api/ui/people.js.');
+  ], 'ADR 0194 items 6 and 7: Use for the picture and the website, Add for a list value, and name each button for its value. Fix pageSuggestions in crates/api/ui/people.js.');
 });
 
-import { addAllPageSuggestions, hasPageSuggestions, hasLinkedPages, linkedPageChanges, linkedPageSelection, linkedPageChangeLines } from '../ui/people.js';
+import { addAllPageSuggestions, hasPageSuggestions, hasLinkedPages, linkedPageChanges, linkedPageSelection, linkedPageChangeLines, linkedPageBody } from '../ui/people.js';
 
 test('linked page updates add matching wallets and review each changed value', () => {
   const values = { img: '', href: '', keys: [], wallets: [], pages: [PAGE] };
@@ -1930,7 +1937,11 @@ test('linked page updates add matching wallets and review each changed value', (
     { kind: 'key', label: 'Nostr key', value: 'npub1cy' },
     { kind: 'wallet', label: 'Wallet', value: 'cy@x.example' },
   ], 'ADR 0182 item 19: show each added value. Fix linkedPageChangeLines in crates/api/ui/people.js.');
-  assert.deepEqual(linkedPageSelection(batch), [2], 'Each person starts selected.');
+  const selection = linkedPageSelection(batch);
+  assert.deepEqual(selection, ['2:picture:https://img.example/c.png', '2:key:npub1cy', '2:wallet:cy@x.example'], 'Each value starts selected.');
+  assert.deepEqual(linkedPageBody(batch, [selection[0], selection[2]]), { people: [{ ...batch[0], keys: [] }] },
+    'ADR 0194 item 4: Update sends only the selected values. Fix linkedPageBody in crates/api/ui/people.js.');
+  assert.deepEqual(linkedPageBody(batch, []), { people: [] }, 'ADR 0194 item 4: a person with no selected value does not change. Fix linkedPageBody in crates/api/ui/people.js.');
   assert.equal(hasLinkedPages([{ pages: [] }, { pages: [PAGE] }]), true);
   assert.equal(hasLinkedPages([{ pages: [] }]), false);
 });

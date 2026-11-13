@@ -29,7 +29,7 @@ import {
   walletToPersonLabel, correctCount, correctButtonLabel, correctTitle, correctFeedIds, correctStart, correctKeyStart, correctOptions,
   correctKeyChoices, correctBody, correctAnySelected, correctRows, CORRECT_OMITTED, CORRECT_EMPTY,
   moreRows, NO_OTHER_TEXT, mergeTitle, mergeHint, mergeLinks, mergeResult, mergeBody, afterMissing,
-  detailList, LINK_HINT, LINK_EMPTY, linkChoices, linkRows, pickLink, pageSuggestions, addAllPageSuggestions, hasPageSuggestions, hasLinkedPages, linkedPageChanges, linkedPageSelection, linkedPageChangeLines, creditPosition, afterCredits, savedValues, pendingKeys, pendingStatus, isPending, saveBody, leaveText, checkGroups, checkFeedLines, checkKeys, checkIntro, CHANGE_ROWS, CHANGE_NOTE,
+  detailList, LINK_HINT, LINK_EMPTY, linkChoices, linkRows, pickLink, pageSuggestions, addAllPageSuggestions, hasPageSuggestions, hasLinkedPages, linkedPageChanges, linkedPageSelection, linkedPageChangeLines, linkedPageBody, creditPosition, afterCredits, savedValues, pendingKeys, pendingStatus, isPending, saveBody, nicknameBody, afterNicknameSave, leaveText, checkGroups, checkFeedLines, checkKeys, checkIntro, CHANGE_ROWS, CHANGE_NOTE,
   CHECK_TITLE, checkSummary, differenceBlocks, openLabel, useValuesLabel,
   recipientChoices, creditChoices, fundingChoices, ALREADY_VALUE, FIND_HINT, FIND_EMPTY, FIND_WAIT, FILL_NOTE, lookupGroups, lookupKind, hasLine, fillRows, splitFillRows, linkName, linkRow, linkFillButton, VALUES_WAIT, ALREADY_LINKED, fillPatch, fillSource, musicindexFeedUrl,
   creditOffers, creditAddTitle, creditRemoveTitle, creditAddNote, creditPublicNote, creditRemoveNote, creditOperation, REMOVE_CREDIT_OPERATION,
@@ -221,11 +221,13 @@ function LinkedPageReview({ people, onClose, onDone }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   useEffect(() => { setSelected(linkedPageSelection(people || [])); }, [people]);
-  // The core saves the selected people (ADR 0170 item 6).
+  // The core saves the selected values (ADR 0194 item 4).
   const save = async () => {
+    const body = linkedPageBody(people, selected);
+    if (body.people.length === 0) return;
     setBusy(true); setError(null);
     try {
-      await api('/people/linked-page-changes', { method: 'POST', body: { people: people.filter((row) => selected.includes(row.person_id)) } });
+      await api('/people/linked-page-changes', { method: 'POST', body });
       onDone(); ref.current.close();
     } catch (e) { setError(e); }
     finally { setBusy(false); }
@@ -234,12 +236,13 @@ function LinkedPageReview({ people, onClose, onDone }) {
     ${people && html`<header><h2 id="linked-review-title">Update from Linked Pages</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button></header>
       <div class="body">${people.length === 0 && html`<p class="note">${LINKED_NONE}</p>`}
-        ${people.length > 0 && html`<div class="group rows">${people.map((row) => html`<label class="link-row use-row review-row" key=${row.person_id}>
-        <input type="checkbox" checked=${selected.includes(row.person_id)} onChange=${() => setSelected((ids) => ids.includes(row.person_id)
-          ? ids.filter((id) => id !== row.person_id) : [...ids, row.person_id])} />
-        <span class="text"><span class="label">${row.name}</span>${linkedPageChangeLines(row).map((line) => html`<span class="review-value" key=${`${line.kind}-${line.value}`}>
+        ${people.length > 0 && html`<div class="group rows">${people.map((row) => html`<div class="review-row" key=${row.person_id}>
+        <div class="link-row static"><span class="text"><span class="label">${row.name}</span></span></div>
+        ${linkedPageChangeLines(row).map((line) => { const key = `${row.person_id}:${line.kind}:${line.value}`; return html`<label class="link-row use-row review-value" key=${key}>
+          <input type="checkbox" checked=${selected.includes(key)} onChange=${() => setSelected((ids) => ids.includes(key)
+            ? ids.filter((id) => id !== key) : [...ids, key])} />
           ${line.kind === 'picture' && html`<${PersonArt} person=${{ img: line.value, name: row.name }} small />`}
-          <span class="text"><span class="label">${line.label}</span><span class="summary mono address-text">${line.value}</span></span></span>`)}</span></label>`)}</div>`}
+          <span class="text"><span class="label">${line.label}</span><span class="summary mono address-text">${line.value}</span></span></label>`; })}</div>`)}</div>`}
         <${ErrorNotice} error=${error} /></div><footer><button class="button" type="button" disabled=${busy} onClick=${() => ref.current.close()}>Cancel</button>
         <button class="button primary" type="button" disabled=${busy || selected.length === 0} onClick=${save}>Update</button></footer>`}
   </dialog>`;
@@ -836,13 +839,14 @@ export function PersonPage({ id, feeds, go }) {
   // The pending changes of the fields, the default address and the links
   // (ADR 0116 items 1 to 6). The saved values come from each read of the person.
   const [values, setValues] = useState(null);
+  const [savedOverride, setSavedOverride] = useState(null);
   const [saving, setSaving] = useState(false);
   const [nicknameOpen, setNicknameOpen] = useState(false);
   const [saveFailure, setSaveFailure] = useState(null);
   // The line of each filled field. Save, Discard and a new read clear it.
   const [sources, setSources] = useState({});
-  useEffect(() => { if (data) { setValues(savedValues(data.person)); setSaveFailure(null); setSources({}); } }, [data]);
-  const saved = data ? savedValues(data.person) : null;
+  useEffect(() => { if (data) { setValues(savedValues(data.person)); setSavedOverride(null); setSaveFailure(null); setSources({}); } }, [data]);
+  const saved = data ? (savedOverride || savedValues(data.person)) : null;
   const shown = values || saved;
   const keys = saved ? pendingKeys(saved, shown) : [];
   const dirty = keys.length > 0;
@@ -1086,7 +1090,12 @@ export function PersonPage({ id, feeds, go }) {
     onQuery=${setFinding} onClose=${() => setFinding(null)} onPick=${setPicked} onLink=${update} />
   <${ValuesSheet} personId=${person.id} row=${picked} feeds=${feeds} shown=${shown}
     onBack=${() => { setPicked(null); setFinding(person.name); }} onClose=${() => setPicked(null)} onFill=${fill} />
-  <${NicknameSheet} open=${nicknameOpen} value=${shown.nickname} onChange=${(nickname) => update({ nickname })}
+  <${NicknameSheet} open=${nicknameOpen} value=${shown.nickname} onChange=${async (nickname) => {
+    const next = afterNicknameSave(saved, shown, nickname);
+    await api(`/people/${id}`, { method: 'PATCH', body: nicknameBody(saved, nickname) });
+    setSavedOverride(next.saved);
+    setValues(next.shown);
+  }}
     onClose=${() => setNicknameOpen(false)} />
   ${offers.length > 0 && html`<${CreditSheet} key=${`${offers[0].kind}${offers[0].feedId}`} offer=${offers[0]} person=${person}
     feeds=${feeds} position=${creditPosition(offerTotal - offers.length, offerTotal)}
@@ -1096,16 +1105,25 @@ export function PersonPage({ id, feeds, go }) {
 function NicknameSheet({ open, value, onChange, onClose }) {
   const ref = useSheet(open);
   const [nickname, setNickname] = useState(value || '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
   useEffect(() => { if (open) setNickname(value || ''); }, [open, value]);
+  const change = async () => {
+    setBusy(true); setError(null);
+    try { await onChange(nickname); ref.current.close(); }
+    catch (e) { setError(e); }
+    finally { setBusy(false); }
+  };
   return html`<dialog ref=${ref} class="sheet small" aria-labelledby="nickname-title" onClose=${onClose}>
     <header><h2 id="nickname-title">Change the Nickname</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button></header>
-    <form class="body" onSubmit=${(event) => { event.preventDefault(); onChange(nickname); ref.current.close(); }}>
+    <form class="body" onSubmit=${(event) => { event.preventDefault(); if (!busy) change(); }}>
       <div class="group rows"><${Field} id="person-nickname" label="Nickname" value=${nickname}
         hint="Only Studio shows the nickname. Studio does not put it in a feed. A new credit uses the field Name in Credits."
         onInput=${(event) => setNickname(event.target.value)} /></div>
-      <footer><button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
-        <button class="button primary" type="submit">Change</button></footer>
+      <${ErrorNotice} error=${error} />
+      <footer><button class="button" type="button" disabled=${busy} onClick=${() => ref.current.close()}>Cancel</button>
+        <button class="button primary" type="submit" disabled=${busy}>${busy ? 'Changing…' : 'Change'}</button></footer>
     </form>
   </dialog>`;
 }

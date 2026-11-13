@@ -998,6 +998,18 @@ export function saveBody(saved, values) {
   return body;
 }
 
+// The body of PATCH /people/{id} for an immediate nickname save.
+export const nicknameBody = (saved, nickname) => ({
+  name: saved.name, nickname, usual_role: saved.usual_role, usual_group: saved.usual_group,
+  img: saved.img, href: saved.href,
+});
+
+// The values after an immediate nickname save. Other shown fields can stay pending.
+export const afterNicknameSave = (saved, shown, nickname) => ({
+  saved: { ...saved, nickname },
+  shown: { ...shown, nickname },
+});
+
 // The names of the controls in the text of the leave sheet.
 const LEAVE_NAMES = {
   name: 'the name',
@@ -1114,8 +1126,8 @@ export function pageSuggestions(suggestions, values) {
   for (const s of suggestions || []) {
     if (s.missing || !shown.has(s.feed_guid)) continue;
     const title = s.title || 'Untitled feed';
-    if (s.picture && s.picture !== values.img) out.img.push({ value: s.picture, line: `New picture on "${title}"`, guid: s.feed_guid, button: 'Add', ariaLabel: `Add ${s.picture}` });
-    if (s.website && s.website !== values.href) out.href.push({ value: s.website, line: `New website on "${title}"`, guid: s.feed_guid, button: 'Add', ariaLabel: `Add ${s.website}` });
+    if (s.picture && s.picture !== values.img) out.img.push({ value: s.picture, line: `New picture on "${title}"`, guid: s.feed_guid, button: 'Use', ariaLabel: `Use ${s.picture}` });
+    if (s.website && s.website !== values.href) out.href.push({ value: s.website, line: `New website on "${title}"`, guid: s.feed_guid, button: 'Use', ariaLabel: `Use ${s.website}` });
     if (s.npub && !(values.keys || []).includes(s.npub)) out.keys.push({ value: s.npub, line: `New Nostr key on "${title}"`, guid: s.feed_guid, button: 'Add', ariaLabel: `Add ${s.npub}` });
     for (const w of s.wallets || []) {
       if (pendingWallets.includes(String(w.key.address).toLowerCase())) continue;
@@ -1159,8 +1171,9 @@ export const hasLinkedPages = (people = []) => people.some((person) => (person.p
 export const linkedPageChanges = (rows = []) => rows.filter((row) => row.img || row.href
   || (row.keys || []).length > 0 || (row.wallets || []).length > 0);
 
-// The people that start selected in the review sheet: all (ADR 0170 item 5).
-export const linkedPageSelection = (people) => people.map((row) => row.person_id);
+// One selected key for each value in the linked-page review sheet (ADR 0194 item 3).
+export const linkedPageSelection = (people) => people.flatMap((person) => linkedPageChangeLines(person)
+  .map((line) => `${person.person_id}:${line.kind}:${line.value}`));
 
 // The values of one person in the review sheet (ADR 0182 item 19).
 export function linkedPageChangeLines(person) {
@@ -1168,6 +1181,19 @@ export function linkedPageChangeLines(person) {
     person.href && { kind: 'website', label: 'Website', value: person.href },
     ...(person.keys || []).map((value) => ({ kind: 'key', label: 'Nostr key', value })),
     ...(person.wallets || []).map((wallet) => ({ kind: 'wallet', label: 'Wallet', value: wallet.key.address }))].filter(Boolean);
+}
+
+// The body of the linked-page update, with values that the user selected.
+export function linkedPageBody(people, selected) {
+  const keys = new Set(selected);
+  return { people: people.map((person) => {
+    const chosen = (kind, value) => keys.has(`${person.person_id}:${kind}:${value}`);
+    const keysForPerson = (person.keys || []).filter((value) => chosen('key', value));
+    const wallets = (person.wallets || []).filter((wallet) => chosen('wallet', wallet.key.address));
+    const img = person.img && chosen('picture', person.img) ? person.img : null;
+    const href = person.href && chosen('website', person.href) ? person.href : null;
+    return { ...person, img, href, keys: keysForPerson, wallets };
+  }).filter((person) => person.img || person.href || person.keys.length > 0 || person.wallets.length > 0) };
 }
 
 // The offers of a credit after a Save that changes the links (ADR 0118 items 3

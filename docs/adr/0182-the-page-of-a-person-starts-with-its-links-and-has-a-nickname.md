@@ -10,6 +10,7 @@
 - Uses: [ADR 0163](0163-one-sheet-finds-and-links-a-page-on-music-index.md) items 4 to 11 for the sheet "From Music Index". [ADR 0116](0116-the-page-of-a-person-has-save-and-discard.md) for the pending changes. [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) for the tiers. [ADR 0108](0108-people-data-at-rest-stays-plain.md) item 2 for the data at rest.
 - Source: findings 12, 13, 14, 15 and 17 of the [human checks of 2026-11-11](../reviews/2026-11-11-local-human-test-findings.md).
 - Changed by: [ADR 0192](0192-add-a-person-has-the-layout-of-the-other-pickers.md). Items 4 to 8: "Add a Person" has the layout of the other pickers, and Studio makes the person only at **Add the Person**.
+- Changed by: [ADR 0194](0194-the-nickname-saves-at-once-and-the-update-sheet-selects-each-value.md). Items 1 and 3: the picture and the website have **Use**. Item 13: **Change** saves the nickname at once.
 
 ## Context
 

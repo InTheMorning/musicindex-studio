@@ -2,7 +2,7 @@
 
 Decision: [ADR 0190](../adr/0190-review-gives-the-return-wait-of-music-index.md).
 
-Status: Not started. Stophammer `v0.20.0-rc.1` (commit `508e4db`) runs on `api.musicindex.org` with Stophammer ADR 0097. On 2026-11-12 at 19:24 EST, `GET /v1/feeds/7ea30e6c-c7ba-5b81-a7be-6465c1591b7a` gave the key `return_wait_until` with the value `null`.
+Status: In progress. Packet 127a is complete. A write learns that it is a return from the pointer row of the draft move (`is_pointer_of_feed`), before the write. The write queues its podping with `Timing::DEFAULT`, so the usual send time is the write time plus 30 seconds. Stophammer `v0.20.0-rc.1` (commit `508e4db`) runs on `api.musicindex.org` with Stophammer ADR 0097. On 2026-11-12 at 19:24 EST, `GET /v1/feeds/7ea30e6c-c7ba-5b81-a7be-6465c1591b7a` gave the key `return_wait_until` with the value `null`.
 
 ## Goal
 

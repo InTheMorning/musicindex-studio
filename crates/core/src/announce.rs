@@ -243,6 +243,30 @@ pub fn queue(
     Ok(())
 }
 
+/// Move a waiting announcement to a return wait time (ADR 0190 item 6).
+///
+/// Studio keeps the usual send time when the new time is more than 23 hours
+/// after `now`. The function does not change `created_at`.
+///
+/// # Errors
+///
+/// Gives a [`CollectionError`] when SQLite fails.
+pub fn move_waiting_send_time(
+    collection: &Collection,
+    feed_id: FeedId,
+    address: &str,
+    send_at: u64,
+    now: u64,
+) -> Result<(), CollectionError> {
+    if send_at > now.saturating_add(23 * 60 * 60) {
+        return Ok(());
+    }
+    if let Some(id) = collection.waiting_announcement(feed_id, address)? {
+        collection.set_announcement_next_at(id, time(send_at))?;
+    }
+    Ok(())
+}
+
 /// Give the oldest `waiting` announcement that is due, and set it to
 /// `sending`.
 ///
@@ -548,6 +572,37 @@ mod tests {
         assert_eq!(rows[0].next_at, 1_000_030);
         assert_eq!(next_due_at(&collection).unwrap(), Some(1_000_030));
         assert!(take_due(&collection, NOW + 29).unwrap().is_none());
+    }
+
+    #[test]
+    fn return_wait_moves_only_a_waiting_send_time_within_the_horizon() {
+        let (collection, feed) = setup();
+        queue_one(&collection, feed, "https://m.example/a.xml", NOW);
+        move_waiting_send_time(&collection, feed, "https://m.example/a.xml", NOW + 600, NOW)
+            .unwrap();
+        let row = recent(&collection, feed).unwrap().remove(0);
+        assert_eq!(
+            row.next_at, 1_000_600_i64,
+            "ADR 0190 item 6: schedule the podping after the return wait; fix the waiting row time."
+        );
+        assert_eq!(
+            row.created_at, 1_000_000_i64,
+            "ADR 0190 item 6: preserve the write time; fix the update to change only next_at."
+        );
+
+        move_waiting_send_time(
+            &collection,
+            feed,
+            "https://m.example/a.xml",
+            NOW + 23 * 60 * 60 + 31,
+            NOW,
+        )
+        .unwrap();
+        let row = recent(&collection, feed).unwrap().remove(0);
+        assert_eq!(
+            row.next_at, 1_000_600_i64,
+            "ADR 0190 item 7: keep the usual send time beyond 23 hours; fix the horizon guard."
+        );
     }
 
     #[test]

@@ -4,11 +4,11 @@
 // commit. A check in each app compares the bytes of the copy with that commit.
 // The module runs in a browser with no build step and no dependency.
 //
-// edgeCuts, overflows and wordBreaks run in the page. Each returns a list of
+// edgeCuts, overflows, overlaps and wordBreaks run in the page. Each returns a list of
 // findings and does not exit. The walk script of the app exits with a status
 // that is not zero when a list has a finding (R-FIT-5 item 2).
 //
-// Each of the three helpers uses no name from outside its own body. Thus a walk
+// Each of the four helpers uses no name from outside its own body. Thus a walk
 // script can send the source of a helper to the page through the DevTools protocol:
 //
 //   import { edgeCuts } from './fit-check.mjs';
@@ -17,7 +17,8 @@
 // A page can also import the module and call the helpers directly.
 //
 // Each finding is an object { fault, text, detail }. The fault is 'edge-cut',
-// 'overflow' or 'word-break'. fitMessage runs in the walk script and gives the
+// 'overflow', 'overlap' or 'word-break'. An overflow finding also has `box`: 'window'
+// or 'control'. fitMessage runs in the walk script and gives the
 // failure message of R-FIT-3 item 4.
 
 // The attribute for a text that the app must break inside a word, for example a
@@ -87,8 +88,12 @@ export function edgeCuts({ groups = '.group', inset = 12, openDetails = true } =
 // The list holds only the outermost element of each fault, not its descendants.
 // When the page scrolls to the side and no element is in the list, the list holds
 // the page.
-export function overflows() {
+// The list also holds each visible control with content that is wider than the
+// control, when the control does not clip its content. Then the content goes into
+// the next control, for example a count in a segment.
+export function overflows({ controls = 'button, [role=button], [role=radio], [role=tab], .segment' } = {}) {
   const shown = (e) => (e.checkVisibility ? e.checkVisibility() : !!e.offsetParent);
+  const label = (e) => (e.getAttribute('aria-label') || e.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 60) || e.outerHTML.slice(0, 70);
   const width = document.documentElement.clientWidth;
   const found = [];
   const outer = [];
@@ -103,11 +108,59 @@ export function overflows() {
     }
     if (clipped) continue;
     outer.push(e);
-    found.push({ fault: 'overflow', text: e.outerHTML.slice(0, 70), detail: `${Math.round(r.right - width)} px` });
+    found.push({ fault: 'overflow', box: 'window', text: e.outerHTML.slice(0, 70), detail: `${Math.round(r.right - width)} px` });
   }
   const scroll = document.documentElement.scrollWidth;
   if (found.length === 0 && scroll > width) {
-    found.push({ fault: 'overflow', text: 'the page', detail: `${scroll - width} px` });
+    found.push({ fault: 'overflow', box: 'window', text: 'the page', detail: `${scroll - width} px` });
+  }
+  for (const c of document.querySelectorAll(controls)) {
+    if (!shown(c) || getComputedStyle(c).overflowX !== 'visible') continue;
+    if (c.scrollWidth <= c.clientWidth + 1) continue;
+    found.push({ fault: 'overflow', box: 'control', text: label(c), detail: `content ${c.scrollWidth} px in a box of ${c.clientWidth} px` });
+  }
+  return found;
+}
+
+// Gives each pair of visible controls with boxes that intersect by more than 1 px
+// in the two directions. A pair in which one control contains the other is not in
+// the list. A disabled control or a control with a low opacity is in the list.
+// A control under a layer is not in the list: the layer is an open modal dialog, or
+// an open dialog or popover that covers the control and does not contain it.
+export function overlaps({ controls = 'button, a, input, select, textarea, [role=button], [role=radio], [role=tab]' } = {}) {
+  const shown = (e) => (e.checkVisibility ? e.checkVisibility() : !!e.offsetParent);
+  const label = (e) => (e.getAttribute('aria-label') || e.textContent || e.getAttribute('placeholder') || '').trim().replace(/\s+/g, ' ').slice(0, 40) || e.outerHTML.slice(0, 70);
+  const cross = (a, b) => ({
+    width: Math.min(a.right, b.right) - Math.max(a.left, b.left),
+    height: Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top),
+  });
+  const layers = [...document.querySelectorAll('dialog, [popover]')].filter((l) => {
+    if (l.tagName === 'DIALOG' && l.open) return true;
+    try { return l.matches(':popover-open'); } catch (_) { return false; }
+  });
+  const under = (e, r) => layers.some((l) => {
+    if (l.contains(e)) return false;
+    if (l.matches(':modal')) return true;
+    const c = cross(l.getBoundingClientRect(), r);
+    return c.width > 0 && c.height > 0;
+  });
+  const items = [];
+  for (const e of document.querySelectorAll(controls)) {
+    if (!shown(e)) continue;
+    const r = e.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0 || under(e, r)) continue;
+    items.push({ e, r });
+  }
+  const found = [];
+  for (let i = 0; i < items.length; i++) {
+    for (let j = i + 1; j < items.length; j++) {
+      const a = items[i];
+      const b = items[j];
+      if (a.e.contains(b.e) || b.e.contains(a.e)) continue;
+      const c = cross(a.r, b.r);
+      if (c.width <= 1 || c.height <= 1) continue;
+      found.push({ fault: 'overlap', text: `"${label(a.e)}" and "${label(b.e)}"`, detail: `${Math.round(c.width)} x ${Math.round(c.height)} px` });
+    }
   }
   return found;
 }
@@ -150,8 +203,15 @@ export function fitMessage(finding, width) {
       return `${head} "${finding.text}" is too near an edge of its group (${finding.detail}).\n`
         + 'Give the row its inner space, make the content narrower, or let the row wrap (ADR 0020 R-FIT-1 item 2).';
     case 'overflow':
+      if (finding.box === 'control') {
+        return `${head} the content of the control "${finding.text}" is wider than the control (${finding.detail}).\n`
+          + 'Give the control more width, make the text shorter, or let the row wrap between the controls (ADR 0020 R-FIT-1 item 2).';
+      }
       return `${head} ${finding.text} goes ${finding.detail} past the right edge of the window.\n`
         + 'Make the element narrower, let it wrap, or put it in a scroll area.';
+    case 'overlap':
+      return `${head} the controls ${finding.text} overlap (${finding.detail}).\n`
+        + 'Give each control its own space: let the row wrap, make a control narrower, or move a control to a different row at this width (ADR 0020 R-FIT-1 item 2).';
     default:
       return `${head} the fit check found the fault "${finding.fault}": ${finding.text}.`;
   }

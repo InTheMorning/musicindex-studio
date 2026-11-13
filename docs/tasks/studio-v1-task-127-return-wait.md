@@ -10,7 +10,7 @@ Stophammer `v0.20.0-rc.1` (commit `508e4db`) runs on `api.musicindex.org` with S
 
 In the screenshot check of 127b, the test index gave three answers. For each answer, Review showed the warning of ADR 0190 item 2, 3 or 4. The check used 1280 px in the light theme. `$edges()` and `$overflow()` gave no result.
 
-Open: with a wait, the hint below the podping check box says "Studio sends it 30 seconds after the write." ADR 0190 does not give that hint, so 127b does not change it.
+With a wait, the hint below the podping check box gives the send time: "Studio sends it at {time}, after the wait of Music Index." Review reads the wait one time, for the warning and the hint. In the screenshot check, the hint gave the end of the wait plus 30 seconds. Without a wait, it gave "Studio sends it 30 seconds after the write."
 
 ## Goal
 

@@ -22,7 +22,7 @@ import { versionLabel, LOCK_HELP, hasSpace, spaceNotice, ROW_SPACE_NOTE, newFeed
 import { refusalView, refusalOfError, noticeViews, blocksWrite, repairRoute, returnWarning, REPLACES_POINTER_NOTE } from './movelink.js';
 import { pickFromIndex, remoteItemFromPick, addTrack, hasTrack, removeTrack, trackRow, tracksSummary } from './playlist.js';
 import { moveTo, moveAmong } from './order.js';
-import { announceLines, announceStatus, isWaiting } from './announce.js';
+import { announceLines, announceStatus, announceHint, isWaiting } from './announce.js';
 import { npubOf, eventsToSign, signAll, signErrorText, signSummary, signProgressLabel, SignError, remoteSigner, signerChoice } from './signing.js';
 import { SignerConnect } from './signer.js';
 import { progressPercent } from './upload.js';
@@ -1747,10 +1747,10 @@ function LinkNotices({ report, busy, onRepair }) {
   </div>`);
 }
 
-// The warning of a return (ADR 0128 items 7 to 9). It does not stop the write.
-// It reads the wait of Music Index only for a return (ADR 0190 item 1). While
-// the read runs, and after a failed read, it gives the text of item 4.
-function ReturnWarning({ feedId, move }) {
+// The wait of Music Index for a return, or `null`. Studio reads it only for a
+// return (ADR 0190 item 1). The value is `null` while the read runs and after
+// a failed read.
+function useReturnWait(feedId, move) {
   const isReturn = Boolean(move && move.replaces_pointer);
   const [wait, setWait] = useState(null);
   useEffect(() => {
@@ -1760,6 +1760,12 @@ function ReturnWarning({ feedId, move }) {
     api(`/feeds/${feedId}/return-wait`).then((answer) => { if (live) setWait(answer); }, () => {});
     return () => { live = false; };
   }, [feedId, isReturn]);
+  return wait;
+}
+
+// The warning of a return (ADR 0128 items 7 to 9, ADR 0190 items 2 to 4). It
+// does not stop the write. With no wait, it gives the text of item 4.
+function ReturnWarning({ move, wait }) {
   const view = returnWarning(move, wait);
   return view && html`<div class="notice" role="status"><strong>${view.title}</strong>${view.text}</div>`;
 }
@@ -1810,7 +1816,7 @@ function HostOperations({ diff, connectors, onRemove, onUndoMove, busy }) {
 
 // The one announcement choice of a write (ADR 0136). Studio remembers it for
 // the next write. `onChange` gets the diff again after a change.
-export function AnnounceChoice({ onChange }) {
+export function AnnounceChoice({ onChange, wait = null }) {
   const [enabled, setEnabled] = useState(null);
   const { busy, error, run } = useAction();
   useEffect(() => { api('/settings/announcements').then((result) => setEnabled(result.enabled), () => {}); }, []);
@@ -1823,7 +1829,7 @@ export function AnnounceChoice({ onChange }) {
   return html`<div class="announce-choice">
     <label class="check"><input type="checkbox" checked=${enabled} disabled=${busy} onChange=${(e) => change(e.target.checked)} />
       <span>Tell Podcast Index and send a podping</span></label>
-    <p class="hint">${enabled ? 'Studio sends it 30 seconds after the write.' : 'No index learns about this write until it reads the feed by itself.'}</p>
+    <p class="hint">${announceHint(enabled, wait)}</p>
     <${ErrorNotice} error=${error} />
   </div>`;
 }
@@ -1937,6 +1943,7 @@ export async function currentSignerChoice(toSign) {
 function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, onWritten, onClose, connectors, onOpenHosts, onOpsChanged, onOpsCleared }) {
   const ref = useSheet(open);
   const [diff, setDiff] = useState(null);
+  const returnWait = useReturnWait(feedId, diff && diff.feed_move);
   const { busy, error, run } = useAction();
   // The progress of the signer while a write signs the planned events.
   const [progress, setProgress] = useState(null);
@@ -2143,7 +2150,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
           </div>`
         : html`<p class="field-warning" role="status" key=${problem.guid + problem.text}><strong>${problem.title}:</strong> ${problem.text}</p>`)}
       ${diff && html`<${HostOperations} diff=${diff} connectors=${connectors} onRemove=${removeOperation} onUndoMove=${undoMove} busy=${busy} />`}
-      ${diff && html`<${ReturnWarning} feedId=${feedId} move=${diff.feed_move} />`}
+      ${diff && html`<${ReturnWarning} move=${diff.feed_move} wait=${returnWait} />`}
       ${diff && html`<${ReplaceWarning} move=${diff.feed_move} />`}
       ${diff && html`<${LinkNotices} report=${links} busy=${busy} onRepair=${repair} />`}
       ${diff && html`<${BuildDateNotices} state=${diff.build_date} />`}
@@ -2184,7 +2191,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
       ${showsExamine({ merge, diff, stale }) && html`<div class="actions">
         <button class="button" type="button" disabled=${busy || draft.status === 'loading'} onClick=${examine}>Examine the Changes</button>
       </div>`}
-      ${diff && hasWork && !addressesBlocked && !choosing && diff.announce_skip !== 'no_address' && html`<${AnnounceChoice} onChange=${refreshDiff} />`}
+      ${diff && hasWork && !addressesBlocked && !choosing && diff.announce_skip !== 'no_address' && html`<${AnnounceChoice} onChange=${refreshDiff} wait=${returnWait} />`}
     </div>
     <footer>
       <button class="button destructive" type="button" disabled=${busy || !draft.changed} onClick=${discard}>Discard the Draft</button>

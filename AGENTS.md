@@ -83,6 +83,7 @@ The UI starts on Releases and shows the outline of an open feed. Below Releases,
 | `.github/workflows` | `ci.yml` runs the four checks. `desktop-release.yml` builds the desktop archives and installers, and makes a draft GitHub Release from a `v*` tag. |
 | `docs/` | ADRs, plans, tasks, reviews, runbooks, release notes (`docs/releases/`) and research. The index is `docs/README.md`. |
 | `tools/drive-ui.mjs` | Drives the UI in headless Chromium for a check. Its header gives the usage. |
+| `tools/fit-check.mjs` | The fit check helpers of musicindex ADR 0065 R-FIT-5. It is a copy from musicindex-lib. Do not change it in this repository. |
 | `tools/release_desktop.py` | Gives the version, packages a desktop archive, runs its smoke test and writes `SHA256SUMS.txt`. The release workflow uses it ([desktop release runbook](docs/runbooks/desktop-release.md)). |
 | `tools/release-candidate.sh` | Sets the version, pushes `main`, waits for CI, pushes the tag, waits for the server image and runs `tools/deploy-server.sh`. Its header gives the steps. A second run continues after the last completed step. |
 | `tools/node` | Runs a pinned Node.js from `.studio-dev/tools/` ([ADR 0042](docs/adr/0042-ui-models-with-node-tests.md)). |
@@ -224,6 +225,7 @@ Situational rules:
 - After the feed list loads and at each open of Releases, Studio checks each feed with a public address, also the artist, label and hosting pages. One store in the shell keeps the results. A row of the left panel shows the most urgent mark of its feed and its releases: changed outside Studio, changes not written, or not checked. An up-to-date row has no mark ([ADR 0165](docs/adr/0165-the-left-panel-marks-the-state-of-each-feed.md)).
 - The Feed facts and the Files page show `itunes:new-feed-url` when a feed has it, and the core gives the comparison with the public address ([ADR 0021](docs/adr/0021-public-address-of-a-feed.md) item 4).
 - After a move, the feed on the new host has a tag that names its own URL, and Review warns at each return. A new tag goes directly after `<channel>`. Stophammer ADR 0083 owns the rule of the index ([ADR 0128](docs/adr/0128-a-moved-feed-names-its-own-address.md)).
+- Each screenshot walk checks the fit at 390 px and at 761 px. `tools/drive-ui.mjs` runs the helpers of `tools/fit-check.mjs` and exits with status 1 on a break inside a word, an edge cut or an overflow. A URL, a GUID or a path that can break inside a word has the attribute `data-fit-allow-break`. `crates/api/ui-tests/fit-copy.test.mjs` compares the bytes of the copy with its musicindex-lib commit (musicindex ADR 0065 R-FIT-2, R-FIT-3 and R-FIT-5).
 - Do not copy code from `../mi-studio`. Use it as reference only ([ADR 0001](docs/adr/0001-one-core-with-desktop-and-server-shells.md)).
 
 Documentation:

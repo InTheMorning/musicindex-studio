@@ -30,25 +30,42 @@
 // The page has these helpers: $set(selector, value), $click(text),
 // $text() and $small() (the controls lower than 44 px, except a control in
 // a label of 44 px or more, and a control that is hidden on purpose).
-// $edges() opens each disclosure in a group, and gives each text and each
-// control that is nearer than 12 px to the left edge or the right edge of
-// its group (ADR 0029 items 11 and 12: a group holds rows, and a row has
-// inner space). The content of a dialog in a group is not content of that
-// group. An empty list means that no content touches an edge.
-// $overflow() gives each visible element that goes past the right edge of
-// the window, and the page width when the page scrolls to the side. An
-// element in a box that clips or scrolls its content is not in the list.
+// $edges(), $overflow() and $wordBreaks() are edgeCuts, overflows and
+// wordBreaks of tools/fit-check.mjs (musicindex ADR 0065 R-FIT-5). Each gives
+// a list of findings { fault, text, detail }. $edges() opens each disclosure
+// in a group.
+// A step {"fit": true} runs the three helpers on the current page at 390 px
+// and at 761 px (musicindex ADR 0065 R-FIT-2). Then it sets the earlier size
+// again. When no step has "fit", the script runs this check after the last
+// step. A text that must break inside a word, such as a URL or a GUID, has the
+// attribute data-fit-allow-break (R-FIT-3 item 3).
+// A step {"save": "name.json"} writes the value of window.__walkChecks to that
+// file in the out dir.
 // $fieldText() gives each visible text field and select with text smaller
 // than 16 px. iOS Safari zooms the page when such a field gets the focus
 // (musicindex ADR 0024 R-TYPE-1, Body on Touch). Use it with "touch": true.
-// The script prints each result and each console error.
+// The script prints each result and each console error. It exits with status 1
+// when the fit check has a finding, after the last step and its screenshot.
+// DRIVE_UI_PORT sets the DevTools port. The default is 9333.
 import { spawn } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { edgeCuts, overflows, wordBreaks, fitMessage } from './fit-check.mjs';
 
 const [url, out] = process.argv.slice(2);
-const port = 9333;
-const chrome = spawn('chromium', ['--headless=new', '--no-sandbox', '--disable-gpu', `--remote-debugging-port=${port}`,
-  '--window-size=1100,1000', '--force-dark-mode', 'about:blank'], { stdio: 'ignore' });
+const port = Number(process.env.DRIVE_UI_PORT || 9333);
+// Chromium needs a home folder that it can write. A sandbox can refuse the
+// home folder of the user and the crash reporter.
+const home = mkdtempSync(join(tmpdir(), 'drive-ui-'));
+const chrome = spawn('chromium', ['--headless=new', '--no-sandbox', '--disable-gpu', '--disable-crash-reporter', '--disable-breakpad',
+  '--no-proxy-server', `--user-data-dir=${home}/profile`, `--remote-debugging-port=${port}`,
+  '--window-size=1100,1000', '--force-dark-mode', 'about:blank'], { stdio: 'ignore', env: { ...process.env, HOME: home } });
+process.on('exit', () => {
+  chrome.kill();
+  // Chromium can write to its profile for a short time after the kill.
+  try { rmSync(home, { recursive: true, force: true, maxRetries: 5 }); } catch (_) {}
+});
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let target;
 for (let i = 0; i < 50 && !target; i++) {
@@ -85,66 +102,36 @@ const helpers = `
   window.$set = (sel, v) => { const e = document.querySelector(sel); e.value = v; e.dispatchEvent(new Event('input', { bubbles: true })); };
   window.$click = (text) => { const e = [...document.querySelectorAll('button, label')].find((b) => b.textContent.trim().startsWith(text)); if (!e) throw new Error('no ' + text); e.click(); };
   window.$text = () => document.body.innerText;
-  window.$edges = () => {
-    document.querySelectorAll('.group details').forEach((d) => { d.open = true; });
-    const near = [];
-    for (const group of document.querySelectorAll('.group')) {
-      if (!(group.checkVisibility ? group.checkVisibility() : group.offsetParent)) continue;
-      const g = group.getBoundingClientRect();
-      // The visible part of the box r: an ancestor that hides its overflow, such as
-      // a summary with an ellipsis, cuts the box.
-      const visible = (node, r) => {
-        let left = r.left;
-        let right = r.right;
-        for (let e = node.parentElement; e && e !== group; e = e.parentElement) {
-          if (getComputedStyle(e).overflowX === 'visible') continue;
-          const b = e.getBoundingClientRect();
-          left = Math.max(left, b.left);
-          right = Math.min(right, b.right);
-        }
-        return { left, right, width: Math.max(0, right - left), height: r.height };
-      };
-      const test = (r, what) => {
-        if (r.width === 0 || r.height === 0) return;
-        if (r.left - g.left < 12 || g.right - r.right < 12) near.push(what.slice(0, 60) + ' @ ' + Math.round(r.left - g.left) + '/' + Math.round(g.right - r.right));
-      };
-      // A dialog in the group shows in the top layer, not in the group. Its
-      // own groups get their own test.
-      const inDialog = (node) => { const d = node.closest('dialog'); return !!d && group.contains(d); };
-      const walker = document.createTreeWalker(group, NodeFilter.SHOW_TEXT);
-      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-        if (!n.textContent.trim() || inDialog(n.parentElement)) continue;
-        const range = document.createRange();
-        range.selectNodeContents(n);
-        for (const r of range.getClientRects()) test(visible(n, r), n.textContent.trim());
-      }
-      for (const c of group.querySelectorAll('input, select, textarea')) {
-        if (inDialog(c)) continue;
-        if (c.checkVisibility ? c.checkVisibility() : c.offsetParent) test(visible(c, c.getBoundingClientRect()), c.outerHTML);
-      }
-    }
-    return near;
-  };
-  window.$overflow = () => {
-    const width = document.documentElement.clientWidth;
-    const found = [];
-    if (document.documentElement.scrollWidth > width) found.push('page ' + document.documentElement.scrollWidth + ' > ' + width);
-    for (const e of document.querySelectorAll('body *')) {
-      if (!(e.checkVisibility ? e.checkVisibility() : e.offsetParent)) continue;
-      const r = e.getBoundingClientRect();
-      if (r.width === 0 || r.right <= width + 0.5) continue;
-      // An ancestor that clips or scrolls its content keeps the box inside it.
-      let clipped = false;
-      for (let a = e.parentElement; a && a !== document.body; a = a.parentElement) {
-        if (getComputedStyle(a).overflowX !== 'visible' && a.getBoundingClientRect().right <= width + 0.5) { clipped = true; break; }
-      }
-      if (!clipped) found.push(e.outerHTML.slice(0, 70) + ' @ ' + Math.round(r.right - width));
-    }
-    return found;
-  };
+  window.$edges = ${edgeCuts};
+  window.$overflow = ${overflows};
+  window.$wordBreaks = ${wordBreaks};
   window.$fieldText = () => [...document.querySelectorAll('input, select, textarea')].filter((e) => !['checkbox', 'radio', 'range', 'file', 'hidden', 'color'].includes(e.type) && (e.checkVisibility ? e.checkVisibility() : e.offsetParent) && parseFloat(getComputedStyle(e).fontSize) < 16).map((e) => getComputedStyle(e).fontSize + ' ' + e.outerHTML.slice(0, 70));
   window.$small = () => [...document.querySelectorAll('button, input, select, a')].filter((e) => !e.classList.contains('visually-hidden') && (e.checkVisibility ? e.checkVisibility() : e.offsetParent) && e.getBoundingClientRect().height < 44 && !(e.closest('label') && e.closest('label').getBoundingClientRect().height >= 44)).map((e) => e.outerHTML.slice(0, 70));
 `;
+// The fit check of musicindex ADR 0065 at the two widths of R-FIT-2.
+const fitWidths = [390, 761];
+let size = null;
+let fitRan = false;
+const fitFindings = [];
+const fit = async () => {
+  fitRan = true;
+  const height = size ? size[1] : 1000;
+  for (const width of fitWidths) {
+    await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
+    await sleep(500);
+    // edgeCuts opens each disclosure, so it runs last.
+    const found = [
+      ...await evaluate(`(${overflows})()`),
+      ...await evaluate(`(${wordBreaks})()`),
+      ...await evaluate(`(${edgeCuts})()`),
+    ];
+    for (const f of found) fitFindings.push(fitMessage(f, width));
+    console.log(`fit at ${width} px =>`, found.length ? `${found.length} finding(s)` : 'no finding');
+  }
+  if (size) await send('Emulation.setDeviceMetricsOverride', { width: size[0], height: size[1], deviceScaleFactor: 1, mobile: size[2] });
+  else await send('Emulation.clearDeviceMetricsOverride');
+  await sleep(300);
+};
 let authenticatorId;
 const steps = JSON.parse(process.argv[4] || '[]');
 await send('Page.navigate', { url });
@@ -152,7 +139,10 @@ await sleep(1500);
 await evaluate(helpers);
 for (const step of steps) {
   if (step.wait) await sleep(step.wait);
-  if (step.size) await send('Emulation.setDeviceMetricsOverride', { width: step.size[0], height: step.size[1], deviceScaleFactor: 1, mobile: step.touch === true });
+  if (step.size) {
+    size = [step.size[0], step.size[1], step.touch === true];
+    await send('Emulation.setDeviceMetricsOverride', { width: size[0], height: size[1], deviceScaleFactor: 1, mobile: size[2] });
+  }
   if (step.touch !== undefined) await send('Emulation.setTouchEmulationEnabled', { enabled: step.touch });
   if (step.webauthn) {
     await send('WebAuthn.enable');
@@ -193,8 +183,14 @@ for (const step of steps) {
   }
   if (step.js) { await evaluate(helpers); console.log(step.js.slice(0, 60), '=>', JSON.stringify(await evaluate(step.js))?.slice(0, 300)); }
   if (step.shot) await shot(step.shot);
+  if (step.save) writeFileSync(`${out}/${step.save}`, JSON.stringify(await evaluate('window.__walkChecks || {}'), null, 2) + '\n');
+  if (step.fit) await fit();
 }
+if (!fitRan) await fit();
 console.log(logs.length ? logs.join('\n') : 'no console errors');
 ws.close();
-chrome.kill();
+if (fitFindings.length) {
+  console.error([...new Set(fitFindings)].join('\n\n'));
+  process.exit(1);
+}
 process.exit(0);

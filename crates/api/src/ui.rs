@@ -67,6 +67,11 @@ const FILES: &[(&str, &str, &[u8])] = &[
         include_bytes!("../ui/feedcheck.js"),
     ),
     (
+        "breaks.js",
+        "text/javascript; charset=utf-8",
+        include_bytes!("../ui/breaks.js"),
+    ),
+    (
         "feeddelete.js",
         "text/javascript; charset=utf-8",
         include_bytes!("../ui/feeddelete.js"),

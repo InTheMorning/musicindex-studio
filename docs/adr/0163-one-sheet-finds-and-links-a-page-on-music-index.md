@@ -7,7 +7,7 @@
 - Changes: [ADR 0117](0117-the-page-of-a-person-finds-values-on-musicindex.md) items 2, 8 and 13. [ADR 0159](0159-a-person-can-link-to-a-page-on-music-index.md) items 4 and 5.
 - Uses: [ADR 0116](0116-the-page-of-a-person-has-save-and-discard.md) for the pending changes. [ADR 0145](0145-each-sheet-that-adds-a-value-has-one-layout.md) for the layout of a sheet. [ADR 0154](0154-the-search-fields-have-a-field-list.md) for the field list. [ADR 0146](0146-link-words-already-marks-and-credit-edits.md) for the mark of a value that the person has.
 - Changed by: [ADR 0192](0192-add-a-person-has-the-layout-of-the-other-pickers.md). Item 2: "Add a Person" has the layout of the other pickers, and the pages of the user come before the results.
-- Amended: 2026-11-12 by the operator, in the human check of task 118. Item 15 was added: the operator linked a page to a person with an empty name, and the name stayed empty.
+- Amended: 2026-11-12 by the operator, in the human check of task 118. Item 15 was added: the operator linked a page to a person, and the name did not change. The operator wants the title of the page to replace the name.
 
 ## Context
 
@@ -56,9 +56,9 @@ The same check found two problems of the search sheets. The field list was in th
 13. The search field stays at the top of the body of the sheet. Only the rows below it scroll.
 14. The field list is a floating layer at the field, as on musicindex.org. When the window has less space below the field, the list opens above it.
 
-### The Name Of A Person With No Name
+### The Name From A Linked Page
 
-15. When the field "Name" in "Credits" is empty, a link to a page puts the title of the page in that field. This applies to a link from the sheet "From Music Index" and to a link from the fold "Your artist and label pages". A name that is not empty does not change. The name is a pending change until Save.
+15. A link to a page replaces the field "Name" in "Credits" with the title of the page. In the sheet "From Music Index", the title is the first row of "Fill", "Name", and the row starts selected. The user can clear the row, for example for a label page. A link from the fold "Your artist and label pages" replaces the name directly. A title that is the same as the name gives no change. The name is a pending change until Save, and Discard removes it.
 
 ## Alternatives Considered
 
@@ -82,7 +82,7 @@ Mechanical:
     - a feed of the collection: a selected row with the line of a collection page
     - a page that the person has: the mark "Already linked"
 - A fill with the link selected gives a patch with the link and with each selected value.
-- Item 15: a link gives the title as the name when the pending name is empty, and gives no name when the pending name has text.
+- Item 15: the fill rows start with a selected row "Name" with the title of the page, and its patch replaces the name. A link from the fold gives the title as the name. The same name gives no change.
 - The Node tests pass.
 
 Visual, from agent screenshots at 1280 px in the dark and the light theme, and at 390 px:

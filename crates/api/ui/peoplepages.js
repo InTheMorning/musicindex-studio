@@ -729,7 +729,7 @@ function ValuesForm({ personId, row, feeds, shown, onBack, onFill }) {
   const button = linkFillButton({ loading, link: linkOn, count });
   // The link and the fill go to the page in one patch, so that both stay
   // pending until Save (ADR 0163 item 11).
-  const apply = () => onFill({ ...fillPatch(rows, checked, shown), ...(linkOn ? { ...pickLink(row, feeds, shown), ...linkName(shown, (values && values.title) || row.title) } : {}) }, fillSource(row));
+  const apply = () => onFill({ ...fillPatch(rows, checked, shown), ...(linkOn ? pickLink(row, feeds, shown) : {}) }, fillSource(row));
   const toggle = (id) => setChecked((current) => (current.includes(id) ? current.filter((c) => c !== id) : [...current, id]));
   const kind = lookupKind(row);
   const title = row.title || 'Untitled feed';
@@ -765,7 +765,7 @@ function FillRow({ row, checked, onToggle }) {
   // A value that the person has already keeps its content and has a tag (ADR 0146 item 3).
   const taken = row.lines.includes(ALREADY_VALUE);
   const text = html`<span class="text"><span class="pick-name"><span class="label">${row.title}</span>${taken && html`<${TakenTag} text=${ALREADY_VALUE} />`}</span>
-    ${row.value && html`<span class="summary mono address-text">${row.value}</span>`}
+    ${row.value && html`<span class=${row.id === 'name' ? 'summary' : 'summary mono address-text'}>${row.value}</span>`}
     ${row.lines.filter((line) => line !== ALREADY_VALUE).map((line) => html`<span class="summary" key=${line}>${line}</span>`)}</span>`;
   if (!row.selectable) return html`<div class=${taken ? 'link-row static pick-taken' : 'link-row static'}>${lead}${text}</div>`;
   return html`<label class="link-row use-row"><input type="checkbox" checked=${checked} onChange=${onToggle} />${lead}${text}</label>`;

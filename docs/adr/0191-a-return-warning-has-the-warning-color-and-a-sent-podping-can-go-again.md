@@ -48,6 +48,6 @@ Visual, by the planning model:
 - Review with the warning of ADR 0190 items 2, 3 and 4, at 1280 px in the light and dark themes. The warning is directly below the status line. Only the warnings of items 2 and 4 have the triangle icon and the title in the Warning color. No warning has a border.
 - The move notice with a sent line and its button, at 1280 px and at 390 px, in the light and dark themes.
 
-Human, by the operator. This gate stays open until it runs:
+Human, by the operator. This gate passed on 2026-11-12, in a release build of `1ca71ba`. Review gave the wait until 9:15:37 PM with the icon and the colored title, and the podping line gave "Waiting · 9:16:07 PM":
 
 - In the release build, the return warning with a wait is easy to see as a warning.

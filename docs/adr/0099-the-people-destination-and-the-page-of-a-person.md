@@ -10,6 +10,7 @@
 - Uses: [ADR 0098](0098-the-people-module.md) for the data and the operations. Also [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) for the tiers, [ADR 0028](0028-summary-lines-and-one-open-entry.md) and [ADR 0029](0029-editor-pages-toolbar-and-three-levels.md) for the rows and the levels, and musicindex ADR 0023 for the words.
 - Changed by: [ADR 0111](0111-the-page-of-a-person-checks-the-feeds.md). Items 3 to 5 and 7: the sheet "Check: {name}", the sequence of the page of a person, "Check your feeds" in the place of "Where used", and "Add to a Person" for a wallet.
 - Changed by: [ADR 0182](0182-the-page-of-a-person-starts-with-its-links-and-has-a-nickname.md). Item 4: the head shows the nickname of the person.
+- Changed by: [ADR 0193](0193-a-destructive-button-is-the-first-button-of-its-row.md). In a row of buttons, the destructive action of a recipient is the first button.
 
 ## Context
 

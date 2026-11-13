@@ -84,8 +84,8 @@ function CreditRow({ row, removeLabel, onRemove, onEdit }) {
           ${a.id === 'nostr' && html`<${CopyButton} text=${row.npub} label="the Nostr key" />`}</dd></div>`)}</dl>
       ${row.warning && html`<span class="summary field-error">${row.warning}</span>`}</div>
     <div class="actions more-actions">
-      ${onEdit && html`<button class="button action" type="button" aria-label=${`Edit ${row.title}`} onClick=${onEdit}>Edit</button>`}
-      <button class="button destructive" type="button" aria-label=${removeLabel} onClick=${onRemove}>Remove</button></div></div>`;
+      <button class="button destructive" type="button" aria-label=${removeLabel} onClick=${onRemove}>Remove</button>
+      ${onEdit && html`<button class="button action" type="button" aria-label=${`Edit ${row.title}`} onClick=${onEdit}>Edit</button>`}</div></div>`;
 }
 
 // A Nostr key with its profile, a copy button and an optional action.
@@ -1039,9 +1039,9 @@ export function PersonPage({ id, feeds, go }) {
     support: () => html`<section class="page-section"><h2>Support links</h2>
       <div class="group">${person.support_links.map((l) => html`<div class="link-row static more-row" key=${l.id}><span class="text">
           <span class="label">${l.label || 'Support link'}</span><span class="summary address-text">${l.url}</span></span>
-          <div class="actions more-actions"><button class="button action" type="button" aria-label=${`Edit the support link ${l.label || l.url}`}
-            onClick=${() => withLeave(() => setEditing(supportLinkEdit(l)))}>Edit</button>
-          ${removeButton('support-links', l.id, `Remove the support link ${l.label || l.url}`)}</div></div>`)}
+          <div class="actions more-actions">${removeButton('support-links', l.id, `Remove the support link ${l.label || l.url}`)}
+          <button class="button action" type="button" aria-label=${`Edit the support link ${l.label || l.url}`}
+            onClick=${() => withLeave(() => setEditing(supportLinkEdit(l)))}>Edit</button></div></div>`)}
         <${AddRow} title="Add a Support Link" onClick=${() => withLeave(() => setLinking('support-links'))} /></div></section>`,
     member: () => {
       const rows = linkRows(shown, saved, feeds, person.linked_credits, pageNotes);
@@ -1062,12 +1062,12 @@ export function PersonPage({ id, feeds, go }) {
       <div class="group">${CHANGE_ROWS.map(([kind, line]) => html`<${ListRow} key=${kind} title=${SHEET_TITLES[kind]} lines=${[line]}
         onClick=${() => open(kind)} />`)}</div></section>`,
     delete: () => html`<section class="page-section"><div class="actions">
-      <button class="button" type="button" onClick=${() => withLeave(() => setMerging(true))}>Merge with a Person</button>
-      <button class="button destructive" type="button" onClick=${() => withLeave(deletePerson)}>Delete Person</button></div></section>`,
+      <button class="button destructive" type="button" onClick=${() => withLeave(deletePerson)}>Delete Person</button>
+      <button class="button" type="button" onClick=${() => withLeave(() => setMerging(true))}>Merge with a Person</button></div></section>`,
   };
   return html`<div><${Bar}><span class="bar-title">${displayName(shown || person)}</span>
     <div class="draft-toolbar"><span class=${saveFailure ? 'draft-status field-error' : 'draft-status'} role="status">${saveFailure || pendingStatus(keys.length)}</span>
-      <button class="button" type="button" disabled=${!dirty || saving} onClick=${discard}>Discard</button>
+      <button class="button discard" type="button" disabled=${!dirty || saving} onClick=${discard}>Discard</button>
       <button class="button primary" type="button" disabled=${!dirty || saving} onClick=${save}>Save</button></div><//><section class="section">
     <${ErrorNotice} error=${error} />
     ${pageSequence('person').map((section) => html`<${Fragment} key=${section.id}>${sections[section.id]()}<//>`)}

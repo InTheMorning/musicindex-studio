@@ -303,6 +303,10 @@ code, .mono {
 .button.destructive { background: var(--error-tint); border-color: transparent; color: var(--error); }
 .button.destructive:hover { filter: brightness(1.1); }
 .button.destructive:active { filter: brightness(.92); }
+.button.destructive:first-of-type:not(:last-of-type),
+.button.discard:first-of-type:not(:last-of-type) { margin-inline-end: 12px; }
+.sheet footer .button.destructive:first-of-type:not(:last-of-type),
+.sheet footer .button.discard:first-of-type:not(:last-of-type) { margin-inline-end: auto; }
 /* The class "button quiet" has no fill. It is only for an icon button
    (ADR 0037 item 5); a test enforces this. */
 .button.quiet { background: transparent; border-color: transparent; color: var(--muted); }

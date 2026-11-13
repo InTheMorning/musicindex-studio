@@ -69,3 +69,11 @@ export const CONFIRMS = {
     `The ${noun} then uses the recipients of the album.`,
     'Remove the Recipients'),
 };
+
+// The buttons of a confirmation sheet, left to right (ADR 0193 items 5 and
+// 6). A destructive action is first. The cancel button gets the first focus.
+export function confirmButtons(entry) {
+  const cancel = { label: entry.cancel || 'Cancel', role: 'cancel', kind: 'cancel', focus: true };
+  const action = { label: entry.action, role: entry.role, kind: 'action', focus: false };
+  return entry.role === 'destructive' ? [action, cancel] : [cancel, action];
+}

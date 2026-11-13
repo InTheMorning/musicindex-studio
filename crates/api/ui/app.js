@@ -24,7 +24,7 @@ import { addChoices, MAKE_TYPES, makeFields, makeTitle, feedFileStart, startChoi
 import { WELCOME, HOST_STEP, showWelcome, welcomeSteps, pathTexts, hostStepModel, welcomeBody, releaseAdd } from './welcome.js';
 import { isLiveItem } from './live.js';
 import { appRowLines, pairingPhase, pairingNotice, doneRemovesApp } from './apps.js';
-import { CONFIRMS } from './confirms.js';
+import { CONFIRMS, confirmButtons } from './confirms.js';
 import { changeTitle, afterDiscard, changeLine } from './people.js';
 import { makeSettingsDraft, changeSetting, settingsDraftView, discardSettings, saveSettings, asksSettingsLeave } from './settingsdraft.js';
 import { PeoplePage, PersonPage, CheckPage, WalletPage } from './peoplepages.js';
@@ -1990,9 +1990,9 @@ function ReadOnlyFeed({ feed, onChanged, onRemoved }) {
         <p class="hint">${otherFeedText(feed)}</p>
         <${OutsideNotices} feed=${feed} busy=${busy} refresh=${refresh} />
         <div class="actions">
+          <button class="button destructive" type="button" disabled=${busy} onClick=${remove}>Remove from Collection</button>
           <button class="button primary" type="button" disabled=${busy || !(feed.connector_id || feed.public_url)} onClick=${refresh}>
             ${busy ? 'Reading…' : 'Read Again'}</button>
-          <button class="button destructive" type="button" disabled=${busy} onClick=${remove}>Remove from Collection</button>
         </div>
       </div>
     </section>
@@ -2465,10 +2465,10 @@ function ConnectedAppsPanel() {
             <span class="hint">${lines.status}</span>
             ${lines.address && html`<span class="hint">Live value address <span class="mono">${lines.address}</span></span>`}</span>
           <span class="app-buttons">
-            ${lines.connectAgain && html`<button class="button action" type="button" disabled=${busy}
-              aria-label=${`Connect the app ${a.name} again`} onClick=${() => connectAgain(a)}>Connect Again</button>`}
             <button class="button destructive" type="button" disabled=${busy}
               aria-label=${`Remove the app ${a.name}`} onClick=${() => remove(a)}>Remove</button>
+            ${lines.connectAgain && html`<button class="button action" type="button" disabled=${busy}
+              aria-label=${`Connect the app ${a.name} again`} onClick=${() => connectAgain(a)}>Connect Again</button>`}
           </span>
         </li>`;
       })}
@@ -2592,11 +2592,11 @@ function HostCard({ connector, connectors, feeds, removeBusy, onRemove, onOpen, 
     <header class="host-head">
       <span class="eyebrow">${isTemporary ? 'Temporary area' : isS3 ? 'S3 or R2 bucket' : isSftp ? 'SFTP server' : isNsite ? 'nsite site' : isBlossom ? 'Blossom server' : 'Folder on this computer'}</span>
       ${!editing && html`<div class="actions">
+        <button class="button destructive" type="button" disabled=${removeBusy}
+          aria-label=${`Remove the file host ${connector.name}`} onClick=${onRemove}>Remove</button>
         ${connectors.length > 1 && html`<button class="button action" type="button" disabled=${removeBusy}
           onClick=${() => setMovingAll(true)}>Move All Releases…</button>`}
         ${!isTemporary && html`<button class="button" type="button" disabled=${removeBusy} onClick=${startEdit}>Edit</button>`}
-        <button class="button destructive" type="button" disabled=${removeBusy}
-          aria-label=${`Remove the file host ${connector.name}`} onClick=${onRemove}>Remove</button>
       </div>`}
     </header>
     ${editing
@@ -2823,7 +2823,7 @@ function SettingsPage({ view, go }) {
   return html`<div>
     <${Bar}><span class="bar-title">Settings</span>
       <div class="draft-toolbar"><span class=${barCause ? 'draft-status error' : 'draft-status'} role="status">${barCause || draftView.status}</span>
-        <button class="button" type="button" disabled=${draftView.discardDisabled || saving} onClick=${discard}>Discard</button>
+        <button class="button discard" type="button" disabled=${draftView.discardDisabled || saving} onClick=${discard}>Discard</button>
         <button class="button primary" type="button" disabled=${draftView.saveDisabled || saving} onClick=${save}>Save</button></div>
 <//>
     <div class="settings-tabs"><${PageTabs} tabs=${tabs.map((tab) => ({ ...tab, pending: draftView.tabs.includes(tab.id) }))} current=${current} onSelect=${openTab} label="Settings tabs" /></div>
@@ -3016,9 +3016,9 @@ function ChangeSetPage({ id, go, onChanged }) {
   const notFound = error && error.status === 404;
   const pendingWrite = set !== null && pending > 0;
   return html`<div><${Bar}><span class="bar-title">Review the changes</span>
-    ${set && html`${pendingWrite && html`<button class="button primary" type="button" disabled=${writing || busy} onClick=${writeAll}>
-        ${writing ? 'Writing…' : writeLabel(pending)}</button>`}
-      <button class="button destructive" type="button" disabled=${writing || busy} onClick=${discard}>Discard</button>`}<//><section class="section">
+    ${set && html`<div class="draft-toolbar"><button class="button destructive" type="button" disabled=${writing || busy} onClick=${discard}>Discard</button>
+      ${pendingWrite && html`<button class="button primary" type="button" disabled=${writing || busy} onClick=${writeAll}>
+        ${writing ? 'Writing…' : writeLabel(pending)}</button>`}</div>`}<//><section class="section">
     ${notFound
       ? html`<div class="notice" role="status"><strong>Studio did not find these changes.</strong>It is written or discarded.
           <div class="actions"><button class="button" type="button" onClick=${() => go({ name: 'people' })}>Open People</button></div></div>`
@@ -4586,18 +4586,18 @@ function AccountPanel() {
     ${exporting && html`<${ExportSheet} onClose=${() => setExporting(false)} />`}
     ${hasPasskeys && html`<${PasskeyList} />`}
     ${deleting
-      ? html`<form class="form" onSubmit=${remove}>
+      ? html`<form class="form" onSubmit=${(e) => e.preventDefault()}>
           <p class="hint">Studio removes your feeds, your vault and your library files from the server. This cannot be undone.</p>
           <${Field} id="delete-confirm" label=${`Type ${byEmail ? 'your email address' : 'your npub'} to confirm`}
             autocomplete="off" value=${typed} onInput=${(e) => setTyped(e.target.value)} />
           <div class="actions">
-            <button class="button destructive" type="submit" disabled=${busy || !confirmation}>${busy ? 'Deleting…' : 'Yes, Delete the Account'}</button>
+            <button class="button destructive" type="button" disabled=${busy || !confirmation} onClick=${remove}>${busy ? 'Deleting…' : 'Yes, Delete the Account'}</button>
             <button class="button" type="button" disabled=${busy} onClick=${() => { setDeleting(false); setTyped(''); }}>Cancel</button>
           </div>
         </form>`
       : html`<div class="actions">
-          <button class="button" type="button" disabled=${busy} onClick=${signOut}>Sign Out</button>
           <button class="button destructive" type="button" disabled=${busy} onClick=${() => setDeleting(true)}>Delete the Account</button>
+          <button class="button" type="button" disabled=${busy} onClick=${signOut}>Sign Out</button>
         </div>`}
     <${AuthNotice} error=${error} />
   </div></section>`;
@@ -4886,14 +4886,14 @@ function CollectionSheet({ kind, openName, onDone, onClose }) {
 // no such button.
 function CollectionActionSheet({ kind, collection, onDone, onClose }) {
   const ref = useSheet(true);
+  const cancelRef = useRef(null);
   const words = collectionAction(kind, collection);
   const [name, setName] = useState(words.start || '');
   const [file, setFile] = useState(null);
   const [exporting, setExporting] = useState(false);
   const picker = useRef(null);
   const { busy, error, run } = useAction();
-  const submit = (e) => {
-    e.preventDefault();
+  const act = () => {
     run(async () => {
       if (kind === 'rename') await api(`/collections/${collection.folder}`, { method: 'PATCH', body: { name } });
       else if (kind === 'replace') await sendReplace(collection.folder, file);
@@ -4901,7 +4901,13 @@ function CollectionActionSheet({ kind, collection, onDone, onClose }) {
       onDone();
     });
   };
+  // Enter in the form does not start a destructive action (ADR 0193 item 9).
+  const submit = (e) => {
+    e.preventDefault();
+    if (!words.destructive) act();
+  };
   const ready = kind === 'rename' ? name.trim() !== '' : kind !== 'replace' || file !== null;
+  useEffect(() => { if (words.destructive) cancelRef.current?.focus(); }, [kind]);
   return html`<dialog ref=${ref} class="sheet small" aria-labelledby="collection-action-title" onClose=${onClose}>
     <header>
       <h2 id="collection-action-title">${words.title}</h2>
@@ -4919,9 +4925,10 @@ function CollectionActionSheet({ kind, collection, onDone, onClose }) {
       <${ErrorNotice} error=${error} />
     </form>
     <footer>
+      ${words.destructive && html`<button class="button destructive" type="button" disabled=${busy || !ready} onClick=${act}>${busy ? words.busy : words.primary}</button>`}
       ${words.exportFirst && html`<button class="button action" type="button" disabled=${busy} onClick=${() => setExporting(true)}>Export First…</button>`}
-      <button class=${`button ${words.destructive ? 'destructive' : 'primary'}`} type="submit" form="collection-action-form" disabled=${busy || !ready}>
-        ${busy ? words.busy : words.primary}</button>
+      ${words.destructive && html`<button class="button" type="button" ref=${cancelRef} onClick=${() => ref.current.close()}>Cancel</button>`}
+      ${!words.destructive && html`<button class="button primary" type="submit" form="collection-action-form" disabled=${busy || !ready}>${busy ? words.busy : words.primary}</button>`}
     </footer>
     ${exporting && html`<${ExportSheet} folder=${collection.folder} onClose=${() => setExporting(false)} />`}
   </dialog>`;
@@ -5295,7 +5302,8 @@ function ConfirmHost() {
     setAsk(null);
   };
   if (!ask) return null;
-  const { title, text, action, role, cancel } = ask.entry;
+  const { title, text } = ask.entry;
+  const buttons = confirmButtons(ask.entry);
   return html`<dialog ref=${ref} class="sheet small" aria-labelledby="confirm-title" onClose=${onClose}>
     <header>
       <h2 id="confirm-title">${title}</h2>
@@ -5303,8 +5311,8 @@ function ConfirmHost() {
     </header>
     <div class="body"><p>${text}</p></div>
     <footer>
-      <button class="button" type="button" ref=${cancelRef} onClick=${() => ref.current.close()}>${cancel || 'Cancel'}</button>
-      <button class=${`button ${role}`} type="button" onClick=${() => { result.current = true; ref.current.close(); }}>${action}</button>
+      ${buttons.map((button) => html`<button class=${`button ${button.kind === 'action' ? button.role : ''}`} type="button"
+        ref=${button.focus ? cancelRef : null} onClick=${() => { if (button.kind === 'action') result.current = true; ref.current.close(); }}>${button.label}</button>`)}
     </footer>
   </dialog>`;
 }

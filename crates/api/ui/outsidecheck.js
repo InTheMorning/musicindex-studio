@@ -63,8 +63,9 @@ export function indexNotice(check) {
 // item 2).
 export const localTime = (seconds) => new Date(seconds * 1000).toLocaleString();
 
-// The notice after a move by Studio (ADR 0184 items 3 to 7). A feed with no
-// public address has no send button (item 11).
+// The notice after a move by Studio (ADR 0184 items 3 to 7). A sent line can
+// send again (ADR 0191 item 4). A feed with no public address has no send
+// button (ADR 0184 item 11).
 export function moveNotice(check) {
   if (!check || check.index_is_move_source !== true || !check.last_move) return null;
   const lines = (check.last_move.announcements || []).map((announcement) => {
@@ -75,6 +76,7 @@ export function moveNotice(check) {
     } else if (announcement.state === 'sent') {
       line.tag = 'Sent';
       line.time = localTime(announcement.finished_at);
+      if (check.own_url) line.action = 'Send the Podping Again';
     } else if (announcement.state === 'failed') {
       line.tag = 'Failed';
       line.time = localTime(announcement.finished_at);

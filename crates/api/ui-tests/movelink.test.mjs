@@ -142,6 +142,11 @@ test('only a return gets the warning, and each state of the wait gives its text 
   for (const wait of [null, { state: 'waits', until, too_far: true }, { state: 'follows' }, { state: 'unknown' }]) {
     assert.doesNotMatch(returnWarning(move, wait).text, /do not need to do more/, owner);
   }
+  const tone = 'ADR 0191 items 2 and 3: only "follows at once" is plain. Correct the tone in returnWarning in crates/api/ui/movelink.js.';
+  assert.equal(waits.tone, 'warning', tone);
+  assert.equal(returnWarning(move, { state: 'unknown' }).tone, 'warning', tone);
+  assert.equal(returnWarning(move, null).tone, 'warning', tone);
+  assert.equal(returnWarning(move, { state: 'follows' }).tone, 'plain', tone);
   assert.equal(returnWarning({ replaces_pointer: false }, { state: 'waits', until }), null, owner);
   assert.equal(returnWarning(null), null, owner);
   assert.equal(returnWarning(undefined), null, owner);

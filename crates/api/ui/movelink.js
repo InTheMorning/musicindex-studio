@@ -89,15 +89,16 @@ export function returnWaitsText(until) {
 
 // The warning for a feed move of the core and the state of the wait, or
 // `null` when the move is not a return. With no state, or a state that this
-// module does not know, the warning gives the text of ADR 0190 item 4.
+// module does not know, the warning gives the text of ADR 0190 item 4. Only
+// "follows at once" has the plain tone (ADR 0191 items 2 and 3).
 export function returnWarning(move, wait) {
   if (!move || !move.replaces_pointer) return null;
   if (wait && wait.state === 'waits' && Number.isFinite(wait.until)) {
     const text = returnWaitsText(wait.until);
-    return { title: RETURN_TITLE, text: wait.too_far ? `${text} ${RETURN_TOO_FAR}` : text };
+    return { title: RETURN_TITLE, text: wait.too_far ? `${text} ${RETURN_TOO_FAR}` : text, tone: 'warning' };
   }
-  if (wait && wait.state === 'follows') return { title: RETURN_TITLE, text: RETURN_FOLLOWS };
-  return { title: RETURN_TITLE, text: RETURN_UNKNOWN };
+  if (wait && wait.state === 'follows') return { title: RETURN_TITLE, text: RETURN_FOLLOWS, tone: 'plain' };
+  return { title: RETURN_TITLE, text: RETURN_UNKNOWN, tone: 'warning' };
 }
 
 const UNKNOWN_CONDITION = 'A link of the draft is not correct.';

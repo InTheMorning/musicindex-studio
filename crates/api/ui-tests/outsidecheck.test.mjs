@@ -58,8 +58,8 @@ test('The Studio move notice gives each podping state and its action (ADR 0184 i
   assert.equal(notice.lines[2].action, 'Send the Podping Again');
   assert.equal(notice.lines[3].text, '');
   assert.equal(notice.lines[3].action, 'Send the Podping');
-  assert.equal(notice.lines[0].action, undefined);
-  assert.equal(notice.lines[1].action, undefined);
+  assert.equal(notice.lines[0].action, undefined, 'ADR 0191 item 5: a waiting line has no button. Correct moveNotice in crates/api/ui/outsidecheck.js.');
+  assert.equal(notice.lines[1].action, 'Send the Podping Again', 'ADR 0191 item 4: a sent line can send the podping again. Correct moveNotice in crates/api/ui/outsidecheck.js.');
   assert.equal(moveNotice({ index_is_move_source: false, index_url: 'https://old.example/a.xml' }), null);
   assert.ok(indexNotice({ index_url: 'https://old.example/a.xml', own_url: 'https://new.example/a.xml' }));
 });

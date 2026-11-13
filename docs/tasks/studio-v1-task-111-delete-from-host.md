@@ -5,7 +5,7 @@ Decision: [ADR 0131](../adr/0131-delete-a-feed-from-its-file-host.md).
 
 Status: Complete. ADR 0131 is Accepted. Packets 111a, 111b, 111c and 111d are complete. The operator confirmed the mockup of packet 111c on 2026-11-13. The footer of the final sheet puts **Delete** first, as ADR 0193 requires. The screenshot visual check of 111c passed at 1280 px in the light theme and at 390 px in the dark theme.
 
-The human test of ADR 0131 ran on 2026-11-13 with a local build. The retire and the delete passed. The feed after the delete did not open, so the gate failed. Finding 6 of the [human test findings of 0.1.0-rc.22](../reviews/2026-11-13-rc22-human-test-findings.md) gives the cause.
+The human test of ADR 0131 ran on 2026-11-13 with a local build. The retire and the delete passed. The feed after the delete did not open (finding 6 of the [human test findings of 0.1.0-rc.22](../reviews/2026-11-13-rc22-human-test-findings.md)). [Task 134](studio-v1-task-134-deleted-feed-opens.md) corrected it, and its human check passed on the same day. A restore on a real host did not run.
 
 ## Goal
 

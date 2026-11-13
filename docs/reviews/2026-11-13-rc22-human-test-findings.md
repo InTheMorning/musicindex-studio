@@ -20,7 +20,7 @@ The steps of "What to test" in the [notes of 0.1.0-rc.22](../releases/0.1.0-rc.2
 | 8–10 | 7 | **Add a Person** from a live page, a nickname, and a new credit | Passed, with finding 8. A new credit got the name "Haleen", not the nickname. |
 | 11 | — | ADR 0175 in the AppImage | Open. The AppImage does not have the rows of 8a23157. The local build was not used for this step. |
 | 12–18 | — | ADR 0131: retire and delete a test feed on a real file host | The delete passed, with findings 3 to 5 |
-| 19 | — | ADR 0131 item 14: the feed after the delete | Failed. Finding 6. |
+| 19 | — | ADR 0131 item 14: the feed after the delete | Failed. Finding 6. Passed after task 134. |
 
 Step 11 details: the album "The Heycitizen Experience" (GUID `a2d2e313-9cbd-5169-b89c-ab07b33ecc33`) showed no Music Index finding. The agent read `GET /v1/feeds/{guid}`: the index holds the same address, and `/copies` is empty. So no finding was the correct result. **Copy the Report** shows only for a copy that pays other people. No feed of the operator has such a copy, so that part cannot run with a real feed.
 
@@ -61,7 +61,12 @@ The probable cause comes from the code. A test has not proved it yet:
 - The `last_version` of a feed on an S3 or R2 host is the ETag of the host (`crates/core/src/connector/s3.rs`). The facts of the test feed showed the version `d4de5b7a46da010a1e6…`, with no `sha256:` prefix. The SHA-256 of the feed before the delete was `c4a7042c…`.
 - So the two values cannot agree after a delete on an S3 or R2 host. `start_restore_draft` (`crates/core/src/feed_delete.rs`) makes the same comparison, so a restore possibly fails too.
 
-The operator keeps the test feed in this state for the investigation.
+Task 134 (`51dc619`) proved this cause with a test host that gives ETag versions. A deleted feed now opens from the snapshot of its delete. The human check of task 134 passed on 2026-11-13: the test feed opened as read-only with its tracks, and the Retire block showed the three steps as done.
+
+Two observations from that check, not verified in the code:
+
+- Step 1 of the Retire block said "Hide from apps is on in the draft." After the delete, the draft is the last copy, so "the last write" is possibly the clearer text.
+- **Stop Retiring** and **Link to This Page** show on the read-only feed.
 
 ### 7. Two Linked Page Rows Look The Same
 

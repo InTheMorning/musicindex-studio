@@ -10,6 +10,7 @@
 - Uses: [ADR 0132](0132-a-person-can-be-part-of-many-artists-and-labels.md), [ADR 0123](0123-one-type-of-value-has-one-picker.md), [ADR 0145](0145-each-sheet-that-adds-a-value-has-one-layout.md), [ADR 0154](0154-the-search-fields-have-a-field-list.md), [ADR 0116](0116-the-page-of-a-person-has-save-and-discard.md), [ADR 0147](0147-the-nostr-and-artwork-rows-show-a-preview.md).
 - Changes: [ADR 0132](0132-a-person-can-be-part-of-many-artists-and-labels.md) items 5 and 6, the select menu of a link. [ADR 0108](0108-people-data-at-rest-stays-plain.md) item 6, which this record examines.
 - Changed by: [ADR 0182](0182-the-page-of-a-person-starts-with-its-links-and-has-a-nickname.md). Items 8 and 15: the button of a page suggestion is **Add**.
+- Changed by: [ADR 0196](0196-a-person-keeps-a-list-of-pictures-and-websites-with-a-default.md). A page value that is not in the list of the person shows with **Add**, and the default does not change.
 
 ## Context
 

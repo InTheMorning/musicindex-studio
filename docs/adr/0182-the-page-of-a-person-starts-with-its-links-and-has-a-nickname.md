@@ -18,6 +18,7 @@ On 2026-11-12, the operator found these defects on the People pages:
 
 - A page suggestion has **Use**. The button adds a wallet to the person, and the wallet then shows "Not used". Thus "Use" and "Not used" tell the user two different things.
 - The sheet "Add a Person" has no search. To link a page, the user adds the person first. The sheet does not show a person that is in People already.
+- Changed by: [ADR 0196](0196-a-person-keeps-a-list-of-pictures-and-websites-with-a-default.md). Items 1 and 3: a picture or a website suggestion adds a value to a list and does not change the default.
 - The section "Linked artist and label pages" is at the bottom of the page. It gives the suggestions in the sections above it, so the user sees the cause last.
 - The head shows the name, and the field "Name" in "Credits" edits the same name. The operator wants a short name in Studio and the official name in a credit.
 - The sheet "Update from Linked Pages" shows "Picture" and "Website" with no value.

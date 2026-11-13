@@ -29,6 +29,7 @@ tungstenite.workspace = true
 tar.workspace = true
 rusqlite = { version = "0.40", features = ["bundled", "backup"] }
 uuid = { version = "1.28", features = ["v4", "v5"] }
+url = "2"
 zeroize = "1.9"
 zxcvbn = { version = "3.1", default-features = false }
 lofty = { version = "0.25", default-features = false, features = [

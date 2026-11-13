@@ -488,7 +488,11 @@ pub fn compose_values(
     let lookups: HashMap<String, Lookup> = people::lookup_map(collection)?;
     let picture = match feed.picture {
         Some(value) => {
-            let state = if person.img.trim() == value {
+            let state = if person
+                .pictures
+                .iter()
+                .any(|item| item.value.trim() == value)
+            {
                 ValueState::Current
             } else {
                 ValueState::New
@@ -499,7 +503,11 @@ pub fn compose_values(
     };
     let website = match feed.website {
         Some(value) => {
-            let state = if person.href.trim() == value {
+            let state = if person
+                .websites
+                .iter()
+                .any(|item| item.value.trim() == value)
+            {
                 ValueState::Current
             } else {
                 ValueState::New

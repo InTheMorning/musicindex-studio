@@ -1876,15 +1876,15 @@ test('a read-only row says "Read only", and a page that Music Index does not kno
 
 test('a page that differs gives suggestions, and a page that agrees gives none (ADR 0159 items 8 and 9)', () => {
   const values = savedValues({ ...MK, pages: [PAGE] });
-  const differs = [{ ...PAGE, missing: false, picture: 'https://img.example/a.png', website: 'https://ann.example', npub: 'npub1ann',
+  const differs = [{ ...PAGE, host: 'index.example', missing: false, picture: 'https://img.example/a.png', website: 'https://ann.example', npub: 'npub1ann',
     wallets: [{ key: { address: 'ann@x.example', custom_key: null, custom_value: null }, recipient_type: 'lnaddress', name: 'Ann' }],
     other_recipients: [
       { key: { address: 'other@x.example' }, recipient_type: 'lnaddress', name: 'Other' },
       { key: { address: 'anonymous@x.example' }, recipient_type: 'node', name: null },
     ] }];
   const out = pageSuggestions(differs, values);
-  assert.deepEqual(out.img.map((r) => [r.value, r.line]), [['https://img.example/a.png', 'New picture on "Ann Bell Music"']]);
-  assert.deepEqual(out.href.map((r) => r.line), ['New website on "Ann Bell Music"']);
+  assert.deepEqual(out.img.map((r) => [r.value, r.line]), [['https://img.example/a.png', 'New picture from "Ann Bell Music" on index.example']]);
+  assert.deepEqual(out.href.map((r) => r.line), ['New website from "Ann Bell Music" on index.example']);
   assert.deepEqual(out.keys.map((r) => r.value), ['npub1ann']);
   assert.deepEqual(out.wallets.map((r) => [r.value, r.recipient_type, r.recipient_name, r.line]), [['ann@x.example', 'lnaddress', 'Ann', 'New wallet on "Ann Bell Music"']]);
   assert.deepEqual(out.otherRecipients.map((fold) => [fold.title, fold.rows.map((row) => [row.value, row.recipient_name, row.line])]), [[
@@ -1907,17 +1907,19 @@ test('a page that differs gives suggestions, and a page that agrees gives none (
   assert.deepEqual(pageSuggestions(differs, { ...values, pages: [] }).img, [], 'A removed page gives no suggestion.');
 });
 
-test('page suggestions give Use for a picture and website and Add for each list value (ADR 0194 items 6 and 7)', () => {
+test('page suggestions give Add and a source line for a picture and website (ADR 0196 item 13)', () => {
   const values = { img: '', href: '', keys: [], wallets: [], pages: [PAGE] };
-  const page = { ...PAGE, missing: false, picture: 'https://img.example/a.png', website: 'https://ann.example', npub: 'npub1ann',
+  const page = { ...PAGE, host: 'index.example', missing: false, picture: 'https://img.example/a.png', website: 'https://ann.example', npub: 'npub1ann',
     wallets: [{ key: { address: 'ann@x.example' }, recipient_type: 'lnaddress' }],
     other_recipients: [{ key: { address: 'other@x.example' }, recipient_type: 'node' }] };
   const rows = pageSuggestions([page], values);
+  assert.equal(rows.img[0].line, 'New picture from "Ann Bell Music" on index.example');
+  assert.equal(rows.href[0].line, 'New website from "Ann Bell Music" on index.example');
   const all = [...rows.img, ...rows.href, ...rows.keys, ...rows.wallets, ...rows.otherRecipients.flatMap((fold) => fold.rows)];
   assert.deepEqual(all.map((row) => [row.button, row.ariaLabel]), [
-    ['Use', 'Use https://img.example/a.png'], ['Use', 'Use https://ann.example'], ['Add', 'Add npub1ann'],
+    ['Add', 'Add https://img.example/a.png'], ['Add', 'Add https://ann.example'], ['Add', 'Add npub1ann'],
     ['Add', 'Add ann@x.example'], ['Add', 'Add other@x.example'],
-  ], 'ADR 0194 items 6 and 7: Use for the picture and the website, Add for a list value, and name each button for its value. Fix pageSuggestions in crates/api/ui/people.js.');
+  ], 'ADR 0196 item 13: Add for picture and website values, and name each button for its value. Fix pageSuggestions in crates/api/ui/people.js.');
 });
 
 import { addAllPageSuggestions, hasPageSuggestions, hasLinkedPages, linkedPageChanges, linkedPageSelection, linkedPageChangeLines, linkedPageBody } from '../ui/people.js';
@@ -1929,17 +1931,17 @@ test('linked page updates add matching wallets and review each changed value', (
     other_recipients: [{ key: { address: 'other@x.example' }, recipient_type: 'lnaddress' }] }];
   assert.deepEqual(addAllPageSuggestions(pages, values), { ...values, img: 'https://img.example/a.png', href: 'https://ann.example',
     keys: ['npub1ann'], wallets: [{ key: { address: 'ann@x.example' }, recipient_type: 'lnaddress' }] });
-  const batch = linkedPageChanges([{ person_id: 1, name: 'Ann', img: null, href: null, keys: [], wallets: [] },
-    { person_id: 2, name: 'Cy', img: 'https://img.example/c.png', href: null, keys: ['npub1cy'], wallets: [{ key: { address: 'cy@x.example' } }] }]);
+  const batch = linkedPageChanges([{ person_id: 1, name: 'Ann', pictures: [], websites: [], keys: [], wallets: [] },
+    { person_id: 2, name: 'Cy', pictures: [{ value: 'https://img.example/c.png', source: { title: 'Cy Music', host: 'index.example' } }], websites: [], keys: ['npub1cy'], wallets: [{ key: { address: 'cy@x.example' } }] }]);
   assert.equal(batch.length, 1);
   assert.deepEqual(linkedPageChangeLines(batch[0]), [
-    { kind: 'picture', label: 'Picture', value: 'https://img.example/c.png' },
+    { kind: 'picture', label: 'Picture', value: 'https://img.example/c.png', source: 'From "Cy Music" on index.example' },
     { kind: 'key', label: 'Nostr key', value: 'npub1cy' },
     { kind: 'wallet', label: 'Wallet', value: 'cy@x.example' },
   ], 'ADR 0182 item 19: show each added value. Fix linkedPageChangeLines in crates/api/ui/people.js.');
   const selection = linkedPageSelection(batch);
   assert.deepEqual(selection, ['2:picture:https://img.example/c.png', '2:key:npub1cy', '2:wallet:cy@x.example'], 'Each value starts selected.');
-  assert.deepEqual(linkedPageBody(batch, [selection[0], selection[2]]), { people: [{ ...batch[0], keys: [] }] },
+  assert.deepEqual(linkedPageBody(batch, [selection[0], selection[2]]), { people: [{ ...batch[0], pictures: batch[0].pictures, websites: [], keys: [] }] },
     'ADR 0194 item 4: Update sends only the selected values. Fix linkedPageBody in crates/api/ui/people.js.');
   assert.deepEqual(linkedPageBody(batch, []), { people: [] }, 'ADR 0194 item 4: a person with no selected value does not change. Fix linkedPageBody in crates/api/ui/people.js.');
   assert.equal(hasLinkedPages([{ pages: [] }, { pages: [PAGE] }]), true);

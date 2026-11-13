@@ -7310,7 +7310,10 @@ async fn the_linked_page_changes_give_the_matching_values_and_save_only_the_sent
     let people = body["people"].as_array().unwrap();
     assert_eq!(people.len(), 1, "{body}");
     assert_eq!(people[0]["person_id"], ids[0]);
-    assert_eq!(people[0]["img"], "https://img.example/a.png");
+    assert_eq!(
+        people[0]["pictures"][0]["value"],
+        "https://img.example/a.png"
+    );
     assert_eq!(people[0]["wallets"].as_array().unwrap().len(), 1, "{body}");
     assert_eq!(people[0]["wallets"][0]["key"]["address"], "ann@x.example");
 
@@ -7337,6 +7340,10 @@ async fn the_linked_page_changes_give_the_matching_values_and_save_only_the_sent
     assert_eq!(status, StatusCode::NO_CONTENT);
     let (_, ann) = call(&app, "GET", &format!("/api/v1/people/{}", ids[0]), None).await;
     assert_eq!(ann["img"], "https://img.example/a.png", "{ann}");
+    assert_eq!(
+        ann["pictures"][0]["value"], "https://img.example/a.png",
+        "{ann}"
+    );
     assert_eq!(ann["wallets"].as_array().unwrap().len(), 1, "{ann}");
     let (_, body) = call(&app, "GET", "/api/v1/people/linked-page-changes", None).await;
     assert_eq!(body["people"], json!([]), "The values are saved: {body}");

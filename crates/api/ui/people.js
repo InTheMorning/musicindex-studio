@@ -1126,8 +1126,8 @@ export function pageSuggestions(suggestions, values) {
   for (const s of suggestions || []) {
     if (s.missing || !shown.has(s.feed_guid)) continue;
     const title = s.title || 'Untitled feed';
-    if (s.picture && s.picture !== values.img) out.img.push({ value: s.picture, line: `New picture on "${title}"`, guid: s.feed_guid, button: 'Use', ariaLabel: `Use ${s.picture}` });
-    if (s.website && s.website !== values.href) out.href.push({ value: s.website, line: `New website on "${title}"`, guid: s.feed_guid, button: 'Use', ariaLabel: `Use ${s.website}` });
+    if (s.picture && s.picture !== values.img) out.img.push({ value: s.picture, line: `New picture from "${title}"${s.host ? ` on ${s.host}` : ''}`, guid: s.feed_guid, button: 'Add', ariaLabel: `Add ${s.picture}` });
+    if (s.website && s.website !== values.href) out.href.push({ value: s.website, line: `New website from "${title}"${s.host ? ` on ${s.host}` : ''}`, guid: s.feed_guid, button: 'Add', ariaLabel: `Add ${s.website}` });
     if (s.npub && !(values.keys || []).includes(s.npub)) out.keys.push({ value: s.npub, line: `New Nostr key on "${title}"`, guid: s.feed_guid, button: 'Add', ariaLabel: `Add ${s.npub}` });
     for (const w of s.wallets || []) {
       if (pendingWallets.includes(String(w.key.address).toLowerCase())) continue;
@@ -1168,7 +1168,7 @@ export const hasLinkedPages = (people = []) => people.some((person) => (person.p
 
 // The people of the review sheet "Update from Linked Pages" (ADR 0170 item
 // 5): each person with a change. `rows` is the list of the core.
-export const linkedPageChanges = (rows = []) => rows.filter((row) => row.img || row.href
+export const linkedPageChanges = (rows = []) => rows.filter((row) => (row.pictures || []).length || (row.websites || []).length
   || (row.keys || []).length > 0 || (row.wallets || []).length > 0);
 
 // One selected key for each value in the linked-page review sheet (ADR 0194 item 3).
@@ -1177,8 +1177,9 @@ export const linkedPageSelection = (people) => people.flatMap((person) => linked
 
 // The values of one person in the review sheet (ADR 0182 item 19).
 export function linkedPageChangeLines(person) {
-  return [person.img && { kind: 'picture', label: 'Picture', value: person.img },
-    person.href && { kind: 'website', label: 'Website', value: person.href },
+  const sourceLine = (item) => item.source ? `From "${item.source.title}" on ${item.source.host}` : '';
+  return [...(person.pictures || []).map((item) => ({ kind: 'picture', label: 'Picture', value: item.value, source: sourceLine(item) })),
+    ...(person.websites || []).map((item) => ({ kind: 'website', label: 'Website', value: item.value, source: sourceLine(item) })),
     ...(person.keys || []).map((value) => ({ kind: 'key', label: 'Nostr key', value })),
     ...(person.wallets || []).map((wallet) => ({ kind: 'wallet', label: 'Wallet', value: wallet.key.address }))].filter(Boolean);
 }
@@ -1190,10 +1191,10 @@ export function linkedPageBody(people, selected) {
     const chosen = (kind, value) => keys.has(`${person.person_id}:${kind}:${value}`);
     const keysForPerson = (person.keys || []).filter((value) => chosen('key', value));
     const wallets = (person.wallets || []).filter((wallet) => chosen('wallet', wallet.key.address));
-    const img = person.img && chosen('picture', person.img) ? person.img : null;
-    const href = person.href && chosen('website', person.href) ? person.href : null;
-    return { ...person, img, href, keys: keysForPerson, wallets };
-  }).filter((person) => person.img || person.href || person.keys.length > 0 || person.wallets.length > 0) };
+    const pictures = (person.pictures || []).filter((item) => chosen('picture', item.value));
+    const websites = (person.websites || []).filter((item) => chosen('website', item.value));
+    return { ...person, pictures, websites, keys: keysForPerson, wallets };
+  }).filter((person) => person.pictures.length || person.websites.length || person.keys.length > 0 || person.wallets.length > 0) };
 }
 
 // The offers of a credit after a Save that changes the links (ADR 0118 items 3

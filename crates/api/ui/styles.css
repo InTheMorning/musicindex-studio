@@ -2232,6 +2232,8 @@ button.outline-feed {
 .person-head h1 { overflow-wrap: anywhere; }
 .person-name-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .person-name-line .icon-button { color: var(--muted); flex: none; }
+/* WebKitGTK gives an SVG with no size a size of 0. */
+.person-name-line .icon { display: block; width: 20px; height: 20px; }
 .person-head .hint { overflow-wrap: anywhere; }
 .person-head .button.link { display: inline; padding: 0; min-height: 0; }
 /* Task 067d: a key or an address with a copy button. */

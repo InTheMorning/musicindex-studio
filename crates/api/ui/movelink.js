@@ -4,6 +4,8 @@
 // The core owns each condition, each hop result, each stage and each repair
 // (ADR 0065). This module only gives the text of what the core sends.
 
+import { localTime } from './outsidecheck.js';
+
 // The text of each condition. The keys are the variants of `Condition` in
 // `crates/core/src/move_link.rs`.
 export const CONDITION_TEXT = {
@@ -71,15 +73,31 @@ export const NOTICE_WHY = 'The self link is where this feed says that it lives. 
 export const NOTICE_END = 'Studio can still write the feed. To correct the self link, use the public address.';
 export const REPLACES_POINTER_NOTE = 'The pointer file at the new address becomes the feed.';
 
-// The warning of a return to an earlier address (ADR 0128 items 7 and 8). It
-// gives no time: Stophammer ADR 0083 owns the times, and Studio cannot read
-// the count of the index.
+// The warning of a return to an earlier address (ADR 0128 items 7 and 8, ADR
+// 0190 items 2 to 5). The text comes from the state of the route
+// `GET /feeds/{id}/return-wait`. Stophammer owns the values of the wait, so
+// the text gives no table of waits.
 export const RETURN_TITLE = 'This is a return to an earlier address.';
-export const RETURN_TEXT = 'This feed was at this address before. The index can wait before it follows a return, and the wait grows with each return. Your write is safe, and you do not need to do more.';
+export const RETURN_FOLLOWS = 'Music Index follows this return at once. Each return in one day makes the wait for the next return longer.';
+export const RETURN_UNKNOWN = 'Music Index can wait before it follows a return, and the wait grows with each return. After the wait, send the podping again.';
+export const RETURN_TOO_FAR = 'Send the podping again after that time.';
 
-// The warning for a feed move of the core, or `null` when it is not a return.
-export function returnWarning(move) {
-  return move && move.replaces_pointer ? { title: RETURN_TITLE, text: RETURN_TEXT } : null;
+// The text of a wait until a Unix time (ADR 0190 item 2).
+export function returnWaitsText(until) {
+  return `Music Index waits until ${localTime(until)} before it follows this return. Studio sends the podping after that time.`;
+}
+
+// The warning for a feed move of the core and the state of the wait, or
+// `null` when the move is not a return. With no state, or a state that this
+// module does not know, the warning gives the text of ADR 0190 item 4.
+export function returnWarning(move, wait) {
+  if (!move || !move.replaces_pointer) return null;
+  if (wait && wait.state === 'waits' && Number.isFinite(wait.until)) {
+    const text = returnWaitsText(wait.until);
+    return { title: RETURN_TITLE, text: wait.too_far ? `${text} ${RETURN_TOO_FAR}` : text };
+  }
+  if (wait && wait.state === 'follows') return { title: RETURN_TITLE, text: RETURN_FOLLOWS };
+  return { title: RETURN_TITLE, text: RETURN_UNKNOWN };
 }
 
 const UNKNOWN_CONDITION = 'A link of the draft is not correct.';

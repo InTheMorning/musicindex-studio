@@ -1748,8 +1748,19 @@ function LinkNotices({ report, busy, onRepair }) {
 }
 
 // The warning of a return (ADR 0128 items 7 to 9). It does not stop the write.
-function ReturnWarning({ move }) {
-  const view = returnWarning(move);
+// It reads the wait of Music Index only for a return (ADR 0190 item 1). While
+// the read runs, and after a failed read, it gives the text of item 4.
+function ReturnWarning({ feedId, move }) {
+  const isReturn = Boolean(move && move.replaces_pointer);
+  const [wait, setWait] = useState(null);
+  useEffect(() => {
+    setWait(null);
+    if (!isReturn) return undefined;
+    let live = true;
+    api(`/feeds/${feedId}/return-wait`).then((answer) => { if (live) setWait(answer); }, () => {});
+    return () => { live = false; };
+  }, [feedId, isReturn]);
+  const view = returnWarning(move, wait);
   return view && html`<div class="notice" role="status"><strong>${view.title}</strong>${view.text}</div>`;
 }
 
@@ -2132,7 +2143,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
           </div>`
         : html`<p class="field-warning" role="status" key=${problem.guid + problem.text}><strong>${problem.title}:</strong> ${problem.text}</p>`)}
       ${diff && html`<${HostOperations} diff=${diff} connectors=${connectors} onRemove=${removeOperation} onUndoMove=${undoMove} busy=${busy} />`}
-      ${diff && html`<${ReturnWarning} move=${diff.feed_move} />`}
+      ${diff && html`<${ReturnWarning} feedId=${feedId} move=${diff.feed_move} />`}
       ${diff && html`<${ReplaceWarning} move=${diff.feed_move} />`}
       ${diff && html`<${LinkNotices} report=${links} busy=${busy} onRepair=${repair} />`}
       ${diff && html`<${BuildDateNotices} state=${diff.build_date} />`}

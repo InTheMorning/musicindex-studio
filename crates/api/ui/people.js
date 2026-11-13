@@ -2201,6 +2201,7 @@ export function fillRows(values, pending) {
       id: `wallet:${index}`, title: 'Wallet', value: wallet.value, lines: [WALLET_WORDS[wallet.recipient_type] || 'Wallet', ...lines],
       selectable, selected: selectable && pending.wallets.some((w) => keyValue(w.key) === keyValue(wallet.key)),
       wallet: { key: wallet.key, recipient_type: wallet.recipient_type },
+      other: wallet.matches !== true,
     });
   });
   const npub = values.npub;
@@ -2220,6 +2221,20 @@ export function fillRows(values, pending) {
     });
   }
   return rows;
+}
+
+// Split wallet rows for the Fill section and name the closed fold.
+export function splitFillRows(rows, title) {
+  const isOther = (row) => row.other === true || row.matches === false;
+  const main = rows.filter((row) => row.id !== 'npub' && !isOther(row));
+  const other = rows.filter(isOther);
+  const tail = rows.filter((row) => row.id === 'npub');
+  return {
+    main,
+    other,
+    tail,
+    title: other.length === 1 ? `1 other recipient on ${title}` : `${other.length} other recipients on ${title}`,
+  };
 }
 
 // The text of the Fill button, for the number of selected rows (ADR 0117 item 13).

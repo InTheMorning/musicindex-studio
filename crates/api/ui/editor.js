@@ -103,12 +103,12 @@ export function PositionSelect({ id, index, count, name, disabled, onMove }) {
 // "Remove" takes an entry out of the list, so it is destructive.
 export function EntryActions({ list, index, name, onChange }) {
   return html`<div class="actions">
+    <button class="button destructive" type="button"
+      aria-label=${`Remove ${name}`} onClick=${() => onChange(list.filter((_, i) => i !== index))}>Remove</button>
     <button class="button" type="button" disabled=${index === 0}
       aria-label=${`Move ${name} up`} onClick=${() => onChange(move(list, index, -1))}>Move Up</button>
     <button class="button" type="button" disabled=${index === list.length - 1}
       aria-label=${`Move ${name} down`} onClick=${() => onChange(move(list, index, 1))}>Move Down</button>
-    <button class="button destructive" type="button"
-      aria-label=${`Remove ${name}`} onClick=${() => onChange(list.filter((_, i) => i !== index))}>Remove</button>
   </div>`;
 }
 
@@ -776,8 +776,8 @@ export function NostrSheet({ open, value, feedId, person, offerPeople = true, on
           : html`<div class="link-row"><span class="text"><span class="summary mono">${value}</span>
               ${card && html`<span class="summary">Studio found no profile for this key</span>`}</span></div>`}
         <div class="actions">
-          <button class="button" type="button" onClick=${() => setChanging(true)}>Change</button>
           <button class="button destructive" type="button" onClick=${() => choose(null, null)}>Remove</button>
+          <button class="button" type="button" onClick=${() => setChanging(true)}>Change</button>
         </div>
       </div>`}
       ${!showCard && html`<form class="form" role="search" onSubmit=${runSearch}>
@@ -2381,15 +2381,14 @@ function ArtistsAndLabels({ feed, feeds, model, update, draft, go, onListChanged
         <span class="title">${row.entry.title || row.entry.feed_url}</span>
         <span class="sub">${publisherLine(row.entry, row.match, row.index)}</span>
         <div class="actions">
+          <button class="button destructive" type="button" disabled=${linkAction.busy}
+            aria-label=${`Remove ${row.entry.title || 'this feed'}`} onClick=${() => removeRow(row)}>Remove</button>
           <button class="button" type="button" disabled=${row.index === 0 || linkAction.busy}
             aria-label=${`Move ${row.entry.title || 'this feed'} up`}
             onClick=${() => movePublisher(row.index, -1)}>Move Up</button>
           <button class="button" type="button" disabled=${row.index === rows.length - 1 || linkAction.busy}
             aria-label=${`Move ${row.entry.title || 'this feed'} down`}
             onClick=${() => movePublisher(row.index, 1)}>Move Down</button>
-          <button class="button destructive" type="button" disabled=${linkAction.busy}
-            aria-label=${`Remove ${row.entry.title || 'this feed'}`}
-            onClick=${() => removeRow(row)}>Remove</button>
         </div>
       </div>`)}
       ${candidates.length > 0 && html`<div class="field">
@@ -3876,8 +3875,8 @@ function CopyRow({ copy, connectors, busy, onReference, onDelete, onUndo }) {
     <span class="sub mono">${copy.path}</span>
     ${copy.url && html`<span class="sub mono">${copy.url}</span>`}
     <div class="actions">
-      <button class="button action" type="button" disabled=${busy} onClick=${() => onReference(copy.connector_id)}>Use This Copy</button>
       <button class="button destructive" type="button" disabled=${busy} onClick=${() => onDelete(copy.connector_id, copy.path)}>Delete</button>
+      <button class="button action" type="button" disabled=${busy} onClick=${() => onReference(copy.connector_id)}>Use This Copy</button>
     </div>
   </div>`;
 }
@@ -3940,8 +3939,8 @@ function FileEntry({ file, defaultHost, connectors, busy, download, onDownload, 
         <span class="title">Copy to ${connectorName(connectors, pending.connector_id)} pending</span>
         <span class="sub mono">${pending.path}</span>
         <div class="actions">
-          <button class="button action" type="button" disabled=${busy} onClick=${() => reference(pending.connector_id)}>Use This Copy</button>
           <button class="button destructive" type="button" disabled=${busy} onClick=${() => onUndo(pending.operation_id)}>Delete</button>
+          <button class="button action" type="button" disabled=${busy} onClick=${() => reference(pending.connector_id)}>Use This Copy</button>
         </div>
       </div>`)}
       ${copyTargets.length > 0 && html`<div class="actions">
@@ -4033,10 +4032,10 @@ function ChangeRow({ difference, file, busy, onAct }) {
   } else if (difference.kind === 'missing') {
     const hasSource = file && (file.copies.length > 0 || file.source_url);
     text = html`Missing: ${name}`;
-    buttons = html`${hasSource && html`<button class="button action" type="button" disabled=${off}
-        onClick=${() => act({ action: 'download', file: difference.file })}>Download Again</button>`}
-      <button class="button destructive" type="button" disabled=${off}
-        onClick=${() => act({ action: 'forget', file: difference.file })}>Forget the File</button>`;
+    buttons = html`<button class="button destructive" type="button" disabled=${off}
+        onClick=${() => act({ action: 'forget', file: difference.file })}>Forget the File</button>
+      ${hasSource && html`<button class="button action" type="button" disabled=${off}
+        onClick=${() => act({ action: 'download', file: difference.file })}>Download Again</button>`}`;
   } else {
     const hasCopy = file && file.copies.length > 0;
     text = html`Changed: ${name} (${fileSize(difference.size)}${file ? `, was ${fileSize(file.size)}` : ''})`;

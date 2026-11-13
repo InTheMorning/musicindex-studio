@@ -6,6 +6,7 @@
 - Accepted: 2026-11-02 by the operator, from screens 1, 5 and 6 of the mockups in `.studio-dev/mockup-lookup/site/`.
 - Changes: [ADR 0111](0111-the-page-of-a-person-checks-the-feeds.md) item 2, the save of each field when the user leaves it. [ADR 0113](0113-the-page-of-a-person-suggests-a-picture-and-an-information-address.md) item 8, the save of "Use".
 - Uses: [ADR 0039](0039-the-shell-releases-and-the-outline.md) and [ADR 0029](0029-editor-pages-toolbar-and-three-levels.md) for the toolbar, [ADR 0037](0037-button-roles.md) for the button roles, and musicindex ADR 0023 R-CONFIRM-1 for the confirmation sheet.
+- Changed by: [ADR 0193](0193-a-destructive-button-is-the-first-button-of-its-row.md). Item 8: "Discard Changes" is the first button of the sheet, and "Keep Editing" is the last button, with the first focus.
 
 ## Context
 

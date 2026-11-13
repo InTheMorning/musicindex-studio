@@ -127,6 +127,9 @@ export function overflows({ controls = 'button, [role=button], [role=radio], [ro
 // the list. A disabled control or a control with a low opacity is in the list.
 // A control under a layer is not in the list: the layer is an open modal dialog, or
 // an open dialog or popover that covers the control and does not contain it.
+// For a text field (input or textarea), the helper uses its content box, not its
+// border box. Thus a control in the padding of a field, such as a clear button, is
+// not in the list, because the text of the field never goes under it.
 export function overlaps({ controls = 'button, a, input, select, textarea, [role=button], [role=radio], [role=tab]' } = {}) {
   const shown = (e) => (e.checkVisibility ? e.checkVisibility() : !!e.offsetParent);
   const label = (e) => (e.getAttribute('aria-label') || e.textContent || e.getAttribute('placeholder') || '').trim().replace(/\s+/g, ' ').slice(0, 40) || e.outerHTML.slice(0, 70);
@@ -144,12 +147,24 @@ export function overlaps({ controls = 'button, a, input, select, textarea, [role
     const c = cross(l.getBoundingClientRect(), r);
     return c.width > 0 && c.height > 0;
   });
+  // The content box of a text field: the border box without the border and the padding.
+  const content = (e, r) => {
+    if (!e.matches('input, textarea')) return r;
+    const s = getComputedStyle(e);
+    const px = (name) => parseFloat(s.getPropertyValue(name)) || 0;
+    return {
+      left: r.left + px('border-left-width') + px('padding-left'),
+      right: r.right - px('border-right-width') - px('padding-right'),
+      top: r.top + px('border-top-width') + px('padding-top'),
+      bottom: r.bottom - px('border-bottom-width') - px('padding-bottom'),
+    };
+  };
   const items = [];
   for (const e of document.querySelectorAll(controls)) {
     if (!shown(e)) continue;
     const r = e.getBoundingClientRect();
     if (r.width === 0 || r.height === 0 || under(e, r)) continue;
-    items.push({ e, r });
+    items.push({ e, r, box: content(e, r) });
   }
   const found = [];
   for (let i = 0; i < items.length; i++) {
@@ -157,7 +172,7 @@ export function overlaps({ controls = 'button, a, input, select, textarea, [role
       const a = items[i];
       const b = items[j];
       if (a.e.contains(b.e) || b.e.contains(a.e)) continue;
-      const c = cross(a.r, b.r);
+      const c = cross(a.box, b.box);
       if (c.width <= 1 || c.height <= 1) continue;
       found.push({ fault: 'overlap', text: `"${label(a.e)}" and "${label(b.e)}"`, detail: `${Math.round(c.width)} x ${Math.round(c.height)} px` });
     }

@@ -57,7 +57,7 @@ Visual, by the planning model:
 
 - "Add a Person" with a filled form and a pending link, and "Find on Music Index" with results, at 1280 px and at 390 px, in the light and dark themes. `$edges()` and `$overflow()` are empty.
 
-Human, by the operator. This gate stays open until it runs:
+Human, by the operator. This gate passed on 2026-11-12 in the desktop app. A selection and **Cancel** kept 4 people. **Add the Person** made one person from a real page, and one person with no page:
 
 - In the desktop app, the operator adds a person from a real page on Music Index, and also adds a person with no page. Each person is made only at **Add the Person**.
 - In "Add a Person", the operator selects a page on Music Index, then goes back, then selects **Cancel**. People has no new person.

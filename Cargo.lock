@@ -4743,6 +4743,7 @@ dependencies = [
  "tempfile",
  "tungstenite",
  "ureq",
+ "url",
  "uuid",
  "zeroize",
  "zxcvbn",

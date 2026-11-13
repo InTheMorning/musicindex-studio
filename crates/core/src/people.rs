@@ -197,6 +197,10 @@ pub struct Person {
     pub img: String,
     /// The information address, or empty text.
     pub href: String,
+    /// Picture addresses, ordered by their saved position.
+    pub pictures: Vec<PersonValue>,
+    /// Website addresses, ordered by their saved position.
+    pub websites: Vec<PersonValue>,
     /// The default address that the user selected. Use [`default_address`]
     /// for the address that Studio uses.
     pub default_address: Option<RecipientKey>,
@@ -228,6 +232,26 @@ pub struct PersonPage {
     pub feed_guid: String,
     /// The title of the page, from the time of the link.
     pub title: String,
+}
+
+/// The linked page that supplied a person value.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ValueSource {
+    /// The feed GUID of the page.
+    pub feed_guid: String,
+    /// The title of the page.
+    pub title: String,
+    /// The host of the page feed address.
+    pub host: String,
+}
+
+/// A picture or website value and its source.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PersonValue {
+    /// The address.
+    pub value: String,
+    /// The linked page source, when one supplied the value.
+    pub source: Option<ValueSource>,
 }
 
 /// The fields of a person that the user edits.
@@ -328,7 +352,10 @@ fn insert_person(db: &Connection, fields: &PersonFields) -> Result<PersonId, Col
             fields.nickname
         ],
     )?;
-    Ok(PersonId(db.last_insert_rowid()))
+    let id = PersonId(db.last_insert_rowid());
+    add_person_value(db, id, "picture", &fields.img, None)?;
+    add_person_value(db, id, "website", &fields.href, None)?;
+    Ok(id)
 }
 
 /// Add a person with no link.
@@ -378,7 +405,76 @@ fn update_fields(
     if changed == 0 {
         return Err(missing(id));
     }
+    add_person_value(db, id, "picture", &fields.img, None)?;
+    add_person_value(db, id, "website", &fields.href, None)?;
     Ok(())
+}
+
+fn add_person_value(
+    db: &Connection,
+    id: PersonId,
+    kind: &str,
+    value: &str,
+    source: Option<&ValueSource>,
+) -> Result<(), CollectionError> {
+    if value.is_empty() {
+        return Ok(());
+    }
+    let position: i64 = db.query_row(
+        "SELECT COALESCE(MAX(position) + 1, 0) FROM person_values WHERE person_id = ?1 AND kind = ?2",
+        params![id.0, kind],
+        |row| row.get(0),
+    )?;
+    db.execute(
+        "INSERT OR IGNORE INTO person_values
+         (person_id, kind, value, source_guid, source_title, source_host, position, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![
+            id.0,
+            kind,
+            value,
+            source.map(|s| s.feed_guid.as_str()),
+            source.map(|s| s.title.as_str()),
+            source.map(|s| s.host.as_str()),
+            position,
+            now()
+        ],
+    )?;
+    let column = if kind == "picture" { "img" } else { "href" };
+    db.execute(
+        &format!("UPDATE people SET {column} = ?2 WHERE id = ?1 AND {column} = ''"),
+        params![id.0, value],
+    )?;
+    Ok(())
+}
+
+fn person_values_of(
+    db: &Connection,
+    id: PersonId,
+) -> Result<(Vec<PersonValue>, Vec<PersonValue>), CollectionError> {
+    let read = |kind| -> Result<Vec<PersonValue>, CollectionError> {
+        let mut statement = db.prepare(
+            "SELECT value, source_guid, source_title, source_host FROM person_values
+             WHERE person_id = ?1 AND kind = ?2 ORDER BY position, id",
+        )?;
+        Ok(statement
+            .query_map(params![id.0, kind], |row| {
+                let source = match (row.get(1)?, row.get(2)?, row.get(3)?) {
+                    (Some(feed_guid), Some(title), Some(host)) => Some(ValueSource {
+                        feed_guid,
+                        title,
+                        host,
+                    }),
+                    _ => None,
+                };
+                Ok(PersonValue {
+                    value: row.get(0)?,
+                    source,
+                })
+            })?
+            .collect::<Result<_, _>>()?)
+    };
+    Ok((read("picture")?, read("website")?))
 }
 
 /// Remove a person with each link.
@@ -460,6 +556,17 @@ fn wallets_of(db: &Connection, id: PersonId) -> Result<Vec<PersonWallet>, Collec
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
+type PersonLists = (Vec<PersonWallet>, Vec<PersonValue>, Vec<PersonValue>);
+
+fn read_person_lists(db: &Connection, id: PersonId) -> Result<PersonLists, CollectionError> {
+    let (pictures, websites) = person_values_of(db, id)?;
+    Ok((wallets_of(db, id)?, pictures, websites))
+}
+
+#[expect(
+    clippy::too_many_lines,
+    reason = "ADR 0196 item 2: reads the person and its ordered value lists"
+)]
 fn read_person(db: &Connection, id: PersonId) -> Result<Person, CollectionError> {
     let mut person = db
         .query_row(
@@ -480,6 +587,8 @@ fn read_person(db: &Connection, id: PersonId) -> Result<Person, CollectionError>
                     usual_group: r.get(7)?,
                     img: r.get(2)?,
                     href: r.get(3)?,
+                    pictures: Vec::new(),
+                    websites: Vec::new(),
                     default_address: address.map(|address| RecipientKey {
                         address,
                         custom_key: Some(custom_key).filter(|t| !t.is_empty()),
@@ -497,7 +606,7 @@ fn read_person(db: &Connection, id: PersonId) -> Result<Person, CollectionError>
         )
         .optional()?
         .ok_or_else(|| missing(id))?;
-    person.wallets = wallets_of(db, id)?;
+    (person.wallets, person.pictures, person.websites) = read_person_lists(db, id)?;
 
     let mut statement = db.prepare(
         "SELECT id, npub, evidence, linked_at FROM person_keys WHERE person_id = ?1 ORDER BY npub",
@@ -1253,6 +1362,10 @@ pub struct PersonSave {
     /// The complete list of read-only links to pages on Music Index
     /// (ADR 0159 item 6). An empty list removes each link.
     pub pages: Option<Vec<PersonPage>>,
+    /// The complete list of pictures (ADR 0196 item 12).
+    pub pictures: Option<Vec<PersonValue>>,
+    /// The complete list of websites (ADR 0196 item 12).
+    pub websites: Option<Vec<PersonValue>>,
     /// Each wallet to link to the person (ADR 0117 item 7).
     pub wallets: Vec<WalletAdd>,
     /// Each Nostr key to link to the person (ADR 0117 item 7).
@@ -1307,6 +1420,12 @@ pub fn save_person(
     if let Some(fields) = &save.fields {
         update_fields(&tx, id, fields)?;
     }
+    if let Some(values) = &save.pictures {
+        replace_person_values(&tx, id, "picture", values)?;
+    }
+    if let Some(values) = &save.websites {
+        replace_person_values(&tx, id, "website", values)?;
+    }
     if let Some(members) = &save.members {
         tx.execute("DELETE FROM person_members WHERE person_id = ?1", [id.0])?;
         for feed in members {
@@ -1334,6 +1453,61 @@ pub fn save_person(
     }
     tx.commit()?;
     Ok(())
+}
+
+fn replace_person_values(
+    db: &Connection,
+    id: PersonId,
+    kind: &str,
+    values: &[PersonValue],
+) -> Result<(), CollectionError> {
+    db.execute(
+        "DELETE FROM person_values WHERE person_id = ?1 AND kind = ?2",
+        params![id.0, kind],
+    )?;
+    let mut unique = HashSet::new();
+    for value in values {
+        let value = value.value.trim();
+        if value.is_empty() || !unique.insert(value.to_owned()) {
+            continue;
+        }
+        add_person_value(db, id, kind, value, value_source_for_kind(value, values))?;
+    }
+    let column = if kind == "picture" { "img" } else { "href" };
+    let current: String = db.query_row(
+        &format!("SELECT {column} FROM people WHERE id = ?1"),
+        [id.0],
+        |row| row.get(0),
+    )?;
+    let contains: bool = db.query_row(
+        "SELECT EXISTS (SELECT 1 FROM person_values WHERE person_id = ?1 AND kind = ?2 AND value = ?3)",
+        params![id.0, kind, current], |row| row.get(0),
+    )?;
+    if !contains {
+        let first = values
+            .iter()
+            .find(|v| !v.value.trim().is_empty())
+            .map_or("", |v| v.value.trim());
+        db.execute(
+            &format!("UPDATE people SET {column} = ?2 WHERE id = ?1"),
+            params![id.0, first],
+        )?;
+    }
+    let default: String = db.query_row(
+        &format!("SELECT {column} FROM people WHERE id = ?1"),
+        [id.0],
+        |row| row.get(0),
+    )?;
+    add_person_value(db, id, kind, &default, None)?;
+    Ok(())
+}
+
+fn value_source_for_kind<'a>(value: &str, values: &'a [PersonValue]) -> Option<&'a ValueSource> {
+    values
+        .iter()
+        .find(|item| item.value.trim() == value)?
+        .source
+        .as_ref()
 }
 
 /// Replace the read-only links of a person with `pages`. A GUID is trimmed.
@@ -2762,6 +2936,8 @@ pub fn make_person<S: BuildHasher>(
         "UPDATE people SET usual_role = ?2, img = ?3, href = ?4 WHERE id = ?1",
         params![id.0, usual_role, img, href],
     )?;
+    add_person_value(&tx, id, "picture", &img, None)?;
+    add_person_value(&tx, id, "website", &href, None)?;
 
     if let Some(feed) = request.member_of {
         add_member(collection, id, feed)?;
@@ -3118,7 +3294,15 @@ pub fn merge_people(
             params![keep.0, other_nickname],
         )?;
     }
-    for table in ["person_wallets", "person_support_links"] {
+    // ADR 0196 item 15: a value that both people have stays one time, at
+    // its place in the list of `keep`.
+    tx.execute(
+        "DELETE FROM person_values WHERE person_id = ?2 AND EXISTS (
+             SELECT 1 FROM person_values AS kept WHERE kept.person_id = ?1
+                 AND kept.kind = person_values.kind AND kept.value = person_values.value)",
+        params![keep.0, other.0],
+    )?;
+    for table in ["person_wallets", "person_support_links", "person_values"] {
         // The links of `other` go after the links of `keep`.
         tx.execute(
             &format!(
@@ -3179,6 +3363,8 @@ pub struct PageSuggestion {
     pub feed_guid: String,
     /// The title of the link.
     pub title: String,
+    /// The host of the feed address of the page.
+    pub host: Option<String>,
     /// True when Music Index answered and does not know the feed.
     pub missing: bool,
     /// The image address, when it is new.
@@ -3201,10 +3387,10 @@ pub struct PageSuggestionChanges {
     pub person_id: PersonId,
     /// The name of the person, for the review sheet.
     pub name: String,
-    /// A new picture.
-    pub img: Option<String>,
-    /// A new website.
-    pub href: Option<String>,
+    /// Each new picture and its source.
+    pub pictures: Vec<PersonValue>,
+    /// Each new website and its source.
+    pub websites: Vec<PersonValue>,
     /// Each new Nostr key.
     pub keys: Vec<String>,
     /// Each new wallet that matches the person (ADR 0159 item 13).
@@ -3219,14 +3405,33 @@ pub fn page_suggestion_changes(person: &Person, pages: &[PageSuggestion]) -> Pag
     let mut changes = PageSuggestionChanges {
         person_id: person.id,
         name: person.name.clone(),
-        img: None,
-        href: None,
+        pictures: Vec::new(),
+        websites: Vec::new(),
         keys: Vec::new(),
         wallets: Vec::new(),
     };
     for page in pages.iter().filter(|page| !page.missing) {
-        changes.img = changes.img.clone().or_else(|| page.picture.clone());
-        changes.href = changes.href.clone().or_else(|| page.website.clone());
+        let source = page.host.as_ref().map(|host| ValueSource {
+            feed_guid: page.feed_guid.clone(),
+            title: page.title.clone(),
+            host: host.clone(),
+        });
+        if let Some(value) = &page.picture
+            && !changes.pictures.iter().any(|item| item.value == *value)
+        {
+            changes.pictures.push(PersonValue {
+                value: value.clone(),
+                source: source.clone(),
+            });
+        }
+        if let Some(value) = &page.website
+            && !changes.websites.iter().any(|item| item.value == *value)
+        {
+            changes.websites.push(PersonValue {
+                value: value.clone(),
+                source: source.clone(),
+            });
+        }
         if let Some(npub) = &page.npub
             && !changes.keys.contains(npub)
         {
@@ -3255,8 +3460,8 @@ pub fn page_suggestion_changes_batch<S: BuildHasher>(
         .iter()
         .filter_map(|person| {
             let changes = page_suggestion_changes(person, pages.get(&person.id)?);
-            (changes.img.is_some()
-                || changes.href.is_some()
+            (!changes.pictures.is_empty()
+                || !changes.websites.is_empty()
                 || !changes.keys.is_empty()
                 || !changes.wallets.is_empty())
             .then_some(changes)
@@ -3279,16 +3484,21 @@ pub fn save_page_suggestion_changes(
 ) -> Result<(), CollectionError> {
     for change in changes {
         let current = person(collection, change.person_id)?;
-        let fields = (change.img.is_some() || change.href.is_some()).then(|| PersonFields {
-            name: current.name.clone(),
-            nickname: current.nickname.clone(),
-            usual_role: current.usual_role.clone(),
-            usual_group: current.usual_group.clone(),
-            img: change.img.clone().unwrap_or_else(|| current.img.clone()),
-            href: change.href.clone().unwrap_or_else(|| current.href.clone()),
-        });
+        let mut pictures = current.pictures.clone();
+        for value in &change.pictures {
+            if !pictures.iter().any(|item| item.value == value.value) {
+                pictures.push(value.clone());
+            }
+        }
+        let mut websites = current.websites.clone();
+        for value in &change.websites {
+            if !websites.iter().any(|item| item.value == value.value) {
+                websites.push(value.clone());
+            }
+        }
         let save = PersonSave {
-            fields,
+            pictures: Some(pictures),
+            websites: Some(websites),
             wallets: change.wallets.clone(),
             keys: change.keys.clone(),
             ..PersonSave::default()
@@ -3333,6 +3543,10 @@ pub fn page_suggestions<S: BuildHasher>(
     let mut suggestion = PageSuggestion {
         feed_guid: page.feed_guid.clone(),
         title: page.title.clone(),
+        host: values
+            .and_then(|v| v.feed_url.as_deref())
+            .and_then(|url| url::Url::parse(url).ok())
+            .and_then(|url| url.host_str().map(str::to_owned)),
         missing: values.is_none(),
         picture: None,
         website: None,
@@ -3350,8 +3564,10 @@ pub fn page_suggestions<S: BuildHasher>(
             .filter(|v| !v.is_empty() && *v != have.trim())
             .map(str::to_owned)
     };
-    suggestion.picture = new_text(&values.image_url, &person.img);
-    suggestion.website = new_text(&values.website, &person.href);
+    suggestion.picture = new_text(&values.image_url, "")
+        .filter(|value| !person.pictures.iter().any(|item| item.value == *value));
+    suggestion.website = new_text(&values.website, "")
+        .filter(|value| !person.websites.iter().any(|item| item.value == *value));
     suggestion.npub = values
         .npub
         .as_deref()
@@ -3619,10 +3835,15 @@ fn slot<'a>(
     joined: &'a mut HashMap<String, Joined>,
     order: &mut Vec<String>,
     current: &str,
+    known: &[PersonValue],
     value: &str,
 ) -> Option<&'a mut Joined> {
     let value = value.trim();
-    if value.is_empty() || value == current || !is_web_value(value) {
+    if value.is_empty()
+        || value == current
+        || known.iter().any(|item| item.value == value)
+        || !is_web_value(value)
+    {
         return None;
     }
     if !joined.contains_key(value) {
@@ -3632,24 +3853,28 @@ fn slot<'a>(
 }
 
 /// Join equal values, leave out `current` and sort (ADR 0113 items 3 and 4).
-fn join_details(current: &str, values: DetailValues) -> Vec<DetailSuggestion> {
+fn join_details(
+    current: &str,
+    known: &[PersonValue],
+    values: DetailValues,
+) -> Vec<DetailSuggestion> {
     let current = current.trim();
     let mut order: Vec<String> = Vec::new();
     let mut joined: HashMap<String, Joined> = HashMap::new();
     for (npub, value) in values.profile {
-        if let Some(j) = slot(&mut joined, &mut order, current, &value)
+        if let Some(j) = slot(&mut joined, &mut order, current, known, &value)
             && !j.profile.contains(&npub)
         {
             j.profile.push(npub);
         }
     }
     for (feed, value) in values.credit {
-        if let Some(j) = slot(&mut joined, &mut order, current, &value) {
+        if let Some(j) = slot(&mut joined, &mut order, current, known, &value) {
             j.credit.insert(feed);
         }
     }
     for (feed, value) in values.member {
-        if let Some(j) = slot(&mut joined, &mut order, current, &value)
+        if let Some(j) = slot(&mut joined, &mut order, current, known, &value)
             && !j.member.contains(&feed)
         {
             j.member.push(feed);
@@ -3732,8 +3957,8 @@ pub fn detail_suggestions(
         }
     }
     Ok(DetailSuggestions {
-        img: join_details(&person.img, img),
-        href: join_details(&person.href, href),
+        img: join_details(&person.img, &person.pictures, img),
+        href: join_details(&person.href, &person.websites, href),
     })
 }
 
@@ -3826,6 +4051,10 @@ pub struct ExportPerson {
     pub img: String,
     /// The information address, or empty text.
     pub href: String,
+    /// Picture values and their sources.
+    pub pictures: Vec<PersonValue>,
+    /// Website values and their sources.
+    pub websites: Vec<PersonValue>,
     /// The default address that applies now ([`default_address`]).
     pub default_address: Option<RecipientKey>,
     /// The wallets, with the addresses of each wallet.
@@ -3920,6 +4149,8 @@ pub fn export<S: BuildHasher>(
             usual_group: person.usual_group,
             img: person.img,
             href: person.href,
+            pictures: person.pictures,
+            websites: person.websites,
             wallets,
             keys: person.keys,
             credit_names: person.credit_names,
@@ -5135,8 +5366,8 @@ mod tests {
         let changes = page_suggestion_changes(&p, std::slice::from_ref(&all));
         assert_eq!(changes.person_id, ann);
         assert_eq!(changes.name, "Ann");
-        assert_eq!(changes.img.as_deref(), Some("https://img.example/a.png"));
-        assert_eq!(changes.href.as_deref(), Some("https://ann.example"));
+        assert_eq!(changes.pictures[0].value, "https://img.example/a.png");
+        assert_eq!(changes.websites[0].value, "https://ann.example");
         assert_eq!(changes.keys, ["npub1ann"]);
         assert_eq!(changes.wallets.len(), 1);
         assert_eq!(changes.wallets[0].key.address, "ann@example.com");
@@ -5151,7 +5382,7 @@ mod tests {
         assert_eq!(batch.len(), 2);
         assert_eq!(batch[0].person_id, ann);
         assert_eq!(batch[1].person_id, ben);
-        assert_eq!(batch[1].img.as_deref(), Some("https://img.example/ben.png"));
+        assert_eq!(batch[1].pictures[0].value, "https://img.example/ben.png");
 
         let mut hidden = all.clone();
         hidden.picture = None;
@@ -5169,8 +5400,8 @@ mod tests {
         });
         let empty = page_suggestion_changes(&p, &[hidden]);
         assert!(
-            empty.img.is_none()
-                && empty.href.is_none()
+            empty.pictures.is_empty()
+                && empty.websites.is_empty()
                 && empty.keys.is_empty()
                 && empty.wallets.is_empty()
         );
@@ -5188,12 +5419,21 @@ mod tests {
         p = person(&collection, ann).unwrap();
         p.img = "https://img.example/a.png".to_owned();
         p.href = "https://ann.example".to_owned();
+        p.pictures.push(PersonValue {
+            value: p.img.clone(),
+            source: None,
+        });
+        p.websites.push(PersonValue {
+            value: p.href.clone(),
+            source: None,
+        });
         let same = page_suggestions(&p, &link, Some(&values()), &lookups);
         assert_eq!(
             same,
             PageSuggestion {
                 feed_guid: "g-1".to_owned(),
                 title: "Ann Bell Music".to_owned(),
+                host: None,
                 missing: false,
                 picture: None,
                 website: None,
@@ -5206,6 +5446,164 @@ mod tests {
 
         let gone = page_suggestions(&p, &link, None, &lookups);
         assert!(gone.missing && gone.picture.is_none() && gone.wallets.is_empty());
+    }
+
+    #[test]
+    fn linked_pages_add_distinct_values_and_keep_the_first_default() {
+        let collection = Collection::open_in_memory().unwrap();
+        let id = add_person(&collection, &fields("Ann")).unwrap();
+        let lookups = lookup_map(&collection).unwrap();
+        let first = PersonPage {
+            feed_guid: "g-first".into(),
+            title: "First".into(),
+        };
+        let second = PersonPage {
+            feed_guid: "g-second".into(),
+            title: "Second".into(),
+        };
+        let mut first_values = values();
+        first_values.feed_url = Some("https://first.example/feed.xml".into());
+        first_values.image_url = Some("https://first.example/picture.png".into());
+        first_values.website = Some("https://first.example".into());
+        let mut second_values = values();
+        second_values.feed_url = Some("https://second.example/feed.xml".into());
+        second_values.image_url = Some("https://second.example/picture.png".into());
+        second_values.website = Some("https://second.example".into());
+
+        let current = person(&collection, id).unwrap();
+        let first_change = page_suggestion_changes(
+            &current,
+            &[page_suggestions(
+                &current,
+                &first,
+                Some(&first_values),
+                &lookups,
+            )],
+        );
+        assert_eq!(
+            first_change.pictures[0].source.as_ref().unwrap().host,
+            "first.example"
+        );
+        save_page_suggestion_changes(&collection, &[first_change]).unwrap();
+        let current = person(&collection, id).unwrap();
+        assert_eq!(current.img, "https://first.example/picture.png");
+        assert_eq!(current.pictures.len(), 1);
+        assert!(
+            page_suggestions(&current, &first, Some(&first_values), &lookups)
+                .picture
+                .is_none()
+        );
+        assert!(
+            page_suggestions(&current, &second, Some(&second_values), &lookups)
+                .picture
+                .is_some()
+        );
+
+        let second_change = page_suggestion_changes(
+            &current,
+            &[page_suggestions(
+                &current,
+                &second,
+                Some(&second_values),
+                &lookups,
+            )],
+        );
+        save_page_suggestion_changes(&collection, &[second_change]).unwrap();
+        let current = person(&collection, id).unwrap();
+        assert_eq!(current.img, "https://first.example/picture.png");
+        assert_eq!(current.pictures.len(), 2);
+        assert!(
+            page_suggestions(&current, &first, Some(&first_values), &lookups)
+                .picture
+                .is_none()
+        );
+        assert!(
+            page_suggestions(&current, &second, Some(&second_values), &lookups)
+                .picture
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn saved_picture_lists_keep_defaults_and_merge_in_order() {
+        let collection = Collection::open_in_memory().unwrap();
+        let mut ann_fields = fields("Ann");
+        ann_fields.img = "https://img.example/a.png".into();
+        let ann = add_person(&collection, &ann_fields).unwrap();
+        let mut ben_fields = fields("Ben");
+        ben_fields.img = "https://img.example/d.png".into();
+        let ben = add_person(&collection, &ben_fields).unwrap();
+        let ben_save = PersonSave {
+            pictures: Some(vec![
+                PersonValue {
+                    value: "https://img.example/d.png".into(),
+                    source: None,
+                },
+                PersonValue {
+                    value: "https://img.example/c.png".into(),
+                    source: None,
+                },
+            ]),
+            ..PersonSave::default()
+        };
+        save_person(&collection, ben, &ben_save).unwrap();
+        let save = PersonSave {
+            pictures: Some(vec![
+                PersonValue {
+                    value: "https://img.example/b.png".into(),
+                    source: None,
+                },
+                PersonValue {
+                    value: "https://img.example/c.png".into(),
+                    source: None,
+                },
+            ]),
+            ..PersonSave::default()
+        };
+        save_person(&collection, ann, &save).unwrap();
+        let ann_after_save = person(&collection, ann).unwrap();
+        assert_eq!(ann_after_save.img, "https://img.example/b.png");
+        assert_eq!(
+            ann_after_save
+                .pictures
+                .iter()
+                .map(|value| value.value.as_str())
+                .collect::<Vec<_>>(),
+            ["https://img.example/b.png", "https://img.example/c.png",],
+            "ADR 0196 item 12: replacing a list must select its first value when it removes the default."
+        );
+
+        let fields = PersonFields {
+            img: "https://img.example/e.png".into(),
+            ..ann_fields
+        };
+        change_person(&collection, ann, &fields).unwrap();
+        let ann_after_change = person(&collection, ann).unwrap();
+        assert!(
+            ann_after_change
+                .pictures
+                .iter()
+                .any(|value| value.value == fields.img),
+            "ADR 0196 item 5: a saved picture must be added to the list."
+        );
+
+        merge_people(&collection, ann, ben).unwrap();
+        let merged = person(&collection, ann).unwrap();
+        assert_eq!(merged.img, "https://img.example/e.png");
+        assert_eq!(
+            merged
+                .pictures
+                .iter()
+                .map(|value| value.value.as_str())
+                .collect::<Vec<_>>(),
+            [
+                "https://img.example/b.png",
+                "https://img.example/c.png",
+                "https://img.example/e.png",
+                "https://img.example/d.png",
+            ],
+            "ADR 0196 item 15: a merge appends the values of the other person, keeps one copy of a shared value, and keeps the default. Fix merge_people in crates/core/src/people.rs."
+        );
     }
 
     #[test]
@@ -5297,8 +5695,11 @@ mod tests {
         let change = PageSuggestionChanges {
             person_id: ann,
             name: "Ann".to_owned(),
-            img: Some("https://img.example/a.png".to_owned()),
-            href: None,
+            pictures: vec![PersonValue {
+                value: "https://img.example/a.png".to_owned(),
+                source: None,
+            }],
+            websites: vec![],
             keys: vec!["npub1ann".to_owned()],
             wallets: vec![WalletAdd {
                 key: RecipientKey {

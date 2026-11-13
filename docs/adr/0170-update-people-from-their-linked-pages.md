@@ -8,6 +8,7 @@
 - Uses: [ADR 0159](0159-a-person-can-link-to-a-page-on-music-index.md) items 8, 9 and 13 to 15, [ADR 0116](0116-the-page-of-a-person-has-save-and-discard.md), [ADR 0132](0132-a-person-can-be-part-of-many-artists-and-labels.md).
 - Changed by: [ADR 0182](0182-the-page-of-a-person-starts-with-its-links-and-has-a-nickname.md). Items 1, 2 and 5: the button is **Add All Suggestions**, and each row of the update sheet shows its value.
 - Changed by: [ADR 0194](0194-the-nickname-saves-at-once-and-the-update-sheet-selects-each-value.md). Item 5: the review sheet has one check box for each value.
+- Changed by: [ADR 0196](0196-a-person-keeps-a-list-of-pictures-and-websites-with-a-default.md). Items 2 and 3: each page gives its own picture and website, with its source, and **Update** adds them to the lists of the person.
 
 ## Context
 

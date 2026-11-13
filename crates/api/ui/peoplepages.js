@@ -242,7 +242,7 @@ function LinkedPageReview({ people, onClose, onDone }) {
           <input type="checkbox" checked=${selected.includes(key)} onChange=${() => setSelected((ids) => ids.includes(key)
             ? ids.filter((id) => id !== key) : [...ids, key])} />
           ${line.kind === 'picture' && html`<${PersonArt} person=${{ img: line.value, name: row.name }} small />`}
-          <span class="text"><span class="label">${line.label}</span><span class="summary mono address-text">${line.value}</span></span></label>`; })}</div>`)}</div>`}
+          <span class="text"><span class="label">${line.label}</span><span class="summary mono address-text">${line.value}</span>${line.source && html`<span class="summary">${line.source}</span>`}</span></label>`; })}</div>`)}</div>`}
         <${ErrorNotice} error=${error} /></div><footer><button class="button" type="button" disabled=${busy} onClick=${() => ref.current.close()}>Cancel</button>
         <button class="button primary" type="button" disabled=${busy || selected.length === 0} onClick=${save}>Update</button></footer>`}
   </dialog>`;

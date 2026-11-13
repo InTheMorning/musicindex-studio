@@ -645,6 +645,25 @@ CREATE TABLE written_feed_moves (
     r"
 ALTER TABLE people ADD COLUMN nickname TEXT NOT NULL DEFAULT '';
 ",
+    // ADR 0196 items 2 and 4: keep each picture and website with its source.
+    r"
+CREATE TABLE person_values (
+    id INTEGER PRIMARY KEY,
+    person_id INTEGER NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind IN ('picture', 'website')),
+    value TEXT NOT NULL,
+    source_guid TEXT,
+    source_title TEXT,
+    source_host TEXT,
+    position INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    UNIQUE(person_id, kind, value)
+);
+INSERT INTO person_values (person_id, kind, value, position, created_at)
+SELECT id, 'picture', img, 0, created_at FROM people WHERE img <> '';
+INSERT INTO person_values (person_id, kind, value, position, created_at)
+SELECT id, 'website', href, 0, created_at FROM people WHERE href <> '';
+",
 ];
 
 /// `root` as a relative path under `data_dir`, when it is a folder inside
@@ -6323,6 +6342,58 @@ mod tests {
         assert_eq!(
             people[0].nickname, "",
             "ADR 0182 item 12: the migration must give an existing person an empty nickname."
+        );
+    }
+
+    #[test]
+    fn the_person_values_migration_keeps_each_default_value() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("collection.sqlite");
+        let db = Connection::open(&path).unwrap();
+        for migration in &MIGRATIONS[..MIGRATIONS.len() - 1] {
+            db.execute_batch(migration).unwrap();
+        }
+        db.pragma_update(
+            None,
+            "user_version",
+            i64::try_from(MIGRATIONS.len() - 1).unwrap(),
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO people (name, usual_role, img, href, created_at) VALUES ('Ann', 'Vocalist', 'https://img.example/a.png', 'https://ann.example', 7)",
+            [],
+        ).unwrap();
+        db.execute(
+            "INSERT INTO people (name, usual_role, img, href, created_at) VALUES ('Ben', 'Vocalist', '', '', 8)",
+            [],
+        ).unwrap();
+        drop(db);
+
+        let collection = Collection::open(&path).unwrap();
+        let values: Vec<(i64, String, String, i64)> = {
+            let mut statement = collection.db().prepare(
+                "SELECT person_id, kind, value, position FROM person_values ORDER BY person_id, kind",
+            ).unwrap();
+            statement
+                .query_map([], |row| {
+                    Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+                })
+                .unwrap()
+                .collect::<Result<_, _>>()
+                .unwrap()
+        };
+        assert_eq!(
+            values,
+            vec![
+                (
+                    1,
+                    "picture".to_owned(),
+                    "https://img.example/a.png".to_owned(),
+                    0
+                ),
+                (1, "website".to_owned(), "https://ann.example".to_owned(), 0),
+            ],
+            "ADR 0196 item 4: migration must retain each non-empty default in person_values."
         );
     }
 

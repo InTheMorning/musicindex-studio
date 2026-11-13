@@ -32,15 +32,15 @@ Steps 8 to 10 of the notes (the server) and steps 10 and 11 (the iPhone) did not
 
 ### 1. Middle Window Widths Break The Editor
 
-At a window width of about 760 px with the left panel, the tab labels of the editor break inside words ("Valu e Rou tes", "Che ck 1"). The field values are cut off, and the rows of the tab **Check** wrap each title on many lines. The cause is in `crates/api/ui/styles.css`: the layout has one breakpoint at 760 px. From 761 px, the left panel takes about 300 px, and the editor keeps its wide form in about 450 px. The screenshot walks use 1280 px and 390 px only, so no walk saw these widths.
+At a window width of about 760 px with the left panel, the tab labels of the editor break inside words ("Valu e Rou tes", "Che ck 1"). The field values are cut off, and the rows of the tab **Check** wrap each title on many lines. The cause is in `crates/api/ui/styles.css`: the layout has one breakpoint at 760 px. From 761 px, the left panel takes about 300 px, and the editor keeps its wide form in about 450 px. The screenshot walks use 1280 px and 390 px only, so no walk saw these widths. [ADR 0197](../adr/0197-the-tabs-and-the-field-rows-follow-the-editor-column.md) gives the correction, and task 135 does it.
 
 ### 2. The Tab Menu At A Narrow Width
 
-At a narrow width, the tab menu fills the width of the page. Its open list is the native menu of GTK. The list is not aligned with the closed menu, and its items have no inset. The correction is open. A comparison with the other two apps comes first.
+At a narrow width, the tab menu fills the width of the page. Its open list is the native menu of GTK. The list is not aligned with the closed menu, and its items have no inset. musicindex.org has no select menu in this place. ADR 0197 items 4 and 5 give the correction: the closed menu fits its longest label, and the open list stays native.
 
 ### 3. The Delete Sheet Jumps
 
-Each click on **Also delete the audio and image files** hides the title, the file host row and the line "“HeyCitizen” links to this feed" for a moment, and the sheet changes its height. The cause is in `crates/api/ui/editor.js`, `loadPreview`: it calls `setPreview(null)` before the new preview arrives. The correction is to keep the old preview until the new one arrives.
+Each click on **Also delete the audio and image files** hides the title, the file host row and the line "“HeyCitizen” links to this feed" for a moment, and the sheet changes its height. The cause is in `crates/api/ui/editor.js`, `loadPreview`: it calls `setPreview(null)` before the new preview arrives. The correction is to keep the old preview until the new one arrives. Task 136 does it, with the two texts of finding 4.
 
 ### 4. Texts Of The Delete Review
 

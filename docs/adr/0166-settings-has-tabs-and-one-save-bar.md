@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-11-10
 - Owner: operator
+- Changed by: [ADR 0197](0197-the-tabs-and-the-field-rows-follow-the-editor-column.md). The tabs are a select menu when they do not fit their column, not at a window width of 760 px.
 - Accepted: 2026-11-10 by the operator, through the questionnaire. The operator compared the mockups in `.studio-dev/settings-mockup/`, and selected the segmented control, four groups, one Save bar and a preview of the UI scale.
 - Technical choices: items 5, 9, 12, 13 and 14 are choices of the planning model.
 - Applies: musicindex ADR 0059 R-SET-1 to R-SET-5, at musicindex `9c81ccd`.

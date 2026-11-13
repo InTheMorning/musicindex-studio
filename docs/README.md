@@ -192,6 +192,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0188: The README is a landing page for an artist](adr/0188-the-readme-is-a-landing-page-for-an-artist.md)
 - [ADR 0189: A move sends one podping of the old address](adr/0189-a-move-sends-one-podping-of-the-old-address.md)
 - [ADR 0190: Review gives the return wait of Music Index](adr/0190-review-gives-the-return-wait-of-music-index.md)
+- [ADR 0197: The tabs and the field rows follow the width of the editor column](adr/0197-the-tabs-and-the-field-rows-follow-the-editor-column.md)
 
 ## Plans
 
@@ -455,6 +456,8 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 123: Review checks the stream type of a live show](tasks/studio-v1-task-123-review-stream-type.md)
 - [Studio v1 task 124: The README is a landing page](tasks/studio-v1-task-124-readme.md)
 - [Studio v1 task 134: A deleted feed opens from its last copy](tasks/studio-v1-task-134-deleted-feed-opens.md)
+- [Studio v1 task 135: The tabs and the field rows follow the editor column](tasks/studio-v1-task-135-tabs-and-rows-follow-the-column.md)
+- [Studio v1 task 136: The delete sheet stays still and the review texts are correct](tasks/studio-v1-task-136-delete-sheet-and-review-texts.md)
 - [Studio v1 task 055: The date and time fields](tasks/studio-v1-task-055-date-time-fields.md)
 - [Studio v1 task 055a: The times in the core](tasks/studio-v1-task-055a-times-in-the-core.md)
 - [Studio v1 task 055b: The date and time field](tasks/studio-v1-task-055b-date-time-field.md)

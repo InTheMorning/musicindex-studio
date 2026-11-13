@@ -443,10 +443,13 @@ input[type="checkbox"]:disabled { opacity: .5; cursor: default; }
   border-radius: 10px;
   background: var(--fill-soft);
 }
-/* A notice has a fill and no border (ADR 0029). A border shows an error
-   or a warning (ADR 0191 item 1). */
+/* A notice has a fill and no border (ADR 0029). The border shows the
+   error only. A warning has no border: its title has the triangle icon
+   and the Warning color (ADR 0191 item 1, musicindex ADR 0025 R-STATUS-1
+   item 4 and R-ELEVATION-1 item 1). */
 .notice.error { border: 1px solid var(--error); }
-.notice.warning { border: 1px solid var(--warning); }
+.notice.warning > strong { display: flex; align-items: center; gap: 6px; color: var(--warning); }
+.notice.warning > strong > .icon { flex: none; width: 1.1em; height: 1.1em; }
 .notice strong { display: block; }
 /* A button in a notice, such as "Close" of the notice after an import. */
 .notice > .actions { margin-top: 10px; }

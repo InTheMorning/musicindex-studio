@@ -1767,7 +1767,9 @@ function useReturnWait(feedId, move) {
 // does not stop the write. With no wait, it gives the text of item 4.
 function ReturnWarning({ move, wait }) {
   const view = returnWarning(move, wait);
-  return view && html`<div class=${view.tone === 'warning' ? 'notice warning' : 'notice'} role="status"><strong>${view.title}</strong>${view.text}</div>`;
+  return view && (view.tone === 'warning'
+    ? html`<div class="notice warning" role="status"><strong><${Icon} name="alert" />${view.title}</strong>${view.text}</div>`
+    : html`<div class="notice" role="status"><strong>${view.title}</strong>${view.text}</div>`);
 }
 
 // The warning of a move that replaces a different file (ADR 0178 item 6). It

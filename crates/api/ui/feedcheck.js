@@ -23,7 +23,27 @@ export const CHECK_UNREADABLE = 'Studio could not read this address.';
 // The text of the page before the first answer.
 export const CHECK_READING = 'Studio is reading the addresses of this feed.';
 
-const LEVELS = { notice: 'Notice', question: 'Question' };
+const LEVELS = { warning: 'Warning', notice: 'Notice', question: 'Question' };
+
+// The texts of the sheet of **Show What to Do** (ADR 0175 item 8).
+export const COPY_SHEET_TEXT = {
+  title: 'A Copy Pays Other People',
+  paragraphs: [
+    'Music Index has a copy of this feed at a different address. The copy has the same GUID, and its payments go to other people.',
+    'Only the operator of Music Index can remove the copy. Studio does not send this report. Copy it and send it to the operator.',
+  ],
+};
+
+// The texts of the sheet of **Show the Ways** (ADR 0175 item 5).
+export const WAYS_SHEET_TEXT = {
+  title: 'Music Index Has Another Address',
+  lead: 'Music Index reads this feed at',
+  noPointer: 'Studio does not put a pointer file at that address. Use one of these ways.',
+  ways: [
+    { title: 'A redirect at the old host', text: 'Ask the old host for an HTTP 301 redirect from the old address to' },
+    { title: 'A request to the operator of Music Index', text: 'Send the two addresses and the GUID to the operator of Music Index.' },
+  ],
+};
 
 // The button of each repair, as the core names it. `move_not_confirmed` has
 // no repair, so it has no button.
@@ -75,13 +95,27 @@ export function findingKey(finding) {
 // button does. `body` is what the repair route needs, without the revision.
 export function checkRows(check) {
   if (!check || !Array.isArray(check.findings)) return [];
-  return check.findings.map((finding) => {
+  return check.findings.map((finding, index) => ({ finding, index })).sort((a, b) => {
+    const rank = { warning: 0, notice: 1, question: 2 };
+    return (rank[a.finding.level] ?? 1) - (rank[b.finding.level] ?? 1) || a.index - b.index;
+  }).map(({ finding }) => {
+    if (finding.kind === 'copy_other_recipients') return {
+      key: findingKey(finding), level: LEVELS[finding.level] || finding.level,
+      warning: finding.level === 'warning', title: finding.title, reason: finding.reason,
+      button: 'Show What to Do', action: 'show-copy', report: finding.report || '',
+    };
+    if (finding.kind === 'index_address_differs') return {
+      key: findingKey(finding), level: LEVELS[finding.level] || finding.level,
+      warning: false, title: finding.title, reason: finding.reason,
+      button: 'Show the Ways', action: 'show-ways', indexAddress: finding.url || '',
+    };
     const label = repairLabel(finding.repair);
     const action = label ? ACTIONS[finding.repair] : null;
     const usable = action && !(action === 'open-track' && !finding.entry);
     return {
       key: findingKey(finding),
       level: LEVELS[finding.level] || finding.level,
+      warning: finding.level === 'warning',
       title: finding.title,
       reason: finding.reason,
       button: usable ? label : null,

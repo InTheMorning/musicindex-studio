@@ -26,7 +26,8 @@ The Stophammer session examined the record on 2026-11-13, through the orchestrat
 - The last read was at 05:34:59 UTC on 2026-11-08, event seq `473985`, of `That_Old_Thing.xml`. That read stored the `declared_self_url` `some_songs.xml` and no `itunes:new-feed-url`. No subsequent event names this guid.
 - Stophammer inference: on 2026-11-08 the old address answered `200`, not `301`. A self link alone does not move a record, because the crawler does not follow a self link (Stophammer ADR 0052 §2).
 - A podping of one of the two addresses corrects the record. A podping of the old address is sufficient because the read follows the `301`.
-- Not proven: a podping that the publisher sent to Hive directly can be missed by the gossip listener. Stophammer did not examine the podping archive.
+- The operator searched the archive of the gossip listener on the VPS, which keeps 30 days. It has no podping of `some_songs.xml`. Podpings of `That_Old_Thing.xml` came at 04:58:29 and 05:32:20 UTC on 2026-11-08, before the read of event seq `473985`. No podping of the two addresses came after that read.
+- Stophammer inference: the publisher added the `301` after the last podping. Stophammer makes no change.
 
 The notice has these defects:
 

@@ -2,7 +2,7 @@
 
 Decision: [ADR 0196](../adr/0196-a-person-keeps-a-list-of-pictures-and-websites-with-a-default.md).
 
-Status: Complete on 2026-11-13. The human check of ADR 0196 is open.
+Status: Complete on 2026-11-13. The human check of ADR 0196 passed on 2026-11-13. In the desktop app, the page of Prosperous Soul listed the values of both pages, and the default values did not change. The operator asked for the Default tag in the column of **Make Default**, so that each **Remove** is in one column (commit `f76554f`). That layout passed. A second "Update from Linked Pages" did not show the values of the first update again.
 
 Part 133b: the mechanical checks passed, with 752 Node tests. The main session restored the import of `hasLinkedPages`, because the People page uses it and no test found its removal. The main session also removed the `.form` wrapper of the add form, because the field touched the edge of the group.
 

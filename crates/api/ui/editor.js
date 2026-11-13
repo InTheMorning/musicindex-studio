@@ -17,6 +17,7 @@ import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, tog
 import { isLiveItem, liveKey, liveDot, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner, OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning, hasBadAddress, problemGroup, setLiveStreamType } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
 import { checkRows, unreadableRows, hasShowGrant, checkTexts, COPY_SHEET_TEXT, WAYS_SHEET_TEXT } from './feedcheck.js';
+import { addressParts } from './breaks.js';
 import { buildDateNotices } from './builddate.js';
 import { versionLabel, LOCK_HELP, hasSpace, spaceNotice, ROW_SPACE_NOTE, newFeedAddress, newFeedAddressLine, libraryFolderRow } from './feedfacts.js';
 import { refusalView, refusalOfError, noticeViews, blocksWrite, repairRoute, returnWarning, REPLACES_POINTER_NOTE } from './movelink.js';
@@ -46,6 +47,11 @@ import { MOVE_SCOPES, fileHostRows, planRows, stayRows, deleteLabel, deleteAllLa
 import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary, artworkPreview } from './artwork.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, addsAsTrackFile, refusedText, wrongKindText, replacedAddresses, selectedFacts } from './picker.js';
 import { DELETE_CHOICES, deleteButtonEnabled, retireSteps } from './feeddelete.js';
+
+// A text where only each web address can break inside a word (musicindex ADR
+// 0065 R-FIT-3 item 3).
+const breakableText = (text) => addressParts(text).map((part) => (part.address
+  ? html`<span data-fit-allow-break>${part.text}</span>` : part.text));
 
 // `values.js` imports `withCids` from this file, so that it does not need
 // to know that the draft moved to `draft.js`.
@@ -4777,7 +4783,7 @@ function CheckPage({ feed, model, check, go }) {
           <span class=${`kind${row.warning ? ' warning' : ''}`}>${row.level}</span>
           <span class="text">
             <span class="title">${row.title}</span>
-            <span class="sub">${row.reason}</span>
+            <span class="sub">${breakableText(row.reason)}</span>
             ${check.refused && check.refused.key === row.key && html`<span class="sub field-error" role="alert">${check.refused.message}</span>`}
           </span>
           ${row.button && html`<button class="button" type="button" disabled=${busy}

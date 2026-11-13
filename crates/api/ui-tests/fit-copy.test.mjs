@@ -14,8 +14,8 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const copy = join(root, 'tools/fit-check.mjs');
 const lib = join(root, '../musicindex-lib');
-const commit = '542893c';
-const sha256 = '8b8f09e0618ffe751eee561dc0a68cf360cd197cb4ab99d3bcea60f75d21ab57';
+const commit = 'e400d93';
+const sha256 = '4f3cafd51c7862b3d798d998da7b8bde34e32d71f3808837c65a034698a0766b';
 const fix = `musicindex ADR 0065 R-FIT-5 item 3: tools/fit-check.mjs must have the bytes of fit/web/fit-check.mjs at musicindex-lib commit ${commit}.\n`
   + 'Do not change the copy. Change the module in musicindex-lib, then copy it again and record the new commit and hash in this test.';
 

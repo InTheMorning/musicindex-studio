@@ -2280,6 +2280,14 @@ button.outline-feed {
 /* The tag of the default address (ADR 0139 item 2). It has the radius of a badge (musicindex ADR 0024). */
 .default-tag { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; padding: 0 6px; border-radius: 6px; background: var(--accent-tint); color: var(--accent); font-size: var(--text-footnote); font-weight: 600; vertical-align: 1px; }
 .default-tag .icon { display: block; width: 12px; height: 12px; stroke-width: 3; }
+/* The default value of a list: the tag is in the place of Make Default
+   (ADR 0196 item 10). The hidden button gives the width of the slot. */
+.default-slot { display: inline-grid; flex: none; place-items: center; }
+.default-slot > * { grid-area: 1 / 1; }
+.default-slot > .default-tag { margin-left: 0; }
+.default-slot > .button { visibility: hidden; }
+/* The same space as after a destructive button that has a button after it. */
+.button.destructive + .default-slot { margin-inline-start: 12px; }
 /* The status tag of a podping line (ADR 0189 item 7). It has the text size of the line, so that the state is easy to see. */
 .status-tag { display: inline-flex; align-items: center; gap: 5px; margin-right: 8px; padding: 2px 8px; border-radius: 6px; font-size: var(--text-callout); font-weight: 600; }
 .status-tag.waiting { color: var(--warning); background: color-mix(in srgb, var(--warning) 16%, transparent); }

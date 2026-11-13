@@ -447,9 +447,11 @@ function PersonFields({ values, saved, update, detail, profiles, titles, feeds, 
         return html`<div class=${`link-row static address-row${pending ? ' pending' : ''}`} key=${item.value}>
           ${art && html`<${PersonArt} person=${{ img: item.value, name: '' }} />`}
           <span class="text"><span class="summary mono address-text">${item.value}</span><span class="summary">${personValueLine(item.source)}</span></span>
-          ${isDefault && html`<span class="default-tag"><${Icon} name="check" />Default</span>`}
           <button class="button destructive" type="button" aria-label=${`Remove ${item.value}`} onClick=${() => update(removePersonValue(values, kind, item.value))}>Remove</button>
-          ${!isDefault && html`<button class="button action" type="button" aria-label=${`Make Default: ${item.value}`} onClick=${() => update({ [field]: item.value })}>Make Default</button>`}
+          ${isDefault
+            // The slot has the width of Make Default, so that each Remove is in one column.
+            ? html`<span class="default-slot"><span class="default-tag"><${Icon} name="check" />Default</span><button class="button action" type="button" tabindex="-1" aria-hidden="true" disabled>Make Default</button></span>`
+            : html`<button class="button action" type="button" aria-label=${`Make Default: ${item.value}`} onClick=${() => update({ [field]: item.value })}>Make Default</button>`}
         </div>`;
       })}
       ${adding === kind ? html`<${Field} id=${addId} label=${addLabel} value=${newValue} onInput=${(event) => setNewValue(event.target.value)}

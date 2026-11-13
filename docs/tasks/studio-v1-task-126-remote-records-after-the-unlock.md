@@ -2,7 +2,7 @@
 
 Decision: [ADR 0038](../adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) item 3.
 
-Status: Complete on 2026-11-12. The mechanical checks passed. The API tests prove the wait and its single clear. They do not prove the rows of a real host, because the test has no feed. The human check is open.
+Status: Complete on 2026-11-12. The mechanical checks passed. The API tests prove the wait and its single clear. They do not prove the rows of a real host, because the test has no feed. The human check passed on 2026-11-12.
 
 ## Goal
 
@@ -26,7 +26,7 @@ Mechanical:
 - Each new assertion message names ADR 0038 item 3 and this task.
 - The four checks pass.
 
-Human, by the operator. This gate stays open until it runs:
+Human, by the operator. This gate passed on 2026-11-12:
 
 - Start the release build with a locked vault. The log has no line "remote file records of feed ... failed ... vault is locked". After the unlock, the Files page of a feed with a remote host shows its remote files.
 

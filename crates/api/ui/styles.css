@@ -1293,7 +1293,7 @@ select option { background: var(--level-3); color: var(--text); }
   right: 0;
   border-top: 1px solid var(--sep);
 }
-.group > .field, .group > .hint, .group > .notice, .group > .actions { padding: 10px 16px; }
+.group > .field, .group > .hint, .group > .notice, .group > .actions, .group > .empty { padding: 10px 16px; }
 /* The open form of a disclosure row holds rows of the group (ADR 0029
    items 11 and 12). Each child is a row with the inner space of a row, and a
    thin separator above it. An entry row and a link row have their own inner

@@ -30,6 +30,7 @@ import {
   correctKeyChoices, correctBody, correctAnySelected, correctRows, CORRECT_OMITTED, CORRECT_EMPTY,
   moreRows, NO_OTHER_TEXT, mergeTitle, mergeHint, mergeLinks, mergeResult, mergeBody, afterMissing,
   detailList, LINK_HINT, LINK_EMPTY, linkChoices, linkRows, pickLink, pageSuggestions, addAllPageSuggestions, hasPageSuggestions, hasLinkedPages, linkedPageChanges, linkedPageSelection, linkedPageChangeLines, linkedPageBody, creditPosition, afterCredits, savedValues, pendingKeys, pendingStatus, isPending, saveBody, nicknameBody, afterNicknameSave, leaveText, checkGroups, checkFeedLines, checkKeys, checkIntro, CHANGE_ROWS, CHANGE_NOTE,
+  addPersonValue, removePersonValue, personValueLine,
   CHECK_TITLE, checkSummary, differenceBlocks, openLabel, useValuesLabel,
   recipientChoices, creditChoices, fundingChoices, ALREADY_VALUE, FIND_HINT, FIND_EMPTY, FIND_WAIT, FILL_NOTE, lookupGroups, lookupKind, hasLine, fillRows, splitFillRows, linkName, linkRow, linkFillButton, VALUES_WAIT, ALREADY_LINKED, fillPatch, fillSource, musicindexFeedUrl,
   creditOffers, creditAddTitle, creditRemoveTitle, creditAddNote, creditPublicNote, creditRemoveNote, creditOperation, REMOVE_CREDIT_OPERATION,
@@ -399,24 +400,26 @@ function AddressRow({ member, count, note, tag, mark, pending, action }) {
 const AddRow = ({ title, onClick }) => html`<button class="link-row add" type="button" onClick=${onClick}>
   <span class="num">＋</span><span class="title">${title}</span></button>`;
 
-// The fields of a person: the name, the usual role, and the picture and the
-// information address. The values are pending changes of the page (ADR 0116
-// item 1). `update` changes them, and the page saves them. A pending control
-// has a mark. "Use" of a suggestion changes the value only (ADR 0113 item 8).
+// The fields and value groups of a person. Each change stays pending until
+// Save. A page suggestion adds a value to its list (ADR 0196 items 6 to 13).
 function PersonFields({ values, saved, update, detail, profiles, titles, feeds, sources = {}, pageRows = { img: [], href: [] } }) {
+  const [adding, setAdding] = useState(null);
+  const [newValue, setNewValue] = useState('');
   // A filled field shows the line of its source until Save or Discard (ADR 0117 item 14).
   const field = (id, label, key, hint = sources[key]) => html`<${Field} id=${id} label=${label} value=${values[key]} hint=${hint}
     class=${isPending(saved, values, key) ? 'pending' : undefined}
     onInput=${(e) => update({ [key]: e.target.value })} />`;
   // The suggestions of the core for one field.
   const suggestions = (key) => {
-    const list = detailList(key, values[key], detail, profiles, titles, feeds);
+    const listKey = key === 'img' ? 'pictures' : 'websites';
+    const valueKind = key === 'img' ? 'picture' : 'website';
+    const list = detailList(key, values[key], detail, profiles, titles, feeds, values[listKey]);
     if (list.state === 'none') return null;
     const rows = list.rows.map((row) => html`<div class="link-row static" key=${row.value}>
       ${key === 'img' && html`<${PersonArt} person=${{ img: row.value, name: '' }} />`}
       <span class="text"><span class="summary mono address-text">${row.value}</span><span class="summary">${row.line}</span></span>
       <button class="button action" type="button" aria-label=${`Add ${row.value}`}
-        onClick=${() => update({ [key]: row.value })}>Add</button></div>`);
+        onClick=${() => update(addPersonValue(values, valueKind, row.value))}>Add</button></div>`);
     // A collapsed list has no heading: its summary line names the values
     // (ADR 0113 item 6).
     if (list.state === 'collapsed') {
@@ -426,15 +429,46 @@ function PersonFields({ values, saved, update, detail, profiles, titles, feeds, 
     }
     return html`<p class="hint suggest-heading">${list.heading}</p><div class="group">${rows}</div>`;
   };
+  const valueGroup = (kind, title, key, field, empty, art) => {
+    const list = values[key] || [];
+    const savedList = new Set((saved[key] || []).map((item) => item.value));
+    const sorted = [...list].sort((a, b) => Number(b.value === values[field]) - Number(a.value === values[field]));
+    const addId = kind === 'picture' ? 'person-add-picture' : 'person-add-website';
+    const addLabel = kind === 'picture' ? 'Picture address' : 'Website address';
+    const commit = () => {
+      update(addPersonValue(values, kind, newValue));
+      setNewValue('');
+      setAdding(null);
+    };
+    return html`<p class="hint suggest-heading">${title}</p><div class="group rows">
+      ${sorted.length === 0 ? html`<p class="empty">${empty}</p>` : sorted.map((item) => {
+        const isDefault = item.value === values[field];
+        const pending = !savedList.has(item.value) || (isDefault && isPending(saved, values, field));
+        return html`<div class=${`link-row static address-row${pending ? ' pending' : ''}`} key=${item.value}>
+          ${art && html`<${PersonArt} person=${{ img: item.value, name: '' }} />`}
+          <span class="text"><span class="summary mono address-text">${item.value}</span><span class="summary">${personValueLine(item.source)}</span></span>
+          ${isDefault && html`<span class="default-tag"><${Icon} name="check" />Default</span>`}
+          <button class="button destructive" type="button" aria-label=${`Remove ${item.value}`} onClick=${() => update(removePersonValue(values, kind, item.value))}>Remove</button>
+          ${!isDefault && html`<button class="button action" type="button" aria-label=${`Make Default: ${item.value}`} onClick=${() => update({ [field]: item.value })}>Make Default</button>`}
+        </div>`;
+      })}
+      ${adding === kind ? html`<${Field} id=${addId} label=${addLabel} value=${newValue} onInput=${(event) => setNewValue(event.target.value)}
+        onKeyDown=${(event) => { if (event.key === 'Enter') { event.preventDefault(); if (newValue.trim()) commit(); } }} />
+        <div class="actions"><button class="button" type="button" onClick=${() => { setAdding(null); setNewValue(''); }}>Cancel</button>
+          <button class="button action" type="button" disabled=${!newValue.trim()} onClick=${commit}>Add</button></div>`
+        : html`<${AddRow} title=${kind === 'picture' ? 'Add a Picture Address' : 'Add a Website'} onClick=${() => { setNewValue(''); setAdding(kind); }} />`}
+    </div>`;
+  };
   return html`<div class="group rows">
     ${field('person-name', 'Name', 'name', sources.name || 'Studio puts this name in a new credit.')}
     <${RoleMenu} id="person-role" label="Usual role" role=${values.usual_role} group=${values.usual_group} hint="The start value of a new credit."
       pending=${isPending(saved, values, 'usual_role')}
       onChange=${(role, group) => update({ usual_role: role, usual_group: group })} />
-    ${field('person-img', 'Picture address', 'img')}</div>
+    </div>
+    ${valueGroup('picture', 'Pictures', 'pictures', 'img', 'No picture yet.', true)}
     ${pageRows.img.length > 0 && html`<div class="group suggest-gap">${pageRows.img}</div>`}
     ${suggestions('img')}
-    <div class="group rows suggest-gap">${field('person-href', 'Information address', 'href')}</div>
+    <div class="suggest-gap">${valueGroup('website', 'Websites', 'websites', 'href', 'No website yet.', false)}</div>
     ${pageRows.href.length > 0 && html`<div class="group suggest-gap">${pageRows.href}</div>`}
     ${suggestions('href')}`;
 }
@@ -857,8 +891,8 @@ export function PersonPage({ id, feeds, go }) {
     update(patch);
     setSources((current) => ({
       ...current,
-      ...(patch.img !== undefined ? { img: source } : {}),
-      ...(patch.href !== undefined ? { href: source } : {}),
+      ...(patch.pictures !== undefined ? { img: source } : {}),
+      ...(patch.websites !== undefined ? { href: source } : {}),
     }));
     setPicked(null);
   };
@@ -1022,7 +1056,7 @@ export function PersonPage({ id, feeds, go }) {
       <div class="group"><${AddRow} title="Add a Wallet" onClick=${() => withLeave(() => setLinking('wallets'))} /></div></section>`,
     credits: () => html`<section class="page-section"><h2>Credits</h2>
       <${PersonFields} values=${shown} saved=${saved} update=${update} detail=${detail} profiles=${profiles} titles=${titles} feeds=${feeds} sources=${sources}
-        pageRows=${{ img: fromPages.img.map((row) => pageRow(row, () => update({ img: row.value }), true)), href: fromPages.href.map((row) => pageRow(row, () => update({ href: row.value }))) }} />
+        pageRows=${{ img: fromPages.img.map((row) => pageRow(row, () => update(addPersonValue(shown, 'picture', row.value, row.source)), true)), href: fromPages.href.map((row) => pageRow(row, () => update(addPersonValue(shown, 'website', row.value, row.source)))) }} />
       ${(person.credit_names.length > 0 || person.keys.length > 0) && html`<details class="disclosure group credit-fold">
         <summary class="link-row"><span class="text"><span class="label">${creditFoldSummary(person).title}</span>
           <span class="summary">${creditFoldSummary(person).line}</span></span></summary>

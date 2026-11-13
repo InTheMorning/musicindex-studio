@@ -2,7 +2,7 @@
 
 Decision: [ADR 0195](../adr/0195-restore-the-hosted-copy-is-destructive.md).
 
-Status: Complete on 2026-11-12. The mechanical checks passed. The test fails on the code before the change, because `CONFIRMS.restoreHostedCopy` does not exist. The walk data has no changed file, so the test is the visual check. The human check is open.
+Status: Complete on 2026-11-12. The mechanical checks passed. The test fails on the code before the change, because `CONFIRMS.restoreHostedCopy` does not exist. The walk data has no changed file, so the test is the visual check. The human check passed on 2026-11-13. In the desktop app, one added byte in `CheckYourPockets.mp3` of the test album gave a changed row. **Restore the Hosted Copy…** came first, in the destructive style. A click opened the confirmation, and **Cancel** kept the changed row.
 
 ## Goal
 

@@ -921,6 +921,8 @@ export function savedValues(person) {
     usual_group: person.usual_group ?? '',
     img: person.img ?? '',
     href: person.href ?? '',
+    pictures: (person.pictures || []).map((item) => ({ value: item.value, source: item.source ? { ...item.source } : null })),
+    websites: (person.websites || []).map((item) => ({ value: item.value, source: item.source ? { ...item.source } : null })),
     default_address: person.default_address ? keyValue(person.default_address) : '',
     members: (person.members || []).map(String),
     // The read-only links to pages on Music Index (ADR 0159 item 2).
@@ -933,12 +935,19 @@ export function savedValues(person) {
 
 // The controls of the page, in their sequence. The usual role and its group
 // are one control. The field controls are sent in the `fields` of a save.
-const CONTROLS = ['name', 'nickname', 'usual_role', 'img', 'href', 'default_address', 'members', 'pages', 'wallets', 'keys'];
+const CONTROLS = ['name', 'nickname', 'usual_role', 'img', 'href', 'pictures', 'websites', 'default_address', 'members', 'pages', 'wallets', 'keys'];
 const FIELD_CONTROLS = ['name', 'nickname', 'usual_role', 'img', 'href'];
 // The list controls. Each added item is one pending change.
 const LIST_NAMES = { wallets: 'wallet', keys: 'npub' };
+const PERSON_VALUE_LISTS = { pictures: 'picture', websites: 'website' };
 
 const listLength = (list) => (list || []).length;
+const valueSet = (list) => new Set((list || []).map((item) => item.value));
+const changedValues = (saved, values) => {
+  const before = valueSet(saved);
+  const after = valueSet(values);
+  return [...after].filter((value) => !before.has(value)).concat([...before].filter((value) => !after.has(value)));
+};
 
 // The links that one list has and the other does not.
 const changedLinks = (saved, values) => [
@@ -959,6 +968,7 @@ export function isPending(saved, values, control) {
   if (control === 'usual_role') return values.usual_role !== saved.usual_role || values.usual_group !== saved.usual_group;
   if (control === 'members') return changedLinks(saved, values).length > 0;
   if (control === 'pages') return changedPages(saved, values).length > 0;
+  if (control in PERSON_VALUE_LISTS) return changedValues(saved[control], values[control]).length > 0;
   if (control in LIST_NAMES) return listLength(values[control]) !== listLength(saved[control]);
   return values[control] !== saved[control];
 }
@@ -969,6 +979,7 @@ export function isPending(saved, values, control) {
 export const pendingKeys = (saved, values) => CONTROLS.flatMap((control) => {
   if (control === 'members') return changedLinks(saved, values).map(() => 'member');
   if (control === 'pages') return changedPages(saved, values).map(() => 'page');
+  if (control in PERSON_VALUE_LISTS) return changedValues(saved[control], values[control]).map(() => PERSON_VALUE_LISTS[control]);
   if (control in LIST_NAMES) {
     const added = listLength(values[control]) - listLength(saved[control]);
     return Array.from({ length: Math.max(0, added) }, () => LIST_NAMES[control]);
@@ -988,6 +999,8 @@ export function saveBody(saved, values) {
   if (keys.some((key) => FIELD_CONTROLS.includes(key))) {
     body.fields = { name: values.name, nickname: values.nickname, usual_role: values.usual_role, usual_group: values.usual_group, img: values.img, href: values.href };
   }
+  if (keys.includes('picture')) body.pictures = values.pictures.map((item) => ({ value: item.value, source: item.source }));
+  if (keys.includes('website')) body.websites = values.websites.map((item) => ({ value: item.value, source: item.source }));
   if (keys.includes('default_address')) body.default_address = values.default_address === '' ? null : keyFromValue(values.default_address);
   if (keys.includes('member')) body.members = values.members.map(Number);
   if (keys.includes('page')) body.pages = values.pages;
@@ -1004,6 +1017,37 @@ export const nicknameBody = (saved, nickname) => ({
   img: saved.img, href: saved.href,
 });
 
+// Add a picture or a website to its list. The function does not change its
+// input. The value becomes the default only when the default is empty (ADR
+// 0196 item 6).
+export function addPersonValue(values, kind, value, source = null) {
+  const address = String(value ?? '').trim();
+  if (!address) return values;
+  const key = kind === 'picture' ? 'pictures' : 'websites';
+  const field = kind === 'picture' ? 'img' : 'href';
+  const list = values[key] || [];
+  if (list.some((item) => item.value === address)) return values;
+  return { ...values, [key]: [...list, { value: address, source }], [field]: values[field] || address };
+}
+
+// Remove a picture or a website from its list. When the value is the default,
+// the first remaining value becomes the default (ADR 0196 item 12).
+export function removePersonValue(values, kind, value) {
+  const key = kind === 'picture' ? 'pictures' : 'websites';
+  const field = kind === 'picture' ? 'img' : 'href';
+  const list = values[key] || [];
+  const next = list.filter((item) => item.value !== value);
+  if (next.length === list.length) return values;
+  return { ...values, [key]: next, [field]: values[field] === value ? (next[0]?.value || '') : values[field] };
+}
+
+// The source line of a picture or a website (ADR 0196 item 9).
+export function personValueLine(source) {
+  if (!source) return 'Added in Studio';
+  const title = source.title || 'Untitled feed';
+  return source.host ? `From "${title}" on ${source.host}` : `From "${title}"`;
+}
+
 // The values after an immediate nickname save. Other shown fields can stay pending.
 export const afterNicknameSave = (saved, shown, nickname) => ({
   saved: { ...saved, nickname },
@@ -1017,6 +1061,8 @@ const LEAVE_NAMES = {
   usual_role: 'the usual role',
   img: 'the picture address',
   href: 'the information address',
+  picture: 'a picture',
+  website: 'a website',
   default_address: 'the default address',
   member: 'the artists and labels',
   page: 'the artists and labels',
@@ -1112,7 +1158,7 @@ export function pickLink(row, feeds, values) {
   return { pages: [...(values.pages || []), { feed_guid: row.feed_guid, title: row.title || '' }] };
 }
 
-// The suggestions of the read-only pages at the fields of the page (ADR 0159
+// The suggestions of the read-only pages on the page of a person (ADR 0159
 // items 8 and 9). `suggestions` is the list of `GET /people/{id}/page-suggestions`.
 // The core compares each page with the saved person. This function removes a
 // value that the pending values already hold, so that **Add** takes the row
@@ -1126,8 +1172,8 @@ export function pageSuggestions(suggestions, values) {
   for (const s of suggestions || []) {
     if (s.missing || !shown.has(s.feed_guid)) continue;
     const title = s.title || 'Untitled feed';
-    if (s.picture && s.picture !== values.img) out.img.push({ value: s.picture, line: `New picture from "${title}"${s.host ? ` on ${s.host}` : ''}`, guid: s.feed_guid, button: 'Add', ariaLabel: `Add ${s.picture}` });
-    if (s.website && s.website !== values.href) out.href.push({ value: s.website, line: `New website from "${title}"${s.host ? ` on ${s.host}` : ''}`, guid: s.feed_guid, button: 'Add', ariaLabel: `Add ${s.website}` });
+    if (s.picture && !(values.pictures || []).some((item) => item.value === s.picture)) out.img.push({ value: s.picture, source: { feed_guid: s.feed_guid, title: s.title || '', host: s.host || null }, line: `New picture from "${title}"${s.host ? ` on ${s.host}` : ''}`, guid: s.feed_guid, button: 'Add', ariaLabel: `Add ${s.picture}` });
+    if (s.website && !(values.websites || []).some((item) => item.value === s.website)) out.href.push({ value: s.website, source: { feed_guid: s.feed_guid, title: s.title || '', host: s.host || null }, line: `New website from "${title}"${s.host ? ` on ${s.host}` : ''}`, guid: s.feed_guid, button: 'Add', ariaLabel: `Add ${s.website}` });
     if (s.npub && !(values.keys || []).includes(s.npub)) out.keys.push({ value: s.npub, line: `New Nostr key on "${title}"`, guid: s.feed_guid, button: 'Add', ariaLabel: `Add ${s.npub}` });
     for (const w of s.wallets || []) {
       if (pendingWallets.includes(String(w.key.address).toLowerCase())) continue;
@@ -1148,10 +1194,11 @@ export function pageSuggestions(suggestions, values) {
 // suggestions.
 export function addAllPageSuggestions(suggestions, values) {
   const rows = pageSuggestions(suggestions, values);
+  let next = { ...values };
+  for (const row of rows.img) next = addPersonValue(next, 'picture', row.value, row.source);
+  for (const row of rows.href) next = addPersonValue(next, 'website', row.value, row.source);
   return {
-    ...values,
-    img: rows.img[0]?.value || values.img,
-    href: rows.href[0]?.value || values.href,
+    ...next,
     keys: [...new Set([...values.keys, ...rows.keys.map((row) => row.value)])],
     wallets: [...values.wallets, ...rows.wallets.map((row) => ({ key: row.key, recipient_type: row.recipient_type }))],
   };
@@ -1312,9 +1359,10 @@ export function detailSourceLine(sources, field, profiles, titles, feeds = []) {
 // rows: [{ value, line }] }`. `state` is `open` for an empty field with
 // suggestions, `collapsed` for a filled field with suggestions, and `none`
 // with no suggestion. `detail` is the answer of the core, or null.
-export function detailList(field, current, detail, profiles, titles, feeds = []) {
+export function detailList(field, current, detail, profiles, titles, feeds = [], values = []) {
   const list = (detail && detail[field]) || [];
-  const rows = list.map((s) => ({ value: s.value, line: detailSourceLine(s.sources, field, profiles, titles, feeds) }));
+  const known = new Set((values || []).map((item) => item.value));
+  const rows = list.filter((s) => !known.has(s.value)).map((s) => ({ value: s.value, line: detailSourceLine(s.sources, field, profiles, titles, feeds) }));
   let state = 'none';
   if (rows.length > 0) state = String(current ?? '').trim() === '' ? 'open' : 'collapsed';
   return { state, heading: DETAIL_HEADINGS[field], collapsedLine: detailCollapsedLine(rows.length), rows };
@@ -2343,17 +2391,22 @@ export function linkRow(row, feeds, values) {
 }
 
 // The rows that a fill adds to the pending values (ADR 0117 item 14). `checked`
-// gives the IDs of the checked rows. A picture or an information address
-// replaces its field. A wallet or a Nostr key is added to its list, once.
+// gives the IDs of the checked rows. A picture or website joins its list.
+// A wallet or Nostr key joins its list once.
 export function fillPatch(rows, checked, pending) {
   const on = rows.filter((row) => row.selectable && checked.includes(row.id));
   const patch = {};
   const name = on.find((row) => row.id === 'name');
   if (name) patch.name = name.value;
   const picture = on.find((row) => row.id === 'img');
-  if (picture) patch.img = picture.value;
   const website = on.find((row) => row.id === 'href');
-  if (website) patch.href = website.value;
+  let next = pending;
+  if (picture) next = addPersonValue(next, 'picture', picture.value);
+  if (website) next = addPersonValue(next, 'website', website.value);
+  if (next.pictures !== pending.pictures) patch.pictures = next.pictures;
+  if (next.websites !== pending.websites) patch.websites = next.websites;
+  if (next.img !== pending.img) patch.img = next.img;
+  if (next.href !== pending.href) patch.href = next.href;
   const wallets = on.filter((row) => row.wallet)
     .map((row) => row.wallet)
     .filter((wallet) => !pending.wallets.some((w) => keyValue(w.key) === keyValue(wallet.key)));

@@ -388,6 +388,7 @@ test('the sheet Check gives its rows and menu', () => {
 import {
   keyValue, keyFromValue, memberLine, memberText, walletGroups, addressOptions, usedText, keyEvidenceText, checkRow,
   savedValues, pendingKeys, pendingStatus, isPending, saveBody, leaveText, checkGroups, findingLine, checkFeedLines, checkKeys,
+  addPersonValue, removePersonValue, personValueLine,
   feedRows, levelRows, feedsHeading, SHEET_TITLES, sheetStart, sheetBody, sheetReady, LINK_FORMS, linkFields,
   linkStart, linkBody, linkReady, profileLine, changeLine, addIntro,
   lookupKind, lookupGroups, LOOKUP_LEVELS, hasLine, fillRows, fillLabel, fillPatch, fillSource, musicindexFeedUrl,
@@ -457,7 +458,7 @@ test('the saved values and the pending changes of a person (ADR 0116 items 1 to 
   const saved = savedValues(MK);
   assert.deepEqual(saved, {
     name: 'Mary Kate', nickname: '', usual_role: 'Vocals', usual_group: '', img: '', href: '', default_address: keyValue(KEY('mk@x.example')), members: ['3'], pages: [],
-    wallets: [], keys: [],
+    pictures: [], websites: [], wallets: [], keys: [],
   });
   assert.deepEqual(pendingKeys(saved, saved), []);
   assert.equal(saveBody(saved, saved), null);
@@ -1236,19 +1237,23 @@ test('a fill makes pending changes, and the save sends the added wallets and key
   const rows = fillRows(values, PENDING);
   const patch = fillPatch(rows, ['img', 'href', 'wallet:0', 'npub'], PENDING);
   assert.deepEqual(patch, {
+    pictures: [{ value: 'https://x.example/p.jpg', source: null }],
+    websites: [{ value: 'https://duh.example', source: null }],
     img: 'https://x.example/p.jpg', href: 'https://duh.example',
     wallets: [{ key: KEY('duh@x.example'), recipient_type: 'lnaddress' }], keys: ['npub1z'],
   });
   const values2 = { ...PENDING, ...patch };
-  assert.deepEqual(pendingKeys(PENDING, values2), ['img', 'href', 'wallet', 'npub']);
-  assert.equal(pendingStatus(pendingKeys(PENDING, values2).length), '4 changes not saved');
+  assert.deepEqual(pendingKeys(PENDING, values2), ['img', 'href', 'picture', 'website', 'wallet', 'npub']);
+  assert.equal(pendingStatus(pendingKeys(PENDING, values2).length), '6 changes not saved');
   assert.deepEqual(saveBody(PENDING, values2), {
     fields: { name: 'Mary Kate', nickname: '', usual_role: 'Vocals', usual_group: '', img: 'https://x.example/p.jpg', href: 'https://duh.example' },
+    pictures: [{ value: 'https://x.example/p.jpg', source: null }],
+    websites: [{ value: 'https://duh.example', source: null }],
     wallets: [{ key: KEY('duh@x.example'), recipient_type: 'lnaddress' }],
     keys: ['npub1z'],
   });
   assert.equal(leaveText('Mary Kate', pendingKeys(PENDING, values2)),
-    'Mary Kate has 4 changes that are not saved: the picture address, the information address, a wallet and a Nostr key.');
+    'Mary Kate has 6 changes that are not saved: the picture address, the information address, a picture, a website, a wallet and a Nostr key.');
   assert.deepEqual(fillPatch(rows, ['wallet:0'], values2), {}, 'A wallet that the page has already is not added twice.');
   assert.deepEqual(fillPatch(rows, [], PENDING), {});
 });
@@ -1839,6 +1844,39 @@ test('a credit row of a suggestion sheet names its release, then each role with 
 
 import { pickLink, pageSuggestions, READ_ONLY_LINK, PAGE_MISSING } from '../ui/people.js';
 
+test('person picture and website lists track pending values and defaults (ADR 0196 items 7 and 12)', () => {
+  const person = { ...MK, img: 'https://img.example/default.png', href: 'https://site.example',
+    pictures: [{ value: 'https://img.example/default.png', source: null }, { value: 'https://img.example/other.png', source: { title: 'Feed', host: 'feed.example' } }],
+    websites: [{ value: 'https://site.example', source: null }] };
+  const saved = savedValues(person);
+  assert.deepEqual(saved.pictures, person.pictures);
+  assert.deepEqual(saved.websites, person.websites);
+  const added = addPersonValue(saved, 'picture', ' https://img.example/new.png ', null);
+  assert.deepEqual(added.pictures.at(-1), { value: 'https://img.example/new.png', source: null });
+  assert.equal(added.img, saved.img, 'ADR 0196 item 6: adding a picture keeps a nonempty default. Fix addPersonValue in crates/api/ui/people.js.');
+  assert.equal(addPersonValue(added, 'picture', 'https://img.example/new.png'), added, 'ADR 0196 item 6: a duplicate value is ignored. Fix addPersonValue in crates/api/ui/people.js.');
+  assert.deepEqual(pendingKeys(saved, added), ['picture'], 'ADR 0196 item 7: one added value gives one pending picture key. Fix pendingKeys in crates/api/ui/people.js.');
+  assert.deepEqual(pendingKeys(added, removePersonValue(added, 'picture', 'https://img.example/new.png')), ['picture'],
+    'ADR 0196 item 7: one removed value gives one pending picture key. Fix pendingKeys in crates/api/ui/people.js.');
+  assert.equal(pendingKeys(saved, { ...saved, pictures: [...saved.pictures].reverse() }).length, 0,
+    'ADR 0196 item 7: a different list order gives no pending key. Fix pendingKeys in crates/api/ui/people.js.');
+  const defaultChange = { ...saved, img: saved.pictures[1].value };
+  assert.deepEqual(pendingKeys(saved, defaultChange), ['img'], 'ADR 0196 item 7: Make Default changes only the default key. Fix pendingKeys in crates/api/ui/people.js.');
+  const removed = removePersonValue(saved, 'picture', saved.img);
+  assert.equal(removed.img, 'https://img.example/other.png', 'ADR 0196 item 12: removing the default selects the first remaining value. Fix removePersonValue in crates/api/ui/people.js.');
+  assert.deepEqual(saveBody(saved, added).pictures, added.pictures,
+    'ADR 0196 item 7: Save sends each picture with its source. Fix saveBody in crates/api/ui/people.js.');
+  const first = addPersonValue({ ...saved, img: '', pictures: [] }, 'picture', 'https://img.example/first.png');
+  assert.equal(first.img, 'https://img.example/first.png', 'ADR 0196 item 6: the first picture becomes the default. Fix addPersonValue in crates/api/ui/people.js.');
+});
+
+test('a person value shows its source (ADR 0196 item 9)', () => {
+  assert.equal(personValueLine({ title: 'Page', host: 'index.example' }), 'From "Page" on index.example');
+  assert.equal(personValueLine({ title: 'Page', host: '' }), 'From "Page"');
+  assert.equal(personValueLine({ title: '', host: 'index.example' }), 'From "Untitled feed" on index.example');
+  assert.equal(personValueLine(null), 'Added in Studio');
+});
+
 const PAGE = { feed_guid: 'g-ann', title: 'Ann Bell Music' };
 const PAGE_FEEDS = [{ id: 3, title: 'Our Label', podcast_guid: 'AAAA-1111', publisher_roles: ['label'] }];
 
@@ -1894,7 +1932,7 @@ test('a page that differs gives suggestions, and a page that agrees gives none (
   const one = [{ ...differs[0], other_recipients: differs[0].other_recipients.slice(0, 1) }];
   assert.deepEqual(pageSuggestions(one, values).otherRecipients.map((fold) => fold.title), ['1 other recipient on Ann Bell Music']);
   // Add makes a pending value, and the row goes.
-  const used = { ...values, img: 'https://img.example/a.png', href: 'https://ann.example', keys: ['npub1ann'],
+  const used = { ...values, pictures: [{ value: 'https://img.example/a.png', source: null }], websites: [{ value: 'https://ann.example', source: null }], keys: ['npub1ann'],
     wallets: [
       { key: { address: 'Ann@x.example' }, recipient_type: 'lnaddress' },
       { key: { address: 'other@x.example' }, recipient_type: 'lnaddress' },
@@ -1915,11 +1953,25 @@ test('page suggestions give Add and a source line for a picture and website (ADR
   const rows = pageSuggestions([page], values);
   assert.equal(rows.img[0].line, 'New picture from "Ann Bell Music" on index.example');
   assert.equal(rows.href[0].line, 'New website from "Ann Bell Music" on index.example');
+  assert.deepEqual(rows.img[0].source, { feed_guid: 'g-ann', title: 'Ann Bell Music', host: 'index.example' });
+  assert.deepEqual(pageSuggestions([{ ...page, picture: 'https://img.example/a.png' }], {
+    ...values, img: 'https://img.example/default.png', pictures: [],
+  }).img.map((row) => row.value), ['https://img.example/a.png'],
+  'ADR 0196 item 8: a page value that differs from the default but is absent from the list stays a suggestion. Fix pageSuggestions in crates/api/ui/people.js.');
   const all = [...rows.img, ...rows.href, ...rows.keys, ...rows.wallets, ...rows.otherRecipients.flatMap((fold) => fold.rows)];
   assert.deepEqual(all.map((row) => [row.button, row.ariaLabel]), [
     ['Add', 'Add https://img.example/a.png'], ['Add', 'Add https://ann.example'], ['Add', 'Add npub1ann'],
     ['Add', 'Add ann@x.example'], ['Add', 'Add other@x.example'],
   ], 'ADR 0196 item 13: Add for picture and website values, and name each button for its value. Fix pageSuggestions in crates/api/ui/people.js.');
+});
+
+test('the picture and website groups replace the scalar fields (ADR 0196 items 9 to 11)', () => {
+  const source = readFileSync(new URL('../ui/peoplepages.js', import.meta.url), 'utf8');
+  assert.equal(source.includes('id="person-img"'), false, 'ADR 0196 item 9: remove the old picture field. Fix PersonFields in crates/api/ui/peoplepages.js.');
+  assert.equal(source.includes('id="person-href"'), false, 'ADR 0196 item 9: remove the old website field. Fix PersonFields in crates/api/ui/peoplepages.js.');
+  const remove = source.indexOf('class="button destructive" type="button" aria-label=${`Remove ${item.value}`}');
+  const makeDefault = source.indexOf('class="button action" type="button" aria-label=${`Make Default: ${item.value}`}');
+  assert.ok(remove >= 0 && makeDefault > remove, 'ADR 0196 item 10: Remove comes before Make Default. Fix the value rows in crates/api/ui/peoplepages.js.');
 });
 
 import { addAllPageSuggestions, hasPageSuggestions, hasLinkedPages, linkedPageChanges, linkedPageSelection, linkedPageChangeLines, linkedPageBody } from '../ui/people.js';
@@ -1929,8 +1981,19 @@ test('linked page updates add matching wallets and review each changed value', (
   const pages = [{ ...PAGE, missing: false, picture: 'https://img.example/a.png', website: 'https://ann.example', npub: 'npub1ann',
     wallets: [{ key: { address: 'ann@x.example' }, recipient_type: 'lnaddress' }],
     other_recipients: [{ key: { address: 'other@x.example' }, recipient_type: 'lnaddress' }] }];
-  assert.deepEqual(addAllPageSuggestions(pages, values), { ...values, img: 'https://img.example/a.png', href: 'https://ann.example',
+  assert.deepEqual(addAllPageSuggestions(pages, values), { ...values,
+    img: 'https://img.example/a.png', href: 'https://ann.example',
+    pictures: [{ value: 'https://img.example/a.png', source: { feed_guid: 'g-ann', title: 'Ann Bell Music', host: null } }],
+    websites: [{ value: 'https://ann.example', source: { feed_guid: 'g-ann', title: 'Ann Bell Music', host: null } }],
     keys: ['npub1ann'], wallets: [{ key: { address: 'ann@x.example' }, recipient_type: 'lnaddress' }] });
+  const twoPages = [
+    { ...PAGE, missing: false, picture: 'https://img.example/a.png', website: null, wallets: [], other_recipients: [] },
+    { feed_guid: 'g-other', title: 'Other Page', missing: false, picture: 'https://img.example/b.png', website: null, wallets: [], other_recipients: [] },
+  ];
+  const many = addAllPageSuggestions(twoPages, { ...values, pages: [PAGE, { feed_guid: 'g-other', title: 'Other Page' }] });
+  assert.deepEqual(many.pictures.map((item) => item.value), ['https://img.example/a.png', 'https://img.example/b.png'],
+    'ADR 0196 item 6: Add All Suggestions adds each picture. Fix addAllPageSuggestions in crates/api/ui/people.js.');
+  assert.equal(many.img, 'https://img.example/a.png', 'ADR 0196 item 6: adding another picture keeps the first default. Fix addAllPageSuggestions in crates/api/ui/people.js.');
   const batch = linkedPageChanges([{ person_id: 1, name: 'Ann', pictures: [], websites: [], keys: [], wallets: [] },
     { person_id: 2, name: 'Cy', pictures: [{ value: 'https://img.example/c.png', source: { title: 'Cy Music', host: 'index.example' } }], websites: [], keys: ['npub1cy'], wallets: [{ key: { address: 'cy@x.example' } }] }]);
   assert.equal(batch.length, 1);

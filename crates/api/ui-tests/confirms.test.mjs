@@ -82,3 +82,22 @@ test('no button comes before a destructive button in its row', () => {
     }
   }
 });
+
+test('no row has only destructive buttons', () => {
+  const names = readdirSync(uiDir).filter((file) => file.endsWith('.js'));
+  const rowEnd = /<\/footer>|<\/div>|<\/li>|<\/\$\{Bar\}>|<\/\/>/;
+  for (const name of names) {
+    const text = readFileSync(new URL(name, uiDir), 'utf8');
+    const buttonPattern = /<button\b[^>]*>/gs;
+    let match;
+    while ((match = buttonPattern.exec(text))) {
+      if (!/class=["'`][^"'`]*(?:destructive|discard)/s.test(match[0])) continue;
+      const after = text.slice(match.index + match[0].length);
+      const end = after.search(rowEnd);
+      const rest = [...after.slice(0, end < 0 ? after.length : end).matchAll(/<button\b[^>]*>/gs)];
+      if (rest.length > 0 && rest.every((button) => /destructive|discard/.test(button[0]))) {
+        assert.fail(`musicindex ADR 0064 R-ACT-10: a row in ${name} has only destructive buttons, at ${match[0].replace(/\s+/g, ' ').slice(0, 90)}. Show one "Remove…" button that opens a menu with the destructive items.`);
+      }
+    }
+  }
+});

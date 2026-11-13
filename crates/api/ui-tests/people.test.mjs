@@ -1911,6 +1911,17 @@ test('the primary button of the sheet "From Music Index" says what it does (ADR 
   assert.equal(linkFillLabel(false, 0), null);
 });
 
+import { linkFillButton } from '../ui/people.js';
+
+test('the main button of the sheet "From Music Index" waits for the values of the page', () => {
+  // Human check of task 118 on 2026-11-12: while the keysend checks ran,
+  // the sheet showed an enabled "Link" with no Fill rows.
+  assert.deepEqual(linkFillButton({ loading: true, link: true, count: 0 }), { label: 'Link', disabled: true });
+  assert.deepEqual(linkFillButton({ loading: false, link: true, count: 0 }), { label: 'Link', disabled: false });
+  assert.deepEqual(linkFillButton({ loading: false, link: true, count: 2 }), { label: 'Link and Fill 2 Fields', disabled: false });
+  assert.deepEqual(linkFillButton({ loading: false, link: false, count: 0 }), { label: 'Fill', disabled: true });
+});
+
 test('the row "Link this page" has three states (ADR 0163 items 5 to 7)', () => {
   const own = savedValues({ ...MK, members: [] });
   const outside = linkRow({ feed_guid: 'g-ann' }, PAGE_FEEDS, own);

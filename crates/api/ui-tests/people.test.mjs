@@ -201,7 +201,7 @@ import {
   initials, personMatches, filterPeople, filterPayees, payeesWithNoPerson, peopleOrder, openChanges, changeTitle, feedsToWrite,
   whereEntries, whereSummary, whereLine,
   changeRow, afterDiscard, afterMissing, memberChoices, creditItemRow, payeeItemRow, toggledItem, dismissBody, addPersonBody,
-  addPersonView, addPersonSelection, addPersonPlan, findPersonPageModel,
+  addPersonView, addPersonSelection, addPersonPlan, findPersonPageModel, linkName,
 } from '../ui/people.js';
 
 test('the Add a Person view searches People and gives its button text', () => {
@@ -248,6 +248,14 @@ test('Add a Person selects a page without making a request, then plans create an
   assert.deepEqual(addPersonPlan({ name: ' Sam ', img: '', href: '' }, { feed_id: '3', title: 'Mine' }).link.body, { members: [3] });
   assert.equal(addPersonPlan({ name: 'Sam', img: '', href: '' }).link, null,
     'ADR 0192 item 5: a person with no page sends no link. Fix addPersonPlan in crates/api/ui/people.js.');
+});
+
+test('a link names a person with an empty name', () => {
+  assert.deepEqual(linkName({ name: '  ' }, 'Matt Finlay'), { name: 'Matt Finlay' },
+    'ADR 0163 item 15: a link puts the page title in an empty name. Fix linkName in crates/api/ui/people.js.');
+  assert.deepEqual(linkName({ name: 'Matt' }, 'Matt Finlay'), {},
+    'ADR 0163 item 15: a link does not change a name with text. Fix linkName in crates/api/ui/people.js.');
+  assert.deepEqual(linkName({ name: '' }, ''), {});
 });
 
 test('Find on Music Index lists user pages before result groups', () => {

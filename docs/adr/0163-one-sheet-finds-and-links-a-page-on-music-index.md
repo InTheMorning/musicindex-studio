@@ -7,6 +7,7 @@
 - Changes: [ADR 0117](0117-the-page-of-a-person-finds-values-on-musicindex.md) items 2, 8 and 13. [ADR 0159](0159-a-person-can-link-to-a-page-on-music-index.md) items 4 and 5.
 - Uses: [ADR 0116](0116-the-page-of-a-person-has-save-and-discard.md) for the pending changes. [ADR 0145](0145-each-sheet-that-adds-a-value-has-one-layout.md) for the layout of a sheet. [ADR 0154](0154-the-search-fields-have-a-field-list.md) for the field list. [ADR 0146](0146-link-words-already-marks-and-credit-edits.md) for the mark of a value that the person has.
 - Changed by: [ADR 0192](0192-add-a-person-has-the-layout-of-the-other-pickers.md). Item 2: "Add a Person" has the layout of the other pickers, and the pages of the user come before the results.
+- Amended: 2026-11-12 by the operator, in the human check of task 118. Item 15 was added: the operator linked a page to a person with an empty name, and the name stayed empty.
 
 ## Context
 
@@ -55,6 +56,10 @@ The same check found two problems of the search sheets. The field list was in th
 13. The search field stays at the top of the body of the sheet. Only the rows below it scroll.
 14. The field list is a floating layer at the field, as on musicindex.org. When the window has less space below the field, the list opens above it.
 
+### The Name Of A Person With No Name
+
+15. When the field "Name" in "Credits" is empty, a link to a page puts the title of the page in that field. This applies to a link from the sheet "From Music Index" and to a link from the fold "Your artist and label pages". A name that is not empty does not change. The name is a pending change until Save.
+
 ## Alternatives Considered
 
 - **Link only.** No **Find on Music Index**: each value of a linked page shows with **Use**. Not chosen: the user selects **Use** one time for each value, and cannot decline a value.
@@ -77,6 +82,7 @@ Mechanical:
     - a feed of the collection: a selected row with the line of a collection page
     - a page that the person has: the mark "Already linked"
 - A fill with the link selected gives a patch with the link and with each selected value.
+- Item 15: a link gives the title as the name when the pending name is empty, and gives no name when the pending name has text.
 - The Node tests pass.
 
 Visual, from agent screenshots at 1280 px in the dark and the light theme, and at 390 px:

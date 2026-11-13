@@ -2233,6 +2233,19 @@ export const linkFillLabel = (link, count) => {
   return count > 0 ? fillLabel(count) : null;
 };
 
+// The status of the sheet "From Music Index" while Studio reads the values
+// of the page. The keysend check of each wallet can take some seconds.
+export const VALUES_WAIT = 'Reading the page on Music Index…';
+
+// The main button of the sheet "From Music Index". While the values load,
+// the button is not available, so that a click cannot link the page before
+// the user sees the Fill rows. After an error, a link with no fill stays
+// available.
+export const linkFillButton = ({ loading, link, count }) => {
+  const label = linkFillLabel(link, count);
+  return { label: label || 'Fill', disabled: loading || label === null };
+};
+
 // The words of the row "Link this page" (ADR 0163 items 6 and 7).
 export const LINK_READ_ONLY_LINE = 'Read only. Subsequent changes of this page show on this person.';
 export const LINK_OWN_LINE = 'Your page. The details of this person go to this page.';

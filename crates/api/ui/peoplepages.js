@@ -31,7 +31,7 @@ import {
   moreRows, NO_OTHER_TEXT, mergeTitle, mergeHint, mergeLinks, mergeResult, mergeBody, afterMissing,
   detailList, LINK_HINT, LINK_EMPTY, linkChoices, linkRows, pickLink, pageSuggestions, addAllPageSuggestions, hasPageSuggestions, hasLinkedPages, linkedPageChanges, linkedPageSelection, linkedPageChangeLines, creditPosition, afterCredits, savedValues, pendingKeys, pendingStatus, isPending, saveBody, leaveText, checkGroups, checkFeedLines, checkKeys, checkIntro, CHANGE_ROWS, CHANGE_NOTE,
   CHECK_TITLE, checkSummary, differenceBlocks, openLabel, useValuesLabel,
-  recipientChoices, creditChoices, fundingChoices, ALREADY_VALUE, FIND_HINT, FIND_EMPTY, FIND_WAIT, FILL_NOTE, lookupGroups, lookupKind, hasLine, fillRows, linkRow, linkFillLabel, ALREADY_LINKED, fillPatch, fillSource, musicindexFeedUrl,
+  recipientChoices, creditChoices, fundingChoices, ALREADY_VALUE, FIND_HINT, FIND_EMPTY, FIND_WAIT, FILL_NOTE, lookupGroups, lookupKind, hasLine, fillRows, linkRow, linkFillButton, VALUES_WAIT, ALREADY_LINKED, fillPatch, fillSource, musicindexFeedUrl,
   creditOffers, creditAddTitle, creditRemoveTitle, creditAddNote, creditPublicNote, creditRemoveNote, creditOperation, REMOVE_CREDIT_OPERATION,
   lookupAddress, showFindEmpty, addPersonView, ADD_PAGE_HINT,
 } from './people.js';
@@ -711,7 +711,8 @@ function ValuesForm({ personId, row, feeds, shown, onBack, onFill }) {
   // The box "Link this page" (ADR 0163 items 5 to 7).
   const linking = linkRow(row, feeds, shown);
   const linkOn = linking.selectable && link;
-  const label = linkFillLabel(linkOn, count);
+  const loading = values === null && error === null;
+  const button = linkFillButton({ loading, link: linkOn, count });
   // The link and the fill go to the page in one patch, so that both stay
   // pending until Save (ADR 0163 item 11).
   const apply = () => onFill({ ...fillPatch(rows, checked, shown), ...(linkOn ? pickLink(row, feeds, shown) : {}) }, fillSource(row));
@@ -725,6 +726,7 @@ function ValuesForm({ personId, row, feeds, shown, onBack, onFill }) {
           <span class="summary"><span class=${`dot ${kind.dot}`} aria-hidden="true"></span>${kind.text}</span>
           <span class="summary"><a href=${musicindexFeedUrl(row.feed_guid)} target="_blank" rel="noopener">Open on musicindex.org</a></span></span></div></div>
       <${ErrorNotice} error=${error} />
+      ${loading && html`<p class="empty" role="status">${VALUES_WAIT}</p>`}
       ${values && html`<section class="page-section"><h2>Link</h2>
         <div class="group rows">${linking.already
           ? html`<div class="link-row static pick-taken"><span class="text"><span class="pick-name"><span class="label">Link this page</span><${TakenTag} text=${ALREADY_LINKED} /></span></span></div>`
@@ -736,7 +738,7 @@ function ValuesForm({ personId, row, feeds, shown, onBack, onFill }) {
         <p class="hint">${FILL_NOTE}</p></section>`}
     </div>
     <footer><button class="button" type="button" onClick=${onBack}>Back</button>
-      <button class="button primary" type="button" disabled=${label === null} onClick=${apply}>${label || 'Fill'}</button></footer>`;
+      <button class="button primary" type="button" disabled=${button.disabled} onClick=${apply}>${button.label}</button></footer>`;
 }
 
 // A row of the Fill section. A row that cannot be selected has no check box.

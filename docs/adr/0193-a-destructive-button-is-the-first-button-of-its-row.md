@@ -63,7 +63,7 @@ Visual, by the planning model, with screenshots at 1280 px and 390 px:
 - The bar of the change set, the last row of the page of a person, the actions of a feed and the account actions.
 - `$edges()` and `$overflow()` are empty.
 
-Human, by the operator. This gate stays open until it runs:
+Human, by the operator. This gate passed on 2026-11-12 in the desktop app:
 
 - In the desktop app, open "Leave without saving?". "Discard Changes" is on the left, with a space after it. "Keep Editing" is on the right and has the focus. Enter keeps the page open.
 

@@ -6,7 +6,7 @@ Status: Complete on 2026-11-12. The mechanical checks passed. The two new scan t
 
 The screenshot check of "Leave without saving?" and of the page of a person passed at 1280 px light and 390 px dark. "Discard Changes" is at the left edge, and "Keep Editing" is at the right edge and has the focus. `$edges()` and `$overflow()` are empty.
 
-The walk data has no read-only feed page, no change set and no account, so these rows have no screenshot. The scan test proves their order. The human check is open.
+The walk data has no read-only feed page, no change set and no account, so these rows have no screenshot. The scan test proves their order. The human check passed on 2026-11-12.
 
 ## Goal
 

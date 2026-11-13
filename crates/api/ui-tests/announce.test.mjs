@@ -1,7 +1,20 @@
 // The announcement models (ADR 0042). Each test checks one text of task 031d.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { announceLines, announceStatus, isWaiting } from '../ui/announce.js';
+import { announceLines, announceStatus, announceHint, isWaiting } from '../ui/announce.js';
+import { localTime } from '../ui/outsidecheck.js';
+
+test('the hint of the announcement choice gives the send time after a wait of Music Index (ADR 0190 items 6 and 7)', () => {
+  const owner = 'ADR 0190 items 6 and 7. Correct announceHint in crates/api/ui/announce.js.';
+  const until = 1_800_000_000;
+  assert.equal(announceHint(true, { state: 'waits', until, too_far: false }),
+    `Studio sends it at ${localTime(until + 30)}, after the wait of Music Index.`, owner);
+  for (const wait of [null, { state: 'follows' }, { state: 'unknown' }, { state: 'waits', until, too_far: true }]) {
+    assert.equal(announceHint(true, wait), 'Studio sends it 30 seconds after the write.', owner);
+  }
+  assert.equal(announceHint(false, { state: 'waits', until, too_far: false }),
+    'No index learns about this write until it reads the feed by itself.', owner);
+});
 
 const at = (seconds) => `T${seconds}`;
 const entry = (fields) => ({

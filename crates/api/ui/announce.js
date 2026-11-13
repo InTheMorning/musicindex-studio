@@ -2,6 +2,19 @@
 // module has no Preact and no browser state. The Node tests in
 // `ui-tests/announce.test.mjs` examine it.
 
+import { localTime } from './outsidecheck.js';
+
+// The hint below the announcement choice of Review. `wait` is the answer of
+// `GET /feeds/{id}/return-wait`, or `null`. With a wait of Music Index, the
+// write sends the podping 30 seconds after the wait (ADR 0190 items 6 and 7).
+export function announceHint(enabled, wait) {
+  if (!enabled) return 'No index learns about this write until it reads the feed by itself.';
+  if (wait && wait.state === 'waits' && Number.isFinite(wait.until) && !wait.too_far) {
+    return `Studio sends it at ${localTime(wait.until + 30)}, after the wait of Music Index.`;
+  }
+  return 'Studio sends it 30 seconds after the write.';
+}
+
 // The lines of the review sheet for the announcements of a write. `diff` is
 // the diff of the API. An entry of `diff.announcements` gives one line. When
 // `diff.announce_skip` is set, one line gives the reason for no announcement.

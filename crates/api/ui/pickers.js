@@ -301,7 +301,7 @@ function FindOneForm({ start, choices, empty, credits, onPick, onCancel }) {
     setProblem(null);
     setNone(false);
     try {
-      const list = choices(await api(`/musicindex/values/${encodeURIComponent(row.feed_guid)}${credits ? '?credits=true' : ''}`), isFeed ? row : null);
+      const list = choices(await api(`/musicindex/values/${encodeURIComponent(row.feed_guid)}${credits ? '?credits=true' : ''}`), isFeed ? row : null, row);
       if (list.length === 1) onPick(list[0].values);
       else if (list.length === 0) setNone(true);
       else setOptions(list);

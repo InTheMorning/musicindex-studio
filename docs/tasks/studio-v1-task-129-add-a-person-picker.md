@@ -2,7 +2,7 @@
 
 Decision: [ADR 0192](../adr/0192-add-a-person-has-the-layout-of-the-other-pickers.md).
 
-Status: Open.
+Status: Complete on 2026-11-12. The mechanical checks and the screenshot visual check passed. The walk added a person from a page on Music Index, and the database had one new person, with the fields and the page link. A selection and **Cancel** made no person. A selection of a release gives no values, because a release is not the page of a person. The human check is open.
 
 ## Goal
 

@@ -114,7 +114,7 @@ export function displayName(person) {
   return nickname || person.name;
 }
 
-// The view of the search in the sheet "Add a Person" (ADR 0182 items 4, 5, 8 and 9).
+// The view of the sheet "Add a Person" (ADR 0192 items 4 and 5).
 export function addPersonView(people, query) {
   const text = String(query ?? '').trim();
   const searching = text.length >= 2;
@@ -123,15 +123,36 @@ export function addPersonView(people, query) {
     person.name, person.nickname, ...(person.credit_names || []).map((credit) => credit.name),
   ].some((value) => String(value ?? '').toLowerCase().includes(needle)))
     .map((person) => ({ person, name: displayName(person) })) : [];
-  return {
-    searching,
-    already,
-    button: text === '' ? 'Add the Person' : `Add "${text}" Without a Page`,
-    disabled: text === '',
-  };
+  return { searching, already, button: 'Add the Person', disabled: text === '' };
 }
 
-export const ADD_PAGE_HINT = 'Select a page to add the person with a link to it.';
+// The values that a selected artist or label page fills in the sheet "Add a
+// Person" (ADR 0192 item 3). `release` is the search row of a release, and a
+// release gives no values. `row` is the search row of the selected page.
+export function addPersonSelection(values, release, row) {
+  if (release || !row) return null;
+  const title = values.title || row.title || '';
+  return { name: title, img: values.image_url || '', href: values.website || '', feed_guid: row.feed_guid, title };
+}
+
+// The API calls that add a person and then add the selected page link.
+export function addPersonPlan(fields, link = null, feeds = []) {
+  const create = { method: 'POST', path: '/people', body: addPersonBody(fields) };
+  if (!link) return { create, link: null };
+  const change = link.feed_id !== undefined
+    ? { members: [link.feed_id] }
+    : pickLink(link, feeds, { members: [], pages: [] });
+  const body = change.members ? { members: change.members.map(Number) } : { pages: change.pages };
+  return { create, link: { method: 'POST', path: '/people/{id}/save', body } };
+}
+
+// The order of sections in the sheet "Find on Music Index" of a person.
+export function findPersonPageModel(own, groups) {
+  return [
+    ...(own.length ? [{ id: 'own', rows: own }] : []),
+    ...(groups || []).map((group) => ({ id: 'results', group })),
+  ];
+}
 
 // The start state of the sheet "Check: {name}" (ADR 0111 item 7). An item
 // with a different name starts not selected. The sheet has `memberOf` as text.
@@ -475,7 +496,13 @@ export function toggledItem(state, group, index) {
 export const dismissBody = (suggestion) => ({ identity: suggestion.identity, items: suggestion.item_keys || [] });
 
 // The body of `POST /people` from the sheet "Add a Person".
-export const addPersonBody = (name) => ({ name: String(name ?? '').trim() });
+export const addPersonBody = (fields) => {
+  const values = typeof fields === 'object' && fields !== null ? fields : { name: fields };
+  return {
+    name: String(values.name ?? '').trim(),
+    ...(values.img !== undefined || values.href !== undefined ? { img: String(values.img ?? '').trim(), href: String(values.href ?? '').trim() } : {}),
+  };
+};
 
 // ---- The page of a person and its sheets (ADR 0099 items 4 to 12, task 065c) ----
 

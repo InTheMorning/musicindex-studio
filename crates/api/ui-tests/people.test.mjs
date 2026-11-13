@@ -201,7 +201,7 @@ import {
   initials, personMatches, filterPeople, filterPayees, payeesWithNoPerson, peopleOrder, openChanges, changeTitle, feedsToWrite,
   whereEntries, whereSummary, whereLine,
   changeRow, afterDiscard, afterMissing, memberChoices, creditItemRow, payeeItemRow, toggledItem, dismissBody, addPersonBody,
-  addPersonView,
+  addPersonView, addPersonSelection, addPersonPlan, findPersonPageModel,
 } from '../ui/people.js';
 
 test('the Add a Person view searches People and gives its button text', () => {
@@ -221,12 +221,39 @@ test('the Add a Person view searches People and gives its button text', () => {
     'ADR 0182 item 9: find people by credit name without regard to capitals. Fix addPersonView in crates/api/ui/people.js.');
   assert.deepEqual(addPersonView(people, 'unknown').already, [],
     'ADR 0182 item 5: show no People rows when no person matches. Fix addPersonView in crates/api/ui/people.js.');
-  assert.equal(addPersonView(people, ' Mary ').button, 'Add "Mary" Without a Page',
-    'ADR 0182 item 8: name the button with the trimmed query. Fix addPersonView in crates/api/ui/people.js.');
-  assert.equal(addPersonView(people, ' ').button, 'Add the Person',
-    'ADR 0182 item 8: name the button for an empty field. Fix addPersonView in crates/api/ui/people.js.');
+  assert.equal(addPersonView(people, ' Mary ').button, 'Add the Person',
+    'ADR 0192 item 5: use one label for the add action. Fix addPersonView in crates/api/ui/people.js.');
+  assert.equal(addPersonView(people, ' ').button, 'Add the Person');
   assert.equal(addPersonView(people, ' ').disabled, true,
-    'ADR 0182 item 8: disable the button when the trimmed field is empty. Fix addPersonView in crates/api/ui/people.js.');
+    'ADR 0192 item 5: disable the button when the name is empty. Fix addPersonView in crates/api/ui/people.js.');
+});
+
+
+test('Add a Person selects a page without making a request, then plans create and link calls', () => {
+  const values = { title: 'Aurora Lane', image_url: 'https://img.example/a.png', website: 'https://aurora.example' };
+  const row = { feed_guid: 'GUID-7', title: 'Aurora', kind: { type: 'inferred_artist' } };
+  const selected = addPersonSelection(values, null, row);
+  assert.deepEqual(selected, {
+    name: 'Aurora Lane', img: 'https://img.example/a.png', href: 'https://aurora.example', feed_guid: 'GUID-7', title: 'Aurora Lane',
+  }, 'ADR 0192 item 3: a page of any kind fills the fields and the pending link. Fix addPersonSelection in crates/api/ui/people.js.');
+  assert.equal(addPersonSelection(values, { feed_guid: 'R-1', artist: 'Aurora' }, row), null,
+    'ADR 0192 item 3: a release gives no person values. Fix addPersonSelection in crates/api/ui/people.js.');
+  const own = { id: 7, podcast_guid: 'guid-7', title: 'Aurora Lane' };
+  assert.deepEqual(addPersonPlan(selected, selected, [own]), {
+    create: { method: 'POST', path: '/people', body: { name: 'Aurora Lane', img: 'https://img.example/a.png', href: 'https://aurora.example' } },
+    link: { method: 'POST', path: '/people/{id}/save', body: { members: [7] } },
+  }, 'ADR 0192 item 5: a page of the user links as a member. Fix addPersonPlan in crates/api/ui/people.js.');
+  assert.deepEqual(addPersonPlan(selected, selected, []).link.body, { pages: [{ feed_guid: 'GUID-7', title: 'Aurora Lane' }] },
+    'ADR 0192 item 5: another page links as a read-only page. Fix addPersonPlan in crates/api/ui/people.js.');
+  assert.deepEqual(addPersonPlan({ name: ' Sam ', img: '', href: '' }, { feed_id: '3', title: 'Mine' }).link.body, { members: [3] });
+  assert.equal(addPersonPlan({ name: 'Sam', img: '', href: '' }).link, null,
+    'ADR 0192 item 5: a person with no page sends no link. Fix addPersonPlan in crates/api/ui/people.js.');
+});
+
+test('Find on Music Index lists user pages before result groups', () => {
+  const own = [{ title: 'My Label' }];
+  const groups = [{ level: 'artist', heading: 'Artists', rows: [{ title: 'Other Artist' }] }];
+  assert.deepEqual(findPersonPageModel(own, groups).map((section) => section.id), ['own', 'results']);
 });
 
 test('the search matches the name, an address and a key, with no regard to capitals', () => {

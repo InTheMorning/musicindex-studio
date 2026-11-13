@@ -154,6 +154,8 @@ pub struct WalletRow {
     pub key: Option<RecipientKey>,
     /// The state of the wallet for the person.
     pub state: ValueState,
+    /// Whether the recipient name matches the person or feed title.
+    pub matches: bool,
 }
 
 /// The values of one feed for one person (ADR 0117 item 5).
@@ -532,6 +534,11 @@ pub fn compose_values(
         };
         let lookup = route.lookup.as_ref().map(wallet_lookup);
         let recipient = route.recipient;
+        let matches = people::page_wallet_matches(
+            &person,
+            feed.title.as_deref().unwrap_or_default(),
+            recipient.name.as_deref(),
+        );
         wallets.push(WalletRow {
             value: recipient.address.unwrap_or_default(),
             name: recipient.name,
@@ -540,6 +547,7 @@ pub fn compose_values(
             lookup,
             key,
             state,
+            matches,
         });
     }
     Ok(LookupValues {
@@ -702,6 +710,41 @@ mod tests {
                 assert_eq!(row.has, Has::default(), "row {position}");
             }
         }
+    }
+
+    #[test]
+    fn value_wallets_mark_person_and_feed_title_matches() {
+        let server = TestServer::start(vec![
+            (
+                "/v1/feeds/c0ffee-49",
+                200,
+                br#"{"data":{"title":"Ann Bell Music","payment_routes":[{"recipient_name":"Ann Bell","route_type":"node","address":"02aa","split":50,"fee":false},{"recipient_name":"Ann Bell Music","route_type":"node","address":"02bb","split":25,"fee":false},{"recipient_name":"Podcastindex.org","route_type":"node","address":"02cc","split":25,"fee":true}]}}"#.to_vec(),
+            ),
+            ("/v1/search", 200, br#"{"data":[]}"#.to_vec()),
+        ]);
+        let index = MusicIndex::new(Web::new(), &server.url(""));
+        let web = Web::new();
+        let collection = Collection::open_in_memory().unwrap();
+        let ann = people::add_person(
+            &collection,
+            &people::PersonFields {
+                name: "Ann Bell".to_owned(),
+                ..people::PersonFields::default()
+            },
+        )
+        .unwrap();
+        let feed = fetch_values(&index, &web, None, "c0ffee-49")
+            .unwrap()
+            .unwrap();
+        let values = compose_values(&collection, ann, feed).unwrap();
+        assert_eq!(
+            values
+                .wallets
+                .iter()
+                .map(|wallet| wallet.matches)
+                .collect::<Vec<_>>(),
+            [true, true, false]
+        );
     }
 
     #[test]

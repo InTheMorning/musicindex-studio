@@ -1911,7 +1911,27 @@ test('the primary button of the sheet "From Music Index" says what it does (ADR 
   assert.equal(linkFillLabel(false, 0), null);
 });
 
-import { linkFillButton } from '../ui/people.js';
+import { linkFillButton, splitFillRows } from '../ui/people.js';
+
+test('the wallet rows split into the rows that match and the fold (ADR 0117 item 15)', () => {
+  const rows = [
+    { id: 'wallet:0', matches: true },
+    { id: 'wallet:1', matches: false },
+    { id: 'npub' },
+  ];
+  assert.deepEqual(splitFillRows(rows, 'Ann Bell Music'), {
+    main: [rows[0]], other: [rows[1]], tail: [rows[2]], title: '1 other recipient on Ann Bell Music',
+  });
+});
+
+test('a wallet that does not match the person goes to the fold (ADR 0117 item 15)', () => {
+  const wallet = (name, matches) => ({ value: `${name}@getalby.com`, name, recipient_type: 'lnaddress', key: { address: `${name}@getalby.com` }, state: 'new', matches });
+  const rows = fillRows({ wallets: [wallet('ann', true), wallet('podcastindex', false)] }, { img: '', href: '', wallets: [], keys: [] });
+  const split = splitFillRows(rows, 'Ann Bell Music');
+  assert.deepEqual(split.main.map((r) => r.id), ['wallet:0']);
+  assert.deepEqual(split.other.map((r) => r.id), ['wallet:1']);
+  assert.equal(split.other[0].selectable, true);
+});
 
 test('the main button of the sheet "From Music Index" waits for the values of the page', () => {
   // Human check of task 118 on 2026-11-12: while the keysend checks ran,

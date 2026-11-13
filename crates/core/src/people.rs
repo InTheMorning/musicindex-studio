@@ -3302,9 +3302,9 @@ pub fn save_page_suggestion_changes(
 /// its name is the name of the person, a credit name of the person or the
 /// title of the page. The test ignores case, spaces and punctuation. A
 /// recipient with no name does not match.
-fn page_wallet_matches(person: &Person, title: &str, wallet: &PageWallet) -> bool {
+pub(crate) fn page_wallet_matches(person: &Person, title: &str, name: Option<&str>) -> bool {
     let key = |name: &str| norm_name(name).replace(' ', "");
-    let Some(name) = wallet.name.as_deref().map(key).filter(|n| !n.is_empty()) else {
+    let Some(name) = name.map(key).filter(|n| !n.is_empty()) else {
         return false;
     };
     [person.name.as_str(), title]
@@ -3375,7 +3375,7 @@ pub fn page_suggestions<S: BuildHasher>(
             recipient_type: route.recipient_type.clone().unwrap_or_default(),
             name: route.name.clone(),
         };
-        if page_wallet_matches(person, &page.title, &wallet) {
+        if page_wallet_matches(person, &page.title, wallet.name.as_deref()) {
             suggestion.wallets.push(wallet);
         } else {
             suggestion.other_recipients.push(wallet);

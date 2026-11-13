@@ -31,7 +31,7 @@ import {
   moreRows, NO_OTHER_TEXT, mergeTitle, mergeHint, mergeLinks, mergeResult, mergeBody, afterMissing,
   detailList, LINK_HINT, LINK_EMPTY, linkChoices, linkRows, pickLink, pageSuggestions, addAllPageSuggestions, hasPageSuggestions, hasLinkedPages, linkedPageChanges, linkedPageSelection, linkedPageChangeLines, creditPosition, afterCredits, savedValues, pendingKeys, pendingStatus, isPending, saveBody, leaveText, checkGroups, checkFeedLines, checkKeys, checkIntro, CHANGE_ROWS, CHANGE_NOTE,
   CHECK_TITLE, checkSummary, differenceBlocks, openLabel, useValuesLabel,
-  recipientChoices, creditChoices, fundingChoices, ALREADY_VALUE, FIND_HINT, FIND_EMPTY, FIND_WAIT, FILL_NOTE, lookupGroups, lookupKind, hasLine, fillRows, linkRow, linkFillButton, VALUES_WAIT, ALREADY_LINKED, fillPatch, fillSource, musicindexFeedUrl,
+  recipientChoices, creditChoices, fundingChoices, ALREADY_VALUE, FIND_HINT, FIND_EMPTY, FIND_WAIT, FILL_NOTE, lookupGroups, lookupKind, hasLine, fillRows, splitFillRows, linkRow, linkFillButton, VALUES_WAIT, ALREADY_LINKED, fillPatch, fillSource, musicindexFeedUrl,
   creditOffers, creditAddTitle, creditRemoveTitle, creditAddNote, creditPublicNote, creditRemoveNote, creditOperation, REMOVE_CREDIT_OPERATION,
   lookupAddress, showFindEmpty, addPersonView, ADD_PAGE_HINT,
 } from './people.js';
@@ -707,6 +707,7 @@ function ValuesForm({ personId, row, feeds, shown, onBack, onFill }) {
     return () => { live = false; };
   }, [row.feed_guid]);
   const rows = values ? fillRows(values, shown) : [];
+  const fillRowsSplit = splitFillRows(rows, row.title || 'Untitled feed');
   const count = rows.filter((r) => r.selectable && checked.includes(r.id)).length;
   // The box "Link this page" (ADR 0163 items 5 to 7).
   const linking = linkRow(row, feeds, shown);
@@ -733,8 +734,12 @@ function ValuesForm({ personId, row, feeds, shown, onBack, onFill }) {
           : html`<label class="link-row use-row"><input type="checkbox" checked=${link} onChange=${() => setLink(!link)} />
             <span class="text"><span class="label">Link this page</span><span class="summary">${linking.line}</span></span></label>`}</div></section>
       <section class="page-section"><h2>Fill</h2>
-        <div class="group rows">${rows.map((r) => html`<${FillRow} key=${r.id} row=${r} checked=${checked.includes(r.id)}
+        <div class="group rows">${fillRowsSplit.main.map((r) => html`<${FillRow} key=${r.id} row=${r} checked=${checked.includes(r.id)}
           onToggle=${() => toggle(r.id)} />`)}</div>
+        ${fillRowsSplit.other.length > 0 && html`<${PickFold} id=${`fill-other-${row.feed_guid}`} title=${fillRowsSplit.title} startOpen=${false} showCount=${false}
+          rows=${fillRowsSplit.other.map((r) => html`<${FillRow} key=${r.id} row=${r} checked=${checked.includes(r.id)} onToggle=${() => toggle(r.id)} />`)} />`}
+        ${fillRowsSplit.tail.length > 0 && html`<div class="group rows">${fillRowsSplit.tail.map((r) => html`<${FillRow} key=${r.id} row=${r} checked=${checked.includes(r.id)}
+          onToggle=${() => toggle(r.id)} />`)}</div>`}
         <p class="hint">${FILL_NOTE}</p></section>`}
     </div>
     <footer><button class="button" type="button" onClick=${onBack}>Back</button>

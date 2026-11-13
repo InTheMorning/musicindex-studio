@@ -59,7 +59,9 @@ export function indexNotice(check) {
   };
 }
 
-const localTime = (seconds) => new Date(seconds * 1000).toLocaleString();
+// The local time of a Unix time in seconds. Review uses it too (ADR 0190
+// item 2).
+export const localTime = (seconds) => new Date(seconds * 1000).toLocaleString();
 
 // The notice after a move by Studio (ADR 0184 items 3 to 7). A feed with no
 // public address has no send button (item 11).

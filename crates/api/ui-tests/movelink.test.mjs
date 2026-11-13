@@ -6,7 +6,8 @@ import { readFileSync } from 'node:fs';
 import { isTitleCase } from '../ui/casing.js';
 import {
   CONDITION_TEXT, HOP_TEXT, STAGE_TEXT, SOURCE_TEXT, DANGER_TEXT, NEXT_TEXT, REPAIRS, refusalView, refusalOfError, noticeViews, blocksWrite,
-  repairButtons, repairRoute, REPLACES_POINTER_NOTE, returnWarning,
+  repairButtons, repairRoute, REPLACES_POINTER_NOTE, returnWarning, returnWaitsText,
+  RETURN_FOLLOWS, RETURN_UNKNOWN, RETURN_TOO_FAR,
 } from '../ui/movelink.js';
 
 const source = readFileSync(new URL('../../core/src/move_link.rs', import.meta.url), 'utf8');
@@ -126,12 +127,22 @@ test('the move row says that a pointer file becomes the feed', () => {
   assert.deepEqual(repairButtons(undefined), []);
 });
 
-test('only a return gets the warning, and the warning gives no time', () => {
-  const owner = 'ADR 0128 items 7 to 9. Correct returnWarning in crates/api/ui/movelink.js.';
-  const view = returnWarning({ replaces_pointer: true });
-  assert.ok(view && view.title && view.text, owner);
-  assert.doesNotMatch(`${view.title} ${view.text}`, /\d|hour|day/, owner);
-  assert.equal(returnWarning({ replaces_pointer: false }), null, owner);
+test('only a return gets the warning, and each state of the wait gives its text (ADR 0190 items 2 to 4 and 7)', () => {
+  const owner = 'ADR 0190 items 2 to 4 and 7. Correct returnWarning in crates/api/ui/movelink.js.';
+  const move = { replaces_pointer: true };
+  const until = 1_800_000_000;
+  const waits = returnWarning(move, { state: 'waits', until, too_far: false });
+  assert.equal(waits.text, returnWaitsText(until), owner);
+  assert.match(waits.text, /^Music Index waits until .+ before it follows this return\. Studio sends the podping after that time\.$/, owner);
+  assert.equal(returnWarning(move, { state: 'waits', until, too_far: true }).text, `${returnWaitsText(until)} ${RETURN_TOO_FAR}`, owner);
+  assert.equal(returnWarning(move, { state: 'follows', until: null, too_far: false }).text, RETURN_FOLLOWS, owner);
+  assert.equal(returnWarning(move, { state: 'unknown', until: null, too_far: false }).text, RETURN_UNKNOWN, owner);
+  assert.equal(returnWarning(move, null).text, RETURN_UNKNOWN, owner);
+  assert.equal(returnWarning(move, { state: 'other' }).text, RETURN_UNKNOWN, owner);
+  for (const wait of [null, { state: 'waits', until, too_far: true }, { state: 'follows' }, { state: 'unknown' }]) {
+    assert.doesNotMatch(returnWarning(move, wait).text, /do not need to do more/, owner);
+  }
+  assert.equal(returnWarning({ replaces_pointer: false }, { state: 'waits', until }), null, owner);
   assert.equal(returnWarning(null), null, owner);
   assert.equal(returnWarning(undefined), null, owner);
 });

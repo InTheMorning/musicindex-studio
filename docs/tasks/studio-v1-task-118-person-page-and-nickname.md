@@ -2,7 +2,7 @@
 
 Decision: [ADR 0182](../adr/0182-the-page-of-a-person-starts-with-its-links-and-has-a-nickname.md).
 
-Status: Complete on 2026-11-12, with packet 118e. The mechanical checks and the screenshot visual check passed. The human gate is open. Packets 118a to 118e are complete.
+Status: Complete on 2026-11-12, with packet 118e. The mechanical checks and the screenshot visual check passed. Packets 118a to 118e are complete. The human gate passed on 2026-11-12 in the desktop app: the operator linked a person to a page on Music Index, gave a nickname, and saved. The head showed the nickname, the field "Name" kept the official name, and a new credit got the official name. The check found four defects. Commits 1d4ac7d, 105a5eb (task 128), fa1f0a8 (task 129) and d6717f5 fixed them. It also gave ADR 0163 item 15 (ec76f87).
 
 Each save of a person sends the nickname. **Change** in the sheet "Change the Nickname" makes a change that is not saved, and **Save** keeps it. The People list sorts and groups "A to Z" by the shown name, and the initials use the shown name.
 

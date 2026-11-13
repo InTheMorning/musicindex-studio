@@ -9,6 +9,7 @@
 - Changes: [ADR 0170](0170-update-people-from-their-linked-pages.md) items 1, 2 and 5. [ADR 0169](0169-an-open-credit-can-find-on-music-index.md) item 2. [ADR 0099](0099-the-people-destination-and-the-page-of-a-person.md) item 4, the name in the head.
 - Uses: [ADR 0163](0163-one-sheet-finds-and-links-a-page-on-music-index.md) items 4 to 11 for the sheet "From Music Index". [ADR 0116](0116-the-page-of-a-person-has-save-and-discard.md) for the pending changes. [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) for the tiers. [ADR 0108](0108-people-data-at-rest-stays-plain.md) item 2 for the data at rest.
 - Source: findings 12, 13, 14, 15 and 17 of the [human checks of 2026-11-11](../reviews/2026-11-11-local-human-test-findings.md).
+- Changed by: [ADR 0192](0192-add-a-person-has-the-layout-of-the-other-pickers.md). Items 4 to 8: "Add a Person" has the layout of the other pickers, and Studio makes the person only at **Add the Person**.
 
 ## Context
 

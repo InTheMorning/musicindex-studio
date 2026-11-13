@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Feed Moves".
 Decision: [ADR 0131](../adr/0131-delete-a-feed-from-its-file-host.md).
 
-Status: Started. ADR 0131 is Accepted. Packets 111a and 111b are complete. Packet 111c is at its mockup. It stops there until the operator confirms it.
+Status: Started. ADR 0131 is Accepted. Packets 111a and 111b are complete. The operator confirmed the mockup of packet 111c on 2026-11-13. Packet 111c is open. The footer of the final sheet puts **Delete** first, as ADR 0193 requires.
 
 Packet 111d is complete.
 

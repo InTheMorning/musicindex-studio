@@ -453,6 +453,64 @@ struct FeedData {
     last_build_date: Option<i64>,
 }
 
+/// The return wait that Music Index reports (ADR 0190 item 1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReturnWait {
+    /// Music Index waits until this Unix time (ADR 0190 item 1).
+    Until(u64),
+    /// Music Index reports no active wait (ADR 0190 item 1).
+    None,
+    /// Music Index does not report the wait (ADR 0190 item 1).
+    Unknown,
+}
+
+/// The state of the return warning (ADR 0190 items 2 to 4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ReturnWaitState {
+    /// The index waits until the given time (ADR 0190 item 2).
+    Waits,
+    /// The index follows the return now (ADR 0190 item 3).
+    Follows,
+    /// Studio does not know the wait (ADR 0190 item 4).
+    Unknown,
+}
+
+/// The state and time for the return warning (ADR 0190 items 2 to 4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct ReturnWarning {
+    /// The warning state (ADR 0190 items 2 to 4).
+    pub state: ReturnWaitState,
+    /// The end of the wait, when known (ADR 0190 items 2 and 3).
+    pub until: Option<u64>,
+    /// True when the scheduled podping would be more than 23 hours away (ADR 0190 item 7).
+    pub too_far: bool,
+}
+
+/// Make the warning state from a Music Index answer and the current time.
+///
+/// ADR 0190 items 2, 3, 4 and 7 define these states.
+#[must_use]
+pub fn return_warning(wait: ReturnWait, now: u64) -> ReturnWarning {
+    match wait {
+        ReturnWait::Until(until) if until > now => ReturnWarning {
+            state: ReturnWaitState::Waits,
+            until: Some(until),
+            too_far: until.saturating_add(30) > now.saturating_add(23 * 60 * 60),
+        },
+        ReturnWait::Until(_) | ReturnWait::None => ReturnWarning {
+            state: ReturnWaitState::Follows,
+            until: None,
+            too_far: false,
+        },
+        ReturnWait::Unknown => ReturnWarning {
+            state: ReturnWaitState::Unknown,
+            until: None,
+            too_far: false,
+        },
+    }
+}
+
 /// The body of a 404 for a feed GUID that a GUID change replaced.
 #[derive(Debug, serde::Deserialize)]
 struct SupersededBody {
@@ -767,6 +825,30 @@ impl MusicIndex {
                     .map_or(IndexPresence::Absent, IndexPresence::Superseded))
             }
             Err(e) => Err(e),
+        }
+    }
+
+    /// Read the return wait for a feed (ADR 0190 item 1).
+    ///
+    /// A missing key or failed read gives [`ReturnWait::Unknown`].
+    #[must_use]
+    pub fn return_wait(&self, guid: &str) -> ReturnWait {
+        let url = format!("{}/v1/feeds/{}", self.base, filter_guid(guid));
+        let Ok(file) = self.web.get(&url, MAX_RESPONSE_BYTES) else {
+            return ReturnWait::Unknown;
+        };
+        let Ok(body) = serde_json::from_slice::<serde_json::Value>(&file.bytes) else {
+            return ReturnWait::Unknown;
+        };
+        match body
+            .get("data")
+            .and_then(|data| data.get("return_wait_until"))
+        {
+            Some(serde_json::Value::Null) => ReturnWait::None,
+            Some(value) => value
+                .as_u64()
+                .map_or(ReturnWait::Unknown, ReturnWait::Until),
+            None => ReturnWait::Unknown,
         }
     }
 
@@ -1164,6 +1246,81 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].feed_guid, "g1");
         assert_eq!(hits[0].artist.as_deref(), Some("Ann"));
+    }
+
+    #[test]
+    fn return_wait_reads_until_null_missing_and_failed_answers() {
+        let server = TestServer::start(vec![
+            (
+                "/v1/feeds/f0000000-0000-0000-0000-000000000001",
+                200,
+                br#"{"data":{"return_wait_until":200}}"#.to_vec(),
+            ),
+            (
+                "/v1/feeds/a0000000-0000-0000-0000-000000000002",
+                200,
+                br#"{"data":{"return_wait_until":null}}"#.to_vec(),
+            ),
+            (
+                "/v1/feeds/b0000000-0000-0000-0000-000000000003",
+                200,
+                br#"{"data":{}}"#.to_vec(),
+            ),
+        ]);
+        let index = MusicIndex::new(Web::new(), &server.url(""));
+        assert_eq!(
+            index.return_wait("f0000000-0000-0000-0000-000000000001"),
+            ReturnWait::Until(200),
+            "ADR 0190 item 1: preserve the reported wait; fix the response decode."
+        );
+        assert_eq!(
+            index.return_wait("a0000000-0000-0000-0000-000000000002"),
+            ReturnWait::None,
+            "ADR 0190 item 1: treat null as no wait; fix field presence handling."
+        );
+        assert_eq!(
+            index.return_wait("b0000000-0000-0000-0000-000000000003"),
+            ReturnWait::Unknown,
+            "ADR 0190 item 1: treat a missing key as unknown; fix field presence handling."
+        );
+        assert_eq!(
+            index.return_wait("c0000000-0000-0000-0000-000000000004"),
+            ReturnWait::Unknown,
+            "ADR 0190 item 1: treat a failed read as unknown; fix read handling."
+        );
+    }
+
+    #[test]
+    fn return_warning_reports_wait_follow_and_unknown_states() {
+        let future = return_warning(ReturnWait::Until(200), 100);
+        assert_eq!(
+            future,
+            ReturnWarning {
+                state: ReturnWaitState::Waits,
+                until: Some(200),
+                too_far: false
+            },
+            "ADR 0190 items 2 and 7: report an active wait; fix the warning state."
+        );
+        assert_eq!(
+            return_warning(ReturnWait::None, 100).state,
+            ReturnWaitState::Follows,
+            "ADR 0190 item 3: report that Music Index follows; fix null handling."
+        );
+        assert_eq!(
+            return_warning(ReturnWait::Until(100), 100).state,
+            ReturnWaitState::Follows,
+            "ADR 0190 item 3: a past or current time follows; fix time comparison."
+        );
+        assert_eq!(
+            return_warning(ReturnWait::Unknown, 100).state,
+            ReturnWaitState::Unknown,
+            "ADR 0190 item 4: report an unknown wait; fix unknown handling."
+        );
+        assert!(
+            return_warning(ReturnWait::Until(100 + 23 * 60 * 60), 100).too_far,
+            "ADR 0190 item 7: include the 30 second send delay; fix the horizon check."
+        );
     }
 
     #[test]

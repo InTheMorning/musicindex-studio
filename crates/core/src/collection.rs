@@ -2310,6 +2310,19 @@ impl Collection {
         Ok(())
     }
 
+    /// Change only the send time of a waiting announcement (ADR 0190 item 6).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn set_announcement_next_at(&self, id: i64, next_at: i64) -> Result<(), CollectionError> {
+        self.db.execute(
+            "UPDATE announcements SET next_at = ?2 WHERE id = ?1 AND state = 'waiting'",
+            params![id, next_at],
+        )?;
+        Ok(())
+    }
+
     /// Add a `waiting` announcement.
     ///
     /// # Errors

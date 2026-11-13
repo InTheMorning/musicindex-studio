@@ -6513,6 +6513,269 @@ async fn write_once(app: &App, id: i64) {
     assert_eq!(status, StatusCode::OK, "{body}");
 }
 
+/// This test server gives a changeable return wait from a local Music Index API.
+struct ReturnWaitIndex {
+    base: String,
+    until: std::sync::Arc<std::sync::atomic::AtomicU64>,
+}
+
+impl ReturnWaitIndex {
+    fn start() -> Self {
+        use std::io::{Read, Write};
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let until = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let response_until = std::sync::Arc::clone(&until);
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let Ok(mut stream) = stream else { continue };
+                let mut request = [0_u8; 4096];
+                let _ = stream.read(&mut request);
+                let value = response_until.load(std::sync::atomic::Ordering::SeqCst);
+                let body = format!("{{\"data\":{{\"return_wait_until\":{value}}}}}");
+                let reply = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\
+                     Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = stream.write_all(reply.as_bytes());
+            }
+        });
+        Self {
+            base: format!("http://127.0.0.1:{port}"),
+            until,
+        }
+    }
+
+    fn set_until(&self, until: u64) {
+        self.until.store(until, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+/// Make a return draft with an index and a hub. The helper gives the app, feed ID, and return host.
+async fn return_draft_app(
+    index: &ReturnWaitIndex,
+    hub: &studio_core::testing::TestHub,
+    timing: studio_core::announce::Timing,
+) -> (App, i64, tempfile::TempDir) {
+    let data = tempfile::tempdir().unwrap();
+    let feeds = tempfile::tempdir().unwrap();
+    std::fs::write(feeds.path().join("album.xml"), FEED).unwrap();
+    let workspace = Workspace::open(data.path())
+        .unwrap()
+        .with_musicindex(&index.base)
+        .with_lookup_relays(vec![UNUSED_RELAY.to_owned()])
+        .with_address_check(std::sync::Arc::new(PassAll))
+        .with_stream_check(std::sync::Arc::new(StubStream))
+        .with_feed_reader(std::sync::Arc::new(
+            [
+                "https://music.example/album.xml",
+                "https://return.example/album.xml",
+            ]
+            .into_iter()
+            .fold(
+                studio_core::move_link::ScriptedReader::empty(),
+                |reader, url| reader.with_feed(url, url, Some("g-1"), Some(url), None),
+            ),
+        ))
+        .with_hub(&hub.url())
+        .with_announce_timing(timing);
+    let app = App {
+        router: local_router(workspace, Access::with_token(TOKEN, 4100)),
+        data,
+        feeds,
+    };
+    let id = set_up(&app).await;
+    let return_host = tempfile::tempdir().unwrap();
+    let return_id = add_host(&app, "Return", return_host.path(), "https://return.example").await;
+    std::fs::write(return_host.path().join("album.xml"), FEED).unwrap();
+    let collection =
+        studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+            .unwrap();
+    collection
+        .add_feed_pointer(
+            studio_core::collection::ConnectorId(return_id),
+            "album.xml",
+            studio_core::collection::FeedId(id),
+        )
+        .unwrap();
+    let (_, draft) = call(&app, "GET", &format!("/api/v1/feeds/{id}/draft"), None).await;
+    assert_eq!(
+        draft["model"]["podcast_guid"], "g-1",
+        "ADR 0190 item 6: keep the feed GUID in the return draft. Fix: preserve podcast_guid."
+    );
+    let (status, diff) = call(
+        &app,
+        "PUT",
+        &format!("/api/v1/feeds/{id}/feed-host"),
+        Some(json!({ "connector_id": return_id })),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0190 item 6: make the return draft. Fix: retain the selected pointer. {diff}"
+    );
+    assert_eq!(
+        diff["feed_move"]["replaces_pointer"], true,
+        "ADR 0190 item 6: identify the move as a return. Fix: retain the pointer record."
+    );
+    (app, id, return_host)
+}
+
+#[tokio::test]
+async fn a_return_write_uses_the_index_wait_and_keeps_the_usual_time_past_the_horizon() {
+    let index = ReturnWaitIndex::start();
+    let hub = studio_core::testing::TestHub::start();
+    let first_wait = 3_600;
+    let timing = studio_core::announce::Timing {
+        first_wait,
+        ..studio_core::announce::Timing::DEFAULT
+    };
+    let (app, id, _return_host) = return_draft_app(&index, &hub, timing).await;
+    let now = crate::announcer::now();
+    let until = now + 600;
+    index.set_until(until);
+    let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    let (status, written) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0190 item 6: write the return. Fix: accept the selected return diff. {written}"
+    );
+    let collection =
+        studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+            .unwrap();
+    let rows =
+        studio_core::announce::recent(&collection, studio_core::collection::FeedId(id)).unwrap();
+    assert_eq!(
+        rows.len(),
+        1,
+        "ADR 0190 item 6: queue one return podping. Fix: queue the old address once. {rows:?}"
+    );
+    assert_eq!(
+        rows[0].state,
+        studio_core::announce::AnnouncementState::Waiting,
+        "ADR 0190 item 6: keep the return podping waiting. Fix: apply its future send time. {rows:?}"
+    );
+    assert_eq!(
+        rows[0].next_at,
+        i64::try_from(until + 30).unwrap(),
+        "ADR 0190 item 6: schedule the return podping after the wait. Fix: use return_wait_until plus 30 seconds."
+    );
+
+    let index = ReturnWaitIndex::start();
+    let hub = studio_core::testing::TestHub::start();
+    let (app, id, _return_host) = return_draft_app(&index, &hub, timing).await;
+    let write_started = crate::announcer::now();
+    let until = write_started + 24 * 60 * 60;
+    index.set_until(until);
+    let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    let (status, written) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0190 item 7: write the return beyond the horizon. Fix: accept the return diff. {written}"
+    );
+    let write_finished = crate::announcer::now();
+    let collection =
+        studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+            .unwrap();
+    let rows =
+        studio_core::announce::recent(&collection, studio_core::collection::FeedId(id)).unwrap();
+    assert_eq!(
+        rows.len(),
+        1,
+        "ADR 0190 item 7: queue one return podping. Fix: queue the old address once. {rows:?}"
+    );
+    assert_eq!(
+        rows[0].next_at,
+        rows[0].created_at
+            + i64::try_from(studio_core::announce::Timing::DEFAULT.first_wait).unwrap(),
+        "ADR 0190 item 7: keep the usual send time beyond the horizon. Fix: keep the write time plus the first wait of the write. Rows: {rows:?}"
+    );
+    assert!(
+        rows[0].created_at >= i64::try_from(write_started).unwrap()
+            && rows[0].created_at <= i64::try_from(write_finished).unwrap(),
+        "ADR 0190 item 7: keep the announcement time at the write. Fix: preserve created_at. Rows: {rows:?}"
+    );
+}
+
+#[tokio::test]
+async fn a_change_to_the_return_wait_keeps_the_diff_id() {
+    let index = ReturnWaitIndex::start();
+    let hub = studio_core::testing::TestHub::start();
+    let timing = studio_core::announce::Timing {
+        first_wait: 3_600,
+        ..studio_core::announce::Timing::DEFAULT
+    };
+    let (app, id, _return_host) = return_draft_app(&index, &hub, timing).await;
+    let first_until = crate::announcer::now() + 600;
+    index.set_until(first_until);
+    let (status, first_wait) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{id}/return-wait"),
+        None,
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0190 item 8: read the first return wait. Fix: serve the index route. {first_wait}"
+    );
+    assert_eq!(
+        first_wait["state"], "waits",
+        "ADR 0190 item 2: report the index wait. Fix: read the feed GUID from Music Index."
+    );
+    assert_eq!(
+        first_wait["until"], first_until,
+        "ADR 0190 item 8: read the first index wait. Fix: request return_wait_until."
+    );
+    let (_, first_diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+
+    let second_until = first_until + 60;
+    index.set_until(second_until);
+    let (status, second_wait) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{id}/return-wait"),
+        None,
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0190 item 8: read the changed return wait. Fix: serve the index route. {second_wait}"
+    );
+    assert_eq!(
+        second_wait["until"], second_until,
+        "ADR 0190 item 8: read the changed index wait. Fix: request return_wait_until again."
+    );
+    let (_, second_diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    assert_ne!(
+        first_wait["until"], second_wait["until"],
+        "ADR 0190 item 8: change the wait between diffs. Fix: update the local index response."
+    );
+    assert_eq!(
+        first_diff["id"], second_diff["id"],
+        "ADR 0190 item 8: keep the diff ID when the index wait changes. Fix: exclude return_wait_until from the diff ID."
+    );
+}
+
 /// Make each waiting announcement due and wake the worker.
 fn announce_now(app: &App, announcer: &crate::announcer::Announcer) {
     let collection =

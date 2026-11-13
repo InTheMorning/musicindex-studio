@@ -36,7 +36,9 @@ use studio_core::media;
 use studio_core::migrate;
 use studio_core::move_link;
 use studio_core::moves::{self, IndexAnswer, MoveScope};
-use studio_core::musicindex::{IndexSearchRequest, SearchNote, SearchPlan, plan_search};
+use studio_core::musicindex::{
+    IndexSearchRequest, MusicIndex, ReturnWait, SearchNote, SearchPlan, plan_search, return_warning,
+};
 use studio_core::nostr_events::Signing;
 use studio_core::outside;
 use studio_core::people;
@@ -3232,7 +3234,7 @@ pub(crate) async fn write_feed(
     Path(id): Path<i64>,
     Json(body): Json<Write>,
 ) -> ApiResult {
-    blocking(shared, move |w| {
+    let (answer, return_read) = blocking(shared.clone(), move |w| {
         // The write counts as work until it ends (ADR 0124 item 17).
         let _work = w.work().write();
         let id = FeedId(id);
@@ -3263,6 +3265,19 @@ pub(crate) async fn write_feed(
         // The write deletes the draft. Keep the feed that the write puts
         // on the host, for the remote file records.
         let written = pipeline::draft_model(&w.collection, id).ok();
+        // A return replaces the pointer file of this feed at the new place
+        // (ADR 0128 item 7). Read it before the write, which removes the
+        // draft move (ADR 0190 item 6).
+        let is_return = match w.collection.draft_feed_move(id)? {
+            Some(draft_move) => {
+                w.collection
+                    .is_pointer_of_feed(draft_move.connector_id, &draft_move.path, id)?
+            }
+            None => false,
+        };
+        let guid = written
+            .as_ref()
+            .and_then(|(feed, _)| feed.podcast_guid.clone());
         let addresses: &dyn pipeline::AddressCheck = match &w.address_check {
             Some(check) => check.0.as_ref(),
             None => &w.web,
@@ -3288,15 +3303,82 @@ pub(crate) async fn write_feed(
         if let Some((feed, _)) = written {
             w.record_remote_files(id, &feed);
         }
-        // The write put its announcements into the queue (ADR 0052).
-        w.announcer.wake();
         // The write can record a grant, change the secret of the host or move
         // the feed XML. The grant vaults of the feed are made again (ADR 0058
         // items 6 and 7).
         w.sync_grant_vaults(Some(id));
-        to_json(w.collection.feed(id)?)
+        let answer = to_json(w.collection.feed(id)?)?;
+        let return_read = if is_return {
+            let row = w.collection.feed(id)?;
+            let address = outside::last_written_move(&w.collection, &row)?
+                .and_then(|movement| movement.from_url);
+            Some((guid, address, w.index.clone()))
+        } else {
+            None
+        };
+        Ok((answer, return_read))
+    })
+    .await?;
+    // The write is done. A failure of this step keeps the usual send time.
+    let moved = move_return_send_time(&shared, id, return_read).await;
+    // The write put its announcements into the queue (ADR 0052).
+    blocking(shared, move |w| {
+        w.announcer.wake();
+        Ok(())
+    })
+    .await?;
+    moved?;
+    Ok(answer)
+}
+
+/// After a return, move the podping to 30 seconds after the return wait of
+/// Music Index (ADR 0190 item 6). Music Index is read outside the workspace
+/// lock. A failed read keeps the usual send time.
+async fn move_return_send_time(
+    shared: &Shared,
+    id: i64,
+    return_read: Option<(Option<String>, Option<String>, MusicIndex)>,
+) -> Result<(), ApiError> {
+    let Some((Some(guid), Some(address), index)) = return_read else {
+        return Ok(());
+    };
+    let wait = blocking_unlocked(move || Ok(index.return_wait(&guid))).await?;
+    let ReturnWait::Until(until) = wait else {
+        return Ok(());
+    };
+    let now = crate::announcer::now();
+    if until <= now {
+        return Ok(());
+    }
+    let send_at = until.saturating_add(30);
+    blocking(shared.clone(), move |w| {
+        announce::move_waiting_send_time(&w.collection, FeedId(id), &address, send_at, now)?;
+        Ok(())
     })
     .await
+}
+
+/// Give the return warning state from Music Index (ADR 0190 items 1 to 4).
+pub(crate) async fn return_wait_state(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+) -> ApiResult {
+    let facts = blocking(shared, move |w| {
+        let guid = pipeline::draft_model(&w.collection, FeedId(id))
+            .ok()
+            .and_then(|(feed, _)| feed.podcast_guid)
+            .or(w.collection.feed(FeedId(id))?.podcast_guid);
+        Ok((guid, w.index.clone()))
+    })
+    .await?;
+    let (guid, index) = facts;
+    let wait = if let Some(guid) = guid {
+        blocking_unlocked(move || Ok(index.return_wait(&guid))).await?
+    } else {
+        ReturnWait::Unknown
+    };
+    let now = crate::announcer::now();
+    to_json(return_warning(wait, now))
 }
 
 /// The snapshots of a feed, the newest first.

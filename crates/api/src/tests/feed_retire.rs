@@ -114,6 +114,60 @@ async fn state(app: &App, id: i64) -> Value {
     body
 }
 
+#[tokio::test]
+async fn return_wait_route_reports_the_index_state_and_skips_feeds_without_a_guid() {
+    let index = CountingIndex::start(200, r#"{"data":{"return_wait_until":4102444800}}"#);
+    let (app, id) = app_with(&index.url(), &feed_xml("Album", &guid_tag())).await;
+    let (status, answer) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{id}/return-wait"),
+        None,
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0190 item 1: return the warning state; fix the route response."
+    );
+    assert_eq!(
+        answer["state"], "waits",
+        "ADR 0190 item 2: report a future wait; fix time classification."
+    );
+    assert_eq!(
+        answer["until"], 4_102_444_800_u64,
+        "ADR 0190 item 2: give the index time; fix the response time."
+    );
+    assert_eq!(
+        answer["too_far"], true,
+        "ADR 0190 item 7: flag a wait beyond the send horizon; fix the horizon check."
+    );
+
+    let index = CountingIndex::start(200, r#"{"data":{"return_wait_until":null}}"#);
+    let (app, id) = app_with(&index.url(), &feed_xml("Album", "")).await;
+    let (status, answer) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{id}/return-wait"),
+        None,
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0190 item 1: answer when a feed has no GUID; fix the route response."
+    );
+    assert_eq!(
+        answer["state"], "unknown",
+        "ADR 0190 item 4: report unknown when no GUID exists; fix the no-GUID state."
+    );
+    assert_eq!(
+        index.requests(),
+        0,
+        "ADR 0190 item 1: skip the index read without a GUID; fix the route read."
+    );
+}
+
 /// Write the draft with the diff that the user approved.
 async fn approve_and_write(app: &App, id: i64, diff: &Value) {
     let (status, body) = call(

@@ -6,6 +6,7 @@
 - Accepted: 2026-11-10 by the operator, through the questionnaire. The operator selected the drawing of one search sheet with the check box "Link this page". The operator also selected the drawing of a sheet with a fixed height and a field that stays at the top.
 - Changes: [ADR 0117](0117-the-page-of-a-person-finds-values-on-musicindex.md) items 2, 8 and 13. [ADR 0159](0159-a-person-can-link-to-a-page-on-music-index.md) items 4 and 5.
 - Uses: [ADR 0116](0116-the-page-of-a-person-has-save-and-discard.md) for the pending changes. [ADR 0145](0145-each-sheet-that-adds-a-value-has-one-layout.md) for the layout of a sheet. [ADR 0154](0154-the-search-fields-have-a-field-list.md) for the field list. [ADR 0146](0146-link-words-already-marks-and-credit-edits.md) for the mark of a value that the person has.
+- Changed by: [ADR 0192](0192-add-a-person-has-the-layout-of-the-other-pickers.md). Item 2: "Add a Person" has the layout of the other pickers, and the pages of the user come before the results.
 
 ## Context
 

@@ -3,9 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Feed Moves".
 Decision: [ADR 0131](../adr/0131-delete-a-feed-from-its-file-host.md).
 
-Status: Started. ADR 0131 is Accepted. Packets 111a and 111b are complete. The operator confirmed the mockup of packet 111c on 2026-11-13. Packet 111c is open. The footer of the final sheet puts **Delete** first, as ADR 0193 requires.
-
-Packet 111d is complete.
+Status: Complete. ADR 0131 is Accepted. Packets 111a, 111b, 111c and 111d are complete. The operator confirmed the mockup of packet 111c on 2026-11-13. The footer of the final sheet puts **Delete** first, as ADR 0193 requires. The screenshot visual check of 111c passed at 1280 px in the light theme and at 390 px in the dark theme. The human test of ADR 0131 is open.
 
 ## Goal
 
@@ -63,6 +61,12 @@ ADR 0131 items 1 to 10.
 - First a mockup of the first sheet, the retire page and the final sheet, at 1280 px and at 390 px. Stop until the operator confirms it.
 - The UI model gives the steps of a retire from the state of the core, and the button that waits for the exact title. Add a Node test.
 - The page shows the action, the sheets and the retire page.
+- The last sheet calls `POST /feeds/{id}/delete/draft` with `with_files: false` when it opens.
+- It calls the route again when the check box changes.
+- The route gives the preview counts and names.
+- The sheet shows the route error and keeps **Delete** off when the route refuses.
+- **Delete** opens Review on the delete draft.
+- **Cancel**, the close button and Escape discard the draft with `DELETE /feeds/{id}/draft`.
 - Add a page to `docs/user-guide/`.
 
 ## Acceptance Criteria

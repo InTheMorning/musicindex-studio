@@ -45,6 +45,7 @@ import { shortType as formatLabel, propertiesSummary, propertiesOpen, propertyRo
 import { MOVE_SCOPES, fileHostRows, planRows, stayRows, deleteLabel, deleteAllLabel, DELETE_NOTE_ON, DELETE_NOTE_OFF, waitLabel, waitingView, readyNotice, partMoveNotice, existsRefusalView, addDisabled, replacesCopyNote, replaceWarning } from './releasemove.js';
 import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary, artworkPreview } from './artwork.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, addsAsTrackFile, refusedText, wrongKindText, replacedAddresses, selectedFacts } from './picker.js';
+import { DELETE_CHOICES, deleteButtonEnabled, retireSteps } from './feeddelete.js';
 
 // `values.js` imports `withCids` from this file, so that it does not need
 // to know that the draft moved to `draft.js`.
@@ -1901,6 +1902,8 @@ export const ANNOUNCE_RELOAD = 'studio-announce-reload';
 export const OPEN_REVIEW = 'studio-open-review';
 // Opens the Review sheet on the merge of the hosted file (ADR 0150 item 4).
 export const OPEN_MERGE = 'studio-open-merge';
+export const OPEN_FEED_MOVE = 'studio-open-feed-move';
+export const OPEN_DELETE_REVIEW = 'studio-open-delete-review';
 
 // A sheet opens with showModal() when `open` turns true, and closes with
 // close() when `open` turns false. The close event covers the Escape key,
@@ -2283,7 +2286,7 @@ export function DraftToolbar({ feedId, feedConnectorId, draft, onWritten, connec
 
 // The Feed facts row of the album page (task 014c step 5): the facts that
 // the former Facts section showed, and the Remove from collection button.
-function FeedFacts({ feed, onRemoved }) {
+function FeedFacts({ feed, draft, onRemoved }) {
   const { busy, error, run } = useAction();
   // The announcements of the feed, the newest first (ADR 0052 item 20). The
   // list loads when the page opens, after each write, and each 5 seconds
@@ -2316,7 +2319,8 @@ function FeedFacts({ feed, onRemoved }) {
   const tag = newFeedAddress(feed);
   // "Remove from Collection" is a row of its own below the facts, so that it
   // shows with the facts closed.
-  return html`<details class="disclosure">
+  return html`<${FeedDelete} feed=${feed} draft=${draft} />
+  <details class="disclosure">
     <summary class="link-row"><span class="label">Feed facts</span><span class="summary">GUID, file, version and announcement</span></summary>
     <div class="form">
       <dl class="facts">
@@ -2332,7 +2336,121 @@ function FeedFacts({ feed, onRemoved }) {
     </div>
   </details>
   <div class="actions"><button class="button destructive" type="button" disabled=${busy} onClick=${remove}>Remove from Collection</button></div>
+  ${feed.connector_id != null && html`<div class="actions"><button class="button destructive" type="button"
+    onClick=${() => window.dispatchEvent(new CustomEvent('studio-open-feed-delete', { detail: feed.id }))}>Delete from File Host…</button></div>`}
   <${ErrorNotice} error=${error} />`;
+}
+
+// The action "Delete from File Host", its two sheets and the retire page
+// (ADR 0131 items 1 to 10). The retire page shows while "Hide from apps" is
+// on in the draft. It reads the state of the steps when it opens and at
+// **Check Again**, so a request to the index goes out only then (item 6).
+function FeedDelete({ feed, draft }) {
+  const [firstOpen, setFirstOpen] = useState(false);
+  const [finalOpen, setFinalOpen] = useState(false);
+  const [retireOpen, setRetireOpen] = useState(false);
+  const [retire, setRetire] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [typed, setTyped] = useState('');
+  const [withFiles, setWithFiles] = useState(false);
+  const keepDeleteDraft = useRef(false);
+  const deleteDraftStarted = useRef(false);
+  const action = useAction();
+  const firstRef = useSheet(firstOpen);
+  const finalRef = useSheet(finalOpen);
+  useEffect(() => {
+    const open = (event) => { if (event.detail === feed.id) setFirstOpen(true); };
+    window.addEventListener('studio-open-feed-delete', open);
+    return () => window.removeEventListener('studio-open-feed-delete', open);
+  }, [feed.id]);
+  const retiring = retireOpen || Boolean(draft && draft.hidden);
+  useEffect(() => {
+    if (!retiring) { setRetire(null); return; }
+    action.run(async () => setRetire(await api(`/feeds/${feed.id}/retire/state`, { method: 'POST' })));
+  }, [retiring, feed.id]);
+  const loadPreview = (include) => action.run(async () => {
+    setWithFiles(include);
+    setPreview(null);
+    const answer = await api(`/feeds/${feed.id}/delete/draft`, { method: 'POST', body: { with_files: include } });
+    deleteDraftStarted.current = true;
+    setPreview(answer);
+  });
+  const openFinal = () => {
+    setTyped('');
+    setPreview(null);
+    deleteDraftStarted.current = false;
+    setFinalOpen(true);
+    loadPreview(false);
+  };
+  const startRetire = () => action.run(async () => {
+    const answer = await api(`/feeds/${feed.id}/retire`, { method: 'POST' });
+    if (draft) draft.show(answer);
+    setFirstOpen(false);
+    setRetireOpen(true);
+  });
+  const stopRetire = () => action.run(async () => {
+    const answer = await api(`/feeds/${feed.id}/retire`, { method: 'DELETE' });
+    if (draft) draft.show(answer);
+    setRetireOpen(false);
+  });
+  const discardDelete = async () => {
+    if (keepDeleteDraft.current) { keepDeleteDraft.current = false; return; }
+    if (!deleteDraftStarted.current) { setFinalOpen(false); return; }
+    await action.run(async () => { await api(`/feeds/${feed.id}/draft`, { method: 'DELETE' }); });
+    deleteDraftStarted.current = false;
+    setPreview(null);
+    setFinalOpen(false);
+  };
+  const startDelete = () => action.run(async () => {
+    if (!preview || !deleteButtonEnabled(preview.names.confirm_text, typed)) return;
+    keepDeleteDraft.current = true;
+    window.dispatchEvent(new Event(OPEN_DELETE_REVIEW));
+    setFinalOpen(false);
+  });
+  const rows = preview && preview.summary;
+  const removedFiles = rows ? Math.max(0, rows.deletes.length - 1) : 0;
+  const pointerStays = rows ? rows.stays.filter((file) => file.reason === 'pointer_file').length : 0;
+  const usedStays = rows ? rows.stays.filter((file) => file.reason === 'used_by_feeds').length : 0;
+  const fileNoun = (count, singular, plural) => `${count} ${count === 1 ? singular : plural}`;
+  const steps = retire && retireSteps(retire);
+  const activeRetire = retire && retire.ask !== 'no';
+  return html`
+    ${activeRetire && html`<div class="retire-head"><span class="label">Retire</span><span class="summary">Studio cannot check Podcast Index. Keep this address, also after the delete. A different person who gets the address can publish a feed with this GUID and other payment recipients.</span></div>
+      ${steps.map((row) => html`<div class=${`delete-step${row.done ? ' done' : ''}`} key=${row.number}>
+          <span class="num">${row.done ? '✓' : row.number}</span><span class="text"><span class="label">${row.title}</span><span class="summary">${row.text}</span></span>
+          ${row.button && html`<button class="button destructive" type="button" disabled=${action.busy} onClick=${openFinal}>${row.button}</button>`}
+        </div>`)}
+      <div class="actions"><button class="button" type="button" disabled=${action.busy} onClick=${() => action.run(async () => setRetire(await api(`/feeds/${feed.id}/retire/state`, { method: 'POST' })))}>Check Again</button>
+        <button class="button" type="button" disabled=${action.busy} onClick=${stopRetire}>Stop Retiring</button></div>
+      <${ErrorNotice} error=${action.error} />`}
+    <dialog ref=${firstRef} class="sheet small" aria-labelledby="delete-host-title" onClose=${() => setFirstOpen(false)}>
+      <header><h2 id="delete-host-title">Delete from File Host</h2><button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => firstRef.current.close()}>✕</button></header>
+      <div class="body"><p>The address of the feed is your control of the feed. When the file is gone, Music Index keeps an entry for the feed. Podcast Index can also keep an entry. The entry keeps its last payment recipients.</p>
+        <p>With no file, you cannot correct the entry, retire it or move it.</p><div class="group rows">
+          ${DELETE_CHOICES.map((choice) => html`<button class=${`delete-choice link-row${choice.destructive ? ' destructive' : ''}`} type="button" key=${choice.title}
+            onClick=${choice.title === 'Retire It' ? startRetire : choice.title === 'Move It to a Different File Host' ? () => {
+              setFirstOpen(false); window.dispatchEvent(new CustomEvent(OPEN_FEED_MOVE, { detail: feed.id }));
+            } : () => { setFirstOpen(false); openFinal(); }}>
+            <span class="text"><span class="label">${choice.title}${choice.recommended && html` <span class="tag">Recommended</span>`}</span><span class="summary">${choice.text}</span></span><span class="go">›</span></button>`)}
+        </div><${ErrorNotice} error=${action.error} /></div>
+      <footer><button class="button" type="button" onClick=${() => firstRef.current.close()}>Cancel</button></footer>
+    </dialog>
+    <dialog ref=${finalRef} class="sheet small" aria-labelledby="delete-feed-title" onClose=${discardDelete}>
+      <header><h2 id="delete-feed-title">Delete the Feed File</h2><button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => finalRef.current.close()}>✕</button></header>
+      <div class="body">
+        ${preview && html`<div class="group rows"><div class="facts delete-facts"><span class="label">File host</span><span>${preview.names.host_name}</span><span class="label">Path</span><span class="mono">${preview.names.path}</span></div></div>`}
+        <p>You lose these things:</p><ul class="delete-loss"><li>The control of the entry in Music Index and in Podcast Index. The entry keeps its last payment recipients.</li>
+          <li>A different person who gets this address can publish a feed with this GUID.</li><li>A different address does not give the entry back. Only a write to this address brings the file back.</li></ul>
+        <div class="group rows"><label class="check delete-files"><input type="checkbox" checked=${withFiles} disabled=${action.busy}
+          onChange=${(event) => loadPreview(event.target.checked)} /><span>Also delete the audio and image files<span class="delete-count">${rows && !withFiles ? 'Studio deletes only the feed file.' : rows ? `Studio deletes ${fileNoun(removedFiles, 'file', 'files')}. ${fileNoun(rows.stays.length, 'file stays', 'files stay')}: ${fileNoun(pointerStays, 'pointer file', 'pointer files')}, and ${fileNoun(usedStays, 'file that another feed uses', 'files that another feed uses')}.` : 'Studio is counting the files.'}</span></span></label></div>
+        ${preview && preview.names.publishers.map((publisher) => html`<p class="hint" key=${publisher.id}>“${publisher.title || 'Untitled feed'}” links to this feed.</p>`)}
+        <div class="field"><label for=${`delete-title-${feed.id}`}>Type the title of the feed: ${preview ? preview.names.confirm_text : ''}</label>
+          <input id=${`delete-title-${feed.id}`} autocomplete="off" value=${typed} onInput=${(event) => setTyped(event.target.value)} /></div>
+        <${ErrorNotice} error=${action.error} />
+      </div>
+      <footer><button class="button destructive" type="button" disabled=${action.busy || !preview || !deleteButtonEnabled(preview.names.confirm_text, typed)} onClick=${startDelete}>Delete</button>
+        <button class="button" type="button" onClick=${() => finalRef.current.close()}>Cancel</button></footer>
+    </dialog>`;
 }
 
 // The section "Artists and labels" of an album or a playlist: its publisher
@@ -2626,7 +2744,7 @@ function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImp
     feed: (s) => html`<section class="page-section"><h2>Feed</h2>
       <div class="group">
         ${showEach(s.rows, {
-          facts: () => html`<${FeedFacts} feed=${feed} onRemoved=${onRemoved} />`,
+          facts: () => html`<${FeedFacts} feed=${feed} draft=${draft} onRemoved=${onRemoved} />`,
         })}
       </div>
     </section>`,
@@ -2663,7 +2781,7 @@ function PlaylistPage({ feed, feeds, draft, model, update, bad, go, onRemoved, o
     feed: (s) => html`<section class="page-section"><h2>Feed</h2>
       <div class="group">
         ${showEach(s.rows, {
-          facts: () => html`<${FeedFacts} feed=${feed} onRemoved=${onRemoved} />`,
+          facts: () => html`<${FeedFacts} feed=${feed} draft=${draft} onRemoved=${onRemoved} />`,
         })}
       </div>
     </section>`,
@@ -3759,7 +3877,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
     feed: (s) => html`<section class="page-section"><h2>Feed</h2>
       <div class="group">
         ${showEach(s.rows, {
-          facts: () => html`<${FeedFacts} feed=${feed} onRemoved=${onRemoved} />`,
+          facts: () => html`<${FeedFacts} feed=${feed} draft=${draft} onRemoved=${onRemoved} />`,
         })}
       </div>
     </section>`,
@@ -4709,6 +4827,20 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
   const trackIndex = model && page === 'track' ? model.items.findIndex((item) => isTrack(item, view.track)) : -1;
   const liveIndex = model && page === 'live' ? (model.live_items || []).findIndex((live) => isLiveItem(live, view.track)) : -1;
   const addLive = useAction();
+  const [feedMove, setFeedMove] = useState(null);
+  useEffect(() => {
+    const openMove = (event) => { if (event.detail === feed.id) setFeedMove({ start: null }); };
+    const openDeleteReview = async () => {
+      await draft.load();
+      window.dispatchEvent(new Event(OPEN_REVIEW));
+    };
+    window.addEventListener(OPEN_FEED_MOVE, openMove);
+    window.addEventListener(OPEN_DELETE_REVIEW, openDeleteReview);
+    return () => {
+      window.removeEventListener(OPEN_FEED_MOVE, openMove);
+      window.removeEventListener(OPEN_DELETE_REVIEW, openDeleteReview);
+    };
+  }, [feed.id, draft.load]);
   // When the track got its GUID, put the new key in the view, so that the
   // tree shows the current track.
   const currentKey = trackIndex === -1 ? null : trackKey(model.items[trackIndex]);
@@ -4806,5 +4938,7 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
     ${!publisher && !playlist && html`<${ImportSheet} feedId=${feed.id} open=${importing} hasAlbumImage=${Boolean(coverOf(model))}
       onClose=${() => onImporting(false)} onAdd=${onImport}
       onAddress=${() => { onImporting(false); onAdding(true); }} />`}
+    <${MoveReleaseSheet} open=${feedMove !== null} feed=${feed} connectors=${connectors} start=${feedMove && feedMove.start}
+      onDone=${async () => { await draft.load(); }} onClose=${() => setFeedMove(null)} />
   </div><//>`;
 }

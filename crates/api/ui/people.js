@@ -2195,6 +2195,13 @@ const isWebAddress = (value) => typeof value === 'string' && /^https?:\/\//i.tes
 // fill has added it already.
 export function fillRows(values, pending) {
   const rows = [];
+  // The title of the page replaces the name, and the row starts selected
+  // (ADR 0163 item 15).
+  const title = String(values.title ?? '').trim();
+  if (title !== '') {
+    const same = title === String(pending.name ?? '').trim();
+    rows.push({ id: 'name', title: 'Name', value: title, lines: [same ? ALREADY_VALUE : 'The title of the page'], selectable: !same, selected: !same });
+  }
   const picture = values.picture;
   if (picture && isWebAddress(picture.value)) {
     const current = picture.state === 'current';
@@ -2314,6 +2321,8 @@ export function linkRow(row, feeds, values) {
 export function fillPatch(rows, checked, pending) {
   const on = rows.filter((row) => row.selectable && checked.includes(row.id));
   const patch = {};
+  const name = on.find((row) => row.id === 'name');
+  if (name) patch.name = name.value;
   const picture = on.find((row) => row.id === 'img');
   if (picture) patch.img = picture.value;
   const website = on.find((row) => row.id === 'href');
@@ -2327,11 +2336,11 @@ export function fillPatch(rows, checked, pending) {
   return patch;
 }
 
-// The name that a link gives to a person with an empty name (ADR 0163
-// item 15). A name with text does not change.
+// The name that a link from the fold "Your artist and label pages" gives to
+// a person: the title of the page replaces the name (ADR 0163 item 15).
 export function linkName(pending, title) {
   const text = String(title ?? '').trim();
-  return String(pending.name ?? '').trim() === '' && text !== '' ? { name: text } : {};
+  return text !== '' && text !== String(pending.name ?? '').trim() ? { name: text } : {};
 }
 
 // The line of a filled field (ADR 0117 item 14). A row with no kind word

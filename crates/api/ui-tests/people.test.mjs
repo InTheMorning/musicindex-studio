@@ -250,12 +250,19 @@ test('Add a Person selects a page without making a request, then plans create an
     'ADR 0192 item 5: a person with no page sends no link. Fix addPersonPlan in crates/api/ui/people.js.');
 });
 
-test('a link names a person with an empty name', () => {
-  assert.deepEqual(linkName({ name: '  ' }, 'Matt Finlay'), { name: 'Matt Finlay' },
-    'ADR 0163 item 15: a link puts the page title in an empty name. Fix linkName in crates/api/ui/people.js.');
-  assert.deepEqual(linkName({ name: 'Matt' }, 'Matt Finlay'), {},
-    'ADR 0163 item 15: a link does not change a name with text. Fix linkName in crates/api/ui/people.js.');
-  assert.deepEqual(linkName({ name: '' }, ''), {});
+test('a link replaces the name with the title of the page', () => {
+  assert.deepEqual(linkName({ name: '' }, 'Matt Finlay'), { name: 'Matt Finlay' },
+    'ADR 0163 item 15: a link puts the page title in the name. Fix linkName in crates/api/ui/people.js.');
+  assert.deepEqual(linkName({ name: 'Matt' }, 'Matt Finlay'), { name: 'Matt Finlay' },
+    'ADR 0163 item 15: a link replaces a different name. Fix linkName in crates/api/ui/people.js.');
+  assert.deepEqual(linkName({ name: 'Matt Finlay' }, 'Matt Finlay'), {});
+  const pending = { name: 'Matt', img: '', href: '', wallets: [], keys: [] };
+  const rows = fillRows({ title: 'Matt Finlay', wallets: [], npub: null }, pending);
+  assert.deepEqual(rows[0], { id: 'name', title: 'Name', value: 'Matt Finlay', lines: ['The title of the page'], selectable: true, selected: true },
+    'ADR 0163 item 15: the sheet "From Music Index" starts with a selected Name row. Fix fillRows in crates/api/ui/people.js.');
+  assert.deepEqual(fillPatch(rows, ['name'], pending), { name: 'Matt Finlay' });
+  assert.equal(fillRows({ title: 'Matt', wallets: [], npub: null }, pending)[0].selectable, false,
+    'ADR 0163 item 15: the same name gives no change. Fix fillRows in crates/api/ui/people.js.');
 });
 
 test('Find on Music Index lists user pages before result groups', () => {

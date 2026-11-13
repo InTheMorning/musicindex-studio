@@ -2,7 +2,18 @@
 
 Decision: [ADR 0190](../adr/0190-review-gives-the-return-wait-of-music-index.md).
 
-Status: Complete on 2026-11-12, with packet 127b. The mechanical checks and the screenshot visual check passed. The human gate is open. Packet 127a is complete.
+Status: Complete on 2026-11-12, with packet 127b. The mechanical checks, the screenshot visual check and the human gate passed. Packet 127a is complete.
+
+The human gate ran on 2026-11-12 in a release build of `3900135`, against Stophammer `v0.20.0-rc.1`. A loop read `GET /v1/feeds/7ea30e6c-c7ba-5b81-a7be-6465c1591b7a` each 10 seconds. The times are EST:
+
+| Time | Address of Music Index | `return_wait_until` |
+| --- | --- | --- |
+| 20:20:19 | `music.cancelbandcamp.com` | `null` |
+| 20:34:11 | `files.heycitizen.xyz` (return B followed) | `1794533887` (20:38:07, a wait of 240 seconds) |
+| 20:38:15 | `files.heycitizen.xyz` | `null` (the wait ended) |
+| 20:38:56 | `music.cancelbandcamp.com` (return C followed) | `1794534415` (20:46:55, a wait of 480 seconds) |
+
+At return C, Review gave "Music Index waits until 11/12/2026, 8:38:07 PM". After the write, the notice line showed "Waiting · 8:38:37 PM", and then "Sent · 8:38:38 PM" with no click. Music Index followed the return 18 seconds after the podping. The wait doubled from 240 to 480 seconds, as Stophammer ADR 0097 gives.
 
 Before the write, the route finds a return from the pointer row of the draft move (`is_pointer_of_feed`). The write queues its podping with `Timing::DEFAULT`, so the usual send time is the write time plus 30 seconds.
 

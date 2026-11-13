@@ -920,6 +920,24 @@ dialog.sheet.small[open] { width: min(520px, calc(var(--window-width) - 32px)); 
    column. A note under a value has no term, so it stays in the value column. */
 .facts dd { min-width: 0; overflow-wrap: anywhere; }
 .facts .facts-note { grid-column: 2; }
+.delete-step { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; padding: 12px 16px; }
+.retire-head { display: grid; gap: 2px; padding: 12px 16px; }
+.retire-head .label { font-weight: 600; }
+.retire-head .summary { color: var(--muted); font-size: var(--text-callout); }
+.delete-step .num { flex: none; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--fill-soft); color: var(--muted); font-weight: 700; }
+.delete-step.done .num { background: var(--accent); color: #fff; }
+.delete-step .text { flex: 1; min-width: 12rem; display: grid; gap: 2px; }
+.delete-step .summary { overflow-wrap: anywhere; }
+.link-row.delete-choice { width: 100%; padding-block: 12px; text-align: left; }
+.link-row.delete-choice .summary { white-space: normal; }
+.link-row.delete-choice.destructive .label { color: var(--error); }
+.delete-choice .tag { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 99px; background: var(--fill-soft); color: var(--muted); font-size: var(--text-footnote); font-weight: 600; vertical-align: 1px; }
+.delete-loss { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+.delete-count { display: block; color: var(--muted); font-size: var(--text-callout); }
+.delete-facts { padding: 12px 16px; gap: 4px 12px; }
+.delete-facts .label { color: var(--muted); font-size: var(--text-callout); }
+.check.delete-files { align-items: flex-start; padding: 12px 16px; }
+.check.delete-files input { margin-top: 2px; }
 .passkey-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .passkey-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .panel {

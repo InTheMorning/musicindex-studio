@@ -44,6 +44,7 @@ Most steps are the same in the two. A page tells you when a step is different.
 - [Check a feed](feed-check.md)
 - [Review and write your changes](review-and-write.md)
 - [Manage the files of a release](release-files.md)
+- [Delete a feed file](delete-from-host.md)
 
 ## Live shows and other apps
 

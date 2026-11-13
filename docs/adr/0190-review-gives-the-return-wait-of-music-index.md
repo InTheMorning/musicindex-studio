@@ -6,6 +6,7 @@
 - Accepted: 2026-11-12 by the operator, through the questionnaire, after the human check of ADR 0128. The operator selected "Ask Music Index": Studio reads the end of the wait from the index.
 - Technical choices: items 3 to 7 are choices of the planning model.
 - Changes: [ADR 0128](0128-a-moved-feed-names-its-own-address.md) items 7, 8 and 10. The warning now gives the time from the index.
+- Changed by: [ADR 0191](0191-a-return-warning-has-the-warning-color-and-a-sent-podping-can-go-again.md). The warnings of items 2 and 4 have the warning style, and the warning is at the top of Review.
 - Uses: Stophammer ADR 0097 (commit `96c4141` in `../stophammer`, not released on 2026-11-12) for the field `return_wait_until`. Stophammer ADR 0083 and ADR 0096 for the wait. [ADR 0052](0052-announcements-through-the-podcast-index-hub.md) for the queue, and [ADR 0189](0189-a-move-sends-one-podping-of-the-old-address.md) for the podping of a move.
 
 ## Context

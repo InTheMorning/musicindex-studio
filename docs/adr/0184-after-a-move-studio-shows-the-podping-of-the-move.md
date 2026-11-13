@@ -7,7 +7,7 @@
 - Technical choices: items 1, 2, 4, 6 and 9 are choices of the planning model.
 - Changes: [ADR 0150](0150-studio-shows-a-change-from-outside-when-a-page-opens.md) item 5, the notice after a move by Studio. [ADR 0052](0052-announcements-through-the-podcast-index-hub.md) item 21, a send with no write.
 - Uses: [ADR 0128](0128-a-moved-feed-names-its-own-address.md) for the tag `itunes:new-feed-url`. [ADR 0052](0052-announcements-through-the-podcast-index-hub.md) items 8 and 13 to 20 for the queue. [ADR 0136](0136-one-announcement-choice-at-the-write.md) for the choice at the write.
-- Changed by: [ADR 0189](0189-a-move-sends-one-podping-of-the-old-address.md). Item 6: the notice gives one line, for the address before the move. Item 10: the button sends that address.
+- Changed by: [ADR 0189](0189-a-move-sends-one-podping-of-the-old-address.md). Item 6: the notice gives one line, for the address before the move. Item 10: the button sends that address. [ADR 0191](0191-a-return-warning-has-the-warning-color-and-a-sent-podping-can-go-again.md) item 4: a sent line has the button **Send the Podping Again**.
 - Source: findings 2 and 8 of the [human checks of 2026-11-11](../reviews/2026-11-11-local-human-test-findings.md).
 
 ## Context

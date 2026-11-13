@@ -1767,7 +1767,7 @@ function useReturnWait(feedId, move) {
 // does not stop the write. With no wait, it gives the text of item 4.
 function ReturnWarning({ move, wait }) {
   const view = returnWarning(move, wait);
-  return view && html`<div class="notice" role="status"><strong>${view.title}</strong>${view.text}</div>`;
+  return view && html`<div class=${view.tone === 'warning' ? 'notice warning' : 'notice'} role="status"><strong>${view.title}</strong>${view.text}</div>`;
 }
 
 // The warning of a move that replaces a different file (ADR 0178 item 6). It
@@ -2113,6 +2113,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
     </header>
     <div class="body">
       <p class="hint" role="status">${STATUS[draft.status]}</p>
+      ${diff && html`<${ReturnWarning} move=${diff.feed_move} wait=${returnWait} />`}
       ${draft.error && draft.error.code === 'stale_revision'
         ? html`<div class="notice error" role="alert"><strong>The draft changed in a different window.</strong>
             Load the draft again to continue. The changes in this window since the last save go out.
@@ -2150,7 +2151,6 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
           </div>`
         : html`<p class="field-warning" role="status" key=${problem.guid + problem.text}><strong>${problem.title}:</strong> ${problem.text}</p>`)}
       ${diff && html`<${HostOperations} diff=${diff} connectors=${connectors} onRemove=${removeOperation} onUndoMove=${undoMove} busy=${busy} />`}
-      ${diff && html`<${ReturnWarning} move=${diff.feed_move} wait=${returnWait} />`}
       ${diff && html`<${ReplaceWarning} move=${diff.feed_move} />`}
       ${diff && html`<${LinkNotices} report=${links} busy=${busy} onRepair=${repair} />`}
       ${diff && html`<${BuildDateNotices} state=${diff.build_date} />`}

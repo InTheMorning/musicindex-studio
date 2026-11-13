@@ -443,9 +443,10 @@ input[type="checkbox"]:disabled { opacity: .5; cursor: default; }
   border-radius: 10px;
   background: var(--fill-soft);
 }
-/* A notice has a fill and no border (ADR 0029). The border shows the
-   error only. */
+/* A notice has a fill and no border (ADR 0029). A border shows an error
+   or a warning (ADR 0191 item 1). */
 .notice.error { border: 1px solid var(--error); }
+.notice.warning { border: 1px solid var(--warning); }
 .notice strong { display: block; }
 /* A button in a notice, such as "Close" of the notice after an import. */
 .notice > .actions { margin-top: 10px; }
@@ -2278,7 +2279,8 @@ button.outline-feed {
 .status-tag.not_sent { color: var(--muted); background: var(--fill-soft); }
 .status-tag .player-wait, .status-tag .icon { display: block; flex: none; width: 12px; height: 12px; }
 .status-tag .icon { stroke-width: 3; }
-.podping-line { margin: 8px 0 0; overflow-wrap: anywhere; }
+/* The tag, the address and the button wrap with a gap (ADR 0191 item 4). */
+.podping-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 8px 0 0; overflow-wrap: anywhere; }
 /* At narrow width the buttons of a row go on their own line, so that the text keeps its width. */
 @media (max-width: 760px) {
   .more-row { flex-wrap: wrap; }

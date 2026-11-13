@@ -94,8 +94,7 @@ pub(crate) async fn restore_draft(State(shared): State<Shared>, Path(id): Path<i
     blocking(shared, move |w| {
         let id = FeedId(id);
         let hosts = w.hosts()?;
-        let library = w.library()?;
-        feed_delete::start_restore_draft(&w.collection, &hosts, &library, id)?;
+        feed_delete::start_restore_draft(&w.collection, &hosts, id)?;
         diff_json(w, id, None)
     })
     .await

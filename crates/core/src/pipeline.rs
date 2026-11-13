@@ -829,8 +829,38 @@ fn public_file_name(row: &FeedRow) -> Option<&str> {
     (!name.is_empty()).then_some(name)
 }
 
+/// Read the snapshot that holds the last copy of a deleted feed.
+///
+/// # Errors
+///
+/// Gives [`PipelineErrorKind::NotFound`] when no snapshot has the last version.
+pub(crate) fn deleted_feed_snapshot_xml(
+    collection: &Collection,
+    id: FeedId,
+    last_version: Option<&crate::connector::Version>,
+) -> Result<Vec<u8>, PipelineError> {
+    let Some(last_version) = last_version else {
+        return Err(PipelineError::new(
+            PipelineErrorKind::NotFound,
+            format!("feed {} has no snapshot of its missing last copy", id.0),
+        ));
+    };
+    let snapshot = collection
+        .snapshots(id)?
+        .into_iter()
+        .find(|snapshot| snapshot.version == *last_version)
+        .ok_or_else(|| {
+            PipelineError::new(
+                PipelineErrorKind::NotFound,
+                format!("feed {} has no snapshot of its missing last copy", id.0),
+            )
+        })?;
+    collection.snapshot_xml(id, snapshot.id).map_err(Into::into)
+}
+
 /// Start a draft of a feed with no connector from the feed XML in its
-/// release folder. It replaces an older draft (ADR 0067 items 3 and 4).
+/// release folder. A deleted feed uses its snapshot with the last host version.
+/// It replaces an older draft (ADR 0067 items 3 and 4).
 ///
 /// # Errors
 ///
@@ -852,6 +882,16 @@ pub fn start_public_draft(
                 id.0
             ),
         ));
+    }
+    if collection.feed_host_delete(id)?.is_some() {
+        let bytes = deleted_feed_snapshot_xml(collection, id, row.last_version.as_ref())?;
+        let draft = DraftRow {
+            base_version: row.last_version,
+            base_xml: bytes.clone(),
+            draft_xml: bytes,
+        };
+        collection.save_draft(id, &draft)?;
+        return Ok(draft);
     }
     let (Some(folder), Some(file_name)) = (row.folder.as_deref(), public_file_name(&row)) else {
         return Err(PipelineError::new(

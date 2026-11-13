@@ -4,6 +4,10 @@
 const destructive = (title, text, action) => ({ title, text, action, role: 'destructive' });
 
 export const CONFIRMS = {
+  restoreHostedCopy: (name) => destructive(
+    `Restore the hosted copy of “${name}”?`,
+    'Studio downloads the copy on the file host and writes it over the changed file in your folder. The changes in the local file are lost.',
+    'Restore the Hosted Copy'),
   deleteOldFilesNow: (count, host) => destructive(
     `Delete ${count === 1 ? 'the old file' : `the ${count} old files`} before the move is ready?`,
     `An app that still uses an old address gets an error. You review each deletion, and ${host} keeps the files until you write.`,

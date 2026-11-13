@@ -26,6 +26,26 @@ test('the leave sheet of a person has the texts of ADR 0116 item 8', () => {
   assert.equal(entry.cancel, 'Keep Editing');
 });
 
+test('restore the hosted copy is destructive and asks first (ADR 0195)', () => {
+  assert.equal(typeof CONFIRMS.restoreHostedCopy, 'function',
+    'ADR 0195: add restoreHostedCopy to confirms.js.');
+  const entry = CONFIRMS.restoreHostedCopy('a.mp3');
+  assert.equal(entry.role, 'destructive',
+    'ADR 0195: mark Restore the Hosted Copy as destructive in confirms.js.');
+  assert.equal(entry.action, 'Restore the Hosted Copy',
+    'ADR 0195: name the confirmation action Restore the Hosted Copy.');
+
+  const editor = readFileSync(new URL('../ui/editor.js', import.meta.url), 'utf8');
+  assert.ok(editor.includes('Restore the Hosted Copy…'),
+    'ADR 0195: label the changed file button Restore the Hosted Copy….');
+  assert.ok(!editor.includes('Restore</button>'),
+    'ADR 0195: remove the unconfirmed Restore button label.');
+  const confirm = editor.indexOf('CONFIRMS.restoreHostedCopy');
+  const restore = editor.indexOf("action: 'restore'", confirm);
+  assert.ok(confirm >= 0 && restore > confirm,
+    'ADR 0195: call CONFIRMS.restoreHostedCopy through askConfirm before the restore action.');
+});
+
 test('each entry gives a title, a text, an action and a role', () => {
   for (const [name, entry] of Object.entries(CONFIRMS)) {
     const { title, text, action, role } = entry('X', 'track');

@@ -4039,10 +4039,14 @@ function ChangeRow({ difference, file, busy, onAct }) {
   } else {
     const hasCopy = file && file.copies.length > 0;
     text = html`Changed: ${name} (${fileSize(difference.size)}${file ? `, was ${fileSize(file.size)}` : ''})`;
-    buttons = html`<button class="button action" type="button" disabled=${off}
+    buttons = html`<button class="button destructive" type="button" disabled=${off || !hasCopy}
+        onClick=${async () => {
+          if (await askConfirm(CONFIRMS.restoreHostedCopy(difference.path))) {
+            await act({ action: 'restore', file: difference.file });
+          }
+        }}>Restore the Hosted Copy…</button>
+      <button class="button action" type="button" disabled=${off}
         onClick=${() => act({ action: 'use_new', file: difference.file })}>Use the New File</button>
-      <button class="button" type="button" disabled=${off || !hasCopy}
-        onClick=${() => act({ action: 'restore', file: difference.file })}>Restore</button>
       ${!hasCopy && html`<span class="sub">No copy on a file host</span>`}`;
   }
   return html`<div class="change-row">

@@ -2,7 +2,7 @@
 
 Decision: [ADR 0117](../adr/0117-the-page-of-a-person-finds-values-on-musicindex.md) item 15.
 
-Status: Complete on 2026-11-12. The mechanical checks and the screenshot visual check passed. The human check is open.
+Status: Complete on 2026-11-12. The mechanical checks and the screenshot visual check passed. The human check passed on 2026-11-12. For the real artist Prosperous Soul, the Fill section showed only the matching wallet, and the closed fold "2 other recipients on Prosperous Soul" held the other two wallets.
 
 ## Goal
 

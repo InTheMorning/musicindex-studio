@@ -31,7 +31,7 @@ import {
   moreRows, NO_OTHER_TEXT, mergeTitle, mergeHint, mergeLinks, mergeResult, mergeBody, afterMissing,
   detailList, LINK_HINT, LINK_EMPTY, linkChoices, linkRows, pickLink, pageSuggestions, addAllPageSuggestions, hasPageSuggestions, hasLinkedPages, linkedPageChanges, linkedPageSelection, linkedPageChangeLines, creditPosition, afterCredits, savedValues, pendingKeys, pendingStatus, isPending, saveBody, leaveText, checkGroups, checkFeedLines, checkKeys, checkIntro, CHANGE_ROWS, CHANGE_NOTE,
   CHECK_TITLE, checkSummary, differenceBlocks, openLabel, useValuesLabel,
-  recipientChoices, creditChoices, fundingChoices, ALREADY_VALUE, FIND_HINT, FIND_EMPTY, FIND_WAIT, FILL_NOTE, lookupGroups, lookupKind, hasLine, fillRows, splitFillRows, linkRow, linkFillButton, VALUES_WAIT, ALREADY_LINKED, fillPatch, fillSource, musicindexFeedUrl,
+  recipientChoices, creditChoices, fundingChoices, ALREADY_VALUE, FIND_HINT, FIND_EMPTY, FIND_WAIT, FILL_NOTE, lookupGroups, lookupKind, hasLine, fillRows, splitFillRows, linkName, linkRow, linkFillButton, VALUES_WAIT, ALREADY_LINKED, fillPatch, fillSource, musicindexFeedUrl,
   creditOffers, creditAddTitle, creditRemoveTitle, creditAddNote, creditPublicNote, creditRemoveNote, creditOperation, REMOVE_CREDIT_OPERATION,
   lookupAddress, showFindEmpty, addPersonView, addPersonSelection, addPersonPlan, findPersonPageModel,
 } from './people.js';
@@ -661,7 +661,7 @@ function FindForm({ personId, name, feeds, values, query, onQuery, onCancel, onP
   const fields = useFieldList({ id: 'find-query', value: query, setValue: onQuery, scope: 'publisher' });
   // A row of the fold makes the link of ADR 0159 item 1 (ADR 0163 item 3).
   const own = linkChoices(feeds, values.members).map(([id, label]) => html`<button class="link-row" type="button" key=${id}
-    onClick=${() => onLink({ members: [...values.members, id] })}><span class="text"><span class="label">${label}</span></span>
+    onClick=${() => onLink({ members: [...values.members, id], ...linkName(values, label) })}><span class="text"><span class="label">${label}</span></span>
     <span class="go" aria-hidden="true">›</span></button>`);
   return html`<header><h2 id="find-title">${`Find on Music Index: ${name}`}</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${onCancel}>✕</button></header>
@@ -729,7 +729,7 @@ function ValuesForm({ personId, row, feeds, shown, onBack, onFill }) {
   const button = linkFillButton({ loading, link: linkOn, count });
   // The link and the fill go to the page in one patch, so that both stay
   // pending until Save (ADR 0163 item 11).
-  const apply = () => onFill({ ...fillPatch(rows, checked, shown), ...(linkOn ? pickLink(row, feeds, shown) : {}) }, fillSource(row));
+  const apply = () => onFill({ ...fillPatch(rows, checked, shown), ...(linkOn ? { ...pickLink(row, feeds, shown), ...linkName(shown, (values && values.title) || row.title) } : {}) }, fillSource(row));
   const toggle = (id) => setChecked((current) => (current.includes(id) ? current.filter((c) => c !== id) : [...current, id]));
   const kind = lookupKind(row);
   const title = row.title || 'Untitled feed';

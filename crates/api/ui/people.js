@@ -2327,6 +2327,13 @@ export function fillPatch(rows, checked, pending) {
   return patch;
 }
 
+// The name that a link gives to a person with an empty name (ADR 0163
+// item 15). A name with text does not change.
+export function linkName(pending, title) {
+  const text = String(title ?? '').trim();
+  return String(pending.name ?? '').trim() === '' && text !== '' ? { name: text } : {};
+}
+
 // The line of a filled field (ADR 0117 item 14). A row with no kind word
 // gives the line with the word "feed" only.
 export function fillSource(row) {

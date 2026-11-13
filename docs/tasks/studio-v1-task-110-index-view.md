@@ -4,9 +4,7 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Feed Moves".
 Decision: [ADR 0175](../adr/0175-the-check-shows-what-music-index-holds.md).
 Source: [research request on a feed check with repairs](../plans/research-feed-check-request.md), item F3.
 
-Status: Started. ADR 0175 is Proposed. Packet 110a is complete. Packet 110b is complete without the repair **Point the Old Address Here**. Packet 110c stops at its mockup until the operator confirms it.
-
-Open decision for the operator: the draft holds one feed file and a move. It cannot hold a pointer file at a different address on a different host. The repair of ADR 0175 item 5 needs a new draft element and a new write step. Until the operator decides, each `index_address_differs` finding has no repair.
+Status: Started. ADR 0175 is Accepted. Packets 110a and 110b are complete. The operator confirmed the mockup of packet 110c on 2026-11-13, with **Show the Ways** for each different address. Packet 110c is open.
 
 ## Goal
 
@@ -47,12 +45,11 @@ ADR 0175 items 2 to 4, 6, 10 and 11.
 ADR 0175 items 1, 5 and 8.
 
 - The reads of ADR 0174 item 16 also read the index, outside the lock of the workspace.
-- The repair **Point the Old Address Here**, through the draft and the checks of ADR 0126.
 - The route of the check gives the new findings, the line of item 10 and the text of the report of item 8.
 
 ### 110c: The Rows And The Sheets
 
-ADR 0175 items 5 and 7 to 10.
+ADR 0175 items 5 and 7 to 10. The finding `index_address_differs` gets **Show the Ways** and its sheet (item 5).
 
 - First a mockup of the two rows, the two sheets and the line, at 1280 px and at 390 px. Stop until the operator confirms it.
 - The UI model gives the order of item 7, the button of item 9 and the report. Add a Node test.
@@ -77,7 +74,7 @@ Human, by the operator. This gate stays open until it runs:
 ## Stop And Ask When
 
 - The index API does not give a field that ADR 0175 names.
-- A repair would change a file that is not the pointer file of item 5.
+- A repair would change a file.
 - A finding of this task and a refusal of ADR 0126 apply to the same address.
 
 ## Final Report

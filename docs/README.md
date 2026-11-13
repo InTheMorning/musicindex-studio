@@ -454,6 +454,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 122: The merge notice gives the times of the change](tasks/studio-v1-task-122-merge-notice-times.md)
 - [Studio v1 task 123: Review checks the stream type of a live show](tasks/studio-v1-task-123-review-stream-type.md)
 - [Studio v1 task 124: The README is a landing page](tasks/studio-v1-task-124-readme.md)
+- [Studio v1 task 134: A deleted feed opens from its last copy](tasks/studio-v1-task-134-deleted-feed-opens.md)
 - [Studio v1 task 055: The date and time fields](tasks/studio-v1-task-055-date-time-fields.md)
 - [Studio v1 task 055a: The times in the core](tasks/studio-v1-task-055a-times-in-the-core.md)
 - [Studio v1 task 055b: The date and time field](tasks/studio-v1-task-055b-date-time-field.md)

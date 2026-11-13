@@ -5,7 +5,10 @@
 use std::fs;
 
 use studio_core::collection::{Collection, ConnectorId, FeedId};
-use studio_core::connector::{self, Connector, Expected, LocalFolder};
+use studio_core::connector::{
+    self, Connector, ConnectorError, Expected, FileList, FileRead, ListedFile, LocalFolder, Stamp,
+    Version,
+};
 use studio_core::feed::{Enclosure, Entry, Item};
 use studio_core::feed_delete::{self, StayReason};
 use studio_core::inventory::{self, Hosts};
@@ -47,6 +50,81 @@ fn env() -> Env {
     .unwrap();
     let mut hosts = Hosts::new();
     hosts.insert(connector_id, Box::new(folder));
+    let library = Library::open(dir.path().join("library")).unwrap();
+    Env {
+        dir,
+        collection,
+        connector,
+        connector_id,
+        hosts,
+        library,
+    }
+}
+
+struct EtagFolder(LocalFolder);
+
+fn etag(version: &Version) -> Version {
+    Version::new(format!(
+        "\"{}\"",
+        version.as_str().trim_start_matches("sha256:")
+    ))
+}
+
+fn local_version(version: &Version) -> Version {
+    Version::new(format!("sha256:{}", version.as_str().trim_matches('"')))
+}
+
+impl Connector for EtagFolder {
+    fn read(&self, path: &str) -> Result<Option<FileRead>, ConnectorError> {
+        Ok(self.0.read(path)?.map(|mut file| {
+            file.version = etag(&file.version);
+            file
+        }))
+    }
+
+    fn write(
+        &self,
+        path: &str,
+        bytes: &[u8],
+        expected: &Expected,
+    ) -> Result<Version, ConnectorError> {
+        let expected = match expected {
+            Expected::Absent => Expected::Absent,
+            Expected::Version(version) => Expected::Version(local_version(version)),
+        };
+        self.0
+            .write(path, bytes, &expected)
+            .map(|version| etag(&version))
+    }
+
+    fn public_url(&self, path: &str) -> Option<String> {
+        self.0.public_url(path)
+    }
+    fn list(&self) -> Result<FileList, ConnectorError> {
+        self.0.list()
+    }
+    fn stat(&self, path: &str) -> Result<Option<ListedFile>, ConnectorError> {
+        self.0.stat(path)
+    }
+    fn delete(&self, path: &str, expected: &Stamp) -> Result<(), ConnectorError> {
+        self.0.delete(path, expected)
+    }
+}
+
+fn etag_env() -> Env {
+    let dir = tempfile::tempdir().unwrap();
+    let folder = LocalFolder::new(dir.path(), Some("https://music.example".into()));
+    let collection = Collection::open(&dir.path().join("collection.sqlite")).unwrap();
+    let connector_id = collection
+        .add_connector(LocalFolder::KIND, "Home folder", &folder.config(), None)
+        .unwrap();
+    let etag_host = EtagFolder(folder);
+    let connector: Box<dyn Connector> = Box::new(EtagFolder(LocalFolder::new(
+        dir.path(),
+        Some("https://music.example".into()),
+    )));
+    let mut hosts = Hosts::new();
+    hosts.insert(connector_id, Box::new(etag_host));
     let library = Library::open(dir.path().join("library")).unwrap();
     Env {
         dir,
@@ -281,8 +359,7 @@ fn after_the_delete_the_feed_is_read_only_and_a_write_to_the_same_address_brings
     let error = pipeline::start_draft(&e.collection, e.connector.as_ref(), feed).unwrap_err();
     assert_eq!(error.kind(), PipelineErrorKind::ReadOnly);
 
-    let restore =
-        feed_delete::start_restore_draft(&e.collection, &e.hosts, &e.library, feed).unwrap();
+    let restore = feed_delete::start_restore_draft(&e.collection, &e.hosts, feed).unwrap();
     assert_eq!(restore.draft_xml, before);
     let diff = pipeline::diff(&e.collection, &e.hosts, &e.library, feed).unwrap();
     write(&mut e, feed, &diff.id).unwrap();
@@ -294,17 +371,74 @@ fn after_the_delete_the_feed_is_read_only_and_a_write_to_the_same_address_brings
 }
 
 #[test]
+fn an_etag_host_uses_the_deleted_snapshot_to_open_and_restore_a_feed() {
+    let mut e = etag_env();
+    let feed = hosted_feed(
+        &mut e,
+        "album.xml",
+        "Album",
+        "music",
+        "cover.jpg",
+        "one.mp3",
+    );
+    let before = fs::read(e.dir.path().join("album.xml")).unwrap();
+    assert!(
+        e.collection
+            .feed(feed)
+            .unwrap()
+            .last_version
+            .unwrap()
+            .as_str()
+            .starts_with('"')
+    );
+    let draft =
+        feed_delete::start_delete_draft(&e.collection, &e.hosts, &e.library, feed, false).unwrap();
+    write(&mut e, feed, &draft.diff.id).unwrap();
+
+    let public = pipeline::start_public_draft(&e.collection, &e.library, feed).unwrap();
+    assert_eq!(public.draft_xml, before);
+    let restore = feed_delete::start_restore_draft(&e.collection, &e.hosts, feed).unwrap();
+    assert_eq!(restore.draft_xml, before);
+    let diff = pipeline::diff(&e.collection, &e.hosts, &e.library, feed).unwrap();
+    write(&mut e, feed, &diff.id).unwrap();
+    assert_eq!(fs::read(e.dir.path().join("album.xml")).unwrap(), before);
+}
+
+#[test]
+fn a_deleted_feed_without_a_matching_snapshot_is_not_found() {
+    let mut e = env();
+    let feed = pipeline::new_feed(
+        &mut e.collection,
+        e.connector.as_ref(),
+        e.connector_id,
+        "missing.xml",
+        "Missing",
+        "Artist",
+        "music",
+    )
+    .unwrap();
+    e.collection
+        .record_feed_host_delete(feed, e.connector_id, "missing.xml")
+        .unwrap();
+
+    let error = pipeline::start_public_draft(&e.collection, &e.library, feed).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::NotFound);
+    assert!(error.to_string().contains("missing last copy"));
+    let error = feed_delete::start_restore_draft(&e.collection, &e.hosts, feed).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::NotFound);
+    assert!(error.to_string().contains("missing last copy"));
+}
+
+#[test]
 fn a_restore_stops_when_a_file_is_at_the_path_and_a_feed_with_no_delete_has_none() {
     let (mut e, feed) = setup();
-    let error =
-        feed_delete::start_restore_draft(&e.collection, &e.hosts, &e.library, feed).unwrap_err();
+    let error = feed_delete::start_restore_draft(&e.collection, &e.hosts, feed).unwrap_err();
     assert_eq!(error.kind(), PipelineErrorKind::NotFound);
     let draft =
         feed_delete::start_delete_draft(&e.collection, &e.hosts, &e.library, feed, false).unwrap();
     write(&mut e, feed, &draft.diff.id).unwrap();
     put(&e, "album.xml", b"<rss/>");
-    let error =
-        feed_delete::start_restore_draft(&e.collection, &e.hosts, &e.library, feed).unwrap_err();
+    let error = feed_delete::start_restore_draft(&e.collection, &e.hosts, feed).unwrap_err();
     assert_eq!(error.kind(), PipelineErrorKind::FileExists);
 }
 
@@ -380,7 +514,7 @@ fn a_discard_of_the_restore_draft_leaves_the_feed_read_only_with_its_record() {
         feed_delete::start_delete_draft(&e.collection, &e.hosts, &e.library, feed, false).unwrap();
     write(&mut e, feed, &draft.diff.id).unwrap();
 
-    feed_delete::start_restore_draft(&e.collection, &e.hosts, &e.library, feed).unwrap();
+    feed_delete::start_restore_draft(&e.collection, &e.hosts, feed).unwrap();
     assert_eq!(
         e.collection.feed(feed).unwrap().connector_id,
         Some(e.connector_id),
@@ -397,7 +531,7 @@ fn a_discard_of_the_restore_draft_leaves_the_feed_read_only_with_its_record() {
     assert!(e.collection.draft(feed).unwrap().is_none());
 
     // The restore route works again, and its write clears the record.
-    feed_delete::start_restore_draft(&e.collection, &e.hosts, &e.library, feed).unwrap();
+    feed_delete::start_restore_draft(&e.collection, &e.hosts, feed).unwrap();
     let diff = pipeline::diff(&e.collection, &e.hosts, &e.library, feed).unwrap();
     write(&mut e, feed, &diff.id).unwrap();
     assert_eq!(fs::read(e.dir.path().join("album.xml")).unwrap(), before);

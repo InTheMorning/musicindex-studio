@@ -183,15 +183,12 @@ fn add_file_deletes(
 ///
 /// # Errors
 ///
-/// Gives [`PipelineErrorKind::NotFound`] when the feed has no record of a
-/// delete, or its release folder has no last copy. Gives
-/// [`PipelineErrorKind::Conflict`] when the last copy is not the file that
-/// Studio last wrote, and [`PipelineErrorKind::FileExists`] when a file is
-/// at the path on the host.
+/// Gives [`PipelineErrorKind::NotFound`] when the feed has no delete record
+/// or matching snapshot. Gives [`PipelineErrorKind::FileExists`] when a file
+/// is at the path on the host.
 pub fn start_restore_draft(
     collection: &Collection,
     hosts: &Hosts,
-    library: &Library,
     id: FeedId,
 ) -> Result<DraftRow, PipelineError> {
     let row = collection.feed(id)?;
@@ -201,25 +198,7 @@ pub fn start_restore_draft(
             format!("feed {} has no deleted feed file", id.0),
         )
     })?;
-    let not_found = || {
-        PipelineError::new(
-            PipelineErrorKind::NotFound,
-            format!("feed {} has no last copy in its release folder", id.0),
-        )
-    };
-    let folder = row.folder.as_deref().ok_or_else(not_found)?;
-    let file_name = path
-        .rsplit_once('/')
-        .map_or(path.as_str(), |(_, name)| name);
-    let bytes = library
-        .read_feed_xml(folder, file_name)
-        .map_err(|_| not_found())?;
-    if Some(&crate::digest::content_version(&bytes)) != row.last_version.as_ref() {
-        return Err(PipelineError::new(
-            PipelineErrorKind::Conflict,
-            "the release folder has a different feed XML than the last read",
-        ));
-    }
+    let bytes = pipeline::deleted_feed_snapshot_xml(collection, id, row.last_version.as_ref())?;
     if hosts.get(connector_id)?.read(&path)?.is_some() {
         return Err(PipelineError::new(
             PipelineErrorKind::FileExists,

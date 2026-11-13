@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   tabLabel, checkCount, checkRows, unreadableRows, repairLabel, hasShowGrant, checkTexts,
   CHECK_LEAD, CHECK_NONE, CHECK_GRANT, CHECK_READ_ONLY, CHECK_UNREADABLE,
+  COPY_SHEET_TEXT, WAYS_SHEET_TEXT,
 } from '../ui/feedcheck.js';
 
 const finding = (kind, repair, extra = {}) => ({
@@ -31,9 +32,9 @@ test('the model gives one row for each finding with its level and its button', (
     finding('move_not_confirmed', null),
   ]));
   assert.deepEqual(rows.map((r) => r.button), [
-    'Add the Link', 'Use the https Address', 'Read the Size', 'Open the Track', 'Select a Language', null,
+    'Add the Link', 'Use the https Address', 'Read the Size', 'Open the Track', null, 'Select a Language',
   ], owner);
-  assert.deepEqual(rows.map((r) => r.level), ['Notice', 'Notice', 'Notice', 'Notice', 'Question', 'Notice'], owner);
+  assert.deepEqual(rows.map((r) => r.level), ['Notice', 'Notice', 'Notice', 'Notice', 'Notice', 'Question'], owner);
   assert.equal(rows[0].title, 'T no_self_link', owner);
   assert.equal(rows[0].reason, 'R no_self_link', owner);
   assert.deepEqual(rows[1].body, { kind: 'http_file', entry: 'g-1', url: 'http://a.example/x.mp3' }, owner);
@@ -41,8 +42,8 @@ test('the model gives one row for each finding with its level and its button', (
   assert.equal(rows[3].action, 'open-track', owner);
   assert.equal(rows[3].track, 'g-2', owner);
   assert.equal(rows[3].body, null, owner);
-  assert.equal(rows[4].action, 'open-language', owner);
-  assert.equal(rows[5].action, null, owner);
+  assert.equal(rows[5].action, 'open-language', owner);
+  assert.equal(rows[4].action, null, owner);
 });
 
 test('a read-only feed gives rows with no button', () => {
@@ -51,6 +52,39 @@ test('a read-only feed gives rows with no button', () => {
   assert.equal(rows.length, 2, owner);
   assert.deepEqual(rows.map((r) => r.button), [null, null], owner);
   assert.deepEqual(rows.map((r) => r.action), [null, null], owner);
+});
+
+test('warning rows come first and the count includes them', () => {
+  const owner = 'ADR 0175 item 7.';
+  const rows = checkRows(check([
+    finding('no_language', 'select_a_language', { level: 'question' }),
+    finding('index_address_differs', null, { url: 'https://old.example/feed.xml' }),
+    finding('copy_other_recipients', null, { level: 'warning', report: 'Feed GUID: g-1\nPublic address of the feed: https://a.example/feed.xml\nCopy URL: https://b.example/feed.xml' }),
+    finding('no_self_link', 'add_the_link'),
+  ]));
+  assert.deepEqual(rows.map((row) => row.level), ['Warning', 'Notice', 'Notice', 'Question'], owner);
+  assert.equal(checkCount(check([finding('copy_other_recipients', null, { level: 'warning' })])), 1, owner);
+});
+
+test('read-only index findings keep their two sheet actions', () => {
+  const rows = checkRows(check([
+    finding('no_self_link', null),
+    finding('copy_other_recipients', null, { level: 'warning', report: 'Feed GUID: g' }),
+    finding('index_address_differs', null, { url: 'https://old.example/feed.xml' }),
+  ], { read_only: true }));
+  assert.deepEqual(rows.map((row) => row.button), ['Show What to Do', null, 'Show the Ways']);
+  assert.deepEqual(rows.map((row) => row.action), ['show-copy', null, 'show-ways']);
+  assert.equal(COPY_SHEET_TEXT.title, 'A Copy Pays Other People');
+  assert.equal(WAYS_SHEET_TEXT.title, 'Music Index Has Another Address');
+});
+
+test('the copy finding carries the complete report text', () => {
+  const report = 'Feed GUID: g-1\nPublic address of the feed: https://a.example/feed.xml\nCopy URL: https://b.example/feed.xml';
+  const row = checkRows(check([finding('copy_other_recipients', null, { level: 'warning', report })]))[0];
+  assert.equal(row.report, report);
+  assert.match(row.report, /g-1/);
+  assert.match(row.report, /https:\/\/a\.example\/feed\.xml/);
+  assert.match(row.report, /https:\/\/b\.example\/feed\.xml/);
 });
 
 test('Open the Track has no button for a track with no GUID', () => {

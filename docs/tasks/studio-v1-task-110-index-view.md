@@ -4,7 +4,7 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Feed Moves".
 Decision: [ADR 0175](../adr/0175-the-check-shows-what-music-index-holds.md).
 Source: [research request on a feed check with repairs](../plans/research-feed-check-request.md), item F3.
 
-Status: Started. ADR 0175 is Accepted. Packets 110a and 110b are complete. The operator confirmed the mockup of packet 110c on 2026-11-13, with **Show the Ways** for each different address. Packet 110c is open.
+Status: Complete. ADR 0175 is Accepted. Packets 110a, 110b and 110c are complete. The operator confirmed the mockup of packet 110c on 2026-11-13, with **Show the Ways** for each different address. The screenshot visual check passed on 2026-11-13 at 1280 px Light and 390 px Dark, with a scripted index (walk `setup-175.py`, `steps-175-{light,dark}.json`). The scripted collection has no last write of Studio, so the shots do not show the line of item 10. The human test is open.
 
 ## Goal
 

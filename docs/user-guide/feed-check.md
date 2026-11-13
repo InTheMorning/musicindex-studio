@@ -16,6 +16,14 @@ A row has no button when Studio cannot repair the finding. A read-only feed has 
 
 When Studio cannot read an address, the page says "Studio could not read this address." and gives the address.
 
+## Read the Music Index findings
+
+**Warning** means that a copy at another address pays other people. Select **Show What to Do** to read the report. Copy it and send it to the operator of Music Index. Studio sends no report.
+
+**Notice** means that Music Index reads the feed at another address. Select **Show the Ways** to read how to ask for a redirect or contact the operator of Music Index.
+
+The line below the findings says when Music Index has not read your last write yet. This line is not a finding and does not change the tab count.
+
 ## Select a button
 
 - **Add the Link** and **Use the Public Address** put the public address in the self link. Studio first reads the public address. It changes the draft only when the feed there is this feed.

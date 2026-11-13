@@ -1954,12 +1954,19 @@ button.outline-feed {
    error color on its own row only, not an entity color (ADR 0018). */
 .host-op-row { display: flex; align-items: center; gap: 12px; min-height: var(--row); padding: 10px 16px; flex-wrap: wrap; }
 .host-op-row .kind { flex: none; width: 5.5rem; font-weight: 600; }
+.host-op-row .kind.warning { color: var(--error); }
 .host-op-row .text { flex: 1; min-width: 0; display: grid; overflow-wrap: anywhere; }
 .host-op-row .title { font-weight: 600; }
 .host-op-row .sub { color: var(--muted); font-size: var(--text-callout); overflow-wrap: anywhere; }
 .host-op-row .size { flex: none; color: var(--muted); font-size: var(--text-callout); font-variant-numeric: tabular-nums; }
 .host-op-row.error { color: var(--error); }
 .host-op-row.error .sub { color: var(--error); }
+.report { margin: 0; background: var(--level-3); border-radius: 12px; padding: 12px 16px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--text-callout); }
+.way { display: grid; gap: 2px; padding: 12px 16px; }
+.way + .way { border-top: 1px solid var(--sep); }
+.way-title { font-weight: 600; }
+.way-text { color: var(--muted); font-size: var(--text-callout); overflow-wrap: anywhere; }
+.index-sheet .body p { margin: 0; }
 
 /* The open rows of a library file entry of the Files page: a hint, each
    copy, each pending copy, the "Copy to" buttons and the host field

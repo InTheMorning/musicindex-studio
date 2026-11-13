@@ -16,7 +16,7 @@ import { roleSummary } from './roles.js';
 import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName } from './shell.js';
 import { isLiveItem, liveKey, liveDot, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner, OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning, hasBadAddress, problemGroup, setLiveStreamType } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
-import { checkRows, unreadableRows, hasShowGrant, checkTexts } from './feedcheck.js';
+import { checkRows, unreadableRows, hasShowGrant, checkTexts, COPY_SHEET_TEXT, WAYS_SHEET_TEXT } from './feedcheck.js';
 import { buildDateNotices } from './builddate.js';
 import { versionLabel, LOCK_HELP, hasSpace, spaceNotice, ROW_SPACE_NOTE, newFeedAddress, newFeedAddressLine, libraryFolderRow } from './feedfacts.js';
 import { refusalView, refusalOfError, noticeViews, blocksWrite, repairRoute, returnWarning, REPLACES_POINTER_NOTE } from './movelink.js';
@@ -4600,6 +4600,13 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
 // the new draft in the editor. The reads run when the page opens and at
 // "Check Again".
 function CheckPage({ feed, model, check, go }) {
+  // The row whose sheet is open (ADR 0175 items 5 and 8), or null.
+  const [sheet, setSheet] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const sheetRef = useRef(null);
+  useEffect(() => {
+    if (sheet && !sheetRef.current?.open) sheetRef.current?.showModal();
+  }, [sheet]);
   const [grants, setGrants] = useState(null);
   useEffect(() => {
     check.readAgain();
@@ -4632,6 +4639,11 @@ function CheckPage({ feed, model, check, go }) {
     if (row.action === 'repair') check.repair(row);
     else if (row.action === 'open-track') go({ name: 'feed', id: feed.id, page: 'track', track: row.track });
     else if (row.action === 'open-language') openLanguage();
+    else if (row.action === 'show-copy' || row.action === 'show-ways') { setCopied(false); setSheet(row); }
+  };
+  const closeSheet = () => setSheet(null);
+  const copyReport = (report) => {
+    if (navigator.clipboard) navigator.clipboard.writeText(report).then(() => setCopied(true), () => {});
   };
   const again = html`<div class="actions"><button class="button" type="button" disabled=${busy}
     onClick=${() => check.readAgain()}>${check.reading ? 'Checking…' : 'Check Again'}</button></div>`;
@@ -4644,7 +4656,7 @@ function CheckPage({ feed, model, check, go }) {
       ${texts.none && html`<p class="hint">${texts.none}</p>`}
       ${rows.length > 0 && html`<div class="group host-ops">
         ${rows.map((row) => html`<div class="host-op-row" key=${row.key}>
-          <span class="kind">${row.level}</span>
+          <span class=${`kind${row.warning ? ' warning' : ''}`}>${row.level}</span>
           <span class="text">
             <span class="title">${row.title}</span>
             <span class="sub">${row.reason}</span>
@@ -4654,8 +4666,26 @@ function CheckPage({ feed, model, check, go }) {
             onClick=${() => press(row)}>${check.repairing === row.key ? 'Working…' : row.button}</button>`}
         </div>`)}
       </div>`}
+      ${answer?.index_line && html`<p class="hint index-line">${answer.index_line}</p>`}
       ${again}
     </section>
+    ${sheet && sheet.action === 'show-copy' && html`<dialog ref=${sheetRef} key=${sheet.key} class="sheet small index-sheet" aria-labelledby="copy-other-title" onClose=${closeSheet}>
+        <header><h2 id="copy-other-title">${COPY_SHEET_TEXT.title}</h2><button class="button quiet icon-button" type="button" aria-label="Close" onClick=${closeSheet}>✕</button></header>
+        <div class="body"><p>${COPY_SHEET_TEXT.paragraphs[0]}</p><p>${COPY_SHEET_TEXT.paragraphs[1]}</p>
+          <pre class="report mono">${sheet.report}</pre>
+        </div><footer><button class="button" type="button" onClick=${closeSheet}>Close</button>
+          <button class="button primary" type="button" onClick=${() => copyReport(sheet.report)}>${copied ? 'Copied' : 'Copy the Report'}</button></footer>
+      </dialog>`}
+    ${sheet && sheet.action === 'show-ways' && (() => {
+      const row = sheet;
+      return html`<dialog ref=${sheetRef} key=${sheet.key} class="sheet small index-sheet" aria-labelledby="index-ways-title" onClose=${closeSheet}>
+        <header><h2 id="index-ways-title">${WAYS_SHEET_TEXT.title}</h2><button class="button quiet icon-button" type="button" aria-label="Close" onClick=${closeSheet}>✕</button></header>
+        <div class="body"><p>${WAYS_SHEET_TEXT.lead} <code class="mono">${row.indexAddress}</code>. ${WAYS_SHEET_TEXT.noPointer}</p>
+          <div class="group rows"><div class="way"><span class="way-title">${WAYS_SHEET_TEXT.ways[0].title}</span><span class="way-text">${WAYS_SHEET_TEXT.ways[0].text} ${feed.public_url}.</span></div>
+            <div class="way"><span class="way-title">${WAYS_SHEET_TEXT.ways[1].title}</span><span class="way-text">${WAYS_SHEET_TEXT.ways[1].text}</span></div></div>
+        </div><footer><button class="button" type="button" onClick=${closeSheet}>Close</button></footer>
+      </dialog>`;
+    })()}
     ${unreadable.length > 0 && html`<section class="page-section"><h2>Not read</h2>
       <div class="group host-ops">
         ${unreadable.map((row) => html`<div class="host-op-row" key=${row.key}>

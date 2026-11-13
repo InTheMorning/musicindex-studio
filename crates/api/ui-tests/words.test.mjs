@@ -154,6 +154,8 @@ const HOST_ALLOWED = [
   // A web site or a verb, not a connector.
   "feed.host || 'Unknown host'",
   'edits them where you host them.',
+  'redirect at the old host',
+  'Ask the old host for an HTTP 301 redirect',
   // A CSS class.
   'class="panel host"',
   'class="host-head"',

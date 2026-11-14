@@ -1,6 +1,6 @@
 # Studio v1 Task 023e: The Folder Scan
 
-Parent: [task 023](studio-v1-task-023-release-library-7b.md). Decisions: [ADR 0038](../adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) items 13 to 15, [ADR 0035](../adr/0035-a-release-library-is-the-master-of-each-feed.md) items 16 and 23.
+Parent: [task 023](studio-v1-task-023-release-library-7b.md). Decisions: [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) items 13 to 15, [ADR 0035](../adr/0035-a-release-library-is-the-master-of-each-feed.md) items 16 and 23.
 Sequence: after [task 023c](studio-v1-task-023c-download-queue.md).
 
 ## Goal

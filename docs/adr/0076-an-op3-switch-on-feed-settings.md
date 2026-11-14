@@ -23,7 +23,7 @@ The operator selected the scope of the switch from a questionnaire on 2026-10-28
 
 1. The core has one function that gives the plain address of an enclosure address. It removes `https://op3.dev/e`, an optional `,pg=…` and the `/` after it. When the remaining text has no scheme, it adds `https://`.
 2. Each comparison of a feed address with a file address uses the plain address: the confirmation, the inventory, the file moves, and the deletion check of ADR 0035 item 17.
-3. Each read of an enclosure by the core uses the plain address: the media facts, the audio player and the downloads of [ADR 0038](0038-published-feeds-downloads-folder-scan-and-feed-moves.md).
+3. Each read of an enclosure by the core uses the plain address: the media facts, the audio player and the downloads of [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md).
 4. A file move changes the plain address in the feed, and keeps the prefix.
 
 ### The Switch

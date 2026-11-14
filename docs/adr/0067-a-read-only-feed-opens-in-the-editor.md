@@ -18,7 +18,7 @@ On 2026-10-27 the operator examined a read-only album in this view. The view has
 - The "File" fact tells the user to connect a folder, also for a feed on a remote host.
 - The view shows no track, and the outline has only "Feed". The user cannot see how Studio edits the feed.
 
-Studio has the XML of each read-only feed in its release folder ([ADR 0038](0038-published-feeds-downloads-folder-scan-and-feed-moves.md) item 4). On 2026-10-27 the operator decided that a read-only feed opens in the editor with a draft. The user chooses a host at the write. The operator also decided that Review gives two choices: connect the host of the file, or move the feed to a different host.
+Studio has the XML of each read-only feed in its release folder ([ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) item 4). On 2026-10-27 the operator decided that a read-only feed opens in the editor with a draft. The user chooses a host at the write. The operator also decided that Review gives two choices: connect the host of the file, or move the feed to a different host.
 
 A move from a host that Studio cannot write cannot use the redirect or the pointer file of [ADR 0035](0035-a-release-library-is-the-master-of-each-feed.md) items 19 and 20. The research note `research_notes/aggregation/podcastindex-guid-behavior.md` in `../musicindex-research` quotes the namespace rule: the `podcast:guid` stays the same when a feed moves to a new host. The note did not examine how Podcast Index handles two addresses with the same GUID.
 
@@ -39,7 +39,7 @@ A move from a host that Studio cannot write cannot use the redirect or the point
 8. A move from a read-only feed sets no redirect and writes no pointer file, because Studio cannot write the first host. This changes ADR 0035 items 19 and 20 only for a move from a read-only feed.
 9. Before the write of such a move, Review tells the user that the file at the address before the move stays and does not change. An app that reads that address continues to receive the feed from before the move.
 10. The write announces the new address and the address before the move, as [ADR 0052](0052-announcements-through-the-podcast-index-hub.md) item 8 says.
-11. Each file of the feed keeps its address after the move. The user can move each file on the Files page ([ADR 0038](0038-published-feeds-downloads-folder-scan-and-feed-moves.md)).
+11. Each file of the feed keeps its address after the move. The user can move each file on the Files page ([ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md)).
 
 ### What Does Not Change
 

@@ -35,7 +35,7 @@
 1. The core gets the module `people`. It keeps the people of the collection of one user. It has no feed rule and no HTTP server code ([ADR 0002](../../adr/0002-rust-core-json-api-browser-ui.md)).
 2. `people` writes no feed. A change of a feed from a person is a change set of ADR 0091. Each feed writes through `pipeline::write_draft` with the ID of its own diff.
 3. A value from a person is a start value in a feed. The feed keeps its own copy, so a change of a person does not change a feed. This is an edit aid (ADR 0065).
-4. The module serves the desktop shell and the server shell. On the server, each user folder has its own collection, and thus its own people ([ADR 0055](../../adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md)).
+4. The module serves the desktop shell and the server shell. On the server, each user folder has its own collection, and thus its own people ([ADR 0055](0055-the-server-shell-user-folders-sessions-and-the-vault-window.md)).
 
 ### A Person
 

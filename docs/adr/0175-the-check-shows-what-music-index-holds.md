@@ -7,7 +7,7 @@
 - Technical choices: items 2, 4, 7, 9 and 11 are choices of the planning model.
 - Accepted: 2026-11-13 by the operator, at the mockup of packet 110c. The operator selected **Show the Ways** for each different address (item 5) through the questionnaire, from a drawing.
 - Source: [research request on a feed check with repairs](../plans/research-feed-check-request.md), item F3.
-- Uses: [ADR 0007](0007-draft-diff-write-and-announce.md), [ADR 0038](0038-published-feeds-downloads-folder-scan-and-feed-moves.md), [ADR 0045](0045-phase-9-crates-test-servers-and-host-forms.md), [ADR 0065](0065-the-core-applies-each-feed-rule.md), [ADR 0126](0126-studio-refuses-a-bad-move-link.md), [ADR 0127](0127-a-changed-feed-gets-a-new-build-date.md), [ADR 0174](0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md). Stophammer ADR 0052 and ADR 0058 own the rules of the index. This record cites them and does not restate them as rules of Studio.
+- Uses: [ADR 0007](0007-draft-diff-write-and-announce.md), [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md), [ADR 0045](0045-phase-9-crates-test-servers-and-host-forms.md), [ADR 0065](0065-the-core-applies-each-feed-rule.md), [ADR 0126](0126-studio-refuses-a-bad-move-link.md), [ADR 0127](0127-a-changed-feed-gets-a-new-build-date.md), [ADR 0174](0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md). Stophammer ADR 0052 and ADR 0058 own the rules of the index. This record cites them and does not restate them as rules of Studio.
 
 ## Context
 

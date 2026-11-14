@@ -29,7 +29,7 @@
 1. The core has the module `people`. It keeps the people of the collection of one user. It has no feed rule and no HTTP server code ([ADR 0002](0002-rust-core-json-api-browser-ui.md)).
 2. `people` writes no feed. A change of a feed from a person is a change set of ADR 0091. Each feed writes through `pipeline::write_draft` with the ID of its own diff.
 3. A value from a person is a start value in a feed. The feed keeps its own copy, so a change of a person does not change a feed. This is an edit aid (ADR 0065).
-4. The module serves the desktop shell and the server shell. On the server, each user folder has its own collection, and thus its own people ([ADR 0055](0055-the-server-shell-user-folders-sessions-and-the-vault-window.md)).
+4. The module serves the desktop shell and the server shell. On the server, each user folder has its own collection, and thus its own people ([ADR 0055](../archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md)).
 5. The collection keeps the people and their links in tables of their own. The tables hold no secret.
 6. The core keeps an index of the credits of each feed, as `feed_recipients` keeps the recipients ([ADR 0027](0027-the-recipient-picker.md) item 4). It has the name, the role, the group, the information address and the `npub` of each credit. It also has the places of each credit: the channel, and the GUID, the number and the title of each item. The index of ADR 0143 keeps the split of each place. The core refreshes the indexes after each read and each write. A run that applies a change refills them from the library copies (ADR 0143 item 4).
 7. A migration made one person from each saved recipient, with its name and its wallet. After the migration, `saved_recipients` has no row.

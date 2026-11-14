@@ -4,11 +4,11 @@
 - Date: 2026-11-01
 - Owner: operator
 - Accepted: 2026-11-01 by the operator, with items 10, 15, 17 and 18 as written.
-- Changes, for a server with `--hold-assets off`: [ADR 0035](0035-a-release-library-is-the-master-of-each-feed.md) item 2 (the library is the master), [ADR 0038](0038-published-feeds-downloads-folder-scan-and-feed-moves.md) items 6 to 10 and items 13 to 15 (downloads and the folder scan), and [ADR 0055](0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) item 21 (the storage limit).
+- Changes, for a server with `--hold-assets off`: [ADR 0035](0035-a-release-library-is-the-master-of-each-feed.md) item 2 (the library is the master), [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) items 6 to 10 and items 13 to 15 (downloads and the folder scan), and [ADR 0055](../archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) item 21 (the storage limit).
 - Uses: [ADR 0007](0007-draft-diff-write-and-announce.md) (no write without a diff), [ADR 0036](0036-library-records-host-inventory-and-host-operations.md) item 15 (the read of each new address), [ADR 0059](0059-uploads-in-parts-and-the-home-screen-app.md) item 4 (an upload expires) and [ADR 0062](0062-a-file-picker-for-each-file-field.md) item 29 (media tickets).
 - Changes: [ADR 0035](0035-a-release-library-is-the-master-of-each-feed.md), A Release Library Is The Master Of Each Feed. ADR 0035 names the changed items.
-- Changes: [ADR 0038](0038-published-feeds-downloads-folder-scan-and-feed-moves.md), Published Feeds, Downloads, The Folder Scan And Feed Moves. ADR 0038 names the changed items.
-- Changes: [ADR 0055](0055-the-server-shell-user-folders-sessions-and-the-vault-window.md), The Server Shell: User Folders, Accounts, Sessions And The Vault Window. ADR 0055 names the changed items.
+- Changes: [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md), Published Feeds, Downloads, The Folder Scan And Feed Moves. ADR 0038 names the changed items.
+- Changes: [ADR 0055](../archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md), The Server Shell: User Folders, Accounts, Sessions And The Vault Window. ADR 0055 names the changed items.
 
 ## Context
 

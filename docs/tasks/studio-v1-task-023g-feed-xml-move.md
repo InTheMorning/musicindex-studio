@@ -1,6 +1,6 @@
 # Studio v1 Task 023g: The Move Of The Feed XML
 
-Parent: [task 023](studio-v1-task-023-release-library-7b.md). Decisions: [ADR 0038](../adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) items 16 to 21, [ADR 0035](../adr/0035-a-release-library-is-the-master-of-each-feed.md) items 18 to 20, [ADR 0008](../adr/0008-feed-types-and-feed-identity.md).
+Parent: [task 023](studio-v1-task-023-release-library-7b.md). Decisions: [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) items 16 to 21, [ADR 0035](../adr/0035-a-release-library-is-the-master-of-each-feed.md) items 18 to 20, [ADR 0008](../adr/0008-feed-types-and-feed-identity.md).
 Sequence: after [task 023b](studio-v1-task-023b-published-feeds-in-the-library.md).
 
 ## Goal

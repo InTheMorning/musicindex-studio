@@ -1,7 +1,7 @@
 # Studio v1 Task 023: The Release Library, Milestone 7b
 
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), Phase 7.
-Decisions: [ADR 0038](../adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md), [ADR 0035](../adr/0035-a-release-library-is-the-master-of-each-feed.md), [ADR 0036](../adr/0036-library-records-host-inventory-and-host-operations.md), [ADR 0037](../adr/0037-button-roles.md).
+Decisions: [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md), [ADR 0035](../adr/0035-a-release-library-is-the-master-of-each-feed.md), [ADR 0036](../adr/0036-library-records-host-inventory-and-host-operations.md), [ADR 0037](../adr/0037-button-roles.md).
 Depends on: milestone 7a and [task 022](studio-v1-task-022-ui-pass-after-7a.md).
 
 ## Goal

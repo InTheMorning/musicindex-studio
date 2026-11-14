@@ -1,6 +1,6 @@
 # Studio v1 Task 126: The Remote File Records Wait For The Unlock
 
-Decision: [ADR 0038](../adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) item 3.
+Decision: [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) item 3.
 
 Status: Complete on 2026-11-12. The mechanical checks passed. The API tests prove the wait and its single clear. They do not prove the rows of a real host, because the test has no feed. The human check passed on 2026-11-12.
 

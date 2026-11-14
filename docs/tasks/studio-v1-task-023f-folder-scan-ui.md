@@ -1,6 +1,6 @@
 # Studio v1 Task 023f: The Folder Scan UI
 
-Parent: [task 023](studio-v1-task-023-release-library-7b.md). Decisions: [ADR 0038](../adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) items 13 to 15, [ADR 0037](../adr/0037-button-roles.md), [ADR 0028](../adr/0028-summary-lines-and-one-open-entry.md).
+Parent: [task 023](studio-v1-task-023-release-library-7b.md). Decisions: [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) items 13 to 15, [ADR 0037](../adr/0037-button-roles.md), [ADR 0028](../adr/0028-summary-lines-and-one-open-entry.md).
 Sequence: after [task 023d](studio-v1-task-023d-download-ui.md) and [task 023e](studio-v1-task-023e-folder-scan.md).
 
 ## Goal

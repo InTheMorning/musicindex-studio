@@ -1,32 +1,34 @@
+> Archived: superseded by [ADR 0204](../../adr/0204-feed-files-moves-and-the-server.md) on 2026-11-14. ADR 0204 restates each live rule of this ADR. Its item map gives the new item of each item.
+
 # ADR 0055: The Server Shell: User Folders, Accounts, Sessions And The Vault Window
 
-- Status: Accepted
+- Status: Superseded by ADR 0204
 - Date: 2026-10-26
 - Owner: operator
-- Changed by: [ADR 0105](0105-a-public-server-holds-no-assets.md), for a server with `--hold-assets off`. Item 21: the storage limit counts the pending files, the files that no host has, the temporary files and the databases.
-- Changed by: [ADR 0107](0107-a-user-can-export-and-import-an-account.md). Items 2 and 3: the collection keeps the library as a relative path. Item 7: a sign-up can import an account.
-- Changed by: [ADR 0142](0142-a-user-selects-the-time-before-the-vault-locks.md), A User Selects The Time Before The Vault Locks.
-- Changes: [ADR 0013](0013-vault-format-and-cryptography.md), Vault Format And Cryptography. ADR 0013 names the changed items.
-- Changes: [ADR 0014](0014-collection-in-sqlite.md), The Collection Is In SQLite. ADR 0014 names the changed items.
-- Changes: [ADR 0035](0035-a-release-library-is-the-master-of-each-feed.md), A Release Library Is The Master Of Each Feed. ADR 0035 names the changed items.
-- Changed by: [ADR 0106](0106-a-sensitive-account-change-needs-a-recent-unlock.md) item 5. Item 23: the limits of failed sign-ins.
+- Changed by: [ADR 0105](../../adr/0105-a-public-server-holds-no-assets.md), for a server with `--hold-assets off`. Item 21: the storage limit counts the pending files, the files that no host has, the temporary files and the databases.
+- Changed by: [ADR 0107](../../adr/0107-a-user-can-export-and-import-an-account.md). Items 2 and 3: the collection keeps the library as a relative path. Item 7: a sign-up can import an account.
+- Changed by: [ADR 0142](../../adr/0142-a-user-selects-the-time-before-the-vault-locks.md), A User Selects The Time Before The Vault Locks.
+- Changes: [ADR 0013](../../adr/0013-vault-format-and-cryptography.md), Vault Format And Cryptography. ADR 0013 names the changed items.
+- Changes: [ADR 0014](../../adr/0014-collection-in-sqlite.md), The Collection Is In SQLite. ADR 0014 names the changed items.
+- Changes: [ADR 0035](../../adr/0035-a-release-library-is-the-master-of-each-feed.md), A Release Library Is The Master Of Each Feed. ADR 0035 names the changed items.
+- Changed by: [ADR 0106](../../adr/0106-a-sensitive-account-change-needs-a-recent-unlock.md) item 5. Item 23: the limits of failed sign-ins.
 
 ## Context
 
-[ADR 0001](0001-one-core-with-desktop-and-server-shells.md) gives Studio a server shell. A host operator runs it as a public service, or an artist runs it as a personal server. `studio-server` prints its version only.
+[ADR 0001](../../adr/0001-one-core-with-desktop-and-server-shells.md) gives Studio a server shell. A host operator runs it as a public service, or an artist runs it as a personal server. `studio-server` prints its version only.
 
 The goal of the operator for Phase 12: an artist changes a feed from a phone, away from home.
 
-The API serves one user today. `Workspace` holds one collection, one vault and one library ([ADR 0014](0014-collection-in-sqlite.md), [ADR 0035](0035-a-release-library-is-the-master-of-each-feed.md)). `local_router` gives each route the shared `Arc<Mutex<Workspace>>`, and `access.rs` checks the token of [ADR 0017](0017-local-api-access.md).
+The API serves one user today. `Workspace` holds one collection, one vault and one library ([ADR 0014](../../adr/0014-collection-in-sqlite.md), [ADR 0035](../../adr/0035-a-release-library-is-the-master-of-each-feed.md)). `local_router` gives each route the shared `Arc<Mutex<Workspace>>`, and `access.rs` checks the token of [ADR 0017](../../adr/0017-local-api-access.md).
 
 Earlier records leave these items to the Server Shell phase:
 
 - ADR 0014: the server keeps all collections in one database, with a user ID on each row.
-- [ADR 0013](0013-vault-format-and-cryptography.md), open question: one vault file for each user, or rows in a database.
+- [ADR 0013](../../adr/0013-vault-format-and-cryptography.md), open question: one vault file for each user, or rows in a database.
 - ADR 0035 item 4: where the server keeps the library of each user.
-- [ADR 0052](0052-announcements-through-the-podcast-index-hub.md): the server uses the same announcement queue for each user.
+- [ADR 0052](../../adr/0052-announcements-through-the-podcast-index-hub.md): the server uses the same announcement queue for each user.
 
-The research of 2026-10-26 ([Phase 12 authentication research](../research/2026-10-26-phase-12-auth-research.md)) examines the session on a phone. A phone browser often closes a tab in the background. A long session that keeps the vault open keeps the vault key in server memory for a long time.
+The research of 2026-10-26 ([Phase 12 authentication research](../../research/2026-10-26-phase-12-auth-research.md)) examines the session on a phone. A phone browser often closes a tab in the background. A long session that keeps the vault open keeps the vault key in server memory for a long time.
 
 On 2026-10-26 the operator selected the decisions below.
 
@@ -42,7 +44,7 @@ On 2026-10-26 the operator selected the decisions below.
 
 ### The Accounts
 
-6. The server keeps a separate database `<data>/server.sqlite`. It holds the accounts, the sign-in methods of each account, the sessions, the sign-in challenges, the invite codes and the index of app tokens ([ADR 0058](0058-grant-vaults-and-connected-apps-on-the-server.md)). It holds no feed data and no secret.
+6. The server keeps a separate database `<data>/server.sqlite`. It holds the accounts, the sign-in methods of each account, the sessions, the sign-in challenges, the invite codes and the index of app tokens ([ADR 0058](../../adr/0058-grant-vaults-and-connected-apps-on-the-server.md)). It holds no feed data and no secret.
 7. The operator selects open sign-up or sign-up with an invite code. The default is an invite code. `studio-server invite` makes a single-use code. A personal server is a server with one account and no open sign-up.
 8. The server sends no email. An email address is only the name of an account. The server keeps it in lowercase with no spaces at the start or the end. The server does not check that the user owns the address.
 9. A user can delete the account. The server asks for an unlock of the vault first. Then it removes the user folder, the account rows and each session of the user. It does not change a feed on a host.
@@ -57,21 +59,21 @@ On 2026-10-26 the operator selected the decisions below.
 ### The Vault Window
 
 14. A session and an open vault are two different states. With a session and a locked vault, a user can read the collection and edit a draft. The user can also see a diff that needs no secret of a host.
-15. The vault opens only through an unlock of the user: a sign-in with a passphrase, or an unlock with a method of [ADR 0056](0056-server-sign-in-methods-and-vault-wrappers.md).
-16. Changed by [ADR 0142](0142-a-user-selects-the-time-before-the-vault-locks.md). The server locks the vault of a user after the time of the user, with a start of 10 minutes, with no use of a vault secret. It also locks the vault at "Lock Studio", at sign-out, at the end of the last session of the user, and when the process stops. The operator can change the limit of 10 minutes. A lock removes the vault key from memory ([ADR 0003](0003-user-unlocked-secret-vault.md), ADR 0013 item 15).
+15. The vault opens only through an unlock of the user: a sign-in with a passphrase, or an unlock with a method of [ADR 0056](../../adr/0056-server-sign-in-methods-and-vault-wrappers.md).
+16. Changed by [ADR 0142](../../adr/0142-a-user-selects-the-time-before-the-vault-locks.md). The server locks the vault of a user after the time of the user, with a start of 10 minutes, with no use of a vault secret. It also locks the vault at "Lock Studio", at sign-out, at the end of the last session of the user, and when the process stops. The operator can change the limit of 10 minutes. A lock removes the vault key from memory ([ADR 0003](../../adr/0003-user-unlocked-secret-vault.md), ADR 0013 item 15).
 17. A route that needs a secret while the vault is locked gives 423 `vault_locked`, as on the desktop. The UI then asks for an unlock and sends the request again.
 
 ### Server Access
 
 18. The server listens on an address that the operator gives. The default is `127.0.0.1:8080`, behind a reverse proxy with TLS. The operator gives the public origin, such as `https://studio.musicindex.org`. The origin must use `https`. Only a loopback origin can use `http`, for development and checks.
 19. The server refuses each request with a `Host` that is not the host of the public origin, with 403. A request that changes data must also have an `Origin` header equal to the public origin.
-20. The UI and its security headers are the same in both shells ([ADR 0016](0016-ui-without-a-build-step.md)). The UI asks `GET /auth/v1/session` first. The desktop answers `{"mode": "local"}`. The server answers with the mode `server` and the state of the session. The UI shows the sign-in page when the server has no session.
+20. The UI and its security headers are the same in both shells ([ADR 0016](../../adr/0016-ui-without-a-build-step.md)). The UI asks `GET /auth/v1/session` first. The desktop answers `{"mode": "local"}`. The server answers with the mode `server` and the state of the session. The UI shows the sign-in page when the server has no session.
 
 ### Limits
 
 21. Each user has a storage limit for the user folder. The default is 10 GiB, and the operator can change it. An upload or a download that goes over the limit stops with 507 `storage_full`.
 22. The server runs a maximum of 2 Argon2id derivations at the same time. The operator can change the number. A sign-in that must wait more than 10 seconds gets 503 `busy`.
-23. Changed by [ADR 0106](0106-a-sensitive-account-change-needs-a-recent-unlock.md) item 5. The server permits 10 failed sign-ins for each pair of account and client address in each hour, 100 for each account from all addresses, and 30 for each client address. After that, it gives 429 `too_many_attempts`. The client address comes from the header that the operator names for the reverse proxy.
+23. Changed by [ADR 0106](../../adr/0106-a-sensitive-account-change-needs-a-recent-unlock.md) item 5. The server permits 10 failed sign-ins for each pair of account and client address in each hour, 100 for each account from all addresses, and 30 for each client address. After that, it gives 429 `too_many_attempts`. The client address comes from the header that the operator names for the reverse proxy.
 
 ### Functions Of The Desktop Only
 

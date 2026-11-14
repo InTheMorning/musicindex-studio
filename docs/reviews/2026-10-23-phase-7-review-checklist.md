@@ -2,7 +2,7 @@
 
 - Date: 2026-10-23
 - Reviewed: each packet of [task 021](../tasks/studio-v1-task-021-release-library-7a.md) and of [task 023](../tasks/studio-v1-task-023-release-library-7b.md)
-- Decisions: [ADR 0035](../adr/0035-a-release-library-is-the-master-of-each-feed.md), [ADR 0036](../adr/0036-library-records-host-inventory-and-host-operations.md) and [ADR 0038](../adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md)
+- Decisions: [ADR 0035](../adr/0035-a-release-library-is-the-master-of-each-feed.md), [ADR 0036](../adr/0036-library-records-host-inventory-and-host-operations.md) and [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md)
 
 The planning model uses this list after each packet, before its commit.
 

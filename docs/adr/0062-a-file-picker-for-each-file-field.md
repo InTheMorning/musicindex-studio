@@ -47,7 +47,7 @@ Each connector can list the files of its host, to a folder depth of 4 and a maxi
 
 8. "Hosts" shows one tree for each connected host. A host with no folders shows one flat list. The tree shows the limit of ADR 0019 item 3 when the limit stops the list.
 9. The user can select only a file that has a public address on its host. A file with no public address shows the reason and cannot be selected.
-10. A selection puts the public address into the field. Studio does not copy the file and does not upload it again. After the next write, the library records the file for the release with no bytes. [ADR 0038](0038-published-feeds-downloads-folder-scan-and-feed-moves.md) items 1 and 3 give this rule for each address of a written feed.
+10. A selection puts the public address into the field. Studio does not copy the file and does not upload it again. After the next write, the library records the file for the release with no bytes. [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) items 1 and 3 give this rule for each address of a written feed.
 
 ### This Computer
 

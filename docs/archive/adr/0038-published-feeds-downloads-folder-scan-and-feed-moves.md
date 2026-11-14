@@ -1,16 +1,18 @@
+> Archived: superseded by [ADR 0204](../../adr/0204-feed-files-moves-and-the-server.md) on 2026-11-14. ADR 0204 restates each live rule of this ADR. Its item map gives the new item of each item.
+
 # ADR 0038: Published Feeds, Downloads, The Folder Scan And Feed Moves
 
-- Status: Accepted
+- Status: Superseded by ADR 0204
 - Date: 2026-10-24
 - Owner: operator, with the technical choices of the planning model
-- Changed by: [ADR 0179](0179-a-release-keeps-one-library-record-for-each-file.md) item 1. A host that Studio cannot read gives no remote row.
-- Changed by: [ADR 0128](0128-a-moved-feed-names-its-own-address.md). The feed on the new host also gets a tag that names its own URL.
-- Changed by: [ADR 0105](0105-a-public-server-holds-no-assets.md), for a server with `--hold-assets off`. Items 6 to 10 and items 13 to 15 do not apply: the server has no downloads into the library and no folder scan.
-- Changed by: [ADR 0126](0126-studio-refuses-a-bad-move-link.md) adds a read of the destination to the sequence of item 19, and lets a pointer file become the feed.
+- Changed by: [ADR 0179](../../adr/0179-a-release-keeps-one-library-record-for-each-file.md) item 1. A host that Studio cannot read gives no remote row.
+- Changed by: [ADR 0128](../../adr/0128-a-moved-feed-names-its-own-address.md). The feed on the new host also gets a tag that names its own URL.
+- Changed by: [ADR 0105](../../adr/0105-a-public-server-holds-no-assets.md), for a server with `--hold-assets off`. Items 6 to 10 and items 13 to 15 do not apply: the server has no downloads into the library and no folder scan.
+- Changed by: [ADR 0126](../../adr/0126-studio-refuses-a-bad-move-link.md) adds a read of the destination to the sequence of item 19, and lets a pointer file become the feed.
 
 ## Context
 
-Milestone 7b of the [Studio v1 phase plan](../plans/studio-v1-phase-plan.md) implements [ADR 0035](0035-a-release-library-is-the-master-of-each-feed.md) items 5 to 8, 18 to 21 and 23. It uses the records of [ADR 0036](0036-library-records-host-inventory-and-host-operations.md).
+Milestone 7b of the [Studio v1 phase plan](../../plans/studio-v1-phase-plan.md) implements [ADR 0035](../../adr/0035-a-release-library-is-the-master-of-each-feed.md) items 5 to 8, 18 to 21 and 23. It uses the records of [ADR 0036](../../adr/0036-library-records-host-inventory-and-host-operations.md).
 
 After milestone 7a, a library file always has its bytes in the library. A published feed has only its feed XML in its release folder. Its audio files and images are on their hosts, and the collection has no record of them.
 
@@ -39,7 +41,7 @@ The planning model added the technical choices below.
 7. Studio downloads two files at a time for all feeds. The Files page shows the progress of each file, with "Stop".
 8. When a connected host has a copy of the file, Studio reads it through the connector. Otherwise it uses HTTP. An HTTP download writes into a hidden partial file in the release folder. After a stop or a restart, it continues from the end of the partial file with a range request.
 9. The collection records each download that is not complete. At the start, Studio continues each one.
-10. Studio refuses a download when the size is more than `download_max_file_bytes`, or when the free space after the download is less than `download_min_free_bytes` ([ADR 0036](0036-library-records-host-inventory-and-host-operations.md) item 17). The error names the setting.
+10. Studio refuses a download when the size is more than `download_max_file_bytes`, or when the free space after the download is less than `download_min_free_bytes` ([ADR 0036](../../adr/0036-library-records-host-inventory-and-host-operations.md) item 17). The error names the setting.
 11. After a download, the row gets `local` true, its size and its SHA-256. When the size is different from the enclosure length in the feed, the Files page shows the two values. Studio does not change the feed for it.
 12. A copy or a move of a remote file asks the user first, with the size of the download. Studio then adds the draft operation and starts the download. The diff marks the operation as "Waiting for the download", and the write refuses the draft until each download of the draft is complete.
 
@@ -57,7 +59,7 @@ The planning model added the technical choices below.
 
 ### A Move Of The Feed XML
 
-16. The Files page has "Host of the feed XML". A different host puts a feed move into the draft. The feed XML keeps its path on the new host, so the files of the release keep their paths too ([ADR 0035](0035-a-release-library-is-the-master-of-each-feed.md) item 13).
+16. The Files page has "Host of the feed XML". A different host puts a feed move into the draft. The feed XML keeps its path on the new host, so the files of the release keep their paths too ([ADR 0035](../../adr/0035-a-release-library-is-the-master-of-each-feed.md) item 13).
 17. `Connector` gets `can_redirect()` and `set_redirect(path, to_url)`. A connector that cannot make an HTTP 301 redirect gives false. The local folder connector cannot.
 18. The diff shows the new address, and the method at the address from before: a redirect, or a pointer file with `itunes:new-feed-url`. It also says that Studio does not tell the musicindex API and Podcast Index yet.
 19. The write puts the uploads and the copies, then the feed XML on the new host with its new self link. Then it sets the redirect, or writes the pointer file at the address from before. Then it records the new host, path and address of the feed, then it does the deletions.

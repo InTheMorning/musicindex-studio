@@ -1,6 +1,6 @@
 # Studio v1 Task 034f: The Sign-In Pages And The Account Panel
 
-Parent: [task 034](studio-v1-task-034-server-core.md). Decisions: [ADR 0055](../adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) items 9, 12, 14 to 17 and 20, [ADR 0056](../adr/0056-server-sign-in-methods-and-vault-wrappers.md) items 1 to 11, [ADR 0018](../adr/0018-passphrase-strength-and-error-color.md), [ADR 0020](../adr/0020-first-run-asks-one-question.md), [ADR 0037](../adr/0037-button-roles.md) and [ADR 0042](../adr/0042-ui-models-with-node-tests.md).
+Parent: [task 034](studio-v1-task-034-server-core.md). Decisions: [ADR 0055](../archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) items 9, 12, 14 to 17 and 20, [ADR 0056](../adr/0056-server-sign-in-methods-and-vault-wrappers.md) items 1 to 11, [ADR 0018](../adr/0018-passphrase-strength-and-error-color.md), [ADR 0020](../adr/0020-first-run-asks-one-question.md), [ADR 0037](../adr/0037-button-roles.md) and [ADR 0042](../adr/0042-ui-models-with-node-tests.md).
 Sequence: the sixth packet of task 034. It depends on 034d and 034e.
 
 ## Goal

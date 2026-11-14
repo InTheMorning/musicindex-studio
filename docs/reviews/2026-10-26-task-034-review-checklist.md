@@ -2,7 +2,7 @@
 
 - Date: 2026-10-26
 - Reviewed: each packet of [task 034](../tasks/studio-v1-task-034-server-core.md)
-- Decisions: [ADR 0055](../adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md), [ADR 0056](../adr/0056-server-sign-in-methods-and-vault-wrappers.md), [ADR 0057](../adr/0057-the-private-network-guard-of-the-server.md), [ADR 0003](../adr/0003-user-unlocked-secret-vault.md), [ADR 0013](../adr/0013-vault-format-and-cryptography.md) and [ADR 0017](../adr/0017-local-api-access.md)
+- Decisions: [ADR 0055](../archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md), [ADR 0056](../adr/0056-server-sign-in-methods-and-vault-wrappers.md), [ADR 0057](../adr/0057-the-private-network-guard-of-the-server.md), [ADR 0003](../adr/0003-user-unlocked-secret-vault.md), [ADR 0013](../adr/0013-vault-format-and-cryptography.md) and [ADR 0017](../adr/0017-local-api-access.md)
 
 The planning model uses this list after each packet, before its commit.
 
@@ -26,8 +26,8 @@ The planning model uses this list after each packet, before its commit.
 
 ## Invariants
 
-- A session can read and write only the folder of its own user ([ADR 0055](../adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md)).
-- The server keeps no vault key after a lock, a sign-out or the idle limit ([ADR 0003](../adr/0003-user-unlocked-secret-vault.md), [ADR 0055](../adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md)).
+- A session can read and write only the folder of its own user ([ADR 0055](../archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md)).
+- The server keeps no vault key after a lock, a sign-out or the idle limit ([ADR 0003](../adr/0003-user-unlocked-secret-vault.md), [ADR 0055](../archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md)).
 - A signed sign-in event works one time only ([ADR 0004](../adr/0004-server-sign-in-with-nostr-or-email.md), [ADR 0056](../adr/0056-server-sign-in-methods-and-vault-wrappers.md)).
 - With `Public`, no outbound connection goes to a private address ([ADR 0057](../adr/0057-the-private-network-guard-of-the-server.md)).
 - No test sends a request to a host outside the computer ([ADR 0045](../adr/0045-phase-9-crates-test-servers-and-host-forms.md)).

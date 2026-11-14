@@ -1,6 +1,6 @@
 # Studio v1 Task 036b: Connected Apps On The Server
 
-Parent: [task 036](studio-v1-task-036-grant-vaults.md). Decisions: [ADR 0058](../adr/0058-grant-vaults-and-connected-apps-on-the-server.md) items 16 to 19, and [ADR 0055](../adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) items 19 and 23.
+Parent: [task 036](studio-v1-task-036-grant-vaults.md). Decisions: [ADR 0058](../adr/0058-grant-vaults-and-connected-apps-on-the-server.md) items 16 to 19, and [ADR 0055](../archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) items 19 and 23.
 Sequence: the second packet of task 036. It depends on 036a.
 
 ## Goal

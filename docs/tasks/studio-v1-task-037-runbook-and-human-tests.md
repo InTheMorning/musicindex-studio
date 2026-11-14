@@ -1,7 +1,7 @@
 # Studio v1 Task 037: The Server Runbook And The Human Tests
 
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), Phase 12, milestone 12d.
-Decisions: [ADR 0055](../adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md), [ADR 0056](../adr/0056-server-sign-in-methods-and-vault-wrappers.md), [ADR 0057](../adr/0057-the-private-network-guard-of-the-server.md), [ADR 0058](../adr/0058-grant-vaults-and-connected-apps-on-the-server.md) and [ADR 0059](../adr/0059-uploads-in-parts-and-the-home-screen-app.md).
+Decisions: [ADR 0055](../archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md), [ADR 0056](../adr/0056-server-sign-in-methods-and-vault-wrappers.md), [ADR 0057](../adr/0057-the-private-network-guard-of-the-server.md), [ADR 0058](../adr/0058-grant-vaults-and-connected-apps-on-the-server.md) and [ADR 0059](../adr/0059-uploads-in-parts-and-the-home-screen-app.md).
 Sequence: after tasks 034, 035 and 036.
 
 ## Goal

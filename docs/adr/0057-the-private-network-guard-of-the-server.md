@@ -10,7 +10,7 @@
 Studio reads many addresses that a user gives:
 
 - Feed addresses in discovery, image addresses ([ADR 0025](0025-studio-serves-cover-art.md)) and audio addresses ([ADR 0023](0023-web-addresses-and-audio-file-facts.md)).
-- Downloads ([ADR 0038](0038-published-feeds-downloads-folder-scan-and-feed-moves.md)).
+- Downloads ([ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md)).
 - Relays, Blossom servers, S3 endpoints and SFTP hosts.
 
 On a server, a user could thus make the server read an address in its own network. Examples are a cloud metadata address and an internal service. Earlier ADRs leave the refusal of these addresses to the Server Shell phase.

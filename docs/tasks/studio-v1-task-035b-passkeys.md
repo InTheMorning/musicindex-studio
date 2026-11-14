@@ -1,6 +1,6 @@
 # Studio v1 Task 035b: Passkeys With PRF
 
-Parent: [task 035](studio-v1-task-035-phone.md). Decisions: [ADR 0056](../adr/0056-server-sign-in-methods-and-vault-wrappers.md) items 2, 3, 5 and 20 to 27, and [ADR 0055](../adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md).
+Parent: [task 035](studio-v1-task-035-phone.md). Decisions: [ADR 0056](../adr/0056-server-sign-in-methods-and-vault-wrappers.md) items 2, 3, 5 and 20 to 27, and [ADR 0055](../archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md).
 Sequence: the third packet of task 035. It depends on 035a and 035g.
 
 ## Goal

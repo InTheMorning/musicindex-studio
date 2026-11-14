@@ -1,6 +1,6 @@
 # Studio v1 Task 031b: The Announcements In The Diff And The Write
 
-Parent: [task 031](studio-v1-task-031-announce.md). Decisions: [ADR 0052](../adr/0052-announcements-through-the-podcast-index-hub.md) items 7 to 13, [ADR 0021](../adr/0021-public-address-of-a-feed.md) and [ADR 0038](../adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) item 21.
+Parent: [task 031](studio-v1-task-031-announce.md). Decisions: [ADR 0052](../adr/0052-announcements-through-the-podcast-index-hub.md) items 7 to 13, [ADR 0021](../adr/0021-public-address-of-a-feed.md) and [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) item 21.
 Sequence: the second packet of task 031. It depends on 031a.
 
 ## Goal

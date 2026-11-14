@@ -1,6 +1,6 @@
 # Studio v1 Task 023h: The Feed XML Move UI
 
-Parent: [task 023](studio-v1-task-023-release-library-7b.md). Decisions: [ADR 0038](../adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) items 16 to 21, [ADR 0037](../adr/0037-button-roles.md).
+Parent: [task 023](studio-v1-task-023-release-library-7b.md). Decisions: [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) items 16 to 21, [ADR 0037](../adr/0037-button-roles.md).
 Sequence: after [task 023f](studio-v1-task-023f-folder-scan-ui.md) and [task 023g](studio-v1-task-023g-feed-xml-move.md). It is the last packet of task 023.
 
 ## Goal

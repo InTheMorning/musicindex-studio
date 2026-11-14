@@ -145,6 +145,30 @@ pub fn read_removal(guid: Option<&str>, reads: &dyn IndexReads) -> IndexRemoval 
     }
 }
 
+/// Refuse a delete while Music Index may hold the feed.
+///
+/// # Errors
+///
+/// Gives [`PipelineErrorKind::IndexHoldsFeed`] unless Music Index removed the feed.
+pub fn ensure_index_removed(removal: &IndexRemoval) -> Result<(), PipelineError> {
+    let next_step = match removal {
+        IndexRemoval::Removed => return Ok(()),
+        IndexRemoval::NotYet => "retire the feed and wait until Music Index removes the entry",
+        IndexRemoval::HeldWithOtherGuid { .. } => {
+            "retire the feed that has the new GUID in Music Index"
+        }
+        IndexRemoval::NotKnownFailed { .. } => {
+            "restore access to Music Index and check the feed again"
+        }
+        IndexRemoval::NotKnownNoGuid => "add a GUID and check the feed in Music Index",
+        IndexRemoval::NotRead => "check the feed in Music Index",
+    };
+    Err(PipelineError::new(
+        PipelineErrorKind::IndexHoldsFeed,
+        format!("ADR 0200 item 6: Music Index may hold this feed. To continue, {next_step}."),
+    ))
+}
+
 /// Join the facts and the read into the state.
 #[must_use]
 pub fn retire_state(facts: &RetireFacts, removal: IndexRemoval) -> RetireState {
@@ -238,4 +262,31 @@ pub fn delete_names(
         confirm_text,
         publishers,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ensure_index_removed_accepts_only_removed() {
+        assert!(ensure_index_removed(&IndexRemoval::Removed).is_ok());
+        let held = [
+            IndexRemoval::NotYet,
+            IndexRemoval::HeldWithOtherGuid {
+                new_guid: "new-guid".to_owned(),
+            },
+            IndexRemoval::NotKnownFailed {
+                address: "https://index.example/feed".to_owned(),
+            },
+            IndexRemoval::NotKnownNoGuid,
+            IndexRemoval::NotRead,
+        ];
+        for removal in held {
+            let error = ensure_index_removed(&removal).unwrap_err();
+            assert_eq!(error.kind(), PipelineErrorKind::IndexHoldsFeed);
+            assert!(error.to_string().starts_with("ADR 0200 item 6:"));
+            assert!(error.to_string().contains("To continue,"));
+        }
+    }
 }

@@ -181,26 +181,69 @@ async fn approve_and_write(app: &App, id: i64, diff: &Value) {
 }
 
 #[tokio::test]
-async fn only_the_retire_state_route_reads_the_index_and_it_reads_once() {
+async fn the_retire_state_and_delete_draft_read_the_index_once() {
     let index = CountingIndex::start(404, "{}");
     let (app, id) = app_with(&index.url(), &feed_xml("Album", &guid_tag())).await;
     let base = format!("/api/v1/feeds/{id}");
     let other_routes = [
         ("POST", format!("{base}/retire"), None),
         ("DELETE", format!("{base}/retire"), None),
-        ("POST", format!("{base}/delete/draft"), Some(json!({}))),
         ("POST", format!("{base}/delete/restore"), None),
         ("GET", format!("{base}/diff"), None),
         ("GET", format!("{base}/check"), None),
     ];
     for (method, path, body) in other_routes {
         let _ = call(&app, method, &path, body).await;
-        assert_eq!(index.requests(), 0, "{method} {path} sent an index read");
+        assert_eq!(
+            index.requests(),
+            0,
+            "ADR 0200 item 7: {method} {path} sent an index read"
+        );
     }
+    let _ = call(&app, "DELETE", &format!("{base}/draft"), None).await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("{base}/delete/draft"),
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(index.requests(), 1, "ADR 0200 item 7");
     let answer = state(&app, id).await;
-    assert_eq!(index.requests(), 1, "ADR 0131 item 6");
+    assert_eq!(index.requests(), 2, "ADR 0200 item 7");
     assert_eq!(answer["removal"]["answer"], "removed");
     assert_eq!(answer["removal_done"], true);
+}
+
+#[tokio::test]
+async fn delete_draft_refuses_a_held_feed_and_a_failed_index_read() {
+    // Before the guard, the held-feed case started a draft and returned 200.
+    let index = CountingIndex::start(
+        200,
+        r#"{"data":{"feed_url":"https://music.example/a.xml"}}"#,
+    );
+    let (app, id) = app_with(&index.url(), &feed_xml("Album", &guid_tag())).await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/delete/draft"),
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["error"]["code"], "index_holds_feed");
+
+    let (app, id) = app_with("http://127.0.0.1:9", &feed_xml("Album", &guid_tag())).await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/delete/draft"),
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["error"]["code"], "index_holds_feed");
 }
 
 #[tokio::test]

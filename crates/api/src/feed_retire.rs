@@ -3,9 +3,8 @@
 //! write nothing on a host. The write is the usual write route with the ID of
 //! the diff that the user approved (ADR 0007).
 //!
-//! Only the route of the retire state sends a request to the index. It reads
-//! with no lock of the workspace (ADR 0015): the route takes the facts under
-//! the lock, releases it, reads, and then answers.
+//! Two routes send a request to the index (ADR 0200 item 7). Each reads with
+//! no lock of the workspace (ADR 0015).
 
 use axum::Json;
 use axum::extract::{Path, State};
@@ -72,8 +71,17 @@ pub(crate) async fn delete_draft(
     Path(id): Path<i64>,
     Json(body): Json<SentDelete>,
 ) -> ApiResult {
+    let id = FeedId(id);
+    let (guid, index) = blocking(shared.clone(), move |w| {
+        let library = w.library()?;
+        let facts = feed_retire::retire_facts(&w.collection, &library, id)?;
+        Ok((facts.guid, w.index.clone()))
+    })
+    .await?;
+    let removal =
+        blocking_unlocked(move || Ok(feed_retire::read_removal(guid.as_deref(), &index))).await?;
+    feed_retire::ensure_index_removed(&removal)?;
     blocking(shared, move |w| {
-        let id = FeedId(id);
         writer_check(w, id)?;
         let hosts = w.hosts()?;
         let library = w.library()?;

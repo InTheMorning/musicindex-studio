@@ -1,14 +1,25 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DELETE_CHOICES, deleteButtonEnabled, deleteWrite, retireSteps, operationNote } from '../ui/feeddelete.js';
+import { deleteChoices, deleteButtonEnabled, deleteWrite, retireSteps, operationNote } from '../ui/feeddelete.js';
 import { readFileSync } from 'node:fs';
 
-test('the first sheet orders its choices and marks only the last choice destructive', () => {
-  assert.deepEqual(DELETE_CHOICES.map(({ title, destructive }) => [title, destructive]), [
+test('the first sheet adds delete only after Music Index removes the entry', () => {
+  const all = deleteChoices({ removal_done: true });
+  assert.deepEqual(all.map(({ title, destructive }) => [title, destructive]), [
     ['Move It to a Different File Host', false],
     ['Retire It', false],
     ['Delete the File Only', true],
-  ]);
+  ], 'ADR 0200 item 4: with removal_done, the sheet has three rows and only the last is destructive. Fix deleteChoices in crates/api/ui/feeddelete.js.');
+  assert.equal(all[1].recommended, true, 'ADR 0200 item 4: Retire It keeps its tag with three rows. Fix deleteChoices in crates/api/ui/feeddelete.js.');
+  for (const value of [null, { removal_done: false }, ...[
+    'not_yet', 'held_with_other_guid', 'not_known_failed', 'not_known_no_guid', 'not_read',
+  ].map((answer) => ({ removal_done: false, removal: { answer } }))]) {
+    const choices = deleteChoices(value);
+    assert.deepEqual(choices.map(({ title }) => title), ['Move It to a Different File Host', 'Retire It'],
+      'ADR 0200 items 2 and 3: a feed that Music Index may hold has no delete row. Fix deleteChoices in crates/api/ui/feeddelete.js.');
+    assert.ok(choices.every((choice) => !('recommended' in choice)),
+      'ADR 0200 item 2: two rows have no tag. Fix deleteChoices in crates/api/ui/feeddelete.js.');
+  }
 });
 
 const state = (extra = {}) => ({
@@ -22,15 +33,25 @@ test('retire steps show the state of each step', () => {
   assert.equal(steps[2].button, null);
 });
 
-test('step three offers Delete Anyway before removal and Delete the File after removal', () => {
-  assert.equal(retireSteps(state())[2].button, 'Delete Anyway');
+test('step three has no button before removal and offers Delete the File after removal', () => {
+  assert.equal(retireSteps(state())[2].button, null,
+    'ADR 0200 item 5: step 3 has no button before removal_done. Fix retireSteps in crates/api/ui/feeddelete.js.');
   assert.equal(retireSteps(state({ removal: { answer: 'removed' }, removal_done: true }))[2].button, 'Delete the File');
 });
 
-test('step three offers Delete Anyway when Music Index holds a replaced GUID', () => {
+test('step three has no button when Music Index holds a replaced GUID', () => {
   const result = retireSteps(state({ removal: { answer: 'held_with_other_guid', new_guid: 'new-guid' } }));
   assert.equal(result[1].text, 'Music Index holds this feed with a different GUID.');
-  assert.equal(result[2].button, 'Delete Anyway');
+  assert.equal(result[2].button, null,
+    'ADR 0200 items 3 and 5: a GUID that Music Index replaced gives no delete. Fix retireSteps in crates/api/ui/feeddelete.js.');
+});
+
+test('the first sheet reads retire state when it opens and maps deleteChoices', () => {
+  const editor = readFileSync(new URL('../ui/editor.js', import.meta.url), 'utf8');
+  assert.ok(editor.includes('api(`/feeds/${feed.id}/retire/state`, { method: \'POST\' })'),
+    'ADR 0200 item 4: the sheet reads the retire state when it opens. Fix FeedDelete in crates/api/ui/editor.js.');
+  assert.ok(editor.includes('${deleteChoices(deleteState).map('),
+    'ADR 0200 item 4: the sheet maps deleteChoices. Fix FeedDelete in crates/api/ui/editor.js.');
 });
 
 test('the final button waits for an exact, nonempty confirmation', () => {

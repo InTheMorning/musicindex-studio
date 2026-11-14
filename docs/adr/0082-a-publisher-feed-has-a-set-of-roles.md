@@ -8,19 +8,20 @@
 - Changed by: [ADR 0083](0083-hosting-is-a-first-class-role.md) gives the sequence of musicindex ADR 0036 to item 1. It adds "Hosting" to the menu of item 7 and to the form of item 9.
 - Changed by: [ADR 0084](0084-the-label-of-a-feed-lists-each-role.md) replaces the label of item 6. The label lists each role.
 - Changed by: [ADR 0087](0087-the-two-sides-of-a-link-confirm-a-role.md) also fills the dot when the two sides of a link give the first role (items 5 and 6).
-- Uses: musicindex ADR 0067 item 82 (`rel` is a set of role words), musicindex ADR 0012 items 5 and 8 (the sequence and the color of the roles, and the hollow dot), musicindex ADR 0033 R-WORD-3 and musicindex ADR 0035 R-WORD-6 (the label).
+- Uses: musicindex ADR 0067 item 82 (`rel` is a set of role words), musicindex ADR 0036 R-ROLE-1 (the sequence of the roles), musicindex ADR 0067 item 43 (the color of the roles) and items 47 to 49 (the hollow dot), musicindex ADR 0033 R-WORD-3 and musicindex ADR 0035 R-WORD-6 (the label).
 - Revised: 2026-11-14. musicindex ADR 0067 item 82 replaces musicindex ADR 0011 item 1. The citations name the new item. No rule changes.
+- Revised: 2026-11-14. musicindex ADR 0036 R-ROLE-1 replaced the role sequence of musicindex ADR 0012 item 5, and ADR 0083 applied it to item 1. The citations and the Context name R-ROLE-1 and ADR 0067. No rule changes.
 
 ## Context
 
 - On 2026-10-29 the operator opened the artist feed "HeyCitizen" in a local Studio. Each release link of the feed has `rel="artist host author label producer"`.
 - `publisher::inferred_role` read `rel` as one word. It found no role, and the collection recorded none. Thus the page showed "Feed" with a hollow dot. On `studio.musicindex.org` the same feed showed "Artist". The operator selected the role there on an earlier date.
 - The collection kept one role, `artist` or `label`, in the column `publisher_role`. The type label used only that recorded role.
-- musicindex ADR 0012 item 5 gives eight roles with a color of their own: artist, label, host, author, producer, network, hosting, sponsor.
+- musicindex ADR 0036 R-ROLE-1 gives eight roles in this sequence: artist, label, hosting, producer, host, author, network, sponsor. musicindex ADR 0067 item 39 gives each role a color of its own.
 
 ## Decision
 
-1. A publisher feed has a set of roles from the eight roles of musicindex ADR 0012 item 5. Studio keeps the set in the sequence of that item.
+1. A publisher feed has a set of roles from the eight roles of musicindex ADR 0036 R-ROLE-1. Studio keeps the set in the sequence of that rule.
 2. The collection keeps the set of each publisher feed, and a state: inferred or confirmed.
 3. Studio reads `rel` as musicindex ADR 0067 item 82 does: a value with a comma is a comma list, and each other value is a list separated by white space. Each word is lowercased. A word that is not one of the eight roles is not recorded.
 4. When Studio reads a publisher feed that has no confirmed set, it records an inferred set: each role that the `rel` of a channel `remoteItem` with `medium="music"` gives.
@@ -44,4 +45,4 @@
 
 ## Invariants
 
-- A link writes the roles of its set in the sequence of musicindex ADR 0012 item 5.
+- A link writes the roles of its set in the sequence of musicindex ADR 0036 R-ROLE-1.

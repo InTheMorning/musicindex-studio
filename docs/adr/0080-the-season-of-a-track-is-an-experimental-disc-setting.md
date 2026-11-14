@@ -5,7 +5,7 @@
 - Owner: operator
 - Accepted: 2026-10-29 by the operator.
 - Changes: [ADR 0064](../archive/adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) item 8, the "Season" fields of the "Identity" row.
-- Uses: musicindex ADR 0034 R-EXPERIMENT-1 (the Experimental badge) and musicindex ADR 0025 R-STATUS-1 (the Warning color).
+- Uses: musicindex ADR 0034 R-EXPERIMENT-1 (the Experimental badge) and musicindex ADR 0068 R-STATUS-1 (the Warning color).
 
 ## Context
 
@@ -20,7 +20,7 @@
 2. Below them, a collapsed entry "Disc" has the Experimental badge of musicindex ADR 0034. It holds the fields "Disc number" and "Disc name".
 3. The entry gives this hint: "Studio writes this as `podcast:season`. The Podcasting 2.0 namespace defines it for the seasons of a podcast, so apps can show it as a season."
 4. The fields write `podcast:season` and its `name`, as before. The core does not change. A read and a write with no edit give the same bytes.
-5. The UI has the token `--warning` with the Warning text color of musicindex ADR 0025 R-STATUS-1: `#ff9f0a` in the dark theme and `#a05a00` in the light theme.
+5. The UI has the token `--warning` with the Warning text color of musicindex ADR 0068 R-STATUS-1: `#ff9f0a` in the dark theme and `#a05a00` in the light theme.
 
 ## Alternatives Considered
 

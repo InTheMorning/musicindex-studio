@@ -5,7 +5,7 @@
 - Owner: operator
 - Accepted: 2026-11-12 by the operator, through the questionnaire, in the human check of ADR 0184. The operator selected one podping of the address before the move.
 - Technical choices: items 2, 5 and 6 are choices of the planning model. Item 6 corrects a defect of the human check of 2026-11-12.
-- Revised: 2026-11-12 by the operator, through the questionnaire, in the human check of this record. Item 7 adds a status tag to the line. The operator selected the tag with a ring. The planning model selected the Success color of musicindex ADR 0025 R-STATUS-1 for the sent tag.
+- Revised: 2026-11-12 by the operator, through the questionnaire, in the human check of this record. Item 7 adds a status tag to the line. The operator selected the tag with a ring. The planning model selected the Success color of musicindex ADR 0068 R-STATUS-1 for the sent tag.
 - Changes: [ADR 0052](../archive/adr/0052-announcements-through-the-podcast-index-hub.md) item 8, the two addresses of a move write.
 - Changes: [ADR 0184](0184-after-a-move-studio-shows-the-podping-of-the-move.md) item 6, one line for each address, and item 10, the address that the button sends.
 - Uses: [ADR 0128](0128-a-moved-feed-names-its-own-address.md) for the tag `itunes:new-feed-url`. Stophammer ADR 0052 for the move of a record in Music Index.
@@ -26,7 +26,7 @@ In the human check of ADR 0184, the notice gave two lines. ADR 0184 item 10 made
 4. The button of ADR 0184 item 7 puts one announcement of that address into the queue of ADR 0052. The rules of the queue apply.
 5. An announcement of the new address that an earlier write put in the queue stays in the queue. The notice does not show it.
 6. While the line of item 3 waits, the notice loads its state again some seconds after the send time. **Read Again** also loads the notice again. Thus the line shows the sent state with no new page.
-7. The line starts with a status tag before the address. The tag gives the state and the time. A waiting tag is orange, with a turning ring. A sent tag is green, with a check. A failed tag has the danger color. The ring stops with Reduce Motion (musicindex ADR 0026 R-LOADING-1). The word in the tag gives the state, so the color is not the only sign (musicindex ADR 0025 R-STATUS-1).
+7. The line starts with a status tag before the address. The tag gives the state and the time. A waiting tag is orange, with a turning ring. A sent tag is green, with a check. A failed tag has the danger color. The ring stops with Reduce Motion (musicindex ADR 0026 R-LOADING-1). The word in the tag gives the state, so the color is not the only sign (musicindex ADR 0068 R-STATUS-1).
 
 ## Alternatives Considered
 

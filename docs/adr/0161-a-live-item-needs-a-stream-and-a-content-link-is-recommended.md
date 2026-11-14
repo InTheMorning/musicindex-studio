@@ -7,7 +7,7 @@
 - Item 9 changed: 2026-11-12, after the human check of ADR 0187. The operator selected a text that gives the next step for a show with no stream type.
 - Changes: [ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md) item 4 and its mechanical check of the content link.
 - Changed by: [ADR 0173](0173-a-live-show-problem-shows-at-its-field.md), A Live Show Problem Shows At Its Field.
-- Uses: the [research request on the live stream](../plans/research-live-item-stream-request.md), musicindex ADR 0025 R-STATUS-1, [ADR 0065](0065-the-core-applies-each-feed-rule.md).
+- Uses: the [research request on the live stream](../plans/research-live-item-stream-request.md), musicindex ADR 0068 R-STATUS-1, [ADR 0065](0065-the-core-applies-each-feed-rule.md).
 
 ## Context
 
@@ -43,7 +43,7 @@ The UI has a copy of the rule of ADR 0054 item 4 in `live.js`. ADR 0065 does not
    The comparison ignores the case of the type and each parameter after `;`. A URL with no extension in the table, for example an Icecast mount `/live`, accepts each type that is not blank.
 4. A live item with no content link gets a warning, not a refusal. The write continues. The warning text is "This show has no content link."
 5. The core gives each problem of a live item with its level, `refusal` or `warning`. Only a refusal stops the write. The refusal stops the write before any change on a host, as ADR 0054 item 4 states.
-6. The draft response gives the problems of the live items as `live_problems`. The live show page shows each problem of its show in the Status section. A refusal uses the Danger color, and a warning uses the Warning color of musicindex ADR 0025 R-STATUS-1. The UI keeps no copy of the rule (ADR 0065), and the function `liveProblems` of `live.js` goes.
+6. The draft response gives the problems of the live items as `live_problems`. The live show page shows each problem of its show in the Status section. A refusal uses the Danger color, and a warning uses the Warning color of musicindex ADR 0068 R-STATUS-1. The UI keeps no copy of the rule (ADR 0065), and the function `liveProblems` of `live.js` goes.
 7. A granted write uses the same check, because it goes through the same write. A show with no stream gets no granted write until the user adds a stream and writes the feed.
 8. A read of a hosted feed does not change. Studio reads and shows a live item with each problem. The check runs only at a write.
 9. The texts of the refusals are "This show has no stream address.", "Choose a stream type, or click Check to get the type from the stream server." and "The stream type TYPE does not agree with the stream address, which ends in .EXT.".

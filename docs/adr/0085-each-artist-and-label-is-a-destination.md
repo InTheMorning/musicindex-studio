@@ -8,7 +8,7 @@
 - Changed by: [ADR 0088](0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md), The Left Panel Shows The Levels Of The Publisher Feeds. It shows only the top feeds at level 0, with role headings, and gives each feed a level (items 1 and 3). It leaves the feeds above and below out of the note of item 5.
 - Changed by: [ADR 0089](0089-the-left-panel-shows-the-art-of-each-publisher-feed.md), The Left Panel Shows The Art Of Each Publisher Feed. It shows the art of the feed in the row of item 1, with the dot on the art.
 - Changed by: [ADR 0090](0090-studio-names-the-feeds-that-it-does-not-edit.md), Studio Names The Feeds That It Does Not Edit. It keeps each feed that is not an album or a playlist out of Releases and "Not linked" (items 3 and 6), and adds "Other feeds".
-- Uses: musicindex ADR 0027 R-SHELL-1 items 1 and 2, R-LIST-1, musicindex ADR 0030 R-SHELL-2 item 2 and musicindex ADR 0037 R-WORD-7.
+- Uses: musicindex ADR 0069 R-SHELL-1 items 1 and 2, R-LIST-1, musicindex ADR 0069 R-SHELL-2 item 2 and musicindex ADR 0037 R-WORD-7.
 
 ## Context
 
@@ -25,7 +25,7 @@
 4. A destination is a list page with the title of the feed. Its head shows the label of ADR 0084, with each role, and the button "Open the feed". Its sorts are "Feed order", the default, then "Newest" and "A to Z". "Feed order" is the sequence of item 2. "Not linked" has the sorts of Releases, and no "Open the feed".
 5. A release of more than one publisher feed shows on the page of each feed. On each page, a line names the other feeds, for example "Also on Some Label".
 6. Releases lists each album and each playlist. A publisher feed opens from its destination, not from a row of Releases.
-7. At 760 px or less, the root page shows the destinations of item 1 below Releases. A destination opens as a page of the root (musicindex ADR 0030 R-SHELL-2 item 2).
+7. At 760 px or less, the root page shows the destinations of item 1 below Releases. A destination opens as a page of the root (musicindex ADR 0069 R-SHELL-2 item 2).
 8. A destination keeps its sort in the navigation record of the session. The address keeps only the sort and the view of Releases (ADR 0039 item 2a).
 
 ## Alternatives Considered

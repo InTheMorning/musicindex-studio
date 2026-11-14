@@ -37,7 +37,7 @@ In Studio, a closed fold, such as "Payees with no person · 10" on the People pa
 Mechanical:
 
 - A Node test of the fold model gives the text, the count and the open condition of a fold header.
-- A browser drive reads the computed style of each fold header of item 2. The text has the body size and no capitals. The height is the target of musicindex ADR 0024 R-TARGET-1 or more.
+- A browser drive reads the computed style of each fold header of item 2. The text has the body size and no capitals. The height is the target of musicindex ADR 0068 R-TARGET-1 or more.
 - A browser drive presses Enter with no selected row in a field of ADR 0154. The list closes and the results show.
 
 Visual, by the agent: the People page, a feed page and a sheet with folds, closed and open. The screenshots use the light and the dark theme, at the desktop width and at 390 px.

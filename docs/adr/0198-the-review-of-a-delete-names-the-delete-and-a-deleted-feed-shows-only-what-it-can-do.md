@@ -6,7 +6,7 @@
 - Accepted: 2026-11-14 by the operator, through the questionnaire about the findings of the human test of 0.1.0-rc.22. The operator selected "Destructive" for finding 5, "in the last write" for finding 6a and "Hide them" for finding 6b.
 - Technical choices: the planning model selected the label of item 1 for one file, and items 3, 5, 7 and 8.
 - Changes: [ADR 0131](0131-delete-a-feed-from-its-file-host.md) items 8 and 12 for a feed with a done delete.
-- Uses: [ADR 0193](0193-a-destructive-button-is-the-first-button-of-its-row.md) items 1 and 4, and musicindex ADR 0020 R-ACT-3 items 1 and 3.
+- Uses: [ADR 0193](0193-a-destructive-button-is-the-first-button-of-its-row.md) items 1 and 4, and musicindex ADR 0069 R-ACT-3 items 1 and 3.
 - Source: finding 5 and finding 6 of the [human test findings of 0.1.0-rc.22](../reviews/2026-11-13-rc22-human-test-findings.md).
 
 ## Context

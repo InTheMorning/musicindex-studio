@@ -45,7 +45,7 @@ Musicindex ADR 0064 gives the rule for each app of the ecosystem. The destructiv
 
 ### Out Of Scope
 
-- A menu keeps musicindex ADR 0020 R-ACT-3 item 2: the destructive item is the last item, after a divider.
+- A menu keeps musicindex ADR 0069 R-ACT-3 item 2: the destructive item is the last item, after a divider.
 - The native quit dialog of the desktop app (ADR 0124 item 18) has no destructive button in a row of the web UI. It does not change.
 
 ## Alternatives Considered

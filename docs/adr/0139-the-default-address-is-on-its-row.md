@@ -14,7 +14,7 @@ The page of a person had a select menu "Default address" above the rows of the s
 ## Decision
 
 1. The section "Payment" has no select menu for the default address.
-2. The row of the default address has the tag "Default" directly after its title, with a check icon, in the accent color and with the radius of a badge (musicindex ADR 0024).
+2. The row of the default address has the tag "Default" directly after its title, with a check icon, in the accent color and with the radius of a badge (musicindex ADR 0068).
 3. Each other row has the button "Make Default", with the role action of ADR 0037.
 4. The button makes a pending change. "Save" keeps it and "Discard" removes it, as ADR 0116 gives. The row of a pending default has the pending mark.
 5. A text above the wallets tells that "Add a Recipient" uses the default address.

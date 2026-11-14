@@ -7,7 +7,7 @@
 - Changed by: [ADR 0099](../archive/adr/0099-the-people-destination-and-the-page-of-a-person.md). Item 1: the first destination of the bottom group is "People", with the icon `users`.
 - Changes: [ADR 0039](../archive/adr/0039-the-shell-releases-and-the-outline.md) items 1, 5 and 11, for the name "Hosts" and for the marker of a destination.
 - Changes: [ADR 0091](../archive/adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md) item 1 uses the name of this record.
-- Uses: musicindex ADR 0022 (the shared Lucide icons), musicindex ADR 0025 R-ICON-1 (the icon size), musicindex ADR 0032 R-DOT-1 (the type dot) and musicindex ADR 0033 R-WORD-3 (the role words).
+- Uses: musicindex ADR 0022 (the shared Lucide icons), musicindex ADR 0068 R-ICON-1 (the icon size), musicindex ADR 0032 R-DOT-1 (the type dot) and musicindex ADR 0033 R-WORD-3 (the role words).
 
 ## Context
 
@@ -17,7 +17,7 @@
 - The other destination rows have no marker.
 - v4vmm shows a monochrome Lucide icon on each destination of its sidebar. The icon of the current destination has the accent color (`src/ui/shells/library/sidebar.rs` in `../v4vmm`).
 - Studio already draws the Lucide paths of `chevron-left` and `chevron-right` inline (`Chevron` in `app.js`). `musicindex-assets/icons/lucide/` has `library`, `wallet`, `hard-drive`, `settings` and `lock`. It has no `lock-open`.
-- On the gloss fill of the current row, accent text has a contrast of 3.6:1 to 4.1:1 in the dark theme, and 4.2:1 to 4.7:1 in the light theme. The values come from the screenshots of task 056a on 2026-10-30. Text needs 4.5:1, and an icon needs 3:1 (musicindex ADR 0025 R-STATUS-1 note 2).
+- On the gloss fill of the current row, accent text has a contrast of 3.6:1 to 4.1:1 in the dark theme, and 4.2:1 to 4.7:1 in the light theme. The values come from the screenshots of task 056a on 2026-10-30. Text needs 4.5:1, and an icon needs 3:1 (musicindex ADR 0068 R-STATUS-1 note 2).
 - The S3 form uses the word "provider" for the company that gives the bucket, for example AWS or Cloudflare.
 - The operator selected this decision from two questionnaires on 2026-10-30. The operator examined the names "Storage" and "Providers", and did not select them.
 
@@ -44,7 +44,7 @@
    | Unlock Studio | `lock-open` |
 
 6. A row of a publisher feed shows its art, not an icon ([ADR 0089](0089-the-left-panel-shows-the-art-of-each-publisher-feed.md)).
-7. Studio draws each icon inline, with the path of its Lucide icon and `currentColor`. The icon has the line height of the row text (musicindex ADR 0025 R-ICON-1 item 1) and a stroke of 2 (item 3). The icon has `aria-hidden="true"`, and the label gives the accessible name.
+7. Studio draws each icon inline, with the path of its Lucide icon and `currentColor`. The icon has the line height of the row text (musicindex ADR 0068 R-ICON-1 item 1) and a stroke of 2 (item 3). The icon has `aria-hidden="true"`, and the label gives the accessible name.
 8. The icon of the current destination has the accent color. Its label keeps the text color, because accent text on the gloss fill has less than 4.5:1. The icon of each other destination has the color of its label.
 9. No destination row shows a type dot.
 10. `lock-open` comes into `musicindex-assets/icons/lucide/` in a commit of that repository, before the Studio commit that uses it (musicindex ADR 0022).

@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-11-06
 - Owner: operator
-- Uses: musicindex ADR 0041 R-SCALE-4, and the UI scale of v4vmm that musicindex ADR 0039 names
+- Uses: musicindex ADR 0068 R-SCALE-4, and the UI scale of v4vmm that musicindex ADR 0068 names
 - Source: [findings of local use, finding 15](../reviews/2026-11-06-local-use-findings.md)
 
 ## Context

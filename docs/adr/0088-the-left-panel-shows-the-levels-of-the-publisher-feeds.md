@@ -8,7 +8,7 @@
 - Changes: [ADR 0085](0085-each-artist-and-label-is-a-destination.md) items 1, 3 and 5.
 - Changes: [ADR 0069](0069-the-outline-head-opens-the-feed-page.md), which makes the first row of each outline "‹ Releases".
 - Uses: Stophammer ADR 0069 §4 (`co_credited_feeds`) and §"A direct link between a label feed and an artist feed".
-- Open: no shared musicindex ADR owns the levels. musicindex ADR 0030 R-SHELL-2 item 3 gives the stack "the root, a list, the outline of an item, then one part of the item". This record adds levels between the root and the outline. The operator decided to write the Studio record first.
+- Open: no shared musicindex ADR owns the levels. musicindex ADR 0069 R-SHELL-2 item 3 gives the stack "the root, a list, the outline of an item, then one part of the item". This record adds levels between the root and the outline. The operator decided to write the Studio record first.
 - Changed by: [ADR 0181](0181-a-level-shows-the-state-of-its-own-feed.md). Item 5: the content area of a level shows the feed of the level as the first tile.
 - Changed by: [ADR 0089](0089-the-left-panel-shows-the-art-of-each-publisher-feed.md) item 5: each feed of a level shows its art, with the dot on the art.
 - Changed by: [ADR 0090](0090-studio-names-the-feeds-that-it-does-not-edit.md) item 4: a publisher feed with no role is in the heading "No role".

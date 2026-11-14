@@ -45,7 +45,7 @@ The read-only feed also shows **Stop Retiring** and **Link to This Page**. Each 
 ## Consequences
 
 - The user sees in the button what the write deletes.
-- A deleted feed shows only **Check Again** and **Restore the Hosted Copy…** as actions of the Retire block.
+- A deleted feed shows only **Check Again** as an action of the Retire block. A write to the same address brings the file back (ADR 0131 item 14).
 - The feed row of the API has one more field.
 
 ## How This Decision Is Checked

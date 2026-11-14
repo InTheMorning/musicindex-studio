@@ -386,3 +386,64 @@ async fn the_option_adds_the_files_of_the_release_to_the_deletes() {
         .collect();
     assert_eq!(paths, ["one.mp3", "a.xml"], "ADR 0131 items 11 and 12");
 }
+
+#[tokio::test]
+async fn feed_rows_report_a_completed_host_delete() {
+    let index = CountingIndex::start(404, "{}");
+    let (app, deleted_id) = app_with(&index.url(), &feed_xml("Album", &guid_tag())).await;
+    let (_, connectors) = call(&app, "GET", "/api/v1/connectors", None).await;
+    let host = connectors[0]["id"].as_i64().unwrap();
+    let other_id = add_paid_feed(&app, host, "other.xml", &feed_xml("Other", "")).await;
+
+    let (status, draft) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{deleted_id}/delete/draft"),
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0198 item 7: start the feed delete. Fix the delete draft route. {draft}"
+    );
+    let (status, written) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{deleted_id}/write"),
+        Some(json!({ "diff_id": draft["id"] })),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0198 item 7: finish the feed delete. Fix the write route. {written}"
+    );
+
+    let (status, rows) = call(&app, "GET", "/api/v1/feeds", None).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0198 item 7: return the feed list. Fix GET /feeds."
+    );
+    let listed_deleted = rows
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["id"] == deleted_id)
+        .unwrap();
+    let listed_other = rows
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["id"] == other_id)
+        .unwrap();
+    assert_eq!(
+        listed_deleted["host_deleted"], true,
+        "ADR 0198 item 7: include the delete state in the feed list. Add it to FeedRow JSON."
+    );
+    assert_eq!(
+        listed_other["host_deleted"], false,
+        "ADR 0198 item 7: mark an undeleted feed as not deleted. Set host_deleted per feed."
+    );
+}

@@ -11,6 +11,7 @@ use studio_core::connector::{
 };
 use studio_core::feed::{Enclosure, Entry, Item};
 use studio_core::feed_delete::{self, StayReason};
+use studio_core::feed_retire::{self, RetireAsk};
 use studio_core::inventory::{self, Hosts};
 use studio_core::library::Library;
 use studio_core::move_link::ScriptedReader;
@@ -247,6 +248,46 @@ fn a_delete_needs_an_approved_diff_keeps_a_snapshot_and_removes_only_the_feed_fi
     assert_eq!(e.collection.snapshots(feed).unwrap().len(), snapshots + 1);
     assert!(e.collection.draft(feed).unwrap().is_none());
     assert!(!e.collection.has_draft_feed_delete(feed).unwrap());
+}
+
+#[test]
+fn a_deleted_hidden_feed_opens_read_only_and_counts_its_hide_as_written() {
+    let (mut e, feed) = setup();
+    pipeline::start_draft(&e.collection, e.connector.as_ref(), feed).unwrap();
+    feed_retire::set_retire(&e.collection, feed, true).unwrap();
+    let diff = pipeline::diff(&e.collection, &e.hosts, &e.library, feed).unwrap();
+    write(&mut e, feed, &diff.id).unwrap();
+    let deletion =
+        feed_delete::start_delete_draft(&e.collection, &e.hosts, &e.library, feed, false).unwrap();
+    write(&mut e, feed, &deletion.diff.id).unwrap();
+
+    pipeline::start_public_draft(&e.collection, &e.library, feed).unwrap();
+    assert!(
+        e.collection.feed(feed).unwrap().connector_id.is_none(),
+        "ADR 0131 item 14: a deleted feed stays read-only when it opens from its snapshot."
+    );
+    let facts = feed_retire::retire_facts(&e.collection, &e.library, feed).unwrap();
+    assert_eq!(
+        facts.ask,
+        RetireAsk::Written,
+        "ADR 0198 item 5: the snapshot of a done delete is the last write. Give Written when it hides the feed."
+    );
+}
+
+#[test]
+fn a_deleted_visible_feed_does_not_count_as_written_cleared() {
+    let (mut e, feed) = setup();
+    let deletion =
+        feed_delete::start_delete_draft(&e.collection, &e.hosts, &e.library, feed, false).unwrap();
+    write(&mut e, feed, &deletion.diff.id).unwrap();
+
+    pipeline::start_public_draft(&e.collection, &e.library, feed).unwrap();
+    let facts = feed_retire::retire_facts(&e.collection, &e.library, feed).unwrap();
+    assert_eq!(
+        facts.ask,
+        RetireAsk::No,
+        "ADR 0198 item 5: a done delete with a visible snapshot keeps No. Do not give WrittenCleared."
+    );
 }
 
 #[test]

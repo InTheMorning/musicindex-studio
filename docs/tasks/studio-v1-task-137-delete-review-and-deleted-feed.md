@@ -2,7 +2,18 @@
 
 Decision: [ADR 0198](../adr/0198-the-review-of-a-delete-names-the-delete-and-a-deleted-feed-shows-only-what-it-can-do.md).
 
-Status: Open.
+Status: Complete on 2026-11-14. The human check of ADR 0198 is open.
+
+## Result
+
+- `deleteWrite` in `feeddelete.js` counts each operation of kind `delete` when one operation has `deletes_feed_file`. The review footer shows the destructive write button first and **Cancel the Delete** in the usual style. A review with no delete keeps its footer.
+- `retire_facts` gives `Written` only for a done delete with a hidden draft. A done delete with a visible draft keeps `No`.
+- The feed row has `host_deleted`. The feed list gets it with one query. `FeedDelete` hides **Stop Retiring**, and `ArtistsAndLabels` hides the link controls for such a feed.
+- The main session added a correction of finding 6 of the rc.22 test. The Retire block did not read its state again after a write, so it still offered **Delete the File** after the delete. The effect now also depends on `last_version` and `host_deleted`. Only the answer of the last request sets the state, also for **Check Again**.
+- The first run of the delegate added no test, counted only the feed file, and gave `WrittenCleared` for a deleted visible feed. A second run corrected these items. The main session removed a route `GET /feeds/{id}` that the second run added with no decision.
+- The independent review found the late answer of the retire state and a core test that did not follow the real path. The main session corrected both. The core test `a_deleted_hidden_feed_opens_read_only_and_counts_its_hide_as_written` fails on the code before the change.
+- Walk: `setup-137.py` with `steps-137-{light,dark}.json`. The setup serves the feeds folder on a local port, because the check after a write cannot read `music.example` in the sandbox. The walk data has no audio file on the host, so the screenshots show **Delete the Feed File**. The Node test covers **Delete N Files**. At 1280 px light and 390 px dark, the destructive button is at the left edge and **Cancel the Delete** at the right edge. After the delete, step 1 says "Hide from apps is on in the last write.", step 3 is done, **Check Again** is the only action, and the link select menu is not on the page. `$edges()` and `$overflow()` give no item.
+- Open observation: directly after the write of the retire, step 1 still said "in the draft" in the walk. Its cause is not known yet.
 
 ## Goal
 

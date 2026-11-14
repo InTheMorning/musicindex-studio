@@ -30,6 +30,7 @@ struct Response {
     /// When false, a `HEAD` response has no `Content-Length`, and a `GET`
     /// with a `Range` gets a 206 response with `Content-Range`.
     head_length: bool,
+    delay: std::time::Duration,
 }
 
 type Routes = Arc<Mutex<HashMap<String, Response>>>;
@@ -61,6 +62,7 @@ impl TestServer {
                     body,
                     content_type: None,
                     head_length: true,
+                    delay: std::time::Duration::ZERO,
                 };
                 (path.to_owned(), response)
             })
@@ -96,6 +98,7 @@ impl TestServer {
                         body: b"not found".to_vec(),
                         content_type: None,
                         head_length: true,
+                        delay: std::time::Duration::ZERO,
                     });
                 let _ = stream.write_all(&route.answer(&method, range));
             }
@@ -128,6 +131,21 @@ impl TestServer {
                 body,
                 content_type: None,
                 head_length: true,
+                delay: std::time::Duration::ZERO,
+            },
+        );
+    }
+
+    /// Add a route that waits before it answers.
+    pub fn set_delayed(&self, path: &str, status: u16, body: Vec<u8>, delay: std::time::Duration) {
+        self.put(
+            path,
+            Response {
+                status,
+                body,
+                content_type: None,
+                head_length: true,
+                delay,
             },
         );
     }
@@ -143,6 +161,7 @@ impl TestServer {
                 body,
                 content_type: Some(content_type.to_owned()),
                 head_length,
+                delay: std::time::Duration::ZERO,
             },
         );
     }
@@ -158,6 +177,7 @@ impl TestServer {
 impl Response {
     /// The bytes of the HTTP response to `method`.
     fn answer(&self, method: &str, range: bool) -> Vec<u8> {
+        thread::sleep(self.delay);
         let mut head = String::new();
         let mut status = self.status;
         let mut body = self.body.clone();

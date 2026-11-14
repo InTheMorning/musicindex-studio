@@ -11038,24 +11038,97 @@ async fn a_node_and_its_lightning_address_are_one_recipient() {
     let (app, connector, server) = wallet_app(Some("http")).await;
     let (_, _, address) = wallet_feeds(&app, connector, &server).await;
     let (status, list) = call(&app, "GET", "/api/v1/recipients", None).await;
-    assert_eq!(status, StatusCode::OK, "{list}");
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0201: GET /recipients must return the cached list; inspect the list handler"
+    );
+    assert_eq!(
+        list.as_array().unwrap().len(),
+        2,
+        "ADR 0201: GET /recipients must keep both cached recipient entries"
+    );
+    assert_eq!(
+        collection_of(&app).keysend_lookups().unwrap().len(),
+        0,
+        "ADR 0201: GET /recipients must send no lookup; move requests to POST /recipients/lookups"
+    );
+    let (status, checked) = call(&app, "POST", "/api/v1/recipients/lookups", None).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0201: POST /recipients/lookups must run due lookups; check the route registration"
+    );
+    assert_eq!(
+        checked["checked"], 1,
+        "ADR 0201: the route must count each due address; check the shared recipient list"
+    );
+    let (status, second) = call(&app, "POST", "/api/v1/recipients/lookups", None).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0201: the second lookup call must answer successfully; check the route"
+    );
+    assert_eq!(
+        second,
+        json!({"checked": 0}),
+        "ADR 0201: a fresh result is not due; check due_addresses"
+    );
+    let (status, list) = call(&app, "GET", "/api/v1/recipients", None).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0201: GET /recipients must return the found wallet; inspect the list handler"
+    );
     let list = list.as_array().unwrap();
-    assert_eq!(list.len(), 1, "{list:?}");
-    assert_eq!(list[0]["feeds"], 2);
-    assert_eq!(list[0]["address"], "02abc");
-    assert_eq!(list[0]["custom_key"], "696969");
+    assert_eq!(
+        list.len(),
+        1,
+        "ADR 0201: found recipients must group into one wallet; check group_wallets"
+    );
+    assert_eq!(
+        list[0]["feeds"], 2,
+        "ADR 0201: the found wallet must keep both feeds; preserve list aggregation"
+    );
+    assert_eq!(
+        list[0]["address"], "02abc",
+        "ADR 0201: the list must use the found wallet key; check stored lookup results"
+    );
+    assert_eq!(
+        list[0]["custom_key"], "696969",
+        "ADR 0201: the list must keep the wallet custom key; check stored lookup results"
+    );
     let addresses = list[0]["addresses"].as_array().unwrap();
-    assert_eq!(addresses.len(), 2);
-    assert_eq!(addresses[0]["address"], "02abc");
-    assert_eq!(addresses[0]["lookup"], Value::Null);
-    assert_eq!(addresses[1]["address"], address.as_str());
-    assert_eq!(addresses[1]["lookup"], "found");
+    assert_eq!(
+        addresses.len(),
+        2,
+        "ADR 0201: the wallet must keep both address forms; check group_wallets"
+    );
+    assert_eq!(
+        addresses[0]["address"], "02abc",
+        "ADR 0201: the node address must remain in the list"
+    );
+    assert_eq!(
+        addresses[0]["lookup"],
+        Value::Null,
+        "ADR 0201: node addresses have no lookup result"
+    );
+    assert_eq!(
+        addresses[1]["address"],
+        address.as_str(),
+        "ADR 0201: the Lightning address must remain in the list"
+    );
+    assert_eq!(
+        addresses[1]["lookup"], "found",
+        "ADR 0201: GET /recipients must show the stored lookup result"
+    );
 }
 
 #[tokio::test]
 async fn a_node_address_gives_the_provider_when_two_addresses_share_its_key() {
     let (app, connector, server) = wallet_app(Some("http")).await;
     wallet_feeds(&app, connector, &server).await;
+    call(&app, "POST", "/api/v1/recipients/lookups", None).await;
     let (_, list) = call(&app, "GET", "/api/v1/recipients", None).await;
     let addresses = &list[0]["addresses"];
     assert_eq!(addresses[0]["provider"], Value::Null, "one address: {list}");
@@ -11073,6 +11146,7 @@ async fn a_node_address_gives_the_provider_when_two_addresses_share_its_key() {
         &wallet_feed("gd", "lnaddress", &format!("dan@{domain}"), ""),
     )
     .await;
+    call(&app, "POST", "/api/v1/recipients/lookups", None).await;
     let (_, list) = call(&app, "GET", "/api/v1/recipients", None).await;
     let wallet = list
         .as_array()
@@ -11087,9 +11161,53 @@ async fn a_node_address_gives_the_provider_when_two_addresses_share_its_key() {
 }
 
 #[tokio::test]
+async fn a_people_request_does_not_wait_for_recipient_lookups() {
+    use std::time::{Duration, Instant};
+    let (app, connector, server) = wallet_app(Some("http")).await;
+    server.set_delayed(
+        "/.well-known/keysend/ann",
+        200,
+        WALLET_KEYSEND.as_bytes().to_vec(),
+        Duration::from_secs(2),
+    );
+    wallet_feeds(&app, connector, &server).await;
+    let router = app.router.clone();
+    let lookup = tokio::spawn(async move {
+        router
+            .oneshot(request("POST", "/api/v1/recipients/lookups", None))
+            .await
+            .unwrap()
+    });
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    let started = Instant::now();
+    let (status, _) = call(&app, "GET", "/api/v1/people", None).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0201: GET /people must answer during a lookup; inspect workspace locking"
+    );
+    assert!(
+        started.elapsed() < Duration::from_secs(1),
+        "ADR 0201: GET /people waited for the lookup; move requests to blocking_unlocked"
+    );
+    lookup.await.unwrap();
+}
+
+#[tokio::test]
 async fn with_no_lookup_scheme_the_same_feeds_give_two_recipients() {
     let (app, connector, server) = wallet_app(None).await;
     wallet_feeds(&app, connector, &server).await;
+    let (lookup_status, checked) = call(&app, "POST", "/api/v1/recipients/lookups", None).await;
+    assert_eq!(
+        lookup_status,
+        StatusCode::OK,
+        "ADR 0201: the lookup route must answer without a scheme; check its no-scheme path"
+    );
+    assert_eq!(
+        checked,
+        json!({"checked": 0}),
+        "ADR 0201: no lookup scheme means no requests"
+    );
     let (status, list) = call(&app, "GET", "/api/v1/recipients", None).await;
     assert_eq!(status, StatusCode::OK, "{list}");
     assert_eq!(list.as_array().unwrap().len(), 2, "{list}");
@@ -11101,6 +11219,7 @@ async fn with_no_lookup_scheme_the_same_feeds_give_two_recipients() {
 async fn recipient_uses_and_a_rename_act_on_each_member_of_the_wallet() {
     let (app, connector, server) = wallet_app(Some("http")).await;
     let (node, ln, _) = wallet_feeds(&app, connector, &server).await;
+    call(&app, "POST", "/api/v1/recipients/lookups", None).await;
     call(&app, "GET", "/api/v1/recipients", None).await;
     let (status, uses) = call(
         &app,

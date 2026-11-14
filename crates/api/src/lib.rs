@@ -335,6 +335,7 @@ fn workspace_router_with_shared(workspace: Workspace) -> (Router, WorkspaceHandl
             delete(people::remove_link).put(people::change_link),
         )
         .route("/recipients", get(routes::list_recipients))
+        .route("/recipients/lookups", post(routes::lookup_recipients))
         .route("/recipients/uses", post(routes::recipient_uses))
         .route(
             "/recipients/lnaddress-suggestions",

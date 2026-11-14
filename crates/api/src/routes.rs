@@ -6314,6 +6314,12 @@ pub(crate) async fn held_files(State(shared): State<Shared>) -> ApiResult {
 /// The key of a recipient as a tuple, with empty text for a missing custom
 /// key or custom value.
 type KeyParts = (String, String, String);
+type RecipientFeedSets = HashMap<KeyParts, std::collections::HashSet<FeedId>>;
+type RecipientListInputs = (
+    Vec<studio_core::collection::KnownRecipient>,
+    RecipientFeedSets,
+    std::collections::HashSet<KeyParts>,
+);
 
 fn key_parts(key: &RecipientKey) -> KeyParts {
     let (address, custom_key, custom_value) = key.parts();
@@ -6338,62 +6344,7 @@ fn keysend_map(w: &Workspace) -> Result<HashMap<String, Lookup>, ApiError> {
 /// (ADR 0095 items 1 to 3).
 pub(crate) async fn list_recipients(State(shared): State<Shared>) -> ApiResult {
     blocking(shared, |w| {
-        let mut known = w.collection.known_recipients()?;
-        // The count of feeds comes from the model of each feed, as in
-        // `recipient_uses`. A recipient that only a draft has is added.
-        let mut counts: HashMap<KeyParts, UsedRecipient> = HashMap::new();
-        // An identity that is a fee in one or more feed models. The People
-        // page marks it (the mockups of ADR 0099).
-        let mut fee_identities: std::collections::HashSet<KeyParts> =
-            std::collections::HashSet::new();
-        for (row, feed) in feed_models(w)? {
-            for recipient in recipient_places(&feed).all() {
-                let Some(address) = recipient.address.as_deref().filter(|a| !a.is_empty()) else {
-                    continue;
-                };
-                let identity = (
-                    address.to_owned(),
-                    recipient.custom_key.clone().unwrap_or_default(),
-                    recipient.custom_value.clone().unwrap_or_default(),
-                );
-                if change_set::is_fee(recipient) {
-                    fee_identities.insert(identity.clone());
-                }
-                let used = counts.entry(identity).or_insert_with(|| UsedRecipient {
-                    name: recipient.name.clone(),
-                    recipient_type: recipient.recipient_type.clone(),
-                    feeds: std::collections::HashSet::new(),
-                });
-                used.feeds.insert(row.id);
-            }
-        }
-        let mut feed_sets: HashMap<KeyParts, std::collections::HashSet<FeedId>> = counts
-            .iter()
-            .map(|(identity, used)| (identity.clone(), used.feeds.clone()))
-            .collect();
-        for entry in &mut known {
-            let identity = (
-                entry.address.clone(),
-                entry.custom_key.clone().unwrap_or_default(),
-                entry.custom_value.clone().unwrap_or_default(),
-            );
-            entry.feeds = counts.remove(&identity).map_or(0, |used| used.feeds.len());
-        }
-        for ((address, custom_key, custom_value), used) in counts {
-            known.push(studio_core::collection::KnownRecipient {
-                name: used.name,
-                recipient_type: used.recipient_type,
-                address,
-                custom_key: Some(custom_key).filter(|k| !k.is_empty()),
-                custom_value: Some(custom_value).filter(|v| !v.is_empty()),
-                feeds: used.feeds.len(),
-                saved_id: None,
-            });
-        }
-        if let Some(scheme) = w.keysend_scheme {
-            let addresses: Vec<String> = known.iter().map(|k| k.address.clone()).collect();
-            keysend::refresh(&w.collection, &w.web, scheme, &addresses, now_seconds())?;
-        }
+        let (known, mut feed_sets, fee_identities) = recipient_list_inputs(w)?;
         let lookups = keysend_map(w)?;
         to_json(group_wallets(
             known,
@@ -6401,6 +6352,90 @@ pub(crate) async fn list_recipients(State(shared): State<Shared>) -> ApiResult {
             &fee_identities,
             &lookups,
         ))
+    })
+    .await
+}
+
+/// Build the recipient data shared by the list and lookup routes.
+fn recipient_list_inputs(w: &Workspace) -> Result<RecipientListInputs, ApiError> {
+    let mut known = w.collection.known_recipients()?;
+    // The count of feeds comes from the model of each feed, as in
+    // `recipient_uses`. A recipient that only a draft has is added.
+    let mut counts: HashMap<KeyParts, UsedRecipient> = HashMap::new();
+    // An identity that is a fee in one or more feed models. The People
+    // page marks it (the mockups of ADR 0099).
+    let mut fee_identities: std::collections::HashSet<KeyParts> = std::collections::HashSet::new();
+    for (row, feed) in feed_models(w)? {
+        for recipient in recipient_places(&feed).all() {
+            let Some(address) = recipient.address.as_deref().filter(|a| !a.is_empty()) else {
+                continue;
+            };
+            let identity = (
+                address.to_owned(),
+                recipient.custom_key.clone().unwrap_or_default(),
+                recipient.custom_value.clone().unwrap_or_default(),
+            );
+            if change_set::is_fee(recipient) {
+                fee_identities.insert(identity.clone());
+            }
+            let used = counts.entry(identity).or_insert_with(|| UsedRecipient {
+                name: recipient.name.clone(),
+                recipient_type: recipient.recipient_type.clone(),
+                feeds: std::collections::HashSet::new(),
+            });
+            used.feeds.insert(row.id);
+        }
+    }
+    let feed_sets: HashMap<KeyParts, std::collections::HashSet<FeedId>> = counts
+        .iter()
+        .map(|(identity, used)| (identity.clone(), used.feeds.clone()))
+        .collect();
+    for entry in &mut known {
+        let identity = (
+            entry.address.clone(),
+            entry.custom_key.clone().unwrap_or_default(),
+            entry.custom_value.clone().unwrap_or_default(),
+        );
+        entry.feeds = counts.remove(&identity).map_or(0, |used| used.feeds.len());
+    }
+    for ((address, custom_key, custom_value), used) in counts {
+        known.push(studio_core::collection::KnownRecipient {
+            name: used.name,
+            recipient_type: used.recipient_type,
+            address,
+            custom_key: Some(custom_key).filter(|k| !k.is_empty()),
+            custom_value: Some(custom_value).filter(|v| !v.is_empty()),
+            feeds: used.feeds.len(),
+            saved_id: None,
+        });
+    }
+    Ok((known, feed_sets, fee_identities))
+}
+
+/// Request the due Lightning address lookups without holding the workspace lock.
+pub(crate) async fn lookup_recipients(State(shared): State<Shared>) -> ApiResult {
+    let (scheme, web, due) = blocking(shared.clone(), |w| {
+        let Some(scheme) = w.keysend_scheme else {
+            return Ok((None, None, Vec::new()));
+        };
+        let (known, _, _) = recipient_list_inputs(w)?;
+        let addresses: Vec<String> = known.into_iter().map(|entry| entry.address).collect();
+        let due = keysend::due_addresses(&w.collection, scheme, &addresses, now_seconds())?;
+        Ok((Some(scheme.to_owned()), Some(w.web.clone()), due))
+    })
+    .await?;
+    let (Some(scheme), Some(web), due) = (scheme, web, due) else {
+        return to_json(json!({"checked": 0}));
+    };
+    if due.is_empty() {
+        return to_json(json!({"checked": 0}));
+    }
+    let checked = due.len();
+    let results =
+        blocking_unlocked(move || Ok(keysend::request_lookups(&web, &scheme, &due))).await?;
+    blocking(shared, move |w| {
+        keysend::store_lookups(&w.collection, results, now_seconds())?;
+        to_json(json!({"checked": checked}))
     })
     .await
 }

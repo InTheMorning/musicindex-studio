@@ -1,6 +1,6 @@
 # Studio v1 Task 033e: Show Grants And Granted Writes
 
-Parent: [task 033](studio-v1-task-033-live-items.md). Decisions: [ADR 0054](../adr/0054-live-items-connected-apps-and-show-grants.md) items 11 to 18, [ADR 0007](../adr/0007-draft-diff-write-and-announce.md) and [ADR 0052](../adr/0052-announcements-through-the-podcast-index-hub.md).
+Parent: [task 033](studio-v1-task-033-live-items.md). Decisions: [ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md) items 11 to 18, [ADR 0007](../adr/0007-draft-diff-write-and-announce.md) and [ADR 0052](../archive/adr/0052-announcements-through-the-podcast-index-hub.md).
 Sequence: the fifth packet of task 033. It depends on 033d.
 
 ## Goal

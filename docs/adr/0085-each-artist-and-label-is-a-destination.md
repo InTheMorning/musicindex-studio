@@ -14,7 +14,7 @@
 
 - Releases listed each feed of the collection in one list: the albums, the playlists and the publisher feeds. ADR 0084 gave the type label of a publisher feed each of its roles, so a row could be too long for its line.
 - The operator wants an artist, a label or a hosting service to see its feeds in a hierarchy. On 2026-10-30 the operator decided on one level: each publisher feed, then its releases.
-- [ADR 0041](0041-publisher-feeds-and-two-way-links.md) links a publisher feed and a release. [ADR 0086](0086-a-playlist-links-to-its-artist-or-label.md) makes a playlist a release.
+- [ADR 0041](../archive/adr/0041-publisher-feeds-and-two-way-links.md) links a publisher feed and a release. [ADR 0086](0086-a-playlist-links-to-its-artist-or-label.md) makes a playlist a release.
 - musicindex ADR 0033 R-WORD-4 permits the word "publisher" only as an RSS name. Thus the interface cannot use the words "No publisher" or "Publisher order".
 
 ## Decision

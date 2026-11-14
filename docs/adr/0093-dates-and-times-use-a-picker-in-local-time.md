@@ -4,7 +4,7 @@
 - Date: 2026-10-30
 - Owner: operator
 - Accepted: 2026-10-30 by the operator.
-- Uses: [ADR 0012](0012-lossless-tree-with-a-typed-model.md) (the lossless tree), [ADR 0016](0016-ui-without-a-build-step.md) (no build step and no other servers), [ADR 0042](0042-ui-models-with-node-tests.md) (the UI models), [ADR 0054](0054-live-items-connected-apps-and-show-grants.md) (live items), [ADR 0065](0065-the-core-applies-each-feed-rule.md) (each feed rule is in the core) and [ADR 0037](0037-button-roles.md) (button roles).
+- Uses: [ADR 0012](0012-lossless-tree-with-a-typed-model.md) (the lossless tree), [ADR 0016](0016-ui-without-a-build-step.md) (no build step and no other servers), [ADR 0042](0042-ui-models-with-node-tests.md) (the UI models), [ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md) (live items), [ADR 0065](0065-the-core-applies-each-feed-rule.md) (each feed rule is in the core) and [ADR 0037](0037-button-roles.md) (button roles).
 
 ## Context
 

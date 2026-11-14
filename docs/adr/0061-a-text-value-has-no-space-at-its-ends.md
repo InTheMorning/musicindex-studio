@@ -34,7 +34,7 @@ MSP 2.0 reads each text with `trimValues: true` (`src/utils/xmlParser.ts` at com
 ## Alternatives Considered
 
 - Keep the text as the source has it, and show the space. Rejected: the editor then shows the format of the source lines as a part of the text.
-- Remove the space only in the UI. Rejected: the API and the connected apps of [ADR 0054](0054-live-items-connected-apps-and-show-grants.md) then receive a different value than the editor shows.
+- Remove the space only in the UI. Rejected: the API and the connected apps of [ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md) then receive a different value than the editor shows.
 - Remove the space on read, and compare the values as they are. Rejected: each save with no edit then changes each element with space at its ends, and ADR 0012 forbids that.
 - Write the source format again around an edited value. Rejected: the writer cannot know the format that the author wants, and the result is a guess.
 

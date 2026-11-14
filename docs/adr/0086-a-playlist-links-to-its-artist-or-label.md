@@ -4,7 +4,7 @@
 - Date: 2026-10-30
 - Owner: operator
 - Accepted: 2026-10-30 by the operator.
-- Changes: [ADR 0041](0041-publisher-feeds-and-two-way-links.md) items 5, 6 and 11, which link a publisher feed to music feeds only.
+- Changes: [ADR 0041](../archive/adr/0041-publisher-feeds-and-two-way-links.md) items 5, 6 and 11, which link a publisher feed to music feeds only.
 - Uses: the Podcasting 2.0 tags `podcast:publisher` and `podcast:medium`, in `../musicindex-research/sources/podcast-namespace` at `d4036dc`.
 
 ## Context

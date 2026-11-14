@@ -6,7 +6,7 @@
 - Accepted: 2026-11-04 by the operator. The operator selected the exception to the writer rule and a new date on a granted write. The operator also selected a second time source as the protection from a wrong clock.
 - Source: [research request on a feed check with repairs](../plans/research-feed-check-request.md), item F2. Research note `research_notes/studio/improving-the-state-of-feeds.md` in `../musicindex-research`. Stophammer record `docs/reviews/last-build-date-behavior-research.md`.
 - Changes: [ADR 0008](0008-feed-types-and-feed-identity.md) and [ADR 0012](0012-lossless-tree-with-a-typed-model.md), for the rule that the writer changes only what the user changed.
-- Changes: [ADR 0054](0054-live-items-connected-apps-and-show-grants.md) items 13 and 15, for a granted write.
+- Changes: [ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md) items 13 and 15, for a granted write.
 - Changes: [ADR 0126](0126-studio-refuses-a-bad-move-link.md) items 8 and 26, for the request of this record.
 - Changes: [ADR 0012](0012-lossless-tree-with-a-typed-model.md), A Lossless XML Tree With A Typed Model. ADR 0012 names the changed items.
 - Uses: [ADR 0007](0007-draft-diff-write-and-announce.md), [ADR 0057](0057-the-private-network-guard-of-the-server.md), [ADR 0077](0077-a-new-album-can-start-from-an-album.md), [ADR 0114](0114-the-review-shows-the-changes-in-words-and-marks-the-changed-part-of-a-line.md) and Stophammer ADR 0053.

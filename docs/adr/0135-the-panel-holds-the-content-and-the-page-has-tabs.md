@@ -4,9 +4,9 @@
 - Date: 2026-11-06
 - Owner: operator
 - Changed by: [ADR 0197](0197-the-tabs-and-the-field-rows-follow-the-editor-column.md). The tabs are a select menu when they do not fit their column, not at a window width of 760 px.
-- Changes: [ADR 0039](0039-the-shell-releases-and-the-outline.md) item 6, [ADR 0041](0041-publisher-feeds-and-two-way-links.md) item 3, [ADR 0054](0054-live-items-connected-apps-and-show-grants.md) item 3, [ADR 0069](0069-the-outline-head-opens-the-feed-page.md) item 3 and the rows of the details sections in [ADR 0068](0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md) and [ADR 0075](0075-the-publisher-page-has-payments-and-credits.md)
-- Changes: [ADR 0041](0041-publisher-feeds-and-two-way-links.md), Publisher Feeds And Two-Way Links. ADR 0041 names the changed items.
-- Changes: [ADR 0054](0054-live-items-connected-apps-and-show-grants.md), Live Items, Connected Apps And Show Grants. ADR 0054 names the changed items.
+- Changes: [ADR 0039](0039-the-shell-releases-and-the-outline.md) item 6, [ADR 0041](../archive/adr/0041-publisher-feeds-and-two-way-links.md) item 3, [ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md) item 3, [ADR 0069](0069-the-outline-head-opens-the-feed-page.md) item 3 and the rows of the details sections in [ADR 0068](0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md) and [ADR 0075](0075-the-publisher-page-has-payments-and-credits.md)
+- Changes: [ADR 0041](../archive/adr/0041-publisher-feeds-and-two-way-links.md), Publisher Feeds And Two-Way Links. ADR 0041 names the changed items.
+- Changes: [ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md), Live Items, Connected Apps And Show Grants. ADR 0054 names the changed items.
 - Changes: [ADR 0068](0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md), The Sequence Of The Sections And Fields Of An Editor Page. ADR 0068 names the changed items.
 - Changes: [ADR 0069](0069-the-outline-head-opens-the-feed-page.md), The Outline Head Opens The Feed Page. ADR 0069 names the changed items.
 - Changes: [ADR 0075](0075-the-publisher-page-has-payments-and-credits.md), The Publisher Page Has Payments And Credits. ADR 0075 names the changed items.

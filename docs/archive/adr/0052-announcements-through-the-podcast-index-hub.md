@@ -1,17 +1,19 @@
+> Archived: superseded by [ADR 0205](../../adr/0205-publisher-feeds-announcements-and-show-grants.md) on 2026-11-14. ADR 0205 restates each live rule of this ADR. Its item map gives the new item of each item.
+
 # ADR 0052: Announcements Through The Podcast Index Hub
 
-- Status: Accepted
+- Status: Superseded by ADR 0205
 - Date: 2026-10-25
-- Changed by: [ADR 0136](0136-one-announcement-choice-at-the-write.md). One choice at the write replaces the two settings of items 5 and 6.
+- Changed by: [ADR 0136](../../adr/0136-one-announcement-choice-at-the-write.md). One choice at the write replaces the two settings of items 5 and 6.
 - Owner: operator
 - Changed by: [ADR 0054](0054-live-items-connected-apps-and-show-grants.md) item 18 adds one exception to the invariant: a change that a show grant of the user covers.
-- Changed by: [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) item 14 moves the two settings from the Hosts page to the Settings page.
-- Changed by: [ADR 0184](0184-after-a-move-studio-shows-the-podping-of-the-move.md). Item 21: the notice after a move by Studio has a button that sends the podping.
-- Changed by: [ADR 0189](0189-a-move-sends-one-podping-of-the-old-address.md). Item 8: a move write announces only the address before the move.
+- Changed by: [ADR 0071](../../adr/0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) item 14 moves the two settings from the Hosts page to the Settings page.
+- Changed by: [ADR 0184](../../adr/0184-after-a-move-studio-shows-the-podping-of-the-move.md). Item 21: the notice after a move by Studio has a button that sends the podping.
+- Changed by: [ADR 0189](../../adr/0189-a-move-sends-one-podping-of-the-old-address.md). Item 8: a move write announces only the address before the move.
 
 ## Context
 
-[ADR 0007](0007-draft-diff-write-and-announce.md) item 5 tells Studio to send a podping and a Podcast Index pubnotify after a write, with a setting for each. ADR 0007 did not decide the send method. [ADR 0035](0035-a-release-library-is-the-master-of-each-feed.md) item 21 tells Studio to give the new address of a moved feed to the musicindex API and Podcast Index. [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) item 21 keeps ADR 0035 item 21 out of force until Phase 10, and puts the announcement in the same diff. [ADR 0041](0041-publisher-feeds-and-two-way-links.md) leaves the announcement of a publisher feed to Phase 10.
+[ADR 0007](../../adr/0007-draft-diff-write-and-announce.md) item 5 tells Studio to send a podping and a Podcast Index pubnotify after a write, with a setting for each. ADR 0007 did not decide the send method. [ADR 0035](../../adr/0035-a-release-library-is-the-master-of-each-feed.md) item 21 tells Studio to give the new address of a moved feed to the musicindex API and Podcast Index. [ADR 0038](0038-published-feeds-downloads-folder-scan-and-feed-moves.md) item 21 keeps ADR 0035 item 21 out of force until Phase 10, and puts the announcement in the same diff. [ADR 0041](0041-publisher-feeds-and-two-way-links.md) leaves the announcement of a publisher feed to Phase 10.
 
 The research gives these observations:
 
@@ -38,7 +40,7 @@ On 2026-10-25 the operator selected the method, the settings, the queue and the 
 
 ### The Addresses
 
-7. Studio announces the public address of the feed ([ADR 0021](0021-public-address-of-a-feed.md)).
+7. Studio announces the public address of the feed ([ADR 0021](../../adr/0021-public-address-of-a-feed.md)).
 8. A write with a move of the feed XML announces two addresses: the new address, then the address before the move. An index that knows only the address from before then reads the redirect or the `itunes:new-feed-url` file.
 9. A feed with no public address gets no announcement. A write is not blocked for this reason.
 10. The first write of a new release or a new publisher feed gets an announcement, as each other write does.
@@ -79,7 +81,7 @@ On 2026-10-25 the operator selected the method, the settings, the queue and the 
 - Studio depends on a public service of Podcast Index. When the hub stops or changes, the announcements fail, and the feed page shows each failure. The writes continue.
 - On the desktop, an announcement waits only while Studio runs. A stop of Studio for more than 24 hours loses the waiting announcements, and the feed page shows them as failed.
 - The `announce` field of the diff, which was always `false`, goes out. The diff gets the planned announcements and the reason for no announcement.
-- A test cannot send a request to the real hub ([ADR 0045](0045-phase-9-crates-test-servers-and-host-forms.md)). A local test hub takes its place. A human test with a real feed is necessary to confirm `podping=1`.
+- A test cannot send a request to the real hub ([ADR 0045](../../adr/0045-phase-9-crates-test-servers-and-host-forms.md)). A local test hub takes its place. A human test with a real feed is necessary to confirm `podping=1`.
 - The Server Shell phase uses the same queue for each user. The operator of the server can select the hub.
 
 ## Verification
@@ -106,7 +108,7 @@ Human test:
 
 ## Invariants
 
-- No announcement occurs without a diff that the user has seen, or a change that a show grant of the user covers ([ADR 0007](0007-draft-diff-write-and-announce.md), [ADR 0054](0054-live-items-connected-apps-and-show-grants.md)).
+- No announcement occurs without a diff that the user has seen, or a change that a show grant of the user covers ([ADR 0007](../../adr/0007-draft-diff-write-and-announce.md), [ADR 0054](0054-live-items-connected-apps-and-show-grants.md)).
 - An announcement never changes or stops a write.
-- No test sends a request to a host outside the computer ([ADR 0045](0045-phase-9-crates-test-servers-and-host-forms.md)).
+- No test sends a request to a host outside the computer ([ADR 0045](../../adr/0045-phase-9-crates-test-servers-and-host-forms.md)).
 - An announcement uses no secret.

@@ -1,6 +1,6 @@
 # Studio v1 Task 031a: The Test Hub, The Queue And The Sender
 
-Parent: [task 031](studio-v1-task-031-announce.md). Decisions: [ADR 0052](../adr/0052-announcements-through-the-podcast-index-hub.md) items 1 to 3, 5, 6 and 13 to 19, and [ADR 0045](../adr/0045-phase-9-crates-test-servers-and-host-forms.md).
+Parent: [task 031](studio-v1-task-031-announce.md). Decisions: [ADR 0052](../archive/adr/0052-announcements-through-the-podcast-index-hub.md) items 1 to 3, 5, 6 and 13 to 19, and [ADR 0045](../adr/0045-phase-9-crates-test-servers-and-host-forms.md).
 Sequence: the first packet of task 031.
 
 ## Goal

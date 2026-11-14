@@ -8,7 +8,7 @@
 - Supersedes: [ADR 0121](../archive/adr/0121-a-folder-with-no-public-address-holds-practice-pages.md), practice pages.
 - Changes: [ADR 0119](0119-a-new-user-starts-as-a-musician-or-a-label.md) item 6, step 2.
 - Changes: [ADR 0032](0032-new-releases-formats-paths-and-new-feeds.md) items 6 to 9, for a file host with no public address.
-- Uses: [ADR 0008](0008-feed-types-and-feed-identity.md) for feed identity. [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) for a feed move. [ADR 0041](0041-publisher-feeds-and-two-way-links.md) items 6, 7 and 12 for the links. [ADR 0055](../archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) for the user folder.
+- Uses: [ADR 0008](0008-feed-types-and-feed-identity.md) for feed identity. [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) for a feed move. [ADR 0041](../archive/adr/0041-publisher-feeds-and-two-way-links.md) items 6, 7 and 12 for the links. [ADR 0055](../archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) for the user folder.
 
 ## Context
 

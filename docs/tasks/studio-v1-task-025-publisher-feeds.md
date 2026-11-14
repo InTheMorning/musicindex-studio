@@ -1,7 +1,7 @@
 # Studio v1 Task 025: Publisher Feeds
 
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), Phase 8.
-Decisions: [ADR 0041](../adr/0041-publisher-feeds-and-two-way-links.md), [ADR 0008](../adr/0008-feed-types-and-feed-identity.md), [ADR 0007](../adr/0007-draft-diff-write-and-announce.md), [ADR 0037](../adr/0037-button-roles.md).
+Decisions: [ADR 0041](../archive/adr/0041-publisher-feeds-and-two-way-links.md), [ADR 0008](../adr/0008-feed-types-and-feed-identity.md), [ADR 0007](../adr/0007-draft-diff-write-and-announce.md), [ADR 0037](../adr/0037-button-roles.md).
 
 ## Goal
 

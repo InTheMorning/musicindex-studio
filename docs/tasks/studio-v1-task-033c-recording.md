@@ -1,6 +1,6 @@
 # Studio v1 Task 033c: The Recording Of An Ended Show
 
-Parent: [task 033](studio-v1-task-033-live-items.md). Decisions: [ADR 0054](../adr/0054-live-items-connected-apps-and-show-grants.md) item 6, [ADR 0026](../adr/0026-import-music-files-through-the-draft.md), [ADR 0033](../adr/0033-a-lossless-import-gives-an-mp3-enclosure.md) and [ADR 0040](../adr/0040-replace-the-audio-of-a-track.md).
+Parent: [task 033](studio-v1-task-033-live-items.md). Decisions: [ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md) item 6, [ADR 0026](../adr/0026-import-music-files-through-the-draft.md), [ADR 0033](../adr/0033-a-lossless-import-gives-an-mp3-enclosure.md) and [ADR 0040](../adr/0040-replace-the-audio-of-a-track.md).
 Sequence: the third packet of task 033. It depends on 033b.
 
 ## Goal

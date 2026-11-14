@@ -1,6 +1,6 @@
 # Studio v1 Task 033b: The Live Item Page
 
-Parent: [task 033](studio-v1-task-033-live-items.md). Decisions: [ADR 0054](../adr/0054-live-items-connected-apps-and-show-grants.md) items 1 to 5, [ADR 0028](../adr/0028-summary-lines-and-one-open-entry.md), [ADR 0029](../adr/0029-editor-pages-toolbar-and-three-levels.md), [ADR 0037](../adr/0037-button-roles.md) and [ADR 0042](../adr/0042-ui-models-with-node-tests.md).
+Parent: [task 033](studio-v1-task-033-live-items.md). Decisions: [ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md) items 1 to 5, [ADR 0028](../adr/0028-summary-lines-and-one-open-entry.md), [ADR 0029](../adr/0029-editor-pages-toolbar-and-three-levels.md), [ADR 0037](../adr/0037-button-roles.md) and [ADR 0042](../adr/0042-ui-models-with-node-tests.md).
 Sequence: the second packet of task 033. It depends on 033a.
 
 ## Goal

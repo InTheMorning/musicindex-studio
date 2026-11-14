@@ -2,7 +2,7 @@
 
 - Date: 2026-10-26
 - Reviewed: each packet of [task 036](../tasks/studio-v1-task-036-grant-vaults.md)
-- Decisions: [ADR 0058](../adr/0058-grant-vaults-and-connected-apps-on-the-server.md), [ADR 0054](../adr/0054-live-items-connected-apps-and-show-grants.md), [ADR 0055](../archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) and [ADR 0013](../adr/0013-vault-format-and-cryptography.md)
+- Decisions: [ADR 0058](../adr/0058-grant-vaults-and-connected-apps-on-the-server.md), [ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md), [ADR 0055](../archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) and [ADR 0013](../adr/0013-vault-format-and-cryptography.md)
 
 The planning model uses this list after each packet, before its commit.
 
@@ -24,7 +24,7 @@ The planning model uses this list after each packet, before its commit.
 
 - A granted write uses only the secrets of the grant vault ([ADR 0058](../adr/0058-grant-vaults-and-connected-apps-on-the-server.md)).
 - A grant vault exists only while its grant is active ([ADR 0058](../adr/0058-grant-vaults-and-connected-apps-on-the-server.md)).
-- A connected app never gets a secret of the vault ([ADR 0054](../adr/0054-live-items-connected-apps-and-show-grants.md)).
+- A connected app never gets a secret of the vault ([ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md)).
 - A write to a host occurs only through `pipeline::write_draft` ([ADR 0007](../adr/0007-draft-diff-write-and-announce.md), [ADR 0015](../adr/0015-connector-interface-and-write-pipeline.md)).
 - No test sends a request to a host outside the computer ([ADR 0045](../adr/0045-phase-9-crates-test-servers-and-host-forms.md)).
 

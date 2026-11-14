@@ -1,6 +1,6 @@
 # Studio v1 Task 033f: The Grants In The UI
 
-Parent: [task 033](studio-v1-task-033-live-items.md). Decisions: [ADR 0054](../adr/0054-live-items-connected-apps-and-show-grants.md) items 11, 14 and 17, [ADR 0037](../adr/0037-button-roles.md) and [ADR 0042](../adr/0042-ui-models-with-node-tests.md).
+Parent: [task 033](studio-v1-task-033-live-items.md). Decisions: [ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md) items 11, 14 and 17, [ADR 0037](../adr/0037-button-roles.md) and [ADR 0042](../adr/0042-ui-models-with-node-tests.md).
 Sequence: the sixth packet of task 033. It depends on 033b and 033e.
 
 ## Goal
@@ -23,7 +23,7 @@ These choices are fixed. Do not change them.
 - When the collection has no connected app, the check box has the hint "No app is connected. Connect an app in Hosts."
 - The live item page shows the grant state with `grantSummary` and lists each granted write with `grantWriteText`. "Stop the grant" with the destructive role ends an active grant.
 - `GET /api/v1/feeds/{id}/grants` gives each grant with `id`, `item_guid`, `created_at`, `ended_at` and `writes` (each with `app_name`, `change` and `written_at`). The values of `change` are `go_live`, `end`, `set_live_value` and `remove_live_value`. The times are seconds after the Unix epoch.
-- A grant with no `ended_at` ends 24 hours after the `end` of the live item, or after its `start` when it has no `end` ([ADR 0054](../adr/0054-live-items-connected-apps-and-show-grants.md) item 14). The API does not give this limit. `live.js` calculates it.
+- A grant with no `ended_at` ends 24 hours after the `end` of the live item, or after its `start` when it has no `end` ([ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md) item 14). The API does not give this limit. `live.js` calculates it.
 - `live.js` gets:
   - `grantLimit(liveItem)`: the time in seconds 24 hours after `end`, or after `start` when `end` is blank, or `null` when the time cannot be read.
   - `grantSummary(grant, liveItem, now, timeText)`: "Connected apps can start and end this show until <time>.", "The grant ended at <time>." or "No grant.". A grant with no `ended_at` and a limit before `now` gives "The grant ended at <limit>.".

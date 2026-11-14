@@ -1,6 +1,6 @@
 # Studio v1 Task 025a: The Role And The Links In The Core
 
-Parent: [task 025](studio-v1-task-025-publisher-feeds.md). Decisions: [ADR 0041](../adr/0041-publisher-feeds-and-two-way-links.md) items 1, 2, 4 to 7 and 9 to 14, [ADR 0008](../adr/0008-feed-types-and-feed-identity.md), [ADR 0014](../adr/0014-collection-in-sqlite.md).
+Parent: [task 025](studio-v1-task-025-publisher-feeds.md). Decisions: [ADR 0041](../archive/adr/0041-publisher-feeds-and-two-way-links.md) items 1, 2, 4 to 7 and 9 to 14, [ADR 0008](../adr/0008-feed-types-and-feed-identity.md), [ADR 0014](../adr/0014-collection-in-sqlite.md).
 Sequence: the first packet of task 025.
 
 ## Goal

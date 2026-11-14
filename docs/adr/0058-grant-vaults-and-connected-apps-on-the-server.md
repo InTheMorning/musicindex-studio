@@ -5,11 +5,11 @@
 - Owner: operator
 - Changed by: [ADR 0110](0110-a-connected-app-signs-each-request-with-its-own-key.md). Items 4, 5, 8, 9, 11, 15, 17, 18, 19 and 20 change. The app key is the key of the app, and the app signs each request. A grant vault has only the wrapper of the app that its grant names. A removed app causes a new grant vault key at the next unlock, and the index holds public keys.
 - Changes: [ADR 0003](0003-user-unlocked-secret-vault.md), Each User Unlocks A Secret Vault. ADR 0003 names the changed items.
-- Changes: [ADR 0054](0054-live-items-connected-apps-and-show-grants.md), Live Items, Connected Apps And Show Grants. ADR 0054 names the changed items.
+- Changes: [ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md), Live Items, Connected Apps And Show Grants. ADR 0054 names the changed items.
 
 ## Context
 
-[ADR 0054](0054-live-items-connected-apps-and-show-grants.md) lets a connected app such as v4vmm start and end a live show and set its live value under a show grant. A granted write needs the secret of a host. ADR 0054 item 16 refuses a granted change while the vault is locked. Its consequences leave the connected apps of a server user to the Server Shell phase.
+[ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md) lets a connected app such as v4vmm start and end a live show and set its live value under a show grant. A granted write needs the secret of a host. ADR 0054 item 16 refuses a granted change while the vault is locked. Its consequences leave the connected apps of a server user to the Server Shell phase.
 
 [ADR 0003](0003-user-unlocked-secret-vault.md) item 4 says: "The server can write to a host only while the user's session is open. The server has no key that opens a vault without the user." On the server, the vault key exists only in the vault window of [ADR 0055](../archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md).
 
@@ -35,7 +35,7 @@ On 2026-10-26 the operator selected the decisions below.
 
 ### When Studio Changes A Grant Vault
 
-6. The approved write that records a grant ([ADR 0054](0054-live-items-connected-apps-and-show-grants.md) item 12) makes the grant vault. The user vault is open at that time when the host needs a secret.
+6. The approved write that records a grant ([ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md) item 12) makes the grant vault. The user vault is open at that time when the host needs a secret.
 7. Studio makes each grant vault of a feed again in two conditions, while the user vault is open:
    - The user changes the secret of the host of the feed XML.
    - The user moves the feed XML to a different host.

@@ -12,7 +12,7 @@
 - MSP 2.0 also removes the artist key `podcast:txt purpose="npub"`. That key names the artist, not the feed.
 - Studio gives a new feed the GUID of its address ([ADR 0032](0032-new-releases-formats-paths-and-new-feeds.md)). A sent item with no key and no GUID gets a new random UUID ([ADR 0022](0022-the-editor-sends-the-model-with-entry-keys.md) item 7).
 - One form makes each new feed. Its first field is "Type" ([ADR 0073](0073-the-add-pages-ask-one-question-at-a-time.md) item 5).
-- A link between a publisher feed and a release changes the two feeds ([ADR 0041](0041-publisher-feeds-and-two-way-links.md)).
+- A link between a publisher feed and a release changes the two feeds ([ADR 0041](../archive/adr/0041-publisher-feeds-and-two-way-links.md)).
 - Studio deletes a file on a host only when no feed of the library refers to its address ([ADR 0035](0035-a-release-library-is-the-master-of-each-feed.md) item 17).
 
 The operator selected each decision of this ADR from a questionnaire on 2026-10-28.

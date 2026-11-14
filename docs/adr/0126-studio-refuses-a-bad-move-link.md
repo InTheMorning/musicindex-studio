@@ -12,7 +12,7 @@
 - Changes: [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) item 19 (the sequence) and item 20 (a pointer file can become the feed).
 - Changes: [ADR 0043](0043-phase-9-connectors-and-the-interface-change.md) item 9, for a move that stage 2 refuses.
 - Changes: [ADR 0057](0057-the-private-network-guard-of-the-server.md) item 1, for the read of this record on the desktop.
-- Uses: [ADR 0021](0021-public-address-of-a-feed.md), [ADR 0054](0054-live-items-connected-apps-and-show-grants.md) and [ADR 0065](0065-the-core-applies-each-feed-rule.md).
+- Uses: [ADR 0021](0021-public-address-of-a-feed.md), [ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md) and [ADR 0065](0065-the-core-applies-each-feed-rule.md).
 
 ## Context
 

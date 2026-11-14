@@ -26,7 +26,7 @@ Earlier records leave these items to the Server Shell phase:
 - ADR 0014: the server keeps all collections in one database, with a user ID on each row.
 - [ADR 0013](../../adr/0013-vault-format-and-cryptography.md), open question: one vault file for each user, or rows in a database.
 - ADR 0035 item 4: where the server keeps the library of each user.
-- [ADR 0052](../../adr/0052-announcements-through-the-podcast-index-hub.md): the server uses the same announcement queue for each user.
+- [ADR 0052](0052-announcements-through-the-podcast-index-hub.md): the server uses the same announcement queue for each user.
 
 The research of 2026-10-26 ([Phase 12 authentication research](../../research/2026-10-26-phase-12-auth-research.md)) examines the session on a phone. A phone browser often closes a tab in the background. A long session that keeps the vault open keeps the vault key in server memory for a long time.
 

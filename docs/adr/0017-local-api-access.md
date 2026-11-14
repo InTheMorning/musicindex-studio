@@ -24,7 +24,7 @@ The server shell uses sign-in sessions instead ([ADR 0004](0004-server-sign-in-w
 9. The UI files themselves need no token. They contain no secret.
 10. Two kinds of route are not `/api/` routes, and the token of item 2 does not open them:
     - The audio route `/media/audio` accepts a media ticket in its query. The UI gets a ticket from an `/api/` route, with the token ([ADR 0062](0062-a-file-picker-for-each-file-field.md) item 29). A media element cannot send a header.
-    - The `/app/v1/` routes accept only the token of a connected app ([ADR 0054](0054-live-items-connected-apps-and-show-grants.md) item 9).
+    - The `/app/v1/` routes accept only the token of a connected app ([ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md) item 9).
 
 ## Alternatives Considered
 

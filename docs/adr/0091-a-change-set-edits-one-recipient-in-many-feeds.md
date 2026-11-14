@@ -69,7 +69,7 @@
 22. The review also lists each changed feed that Studio cannot write now, with the cause. For example, a read-only feed has no host ([ADR 0067](0067-a-read-only-feed-opens-in-the-editor.md)), or the vault is locked.
 23. "Write" writes each feed that the user can write, one at a time, through `pipeline::write_draft` with the ID of the diff of that feed. The review shows the status of each feed during the write.
 24. When the write of one feed fails, Studio does not stop the write of the other feeds. A conflict of ADR 0007 item 3 stops only that feed. The draft of a feed that is not written stays, and the change set stays open.
-25. Each write announces its feed as each other write does ([ADR 0052](0052-announcements-through-the-podcast-index-hub.md)).
+25. Each write announces its feed as each other write does ([ADR 0052](../archive/adr/0052-announcements-through-the-podcast-index-hub.md)).
 26. A show grant does not cover a change set. A change set needs the vault of the user.
 
 ## Alternatives Considered

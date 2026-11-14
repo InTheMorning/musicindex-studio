@@ -42,7 +42,7 @@ On 2026-10-27, a human test of task 039 found a draft from before task 038. It h
 
 ### A Write Has One Cover
 
-8. Studio writes no feed with two different channel cover addresses. When the channel `itunes:image` and `<image><url>` have two different addresses, the diff and the write put the address of `itunes:image` in `<image><url>`. This is the address that the cover field shows (item 2). The draft keeps the two addresses, so that the editor can show the note of item 4. The diff shows the change before the write. The rule applies to each write, also a granted write of [ADR 0054](0054-live-items-connected-apps-and-show-grants.md).
+8. Studio writes no feed with two different channel cover addresses. When the channel `itunes:image` and `<image><url>` have two different addresses, the diff and the write put the address of `itunes:image` in `<image><url>`. This is the address that the cover field shows (item 2). The draft keeps the two addresses, so that the editor can show the note of item 4. The diff shows the change before the write. The rule applies to each write, also a granted write of [ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md).
 
 ## Alternatives Considered
 

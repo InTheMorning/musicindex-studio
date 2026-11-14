@@ -1,6 +1,6 @@
 # Studio v1 Task 031d: The Announcements In The UI
 
-Parent: [task 031](studio-v1-task-031-announce.md). Decisions: [ADR 0052](../adr/0052-announcements-through-the-podcast-index-hub.md) items 5, 6, 11 and 20, [ADR 0042](../adr/0042-ui-models-with-node-tests.md), [ADR 0037](../adr/0037-button-roles.md) and [ADR 0028](../adr/0028-summary-lines-and-one-open-entry.md).
+Parent: [task 031](studio-v1-task-031-announce.md). Decisions: [ADR 0052](../archive/adr/0052-announcements-through-the-podcast-index-hub.md) items 5, 6, 11 and 20, [ADR 0042](../adr/0042-ui-models-with-node-tests.md), [ADR 0037](../adr/0037-button-roles.md) and [ADR 0028](../adr/0028-summary-lines-and-one-open-entry.md).
 Sequence: the fourth packet of task 031. It depends on 031c.
 
 ## Goal

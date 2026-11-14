@@ -48,7 +48,7 @@ The row of `feed.xml` says "Studio deletes it after the feed is written". That t
 
 ### 5. The Write Button Of A Delete
 
-The review of a delete shows **Write to the File Host** in the primary color. The write deletes five files. ADR 0193 gives the order of the buttons and does not say if this button is destructive. This item is a question for the operator.
+The review of a delete shows **Write to the File Host** in the primary color. The write deletes five files. ADR 0193 gives the order of the buttons and does not say if this button is destructive. This item is a question for the operator. On 2026-11-14 the operator selected the destructive style. [ADR 0198](../adr/0198-the-review-of-a-delete-names-the-delete-and-a-deleted-feed-shows-only-what-it-can-do.md) items 1 to 4 give the change, and task 137 does it.
 
 ### 6. A Deleted Feed Does Not Open
 
@@ -68,13 +68,15 @@ Two observations from that check, not verified in the code:
 - Step 1 of the Retire block said "Hide from apps is on in the draft." After the delete, the draft is the last copy, so "the last write" is possibly the clearer text.
 - **Stop Retiring** and **Link to This Page** show on the read-only feed.
 
+The code confirmed both observations on 2026-11-14. ADR 0198 items 5 to 8 give the corrections, and task 137 does them.
+
 ### 7. Two Linked Page Rows Look The Same
 
-The page of Prosperous Soul has two linked page rows. Each row shows only "Prosperous Soul" and "Read only". The user cannot see which row is the page on wavlake.com and which is the page on feeds.fountain.fm.
+The page of Prosperous Soul has two linked page rows. Each row shows only "Prosperous Soul" and "Read only". The user cannot see which row is the page on wavlake.com and which is the page on feeds.fountain.fm. [ADR 0199](../adr/0199-a-linked-page-row-names-its-host-and-add-a-person-keeps-the-source-of-its-values.md) items 1 to 4 give each row its host, and task 138 does it.
 
 ### 8. A Person From A Page Shows "Added In Studio"
 
-**Add a Person** made Haleen from a live page on Music Index. The picture and the website came from that page, but each shows the line `Added in Studio`, not `From "Haleen" on …`. The known gap of rc.22 is only about the values from before the upgrade. Possibly this is a defect. The code was not read yet.
+**Add a Person** made Haleen from a live page on Music Index. The picture and the website came from that page, but each shows the line `Added in Studio`, not `From "Haleen" on …`. The known gap of rc.22 is only about the values from before the upgrade. Possibly this is a defect. The code read of 2026-11-14 found the defect: `addPersonBody` sends no source, so `insert_person` saves the values with no source. ADR 0199 items 5 to 7 give the correction, and task 138 does it.
 
 ### 9. Music Index Cannot Find An Artist With No Publisher Feed
 

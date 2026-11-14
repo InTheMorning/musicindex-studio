@@ -5,7 +5,12 @@
 - Owner: operator
 - Accepted: 2026-11-12 by the operator, through the questionnaires of the human checks. The operator selected the names, the row with only the path, and the sheet of **Change…** with **Choose Folder…** and **Default**. The operator also selected **Use This Copy**, no **Move to {host}**, and no select menu "File host of this file".
 - Technical choices: items 6, 8, 9, 15 and 17 are choices of the planning model.
-- Changes: [ADR 0177](0177-the-files-page-has-one-way-to-move.md) items 1, 3, 6 and 10. [ADR 0167](0167-each-release-has-an-editable-library-folder.md) items 6, 7 and 10. [ADR 0148](0148-a-move-keeps-the-old-files-until-the-user-reviews-the-deletion.md) items 7 and 8. [ADR 0036](0036-library-records-host-inventory-and-host-operations.md) items 8 and 12. [ADR 0037](0037-button-roles.md), the examples of the action role. [ADR 0124](0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md) item 3.
+- Changes: [ADR 0177](0177-the-files-page-has-one-way-to-move.md) items 1, 3, 6 and 10.
+- Changes: [ADR 0167](0167-each-release-has-an-editable-library-folder.md) items 6, 7 and 10.
+- Changes: [ADR 0148](0148-a-move-keeps-the-old-files-until-the-user-reviews-the-deletion.md) items 7 and 8.
+- Changes: [ADR 0036](0036-library-records-host-inventory-and-host-operations.md) items 8 and 12.
+- Changes: [ADR 0037](0037-button-roles.md), the examples of the action role.
+- Changes: [ADR 0124](0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md) item 3.
 - Uses: [ADR 0167](0167-each-release-has-an-editable-library-folder.md) items 1 and 2 for the standard path. [ADR 0105](0105-a-public-server-holds-no-assets.md) for a server with no assets.
 - Source: findings 1, 3 and 5 of the [human checks of 2026-11-11](../reviews/2026-11-11-local-human-test-findings.md).
 

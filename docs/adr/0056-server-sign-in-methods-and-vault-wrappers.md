@@ -3,7 +3,10 @@
 - Status: Accepted
 - Date: 2026-10-26
 - Owner: operator
-- Amended: 2026-10-26 by operator decision, after packet 035b. Item 21 uses one fixed PRF salt for each passkey of the server, not a random salt for each credential. A discoverable sign-in does not know the credential before the assertion, so the browser can send only one salt.
+- Revised: 2026-10-26 by operator decision, after packet 035b. Item 21 uses one fixed PRF salt for each passkey of the server, not a random salt for each credential. A discoverable sign-in does not know the credential before the assertion, so the browser can send only one salt.
+- Changes: [ADR 0004](0004-server-sign-in-with-nostr-or-email.md), Server Sign-In With A Nostr Signer Or Email And Passphrase. ADR 0004 names the changed items.
+- Changes: [ADR 0013](0013-vault-format-and-cryptography.md), Vault Format And Cryptography. ADR 0013 names the changed items.
+- Changes: [ADR 0050](0050-nsite-and-blossom-signer-environment-and-plan.md), The nsite And Blossom Signer, Host Environment And Signing Plan. ADR 0050 names the changed items.
 
 ## Context
 

@@ -4,7 +4,7 @@
 - Date: 2026-11-10
 - Owner: operator
 - Accepted: 2026-11-10 by the operator. The operator selected the row for a closed fold through the questionnaire of the rc.21 human test. The orchestrator session relayed the decisions of the open fold, the chevron at the start and the types of row.
-- Amended: 2026-11-10. Items 1 to 6 follow musicindex `5123573`: the chevron is at the start, and R-FOLD-1 item 5 gives three types of row.
+- Revised: 2026-11-10. Items 1 to 6 follow musicindex `5123573`: the chevron is at the start, and R-FOLD-1 item 5 gives three types of row.
 - Technical choices: items 6 and 9 are choices of the planning model.
 - Applies: musicindex ADR 0060 R-FOLD-1 items 1 to 5, R-FOLD-2 and R-FOLD-3. musicindex ADR 0052 R-QUERY-7 item 4, at musicindex `1959db9`.
 - Uses: [ADR 0154](0154-the-search-fields-have-a-field-list.md). [ADR 0172](0172-a-list-is-one-tab-stop.md) gives the keys of the expandable rows and the tree rows.

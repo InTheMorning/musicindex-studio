@@ -7,9 +7,11 @@
 - Changed by: [ADR 0128](0128-a-moved-feed-names-its-own-address.md). The feed on the new host also gets a tag that names its own URL. That decides the tag that "Alternatives Considered" left open.
 - Changed by: [ADR 0178](0178-a-move-replaces-a-file-at-the-feed-path-in-studio.md). Items 19 and 21: a file at the feed path with no record no longer stops a move.
 - Changed by: [ADR 0127](0127-a-changed-feed-gets-a-new-build-date.md). Items 8 and 26: Review and a granted write can send the time request of that record. That request reads no feed.
-- Changed: on 2026-11-05 the operator added item 28, from finding 9 of the [human test of `0.1.0-rc.17`](../reviews/2026-11-05-rc17-human-test-findings.md). The operator said that the box did not explain anything, and selected the full explanation.
+- Revised: on 2026-11-05 the operator added item 28, from finding 9 of the [human test of `0.1.0-rc.17`](../reviews/2026-11-05-rc17-human-test-findings.md). The operator said that the box did not explain anything, and selected the full explanation.
 - Source: [research request on a feed check with repairs](../plans/research-feed-check-request.md), item F0. Research note `research_notes/aggregation/itunes-new-feed-url.md` in `../musicindex-research`.
-- Changes: [ADR 0038](0038-published-feeds-downloads-folder-scan-and-feed-moves.md) item 19 (the sequence) and item 20 (a pointer file can become the feed). [ADR 0043](0043-phase-9-connectors-and-the-interface-change.md) item 9, for a move that stage 2 refuses. [ADR 0057](0057-the-private-network-guard-of-the-server.md) item 1, for the read of this record on the desktop.
+- Changes: [ADR 0038](0038-published-feeds-downloads-folder-scan-and-feed-moves.md) item 19 (the sequence) and item 20 (a pointer file can become the feed).
+- Changes: [ADR 0043](0043-phase-9-connectors-and-the-interface-change.md) item 9, for a move that stage 2 refuses.
+- Changes: [ADR 0057](0057-the-private-network-guard-of-the-server.md) item 1, for the read of this record on the desktop.
 - Uses: [ADR 0021](0021-public-address-of-a-feed.md), [ADR 0054](0054-live-items-connected-apps-and-show-grants.md) and [ADR 0065](0065-the-core-applies-each-feed-rule.md).
 
 ## Context

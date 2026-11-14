@@ -5,7 +5,8 @@
 - Owner: operator
 - Changed by: musicindex ADR 0023 R-WORD-2, on 2026-10-25. The page "Recipients" of item 5 is "Value routes". [ADR 0010](0010-studio-uses-the-afterglow-direction.md#rules-that-musicindex-replaces) names the change.
 - Changed by: [ADR 0039](0039-the-shell-releases-and-the-outline.md), on 2026-10-25. The outline of an open feed replaces the sidebar tree of items 5 and 6, and the drawer of item 15. The invariant "The sidebar tree has two levels" goes.
-- Amended: 2026-10-28 by operator decision. [ADR 0073](0073-the-add-pages-ask-one-question-at-a-time.md) items 11 to 14 change the entry of item 8: one row "Add tracks" opens the file sheet.
+- Changed by: [ADR 0073](0073-the-add-pages-ask-one-question-at-a-time.md) items 11 to 14 change the entry of item 8: one row "Add tracks" opens the file sheet.
+- Changes: [ADR 0010](0010-studio-uses-the-afterglow-direction.md), Studio Uses The Afterglow Visual Direction. ADR 0010 names the changed items.
 
 ## Context
 

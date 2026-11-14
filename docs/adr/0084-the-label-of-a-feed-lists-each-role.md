@@ -5,6 +5,7 @@
 - Owner: operator
 - Accepted: 2026-10-29 by the operator.
 - Changes: [ADR 0082](0082-a-publisher-feed-has-a-set-of-roles.md) item 6 and [ADR 0083](0083-hosting-is-a-first-class-role.md) item 1, which give a feed the label of its first role.
+- Changes: [ADR 0083](0083-hosting-is-a-first-class-role.md), Hosting Is A First-Class Role. ADR 0083 names the changed items.
 - Uses: musicindex ADR 0037 R-WORD-7.
 
 ## Context

@@ -4,7 +4,7 @@
 - Date: 2026-11-02
 - Owner: operator
 - Accepted: 2026-11-02 by the operator, from the mockups in `.studio-dev/mockup-diff/site/`.
-- Changed: on 2026-11-05 the operator changed items 9 to 11 and added items 14 and 15, from finding 10 of the [human test of `0.1.0-rc.17`](../reviews/2026-11-05-rc17-human-test-findings.md). "Simplified" shows only words, and each time shows in local time.
+- Revised: on 2026-11-05 the operator changed items 9 to 11 and added items 14 and 15, from finding 10 of the [human test of `0.1.0-rc.17`](../reviews/2026-11-05-rc17-human-test-findings.md). "Simplified" shows only words, and each time shows in local time.
 - Uses: [ADR 0007](0007-draft-diff-write-and-announce.md) for the diff that the user approves. [ADR 0012](0012-lossless-tree-with-a-typed-model.md) for the typed model. [ADR 0010](0010-studio-uses-the-afterglow-direction.md) for a sign that is not only a color. [ADR 0065](0065-the-core-applies-each-feed-rule.md) for the core as the owner of each rule.
 
 ## Context

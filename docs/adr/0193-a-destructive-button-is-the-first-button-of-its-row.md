@@ -6,7 +6,10 @@
 - Accepted: 2026-11-12. The operator accepted musicindex ADR 0064 (musicindex `51d94d1`) through the orchestrator session. The orchestrator session asked Studio to apply it.
 - Technical choices: items 2, 4, 6, 9 and 10 are choices of the planning model.
 - Applies: musicindex ADR 0064 R-ACT-8 to R-ACT-12. Musicindex `ab11758` added R-ACT-10 to R-ACT-12 and the scope of R-ACT-8 on 2026-11-12, as operator decisions.
-- Changes: [ADR 0116](0116-the-page-of-a-person-has-save-and-discard.md) item 8, the button order of "Leave without saving?". [ADR 0103](0103-one-person-collects-the-items-of-many-suggestions.md) item 14, the order of "Merge with a Person" and "Delete Person". [ADR 0074](0074-nostr-keys-for-artists-labels-and-contributors.md) item 25, the order of "Change" and "Remove". [ADR 0099](0099-the-people-destination-and-the-page-of-a-person.md), the order of the recipient actions, when they show as a row of buttons.
+- Changes: [ADR 0116](0116-the-page-of-a-person-has-save-and-discard.md) item 8, the button order of "Leave without saving?".
+- Changes: [ADR 0103](0103-one-person-collects-the-items-of-many-suggestions.md) item 14, the order of "Merge with a Person" and "Delete Person".
+- Changes: [ADR 0074](0074-nostr-keys-for-artists-labels-and-contributors.md) item 25, the order of "Change" and "Remove".
+- Changes: [ADR 0099](0099-the-people-destination-and-the-page-of-a-person.md), the order of the recipient actions, when they show as a row of buttons.
 - Source: the screenshot of "Leave without saving?" on 2026-11-12. "Discard Changes" was the rightmost button of the sheet.
 
 ## Context

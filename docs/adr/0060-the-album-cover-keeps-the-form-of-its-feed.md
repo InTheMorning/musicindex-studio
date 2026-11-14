@@ -3,7 +3,9 @@
 - Status: Accepted
 - Date: 2026-10-27
 - Owner: operator
-- Amended: 2026-10-27 by operator decision. [ADR 0065](0065-the-core-applies-each-feed-rule.md) item 6 makes items 3 to 5 a step of the draft save in the core. The UI sends the new address in `image`, or an empty text to clear the cover.
+- Changed by: [ADR 0065](0065-the-core-applies-each-feed-rule.md) item 6 makes items 3 to 5 a step of the draft save in the core. The UI sends the new address in `image`, or an empty text to clear the cover.
+- Changes: [ADR 0023](0023-web-addresses-and-audio-file-facts.md), Web Addresses And The Facts Of An Audio File. ADR 0023 names the changed items.
+- Changes: [ADR 0025](0025-studio-serves-cover-art.md), Studio Serves Cover Art To The UI. ADR 0025 names the changed items.
 
 ## Context
 

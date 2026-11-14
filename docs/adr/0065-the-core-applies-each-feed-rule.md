@@ -4,6 +4,8 @@
 - Date: 2026-10-27
 - Owner: operator
 - Accepted: 2026-10-27 by the operator. Item 4 got its last sentence, and items 6 and 7 got their details, at the acceptance.
+- Changes: [ADR 0060](0060-the-album-cover-keeps-the-form-of-its-feed.md), The Album Cover Keeps The Form Of Its Feed. ADR 0060 names the changed items.
+- Changes: [ADR 0063](0063-one-switch-hides-a-feed-from-apps.md), One Switch Hides A Feed From Apps. ADR 0063 names the changed items.
 
 ## Context
 

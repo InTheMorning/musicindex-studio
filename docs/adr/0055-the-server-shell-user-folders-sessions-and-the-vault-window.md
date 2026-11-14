@@ -5,6 +5,10 @@
 - Owner: operator
 - Changed by: [ADR 0105](0105-a-public-server-holds-no-assets.md), for a server with `--hold-assets off`. Item 21: the storage limit counts the pending files, the files that no host has, the temporary files and the databases.
 - Changed by: [ADR 0107](0107-a-user-can-export-and-import-an-account.md). Items 2 and 3: the collection keeps the library as a relative path. Item 7: a sign-up can import an account.
+- Changed by: [ADR 0142](0142-a-user-selects-the-time-before-the-vault-locks.md), A User Selects The Time Before The Vault Locks.
+- Changes: [ADR 0013](0013-vault-format-and-cryptography.md), Vault Format And Cryptography. ADR 0013 names the changed items.
+- Changes: [ADR 0014](0014-collection-in-sqlite.md), The Collection Is In SQLite. ADR 0014 names the changed items.
+- Changes: [ADR 0035](0035-a-release-library-is-the-master-of-each-feed.md), A Release Library Is The Master Of Each Feed. ADR 0035 names the changed items.
 
 ## Context
 

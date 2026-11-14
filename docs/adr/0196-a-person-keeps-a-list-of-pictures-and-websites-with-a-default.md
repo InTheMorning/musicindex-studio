@@ -5,7 +5,10 @@
 - Owner: operator, with the technical choices of the planning model
 - Accepted: 2026-11-12 by the operator. The operator found the defect in the human check of ADR 0194. The operator asked for competing values with a default, as the wallets have. The operator selected "List, default stays" through the questionnaire, from a drawing.
 - Technical choices: items 2, 3, 6, 9, 10, 12, 13 and 14 are choices of the planning model.
-- Changes: [ADR 0194](0194-the-nickname-saves-at-once-and-the-update-sheet-selects-each-value.md) items 6 and 7, the button **Use**. [ADR 0182](0182-the-page-of-a-person-starts-with-its-links-and-has-a-nickname.md) items 1 and 3, the page suggestion of the picture and the website. [ADR 0170](0170-update-people-from-their-linked-pages.md) items 2 and 3, the first page gives the picture and the website. [ADR 0159](0159-a-person-can-link-to-a-page-on-music-index.md), a value that differs shows with "Use" as a pending change.
+- Changes: [ADR 0194](0194-the-nickname-saves-at-once-and-the-update-sheet-selects-each-value.md) items 6 and 7, the button **Use**.
+- Changes: [ADR 0182](0182-the-page-of-a-person-starts-with-its-links-and-has-a-nickname.md) items 1 and 3, the page suggestion of the picture and the website.
+- Changes: [ADR 0170](0170-update-people-from-their-linked-pages.md) items 2 and 3, the first page gives the picture and the website.
+- Changes: [ADR 0159](0159-a-person-can-link-to-a-page-on-music-index.md), a value that differs shows with "Use" as a pending change.
 - Source: the human check of ADR 0194 on 2026-11-12.
 
 ## Context

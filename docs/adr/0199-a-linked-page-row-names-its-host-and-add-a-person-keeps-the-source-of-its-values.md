@@ -4,7 +4,7 @@
 - Date: 2026-11-14
 - Owner: operator, with the technical choices of the planning model
 - Accepted: 2026-11-14 by the operator, through the questionnaire about the findings of the human test of 0.1.0-rc.22. The operator selected "Host on its own line" for finding 7.
-- Changed: 2026-11-14 by the operator, at the human check. Item 1 puts the host below "Read only", as the app shows it.
+- Revised: 2026-11-14 by the operator, at the human check. Item 1 puts the host below "Read only", as the app shows it.
 - Technical choices: the planning model selected the source of the host in item 2, the text of item 3, and items 4 to 7. Finding 8 is a defect against [ADR 0196](0196-a-person-keeps-a-list-of-pictures-and-websites-with-a-default.md) item 9, so it needs no new choice of the operator.
 - Uses: [ADR 0196](0196-a-person-keeps-a-list-of-pictures-and-websites-with-a-default.md) items 1 and 9, [ADR 0192](0192-add-a-person-has-the-layout-of-the-other-pickers.md) item 3, and the rule of one labeled line for each kind of value in a row.
 - Source: finding 7 and finding 8 of the [human test findings of 0.1.0-rc.22](../reviews/2026-11-13-rc22-human-test-findings.md).

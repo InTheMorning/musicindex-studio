@@ -3,6 +3,8 @@
 - Status: Accepted
 - Date: 2026-10-23
 - Owner: operator
+- Changed by: [ADR 0091](0091-a-change-set-edits-one-recipient-in-many-feeds.md), A Change Set Edits One Recipient In Many Feeds.
+- Changes: [ADR 0027](0027-the-recipient-picker.md), The Recipient Picker. ADR 0027 names the changed items.
 
 ## Context
 

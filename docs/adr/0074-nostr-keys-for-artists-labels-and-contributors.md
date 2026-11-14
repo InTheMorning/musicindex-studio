@@ -7,6 +7,7 @@
 - Changed by: [ADR 0098](0098-the-people-module.md). Items 17 to 19: the `lud16` of a profile is a suggestion for the wallet of a person. This changes the non-goal of `lud16`.
 - Changes: [ADR 0064](0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) item 8, for the copy of the album credits.
 - Changed by: [ADR 0193](0193-a-destructive-button-is-the-first-button-of-its-row.md). Item 25: "Remove" is the first button of its row, before "Change".
+- Changed by: [ADR 0137](0137-the-people-list-fills-nostr-keys-and-open-entries.md), The People List Fills Nostr Keys And Open Entries.
 
 ## Context
 

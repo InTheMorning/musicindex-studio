@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-22
 - Owner: operator
-- Amended: 2026-10-26 by operator decision. [ADR 0054](0054-live-items-connected-apps-and-show-grants.md) item 18 adds one exception to the invariant: a change that a show grant of the user covers.
+- Changed by: [ADR 0054](0054-live-items-connected-apps-and-show-grants.md) item 18 adds one exception to the invariant: a change that a show grant of the user covers.
 
 ## Context
 

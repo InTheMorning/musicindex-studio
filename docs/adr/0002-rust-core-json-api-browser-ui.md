@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-22
 - Owner: operator
+- Changed by: [ADR 0124](0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md), The Desktop App Is A Tauri Window On The Local API.
 
 ## Context
 

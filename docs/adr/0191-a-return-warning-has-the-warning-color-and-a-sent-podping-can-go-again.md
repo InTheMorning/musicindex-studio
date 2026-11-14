@@ -5,7 +5,8 @@
 - Owner: operator, with the technical choices of the planning model
 - Accepted: 2026-11-12 by the operator, in the human check of ADR 0190. The operator said that the return warning did not look like a warning. The operator accepted the two proposals of the planning model, and asked for the warning at the top of Review (item 6).
 - Technical choices: the form of item 1 follows musicindex ADR 0025 and the status mark of HitIt. The operator asked that the warning follow the guidelines. The text of item 4 is a choice of the planning model.
-- Changes: [ADR 0184](0184-after-a-move-studio-shows-the-podping-of-the-move.md) item 7, the buttons of the podping line. [ADR 0190](0190-review-gives-the-return-wait-of-music-index.md) items 2 to 4, the style of the warning. The rule "a notice border shows the error only" in `crates/api/ui/styles.css`.
+- Changes: [ADR 0184](0184-after-a-move-studio-shows-the-podping-of-the-move.md) item 7, the buttons of the podping line.
+- Changes: [ADR 0190](0190-review-gives-the-return-wait-of-music-index.md) items 2 to 4, the style of the warning. The rule "a notice border shows the error only" in `crates/api/ui/styles.css`.
 - Uses: musicindex ADR 0025 R-STATUS-1 for the Warning color. [ADR 0052](0052-announcements-through-the-podcast-index-hub.md) for the queue. [ADR 0189](0189-a-move-sends-one-podping-of-the-old-address.md) item 4 for the address that the button sends.
 - Source: the human check of task 127 on 2026-11-12.
 

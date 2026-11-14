@@ -5,7 +5,9 @@
 - Owner: operator, with the technical choices of the planning model
 - Accepted: 2026-11-12 by the operator, in the human checks of task 118 and task 128. The operator gave items 1, 3 and 5 in the chat. The operator selected **Use** in item 6 through the questionnaire, from a drawing.
 - Technical choices: items 2, 4 and 7 are choices of the planning model.
-- Changes: [ADR 0182](0182-the-page-of-a-person-starts-with-its-links-and-has-a-nickname.md) items 1 and 3, the button of the picture and the website. ADR 0182 item 13, the save of the nickname. [ADR 0170](0170-update-people-from-their-linked-pages.md) item 5, the check boxes of the review sheet. [ADR 0116](0116-the-page-of-a-person-has-save-and-discard.md) item 1, for the nickname only.
+- Changes: [ADR 0182](0182-the-page-of-a-person-starts-with-its-links-and-has-a-nickname.md) items 1 and 3, the button of the picture and the website. ADR 0182 item 13, the save of the nickname.
+- Changes: [ADR 0170](0170-update-people-from-their-linked-pages.md) item 5, the check boxes of the review sheet.
+- Changes: [ADR 0116](0116-the-page-of-a-person-has-save-and-discard.md) item 1, for the nickname only.
 - Source: the human checks of task 118 and task 128 on 2026-11-12.
 - Changed by: [ADR 0196](0196-a-person-keeps-a-list-of-pictures-and-websites-with-a-default.md). Items 6 and 7: the picture and the website suggestions have **Add** again, because a person keeps a list of each.
 

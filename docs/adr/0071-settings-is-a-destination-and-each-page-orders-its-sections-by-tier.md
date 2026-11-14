@@ -3,8 +3,12 @@
 - Status: Accepted
 - Date: 2026-10-28
 - Changed by: [ADR 0136](0136-one-announcement-choice-at-the-write.md). Item 14 ends: the Settings page has no announcement section.
+- Changed by: [ADR 0166](0166-settings-has-tabs-and-one-save-bar.md), Settings Has Tabs And One Save Bar.
 - Owner: operator
 - Accepted: 2026-10-28 by the operator.
+- Changes: [ADR 0039](0039-the-shell-releases-and-the-outline.md), The Shell, Releases And The Outline Of A Feed. ADR 0039 names the changed items.
+- Changes: [ADR 0052](0052-announcements-through-the-podcast-index-hub.md), Announcements Through The Podcast Index Hub. ADR 0052 names the changed items.
+- Changes: [ADR 0068](0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md), The Sequence Of The Sections And Fields Of An Editor Page. ADR 0068 names the changed items.
 
 ## Context
 

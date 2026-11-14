@@ -5,6 +5,9 @@
 - Owner: operator
 - Accepted: 2026-10-30 by the operator.
 - Changes: [ADR 0039](0039-the-shell-releases-and-the-outline.md) items 1, 2 and 11. Releases is no longer the only destination of the left panel, and it no longer lists the publisher feeds.
+- Changed by: [ADR 0088](0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md), The Left Panel Shows The Levels Of The Publisher Feeds.
+- Changed by: [ADR 0089](0089-the-left-panel-shows-the-art-of-each-publisher-feed.md), The Left Panel Shows The Art Of Each Publisher Feed.
+- Changed by: [ADR 0090](0090-studio-names-the-feeds-that-it-does-not-edit.md), Studio Names The Feeds That It Does Not Edit.
 - Uses: musicindex ADR 0027 R-SHELL-1 items 1 and 2, R-LIST-1, musicindex ADR 0030 R-SHELL-2 item 2 and musicindex ADR 0037 R-WORD-7.
 
 ## Context

@@ -5,9 +5,11 @@
 - Changed by: [ADR 0135](0135-the-panel-holds-the-content-and-the-page-has-tabs.md). The first page has no rows for the pages that are now tabs.
 - Owner: operator
 - Accepted: 2026-10-27 by the operator.
-- Amended: 2026-10-28 by operator decision. [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) item 15 replaces item 11 and the mechanical check. The sequences of items 2 to 9 are the start values of the model module. The module now owns the sequence, and the tier test of ADR 0071 item 6 is the guard.
-- Amended: 2026-10-28 by operator decision. [ADR 0073](0073-the-add-pages-ask-one-question-at-a-time.md) item 11 replaces "Add a track" and "Import files" in item 2 with one row "Add tracks".
+- Changed by: [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) item 15 replaces item 11 and the mechanical check. The sequences of items 2 to 9 are the start values of the model module. The module now owns the sequence, and the tier test of ADR 0071 item 6 is the guard.
+- Changed by: [ADR 0073](0073-the-add-pages-ask-one-question-at-a-time.md) item 11 replaces "Add a track" and "Import files" in item 2 with one row "Add tracks".
 - Changed by: [ADR 0130](0130-the-facts-of-an-audio-file-stay-locked.md). Item 10: the duration moves into "Properties". It is text until the user selects "Advanced".
+- Changes: [ADR 0053](0053-playlists-are-musicl-feeds-with-remote-items.md), Playlists Are musicL Feeds With Remote Items. ADR 0053 names the changed items.
+- Changes: [ADR 0064](0064-the-editor-edits-the-fields-that-msp-2-0-edits.md), The Editor Edits The Fields That MSP 2.0 Edits. ADR 0064 names the changed items.
 
 ## Context
 

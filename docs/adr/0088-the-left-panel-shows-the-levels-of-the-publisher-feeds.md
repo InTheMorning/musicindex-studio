@@ -4,7 +4,7 @@
 - Date: 2026-10-30
 - Owner: operator
 - Accepted: 2026-10-30 by the operator.
-- Amended: 2026-10-30 by operator decision. The first role of a feed gives its rank in item 1, and its heading in item 4. A feed is one feed on one level.
+- Revised: 2026-10-30 by operator decision. The first role of a feed gives its rank in item 1, and its heading in item 4. A feed is one feed on one level.
 - Changes: [ADR 0085](0085-each-artist-and-label-is-a-destination.md) items 1, 3 and 5, and [ADR 0069](0069-the-outline-head-opens-the-feed-page.md), which makes the first row of each outline "‹ Releases".
 - Uses: Stophammer ADR 0069 §4 (`co_credited_feeds`) and §"A direct link between a label feed and an artist feed".
 - Open: no shared musicindex ADR owns the levels. musicindex ADR 0030 R-SHELL-2 item 3 gives the stack "the root, a list, the outline of an item, then one part of the item". This record adds levels between the root and the outline. The operator decided to write the Studio record first.

@@ -4,6 +4,7 @@
 - Date: 2026-11-06
 - Owner: operator
 - Changes: [ADR 0052](0052-announcements-through-the-podcast-index-hub.md) items 5, 6, 11 and 12, and [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) item 14
+- Changes: [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md), Settings Is A Destination, And Each Page Orders Its Sections By Tier. ADR 0071 names the changed items.
 - Source: [findings of local use, finding 7](../reviews/2026-11-06-local-use-findings.md)
 
 ## Context

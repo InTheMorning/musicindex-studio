@@ -3,8 +3,8 @@
 - Status: Accepted
 - Date: 2026-10-22
 - Owner: operator
-- Amended: 2026-10-27 by operator decision. [ADR 0060](0060-the-album-cover-keeps-the-form-of-its-feed.md) item 1 adds the `url` of the channel RSS `<image>` to the address fields of item 1.
-- Amended: 2026-10-28 by operator decision. [ADR 0073](0073-the-add-pages-ask-one-question-at-a-time.md) item 14 shows the facts that Studio found in a closed row "Properties" (item 6).
+- Changed by: [ADR 0060](0060-the-album-cover-keeps-the-form-of-its-feed.md) item 1 adds the `url` of the channel RSS `<image>` to the address fields of item 1.
+- Changed by: [ADR 0073](0073-the-add-pages-ask-one-question-at-a-time.md) item 14 shows the facts that Studio found in a closed row "Properties" (item 6).
 
 ## Context
 

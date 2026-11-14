@@ -199,6 +199,8 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0195: Restore the hosted copy is destructive](adr/0195-restore-the-hosted-copy-is-destructive.md)
 - [ADR 0196: A person keeps a list of pictures and websites, with a default](adr/0196-a-person-keeps-a-list-of-pictures-and-websites-with-a-default.md)
 - [ADR 0197: The tabs and the field rows follow the width of the editor column](adr/0197-the-tabs-and-the-field-rows-follow-the-editor-column.md)
+- [ADR 0198: The review of a delete names the delete, and a deleted feed shows only what it can do](adr/0198-the-review-of-a-delete-names-the-delete-and-a-deleted-feed-shows-only-what-it-can-do.md)
+- [ADR 0199: A linked page row names its host, and Add a Person keeps the source of its values](adr/0199-a-linked-page-row-names-its-host-and-add-a-person-keeps-the-source-of-its-values.md)
 
 ## Plans
 
@@ -473,6 +475,8 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 134: A deleted feed opens from its last copy](tasks/studio-v1-task-134-deleted-feed-opens.md)
 - [Studio v1 task 135: The tabs and the field rows follow the editor column](tasks/studio-v1-task-135-tabs-and-rows-follow-the-column.md)
 - [Studio v1 task 136: The delete sheet stays still and the review texts are correct](tasks/studio-v1-task-136-delete-sheet-and-review-texts.md)
+- [Studio v1 task 137: The review of a delete names the delete, and a deleted feed shows only what it can do](tasks/studio-v1-task-137-delete-review-and-deleted-feed.md)
+- [Studio v1 task 138: A linked page row names its host, and Add a Person keeps the source of its values](tasks/studio-v1-task-138-linked-page-host-and-add-a-person-source.md)
 - [Studio v1 task 055: The date and time fields](tasks/studio-v1-task-055-date-time-fields.md)
 - [Studio v1 task 055a: The times in the core](tasks/studio-v1-task-055a-times-in-the-core.md)
 - [Studio v1 task 055b: The date and time field](tasks/studio-v1-task-055b-date-time-field.md)

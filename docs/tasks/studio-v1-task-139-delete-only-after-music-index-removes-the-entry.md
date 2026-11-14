@@ -2,7 +2,7 @@
 
 Decision: [ADR 0200](../adr/0200-studio-deletes-a-feed-file-only-after-music-index-removes-the-entry.md).
 
-Status: Complete on 2026-11-14. The human check of ADR 0200 is open.
+Status: Complete on 2026-11-14. The human check of ADR 0200 passed on 2026-11-14.
 
 ## Result
 

@@ -57,6 +57,6 @@ Visual, by the planning model:
 - The sheet of a held feed and of a feed that Music Index does not hold, at 1280 px light and 390 px dark.
 - The Retire block of a held feed: step 3 has no button.
 
-Human, by the operator. This gate stays open until it runs:
+Human, by the operator. This gate passed on 2026-11-14:
 
 - In the desktop app, open **Delete from File Host…** of a feed that Music Index holds. The sheet has only **Move It to a Different File Host** and **Retire It**.

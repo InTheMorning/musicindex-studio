@@ -4,7 +4,7 @@
 - Date: 2026-11-06
 - Owner: operator
 - Accepted: 2026-11-06 by the operator, who asked that the row names the track. The form of the line is a choice of the planning model.
-- Uses: [ADR 0120](0120-the-check-of-a-person-shows-each-difference.md) items 1 and 2 for the places and their text.
+- Uses: [ADR 0120](../archive/adr/0120-the-check-of-a-person-shows-each-difference.md) items 1 and 2 for the places and their text.
 - Source: [findings of local use, finding 26](../reviews/2026-11-06-local-use-findings.md)
 
 ## Context

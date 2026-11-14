@@ -1,7 +1,7 @@
 # Studio v1 Task 093: A Person Can Be Part Of Many Artists And Labels
 
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The People Module".
-Decision: [ADR 0132](../adr/0132-a-person-can-be-part-of-many-artists-and-labels.md). It changes [ADR 0118](../adr/0118-member-of-offers-a-credit-on-the-artist-feed.md) and [ADR 0111](../adr/0111-the-page-of-a-person-checks-the-feeds.md) item 3. It uses [ADR 0116](../adr/0116-the-page-of-a-person-has-save-and-discard.md).
+Decision: [ADR 0132](../adr/0132-a-person-can-be-part-of-many-artists-and-labels.md). It changes [ADR 0118](../adr/0118-member-of-offers-a-credit-on-the-artist-feed.md) and [ADR 0111](../archive/adr/0111-the-page-of-a-person-checks-the-feeds.md) item 3. It uses [ADR 0116](../adr/0116-the-page-of-a-person-has-save-and-discard.md).
 
 Status: Complete, with packets 093a and 093b. The screenshot visual check passed on 2026-11-05. The human test is open.
 

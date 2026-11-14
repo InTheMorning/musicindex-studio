@@ -4,7 +4,7 @@
 - Date: 2026-11-03
 - Owner: operator
 - Accepted: 2026-11-03 by the operator: "reuse our rich pickers instead of having different input code for the same data".
-- Changes: [ADR 0099](0099-the-people-destination-and-the-page-of-a-person.md) item 4, the forms "Add a Nostr Key" and "Add a Credit Name" of the page of a person.
+- Changes: [ADR 0099](../archive/adr/0099-the-people-destination-and-the-page-of-a-person.md) item 4, the forms "Add a Nostr Key" and "Add a Credit Name" of the page of a person.
 - Uses: [ADR 0074](0074-nostr-keys-for-artists-labels-and-contributors.md) for the profile search.
 
 ## Context

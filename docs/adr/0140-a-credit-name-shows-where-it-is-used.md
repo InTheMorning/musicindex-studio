@@ -5,8 +5,8 @@
 - Owner: operator
 - Accepted: 2026-11-06 by the operator, through the questionnaire, from drawings of the rows. The operator selected the rows that show the use, in a fold.
 - Technical choices: items 4 and 5 are choices of the planning model.
-- Changes: the rows "Credit name" and "Nostr key" of [ADR 0099](0099-the-people-destination-and-the-page-of-a-person.md).
-- Uses: [ADR 0028](0028-summary-lines-and-one-open-entry.md) for a section that starts closed. [ADR 0098](0098-the-people-module.md) item 12 for the identity of a credit. [ADR 0102](0102-delete-a-person-changes-no-feed.md).
+- Changes: the rows "Credit name" and "Nostr key" of [ADR 0099](../archive/adr/0099-the-people-destination-and-the-page-of-a-person.md).
+- Uses: [ADR 0028](0028-summary-lines-and-one-open-entry.md) for a section that starts closed. [ADR 0098](../archive/adr/0098-the-people-module.md) item 12 for the identity of a credit. [ADR 0102](../archive/adr/0102-delete-a-person-changes-no-feed.md).
 - Source: [findings of local use, finding 23](../reviews/2026-11-06-local-use-findings.md)
 
 ## Context

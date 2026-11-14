@@ -4,7 +4,7 @@
 - Date: 2026-11-02
 - Owner: operator
 - Accepted: 2026-11-02 by the operator, from the mockups in `.studio-dev/mockup-people-2/site/`.
-- Changes: [ADR 0098](0098-the-people-module.md) item 5, the usual role of a person.
+- Changes: [ADR 0098](../archive/adr/0098-the-people-module.md) item 5, the usual role of a person.
 - Changes: [ADR 0064](0064-the-editor-edits-the-fields-that-msp-2-0-edits.md), the role field of a credit.
 - Uses: [ADR 0065](0065-the-core-applies-each-feed-rule.md) for the group of a role, and [ADR 0012](0012-lossless-tree-with-a-typed-model.md) for the bytes of a credit that the user does not change.
 

@@ -6,10 +6,10 @@
 - Accepted: 2026-11-06 by the operator, through the questionnaire and from the mockup in `.studio-dev/mockup-pickers/`. The operator selected one selection that fills the form, a row with a heading after the form, lists that fold, and all four sheets. The operator accepted items 9 to 13 from a list of proposed changes, and asked for the share on each row and for the name of a large node. The operator selected one search in all sheets, from a recommendation. The operator asked for the row in the credit picker and the Nostr picker.
 - Technical choices: the limit of 6 rows in item 2 and the two routes of item 3 are choices of the planning model.
 - Changes: [ADR 0144](0144-recipients-use-one-picker-and-sort-by-split.md) item 2, the position of the row of musicindex.
-- Changes: [ADR 0099](0099-the-people-destination-and-the-page-of-a-person.md) items 20 and 21, "Pick From Your People".
+- Changes: [ADR 0099](../archive/adr/0099-the-people-destination-and-the-page-of-a-person.md) items 20 and 21, "Pick From Your People".
 - Changes: [ADR 0137](0137-the-people-list-fills-nostr-keys-and-open-entries.md) items 4 to 9, "Fill from a Person".
 - Changed by: [ADR 0169](0169-an-open-credit-can-find-on-music-index.md), An Open Credit Can Find On Music Index.
-- Uses: [ADR 0123](0123-one-type-of-value-has-one-picker.md) and [ADR 0141](0141-the-form-of-add-a-wallet-comes-first.md) item 1, the form stays in view. [ADR 0117](0117-the-page-of-a-person-finds-values-on-musicindex.md) for the search of artist and label feeds. [ADR 0098](0098-the-people-module.md), a value from a person is a start value.
+- Uses: [ADR 0123](0123-one-type-of-value-has-one-picker.md) and [ADR 0141](0141-the-form-of-add-a-wallet-comes-first.md) item 1, the form stays in view. [ADR 0117](0117-the-page-of-a-person-finds-values-on-musicindex.md) for the search of artist and label feeds. [ADR 0098](../archive/adr/0098-the-people-module.md), a value from a person is a start value.
 - Source: [findings of local use, finding 29](../reviews/2026-11-06-local-use-findings.md)
 
 ## Context

@@ -1,7 +1,7 @@
 # Studio v1 Task 074: The Credit Role List
 
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The People Module".
-Decision: [ADR 0112](../adr/0112-a-credit-role-comes-from-a-list.md). It uses [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md), [ADR 0012](../adr/0012-lossless-tree-with-a-typed-model.md) and [ADR 0098](../adr/0098-the-people-module.md) items 5 and 20.
+Decision: [ADR 0112](../adr/0112-a-credit-role-comes-from-a-list.md). It uses [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md), [ADR 0012](../adr/0012-lossless-tree-with-a-typed-model.md) and [ADR 0098](../archive/adr/0098-the-people-module.md) items 5 and 20.
 
 Status: Complete, in two packets, with the screenshot visual check of 074b on 2026-11-02. The human test is open. Notes from the reviews:
 

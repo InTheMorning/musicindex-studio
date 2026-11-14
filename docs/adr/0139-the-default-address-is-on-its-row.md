@@ -4,7 +4,7 @@
 - Date: 2026-11-06
 - Owner: operator
 - Accepted: 2026-11-06 by the operator, through the questionnaire, from drawings of the rows. The operator selected the button on each row.
-- Changes: [ADR 0099](0099-the-people-destination-and-the-page-of-a-person.md) item 4, the select menu "Default address", and [ADR 0116](0116-the-page-of-a-person-has-save-and-discard.md) for that menu.
+- Changes: [ADR 0099](../archive/adr/0099-the-people-destination-and-the-page-of-a-person.md) item 4, the select menu "Default address", and [ADR 0116](0116-the-page-of-a-person-has-save-and-discard.md) for that menu.
 - Source: [examples of a default among many addresses](../research/2026-11-06-default-address-examples.md), and [findings of local use, finding 21](../reviews/2026-11-06-local-use-findings.md)
 
 ## Context

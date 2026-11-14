@@ -199,7 +199,7 @@ The same row of `peoplepages.js` shows each page suggestion: a picture, a websit
 
 Decision: [ADR 0182](../adr/0182-the-page-of-a-person-starts-with-its-links-and-has-a-nickname.md).
 
-Owner: [ADR 0099](../adr/0099-the-people-destination-and-the-page-of-a-person.md) and [ADR 0163](../adr/0163-one-sheet-finds-and-links-a-page-on-music-index.md).
+Owner: [ADR 0099](../archive/adr/0099-the-people-destination-and-the-page-of-a-person.md) and [ADR 0163](../adr/0163-one-sheet-finds-and-links-a-page-on-music-index.md).
 
 The sheet "Add a Person" has only the field "Name" and **Add the Person**. To link a page, the user adds the person, opens the page of the person and selects **Find on Music Index**. The sheet does not show a person that is in People already, so the user can add a second person with the same name.
 
@@ -216,7 +216,7 @@ A mockup of the real sheet comes before the ADR.
 
 Decision: [ADR 0182](../adr/0182-the-page-of-a-person-starts-with-its-links-and-has-a-nickname.md).
 
-Owner: [ADR 0099](../adr/0099-the-people-destination-and-the-page-of-a-person.md) and [ADR 0159](../adr/0159-a-person-can-link-to-a-page-on-music-index.md).
+Owner: [ADR 0099](../archive/adr/0099-the-people-destination-and-the-page-of-a-person.md) and [ADR 0159](../adr/0159-a-person-can-link-to-a-page-on-music-index.md).
 
 The section "Linked artist and label pages" is below the sections "Payment", "Credits" and "Support links". The linked page gives the suggestions in these sections, but the user sees the link last. **Use All Suggestions** is also below the suggestions that it adds.
 

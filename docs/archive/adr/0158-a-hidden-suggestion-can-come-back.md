@@ -1,6 +1,8 @@
+> Archived: superseded by [ADR 0203](../../adr/0203-people.md) on 2026-11-14. ADR 0203 restates each live rule of this ADR. Its item map gives the new item of each item.
+
 # ADR 0158: A Hidden Suggestion Can Come Back
 
-- Status: Accepted
+- Status: Superseded by ADR 0203
 - Date: 2026-11-08
 - Owner: operator
 - Accepted: 2026-11-08 by the operator. The label "Not This Person" did not name a person or a step, and a dismissal had no undo.
@@ -29,4 +31,4 @@ Mechanical:
 
 Visual, by the agent: the fold with one hidden suggestion, and the list after "Show Again", at 1280 px and at 390 px with touch.
 
-Visual result: passed on 2026-11-08 ([visual checks of 2026-11-08](../reviews/2026-11-08-visual-checks.md)).
+Visual result: passed on 2026-11-08 ([visual checks of 2026-11-08](../../reviews/2026-11-08-visual-checks.md)).

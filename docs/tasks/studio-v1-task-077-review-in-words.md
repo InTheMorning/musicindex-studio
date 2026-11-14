@@ -1,7 +1,7 @@
 # Studio v1 Task 077: The Review In Words And The Marked Lines
 
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The Review Of A Write".
-Decision: [ADR 0114](../adr/0114-the-review-shows-the-changes-in-words-and-marks-the-changed-part-of-a-line.md). It uses [ADR 0007](../adr/0007-draft-diff-write-and-announce.md), [ADR 0012](../adr/0012-lossless-tree-with-a-typed-model.md), [ADR 0010](../adr/0010-studio-uses-the-afterglow-direction.md), [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md) and [ADR 0103](../adr/0103-one-person-collects-the-items-of-many-suggestions.md) item 18.
+Decision: [ADR 0114](../adr/0114-the-review-shows-the-changes-in-words-and-marks-the-changed-part-of-a-line.md). It uses [ADR 0007](../adr/0007-draft-diff-write-and-announce.md), [ADR 0012](../adr/0012-lossless-tree-with-a-typed-model.md), [ADR 0010](../adr/0010-studio-uses-the-afterglow-direction.md), [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md) and [ADR 0103](../archive/adr/0103-one-person-collects-the-items-of-many-suggestions.md) item 18.
 
 Status: Complete, in four packets, with the screenshot visual checks of 077b, 077c and 077d on 2026-11-02. The human test is open. Notes from the reviews:
 

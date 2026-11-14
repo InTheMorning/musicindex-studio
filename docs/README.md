@@ -101,11 +101,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0095: A Lightning address and its node key are one recipient](adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md)
 - [ADR 0096: Add to an artist or label](adr/0096-add-to-an-artist-or-label.md)
 - [ADR 0097: Studio suggests the Lightning address of a wallet](adr/0097-studio-suggests-the-lightning-address-of-a-wallet.md)
-- [ADR 0098: The People module](adr/0098-the-people-module.md)
-- [ADR 0099: The People destination and the page of a person](adr/0099-the-people-destination-and-the-page-of-a-person.md)
 - [ADR 0100: Each release candidate has a notes file](adr/0100-each-release-candidate-has-a-notes-file.md)
-- [ADR 0102: Delete a person changes no feed](adr/0102-delete-a-person-changes-no-feed.md)
-- [ADR 0103: One person collects the items of many suggestions](adr/0103-one-person-collects-the-items-of-many-suggestions.md)
 - [ADR 0104: Key material stays off the disk](adr/0104-key-material-stays-off-the-disk.md)
 - [ADR 0105: A public server holds no assets](adr/0105-a-public-server-holds-no-assets.md)
 - [ADR 0106: A sensitive account change needs a recent unlock](adr/0106-a-sensitive-account-change-needs-a-recent-unlock.md)
@@ -113,7 +109,6 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0108: People data at rest stays plain](adr/0108-people-data-at-rest-stays-plain.md)
 - [ADR 0109: Images and audio load from their hosts](adr/0109-images-and-audio-load-from-their-hosts.md)
 - [ADR 0110: A connected app signs each request with its own key](adr/0110-a-connected-app-signs-each-request-with-its-own-key.md)
-- [ADR 0111: The page of a person checks the feeds](adr/0111-the-page-of-a-person-checks-the-feeds.md)
 - [ADR 0112: A credit role comes from a list](adr/0112-a-credit-role-comes-from-a-list.md)
 - [ADR 0113: The page of a person suggests a picture and an information address](adr/0113-the-page-of-a-person-suggests-a-picture-and-an-information-address.md)
 - [ADR 0114: The review shows the changes in words and marks the changed part of a line](adr/0114-the-review-shows-the-changes-in-words-and-marks-the-changed-part-of-a-line.md)
@@ -122,7 +117,6 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0117: The page of a person finds values on musicindex](adr/0117-the-page-of-a-person-finds-values-on-musicindex.md)
 - [ADR 0118: "Member of" offers a credit on the artist feed](adr/0118-member-of-offers-a-credit-on-the-artist-feed.md)
 - [ADR 0119: A new user starts as a musician or a label](adr/0119-a-new-user-starts-as-a-musician-or-a-label.md)
-- [ADR 0120: The check of a person shows each difference](adr/0120-the-check-of-a-person-shows-each-difference.md)
 - [ADR 0122: A new user starts with a default file host](adr/0122-a-new-user-starts-with-a-default-file-host.md)
 - [ADR 0123: One type of value has one picker](adr/0123-one-type-of-value-has-one-picker.md)
 - [ADR 0124: The desktop app is a Tauri window on the local API](adr/0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md)
@@ -157,9 +151,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0153: The People list has a sort, and names sort with numbers](adr/0153-the-people-list-has-a-sort-and-names-sort-with-numbers.md)
 - [ADR 0154: The search fields have a field list](adr/0154-the-search-fields-have-a-field-list.md)
 - [ADR 0155: The sort menu names both directions](adr/0155-the-sort-menu-names-both-directions.md)
-- [ADR 0156: The page of a person lists where the person is](adr/0156-the-page-of-a-person-lists-where-the-person-is.md)
 - [ADR 0157: The page tabs are a segmented control](adr/0157-the-page-tabs-are-a-segmented-control.md)
-- [ADR 0158: A hidden suggestion can come back](adr/0158-a-hidden-suggestion-can-come-back.md)
 - [ADR 0159: A person can link to a page on Music Index](adr/0159-a-person-can-link-to-a-page-on-music-index.md)
 - [ADR 0160: The field list shows the placeholder of a text field](adr/0160-the-field-list-shows-the-placeholder-of-a-text-field.md)
 - [ADR 0161: A live item needs a stream, and a content link is recommended](adr/0161-a-live-item-needs-a-stream-and-a-content-link-is-recommended.md)
@@ -204,6 +196,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0200: Studio deletes a feed file only after Music Index removes the entry](adr/0200-studio-deletes-a-feed-file-only-after-music-index-removes-the-entry.md)
 - [ADR 0201: People opens before the Lightning address lookups](adr/0201-people-opens-before-the-lightning-address-lookups.md)
 - [ADR 0202: An http image shows from its https address](adr/0202-an-http-image-shows-from-its-https-address.md)
+- [ADR 0203: People](adr/0203-people.md)
 
 ## Plans
 
@@ -584,5 +577,13 @@ Each release candidate after 0.1.0-rc.8 has one notes file ([ADR 0100](adr/0100-
 
 Superseded decisions. Read them for research only. They bind no change.
 
+- [ADR 0098: The People module](archive/adr/0098-the-people-module.md), superseded by ADR 0203
+- [ADR 0099: The People destination and the page of a person](archive/adr/0099-the-people-destination-and-the-page-of-a-person.md), superseded by ADR 0203
 - [ADR 0101: A suggestion groups the items of one name](archive/adr/0101-a-suggestion-groups-the-items-of-one-name.md), superseded by ADR 0103
+- [ADR 0102: Delete a person changes no feed](archive/adr/0102-delete-a-person-changes-no-feed.md), superseded by ADR 0203
+- [ADR 0103: One person collects the items of many suggestions](archive/adr/0103-one-person-collects-the-items-of-many-suggestions.md), superseded by ADR 0203
+- [ADR 0111: The page of a person checks the feeds](archive/adr/0111-the-page-of-a-person-checks-the-feeds.md), superseded by ADR 0203
+- [ADR 0120: The check of a person shows each difference](archive/adr/0120-the-check-of-a-person-shows-each-difference.md), superseded by ADR 0203
 - [ADR 0121: A folder with no public address holds practice pages](archive/adr/0121-a-folder-with-no-public-address-holds-practice-pages.md), superseded by ADR 0122
+- [ADR 0156: The page of a person lists where the person is](archive/adr/0156-the-page-of-a-person-lists-where-the-person-is.md), superseded by ADR 0203
+- [ADR 0158: A hidden suggestion can come back](archive/adr/0158-a-hidden-suggestion-can-come-back.md), superseded by ADR 0203

@@ -1,11 +1,13 @@
+> Archived: superseded by [ADR 0203](../../adr/0203-people.md) on 2026-11-14. ADR 0203 restates each live rule of this ADR. Its item map gives the new item of each item.
+
 # ADR 0102: Delete A Person Changes No Feed
 
-- Status: Accepted
+- Status: Superseded by ADR 0203
 - Date: 2026-11-01
 - Owner: operator
 - Accepted: 2026-11-01 by the operator.
 - Changes: [ADR 0099](0099-the-people-destination-and-the-page-of-a-person.md) items 4 and 11, the name of the operation "Remove".
-- Uses: [ADR 0098](0098-the-people-module.md) items 2, 3 and 15, and [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) for the tier of a section.
+- Uses: [ADR 0098](0098-the-people-module.md) items 2, 3 and 15, and [ADR 0071](../../adr/0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) for the tier of a section.
 
 ## Context
 

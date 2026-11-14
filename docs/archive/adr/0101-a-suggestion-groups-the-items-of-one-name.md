@@ -1,4 +1,4 @@
-> Archived: superseded by [ADR 0103](../../adr/0103-one-person-collects-the-items-of-many-suggestions.md) on 2026-11-01. ADR 0103 keeps items 1 to 7 of this ADR.
+> Archived: superseded by [ADR 0103](0103-one-person-collects-the-items-of-many-suggestions.md) on 2026-11-01. ADR 0103 keeps items 1 to 7 of this ADR.
 
 # ADR 0101: A Suggestion Groups The Items Of One Name
 
@@ -6,8 +6,8 @@
 - Date: 2026-11-01
 - Owner: operator
 - Accepted: 2026-11-01 by the operator.
-- Changes: [ADR 0098](../../adr/0098-the-people-module.md) item 12, the grouping of the suggestions. Items 13 to 16 stay.
-- Uses: [ADR 0099](../../adr/0099-the-people-destination-and-the-page-of-a-person.md) item 3 for the sheet "Make a Person".
+- Changes: [ADR 0098](0098-the-people-module.md) item 12, the grouping of the suggestions. Items 13 to 16 stay.
+- Uses: [ADR 0099](0099-the-people-destination-and-the-page-of-a-person.md) item 3 for the sheet "Make a Person".
 
 ## Context
 

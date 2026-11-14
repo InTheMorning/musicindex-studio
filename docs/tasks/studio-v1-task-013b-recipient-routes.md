@@ -1,6 +1,6 @@
 # Studio v1 Task 013b: The Recipient Routes
 
-Parent: [task 013](studio-v1-task-013-recipient-picker.md). Decision: [ADR 0027](../adr/0027-the-recipient-picker.md) items 2 to 6.
+Parent: [task 013](studio-v1-task-013-recipient-picker.md). Decision: [ADR 0027](../archive/adr/0027-the-recipient-picker.md) items 2 to 6.
 Sequence: after [task 013a](studio-v1-task-013a-recipient-store.md).
 
 ## Goal

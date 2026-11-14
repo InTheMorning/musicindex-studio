@@ -1,7 +1,7 @@
 # Studio v1 Task 067: The Findings Of The First People Test
 
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The People Module".
-Decisions: [ADR 0103](../archive/adr/0103-one-person-collects-the-items-of-many-suggestions.md), [ADR 0102](../archive/adr/0102-delete-a-person-changes-no-feed.md), [ADR 0098](../archive/adr/0098-the-people-module.md) items 6, 7 and 17 to 19, [ADR 0099](../archive/adr/0099-the-people-destination-and-the-page-of-a-person.md) items 3, 4 and 15, [ADR 0095](../adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md), [ADR 0074](../adr/0074-nostr-keys-for-artists-labels-and-contributors.md) items 12 to 15, [ADR 0057](../adr/0057-the-private-network-guard-of-the-server.md) and [ADR 0045](../adr/0045-phase-9-crates-test-servers-and-host-forms.md).
+Decisions: [ADR 0103](../archive/adr/0103-one-person-collects-the-items-of-many-suggestions.md), [ADR 0102](../archive/adr/0102-delete-a-person-changes-no-feed.md), [ADR 0098](../archive/adr/0098-the-people-module.md) items 6, 7 and 17 to 19, [ADR 0099](../archive/adr/0099-the-people-destination-and-the-page-of-a-person.md) items 3, 4 and 15, [ADR 0095](../archive/adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md), [ADR 0074](../adr/0074-nostr-keys-for-artists-labels-and-contributors.md) items 12 to 15, [ADR 0057](../adr/0057-the-private-network-guard-of-the-server.md) and [ADR 0045](../adr/0045-phase-9-crates-test-servers-and-host-forms.md).
 
 Status: Complete, in five packets, with the screenshot visual checks of 067d and 067e. The human test is open. Notes from the reviews:
 

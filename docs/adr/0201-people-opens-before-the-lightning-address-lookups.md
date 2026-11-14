@@ -5,7 +5,7 @@
 - Owner: operator, with the technical choices of the planning model
 - Accepted: 2026-11-14 by the operator. The operator selected "Check after": People opens with the last known results, and the lookups run after that.
 - Technical choices: the planning model selected items 3 to 9.
-- Changes: [ADR 0095](0095-a-lightning-address-and-its-node-key-are-one-recipient.md) item 3.
+- Changes: [ADR 0095](../archive/adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md) item 3.
 - Uses: [ADR 0015](0015-connector-interface-and-write-pipeline.md) for the requests with no lock of the workspace. [ADR 0113](0113-the-page-of-a-person-suggests-a-picture-and-an-information-address.md) item 5 and [ADR 0200](0200-studio-deletes-a-feed-file-only-after-music-index-removes-the-entry.md) item 6 use the same pattern.
 
 ## Context

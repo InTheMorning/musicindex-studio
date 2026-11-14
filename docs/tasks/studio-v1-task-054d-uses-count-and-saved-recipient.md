@@ -1,6 +1,6 @@
 # Studio v1 Task 054d: One Count Of The Uses, And Discard Of The Saved Recipient
 
-Parent: [task 054](studio-v1-task-054-recipient-change-sets.md). Decision: [ADR 0091](../adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md) items 2, 12 and 20.
+Parent: [task 054](studio-v1-task-054-recipient-change-sets.md). Decision: [ADR 0091](../archive/adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md) items 2, 12 and 20.
 
 Status: Complete. `GET /recipients` took 0.09 s for a collection with 58 feeds. A recipient that is not saved and that no feed model uses shows "0 feeds".
 

@@ -1,6 +1,6 @@
 # Studio v1 Task 054b: The Routes Of A Change Set
 
-Parent: [task 054](studio-v1-task-054-recipient-change-sets.md). Decision: [ADR 0091](../adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md) items 2, 3, 9, 12 and 17 to 26.
+Parent: [task 054](studio-v1-task-054-recipient-change-sets.md). Decision: [ADR 0091](../archive/adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md) items 2, 3, 9, 12 and 17 to 26.
 
 Status: Complete. A change set object gives `blocked` for a feed that Studio cannot write now. Discard does not put back a changed saved recipient.
 

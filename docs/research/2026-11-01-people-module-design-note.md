@@ -24,14 +24,14 @@ Studio has no record of a person. The data is in three places that do not refer 
 
 | Data | Where | Owner |
 | --- | --- | --- |
-| Value recipients of each feed | Table `feed_recipients`, from each read and write | [ADR 0027](../adr/0027-the-recipient-picker.md) |
+| Value recipients of each feed | Table `feed_recipients`, from each read and write | [ADR 0027](../archive/adr/0027-the-recipient-picker.md) |
 | Recipients that the user saved | Table `saved_recipients` | ADR 0027 item 5 |
-| The wallet of a Lightning address | Table `keysend_lookups` | [ADR 0095](../adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md) |
+| The wallet of a Lightning address | Table `keysend_lookups` | [ADR 0095](../archive/adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md) |
 | Credits (`podcast:person`) | Only in the feed model of each feed. No table. | [ADR 0064](../archive/adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md), [ADR 0075](../adr/0075-the-publisher-page-has-payments-and-credits.md) |
 | Nostr keys of persons and feeds | Only in the feed model. The profile search gets profiles from relays and musicindex. | [ADR 0074](../adr/0074-nostr-keys-for-artists-labels-and-contributors.md) |
 | Support links (`podcast:funding`) | Only in the feed model, as `fundings` on the channel and on each item. The editor shows them as "Support links". No table and no picker. | ADR 0023, ADR 0075 |
 
-The Recipients page of [ADR 0091](../adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md) does two jobs:
+The Recipients page of [ADR 0091](../archive/adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md) does two jobs:
 
 1. It is a directory of payees: who gets paid, and through which addresses.
 2. It is a tool for batch edits: each operation makes a change set and writes feeds.
@@ -69,7 +69,7 @@ The module keeps three types of data. Each type has a different owner and a diff
 This section is a proposal for the module ADR. It is not a decision.
 
 - The core gets the module `people`. It keeps the data of type 1 in its own tables. It has no feed rule and no HTTP server code ([ADR 0002](../adr/0002-rust-core-json-api-browser-ui.md)).
-- `people` writes no feed. A change of a feed from a person goes through a change set ([ADR 0091](../adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md)), and each feed writes through `pipeline::write_draft`.
+- `people` writes no feed. A change of a feed from a person goes through a change set ([ADR 0091](../archive/adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md)), and each feed writes through `pipeline::write_draft`.
 - `people` reads the feed index. The table `feed_recipients` is an index of the recipients. Studio has no index of the credits and the keys of each feed, and J7 and J9 need it.
 - The value editor, the credits editor and the profile search read from `people`. A person is the start value of a recipient or of a credit. The feed keeps its own copy of each value, so a feed does not change when the person changes. This is an edit aid of [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md).
 - The wallet of ADR 0095 stays as it is. A person holds one or more wallets. The keysend lookup links the addresses of one wallet. Only the user links two wallets to one person.

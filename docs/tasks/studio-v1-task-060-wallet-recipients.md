@@ -1,7 +1,7 @@
 # Studio v1 Task 060: Wallet Recipients
 
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Recipient Batch Edits, File Hosts And Dates".
-Decisions: [ADR 0095](../adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md), [ADR 0091](../adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md), [ADR 0027](../adr/0027-the-recipient-picker.md), [ADR 0042](../adr/0042-ui-models-with-node-tests.md), [ADR 0045](../adr/0045-phase-9-crates-test-servers-and-host-forms.md), [ADR 0057](../adr/0057-the-private-network-guard-of-the-server.md) and [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md).
+Decisions: [ADR 0095](../archive/adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md), [ADR 0091](../archive/adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md), [ADR 0027](../archive/adr/0027-the-recipient-picker.md), [ADR 0042](../adr/0042-ui-models-with-node-tests.md), [ADR 0045](../adr/0045-phase-9-crates-test-servers-and-host-forms.md), [ADR 0057](../adr/0057-the-private-network-guard-of-the-server.md) and [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md).
 
 Status: Complete, with its screenshot visual check on 2026-10-31. The human test is open. Two notes from the reviews: the route `make_change_set` checks the type before the core, because the core error has no 422 code (a core error kind can replace it later). The lookups run with the workspace lock. Thus a listing of the recipients with due lookups blocks the other API calls for a maximum of 5 seconds. The planning model also moved "Remove" to the last place of the buttons (musicindex ADR 0020 R-ACT-3).
 

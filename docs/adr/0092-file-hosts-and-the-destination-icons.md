@@ -6,7 +6,7 @@
 - Accepted: 2026-10-30 by the operator.
 - Changed by: [ADR 0099](../archive/adr/0099-the-people-destination-and-the-page-of-a-person.md). Item 1: the first destination of the bottom group is "People", with the icon `users`.
 - Changes: [ADR 0039](../archive/adr/0039-the-shell-releases-and-the-outline.md) items 1, 5 and 11, for the name "Hosts" and for the marker of a destination.
-- Changes: [ADR 0091](0091-a-change-set-edits-one-recipient-in-many-feeds.md) item 1 uses the name of this record.
+- Changes: [ADR 0091](../archive/adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md) item 1 uses the name of this record.
 - Uses: musicindex ADR 0022 (the shared Lucide icons), musicindex ADR 0025 R-ICON-1 (the icon size), musicindex ADR 0032 R-DOT-1 (the type dot) and musicindex ADR 0033 R-WORD-3 (the role words).
 
 ## Context

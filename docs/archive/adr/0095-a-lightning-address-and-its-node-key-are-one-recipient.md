@@ -1,20 +1,22 @@
+> Archived: superseded by [ADR 0207](../../adr/0207-recipients-change-sets-and-wallets.md) on 2026-11-14. ADR 0207 restates each live rule of this ADR. Its item map gives the new item of each item.
+
 # ADR 0095: A Lightning Address And Its Node Key Are One Recipient
 
-- Status: Accepted
+- Status: Superseded by ADR 0207
 - Date: 2026-10-31
 - Owner: operator
 - Accepted: 2026-10-31 by the operator.
-- Changed by: [ADR 0099](../archive/adr/0099-the-people-destination-and-the-page-of-a-person.md). Items 6 to 8, 10 to 12, 14 and 15: the words of the rows, the menus and the hint, and the pages of People.
-- Changed by: [ADR 0098](../archive/adr/0098-the-people-module.md): a person holds more than one wallet.
-- Changed by: [ADR 0201](0201-people-opens-before-the-lightning-address-lookups.md) item 3: the list of the recipients sends no lookup, and a separate route sends the lookups with no lock.
+- Changed by: [ADR 0099](0099-the-people-destination-and-the-page-of-a-person.md). Items 6 to 8, 10 to 12, 14 and 15: the words of the rows, the menus and the hint, and the pages of People.
+- Changed by: [ADR 0098](0098-the-people-module.md): a person holds more than one wallet.
+- Changed by: [ADR 0201](../../adr/0201-people-opens-before-the-lightning-address-lookups.md) item 3: the list of the recipients sends no lookup, and a separate route sends the lookups with no lock.
 - Changes: [ADR 0091](0091-a-change-set-edits-one-recipient-in-many-feeds.md) items 2 to 8 and 12. An operation acts on each address of one wallet, and the page of a recipient has a fifth operation.
-- Changed by: [ADR 0097](0097-studio-suggests-the-lightning-address-of-a-wallet.md), Studio Suggests The Lightning Address Of A Wallet.
-- Uses: [ADR 0027](0027-the-recipient-picker.md) for the identity of a recipient, and [ADR 0057](0057-the-private-network-guard-of-the-server.md) for the network policy. Also [ADR 0065](0065-the-core-applies-each-feed-rule.md) for the feed rules, and [ADR 0045](0045-phase-9-crates-test-servers-and-host-forms.md) for the test servers.
-- Changed by: [ADR 0138](0138-the-names-of-a-wallet-address-and-the-correction-of-a-wrong-key.md), The Names Of A Wallet Address And The Correction Of A Wrong Key.
+- Changed by: [ADR 0097](../../adr/0097-studio-suggests-the-lightning-address-of-a-wallet.md), Studio Suggests The Lightning Address Of A Wallet.
+- Uses: [ADR 0027](0027-the-recipient-picker.md) for the identity of a recipient, and [ADR 0057](../../adr/0057-the-private-network-guard-of-the-server.md) for the network policy. Also [ADR 0065](../../adr/0065-the-core-applies-each-feed-rule.md) for the feed rules, and [ADR 0045](../../adr/0045-phase-9-crates-test-servers-and-host-forms.md) for the test servers.
+- Changed by: [ADR 0138](../../adr/0138-the-names-of-a-wallet-address-and-the-correction-of-a-wrong-key.md), The Names Of A Wallet Address And The Correction Of A Wrong Key.
 
 ## Context
 
-- The [research note of 2026-10-31](../research/2026-10-31-keysend-and-lightning-address-recipients.md) gives the evidence for this record.
+- The [research note of 2026-10-31](../../research/2026-10-31-keysend-and-lightning-address-recipients.md) gives the evidence for this record.
 - In the podcast namespace, a `podcast:valueRecipient` has the type `node` or `lnaddress`. For `lnaddress`, an app gets the node key and the custom data from `https://<domain>/.well-known/keysend/<name>` before it pays. The specification has no attribute that gives one recipient two addresses.
 - Fountain and Alby publish the keysend lookup. Of 30 Lightning addresses in the corpus, 23 gave keysend data. Strike, Wallet of Satoshi and a custom domain gave none.
 - Four persons of the corpus are a `node` recipient in one feed and an `lnaddress` recipient in a different feed. The node key and the custom data are the same. Studio shows each of them as two recipients, because ADR 0027 item 3 identifies a recipient by its address with its custom pair. The user then must make two change sets.
@@ -22,7 +24,7 @@
 - The operation form of task 054c has the choice "Keep the type" in its Type menu. The core replaces the type (ADR 0091 item 5), so the empty choice removes the `type` attribute. The operator found this on 2026-10-31.
 - The operator asked for this decision on 2026-10-31, after the research.
 - On 2026-10-31, on `0.1.0-rc.6`, the operator found two defects. A row that showed the name and the types did not tell a node recipient with a name such as "deltaog@getalby.com" from a Lightning address. The form of Change address started at the key of the wallet. For a Lightning address with a `found` lookup, that key is a node key that no feed has. The form showed that key with the type `lnaddress`. Items 7 and 14 changed on that day.
-- Also on 2026-10-31, the operator found two more defects. A row did not tell a node key from an account on it, and a name can look like a Lightning address. The [research note](../research/2026-10-31-keysend-and-lightning-address-recipients.md) then examined the nodes behind the addresses. Each `fountain.fm` address resolves to one shared node, and each `getalby.com` address resolves to a personal Alby Hub node. The shared Alby node `030a58b8…` is from before Alby Hub, and the alias of the Fountain node in the network graph is `klnd0`. Items 7 and 8 changed again, and items 16 to 18 are new.
+- Also on 2026-10-31, the operator found two more defects. A row did not tell a node key from an account on it, and a name can look like a Lightning address. The [research note](../../research/2026-10-31-keysend-and-lightning-address-recipients.md) then examined the nodes behind the addresses. Each `fountain.fm` address resolves to one shared node, and each `getalby.com` address resolves to a personal Alby Hub node. The shared Alby node `030a58b8…` is from before Alby Hub, and the alias of the Fountain node in the network graph is `klnd0`. Items 7 and 8 changed again, and items 16 to 18 are new.
 
 ## Decision
 
@@ -86,7 +88,7 @@
 ## Consequences
 
 - The core makes HTTPS requests to the domains of the Lightning addresses of the collection. On the server, the private network guard applies. A listing of the recipients can take a maximum of 5 seconds when a provider is slow.
-- A new migration adds the table `keysend_lookups` ([ADR 0014](0014-collection-in-sqlite.md)). The table holds no secret.
+- A new migration adds the table `keysend_lookups` ([ADR 0014](../../adr/0014-collection-in-sqlite.md)). The table holds no secret.
 - The provider of a Lightning address can see that a Studio requested its lookup. It gets no other data.
 - The Recipients page shows fewer rows for a collection with both forms of an address, and one change set changes both forms.
 - No test sends a request to a provider (ADR 0045). The tests use a local test server, and the check against Fountain and Alby is a human test.

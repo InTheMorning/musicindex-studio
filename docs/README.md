@@ -30,7 +30,6 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0024: Track numbers follow the track sequence](adr/0024-track-numbers-follow-the-track-sequence.md)
 - [ADR 0025: Studio serves cover art to the UI](adr/0025-studio-serves-cover-art.md)
 - [ADR 0026: Import music files through the draft](adr/0026-import-music-files-through-the-draft.md)
-- [ADR 0027: The recipient picker](adr/0027-the-recipient-picker.md)
 - [ADR 0028: Summary lines and one open entry](adr/0028-summary-lines-and-one-open-entry.md)
 - [ADR 0029: Editor pages, the toolbar and three background levels](adr/0029-editor-pages-toolbar-and-three-levels.md)
 - [ADR 0030: An added recipient gets no split](adr/0030-an-added-recipient-gets-no-split.md)
@@ -86,11 +85,9 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0088: The left panel shows the levels of the publisher feeds](adr/0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md)
 - [ADR 0089: The left panel shows the art of each publisher feed](adr/0089-the-left-panel-shows-the-art-of-each-publisher-feed.md)
 - [ADR 0090: Studio names the feeds that it does not edit](adr/0090-studio-names-the-feeds-that-it-does-not-edit.md)
-- [ADR 0091: A change set edits one recipient in many feeds](adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md)
 - [ADR 0092: File hosts and the destination icons](adr/0092-file-hosts-and-the-destination-icons.md)
 - [ADR 0093: Dates and times use a picker in local time](adr/0093-dates-and-times-use-a-picker-in-local-time.md)
 - [ADR 0094: A duration is edited as minutes and seconds](adr/0094-a-duration-is-edited-as-minutes-and-seconds.md)
-- [ADR 0095: A Lightning address and its node key are one recipient](adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md)
 - [ADR 0096: Add to an artist or label](adr/0096-add-to-an-artist-or-label.md)
 - [ADR 0097: Studio suggests the Lightning address of a wallet](adr/0097-studio-suggests-the-lightning-address-of-a-wallet.md)
 - [ADR 0100: Each release candidate has a notes file](adr/0100-each-release-candidate-has-a-notes-file.md)
@@ -192,6 +189,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0204: Feed files, feed moves and the server shell](adr/0204-feed-files-moves-and-the-server.md)
 - [ADR 0205: Publisher feeds, announcements and show grants](adr/0205-publisher-feeds-announcements-and-show-grants.md)
 - [ADR 0206: The shell and the editor pages](adr/0206-the-shell-and-the-editor-pages.md)
+- [ADR 0207: Recipients, change sets and wallets](adr/0207-recipients-change-sets-and-wallets.md)
 
 ## Plans
 
@@ -573,6 +571,7 @@ Each release candidate after 0.1.0-rc.8 has one notes file ([ADR 0100](adr/0100-
 
 Superseded decisions. Read them for research only. They bind no change.
 
+- [ADR 0027: The recipient picker](archive/adr/0027-the-recipient-picker.md), superseded by ADR 0207
 - [ADR 0038: Published feeds, downloads, the folder scan and feed moves](archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md), superseded by ADR 0204
 - [ADR 0039: The shell, Releases and the outline of a feed](archive/adr/0039-the-shell-releases-and-the-outline.md), superseded by ADR 0206
 - [ADR 0041: Publisher feeds and two-way links](archive/adr/0041-publisher-feeds-and-two-way-links.md), superseded by ADR 0205
@@ -581,6 +580,8 @@ Superseded decisions. Read them for research only. They bind no change.
 - [ADR 0055: The server shell: user folders, accounts, sessions and the vault window](archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md), superseded by ADR 0204
 - [ADR 0064: The editor edits the fields that MSP 2.0 edits](archive/adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md), superseded by ADR 0206
 - [ADR 0068: The sequence of the sections and fields of an editor page](archive/adr/0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md), superseded by ADR 0206
+- [ADR 0091: A change set edits one recipient in many feeds](archive/adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md), superseded by ADR 0207
+- [ADR 0095: A Lightning address and its node key are one recipient](archive/adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md), superseded by ADR 0207
 - [ADR 0098: The People module](archive/adr/0098-the-people-module.md), superseded by ADR 0203
 - [ADR 0099: The People destination and the page of a person](archive/adr/0099-the-people-destination-and-the-page-of-a-person.md), superseded by ADR 0203
 - [ADR 0101: A suggestion groups the items of one name](archive/adr/0101-a-suggestion-groups-the-items-of-one-name.md), superseded by ADR 0103

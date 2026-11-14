@@ -1,16 +1,18 @@
+> Archived: superseded by [ADR 0207](../../adr/0207-recipients-change-sets-and-wallets.md) on 2026-11-14. ADR 0207 restates each live rule of this ADR. Its item map gives the new item of each item.
+
 # ADR 0027: The Recipient Picker
 
-- Status: Accepted
+- Status: Superseded by ADR 0207
 - Date: 2026-10-22
 - Owner: operator
-- Changed by: [ADR 0030](0030-an-added-recipient-gets-no-split.md). Item 7: an added recipient gets no split.
-- Changed by: [ADR 0098](../archive/adr/0098-the-people-module.md). Items 2 and 5: the saved recipients become people.
-- Changed by: [ADR 0099](../archive/adr/0099-the-people-destination-and-the-page-of-a-person.md). Items 1 to 3 and 7: the picker shows people first.
-- Changed by: [ADR 0144](0144-recipients-use-one-picker-and-sort-by-split.md), Recipients Use One Picker And Sort By Split.
+- Changed by: [ADR 0030](../../adr/0030-an-added-recipient-gets-no-split.md). Item 7: an added recipient gets no split.
+- Changed by: [ADR 0098](0098-the-people-module.md). Items 2 and 5: the saved recipients become people.
+- Changed by: [ADR 0099](0099-the-people-destination-and-the-page-of-a-person.md). Items 1 to 3 and 7: the picker shows people first.
+- Changed by: [ADR 0144](../../adr/0144-recipients-use-one-picker-and-sort-by-split.md), Recipients Use One Picker And Sort By Split.
 
 ## Context
 
-On 2026-10-22 the operator checked the value editor ([task 012](../tasks/studio-v1-task-012-value-editor.md)). In that editor, an artist types the same recipients into many feeds and tracks. The operator asked for a list of the recipients that the artist used. The operator also asked for an import of recipients from the feeds and tracks in musicindex.
+On 2026-10-22 the operator checked the value editor ([task 012](../../tasks/studio-v1-task-012-value-editor.md)). In that editor, an artist types the same recipients into many feeds and tracks. The operator asked for a list of the recipients that the artist used. The operator also asked for an import of recipients from the feeds and tracks in musicindex.
 
 The musicindex API gives `payment_routes` with each feed and each track. Each route has a name, a route type, an address, a split, `fee`, and a custom key and value. Musicindex identifies a recipient by its address, its custom key and its custom value. A keysend route to a shared node names the account in the custom pair.
 
@@ -34,8 +36,8 @@ The musicindex API gives `payment_routes` with each feed and each track. Each ro
 
 ## Consequences
 
-- The collection schema gets a table for the recipients of each feed and a table for the saved recipients. This is a new migration ([ADR 0014](0014-collection-in-sqlite.md)).
-- A recipient address is public. These tables contain no secret ([ADR 0003](0003-user-unlocked-secret-vault.md)).
+- The collection schema gets a table for the recipients of each feed and a table for the saved recipients. This is a new migration ([ADR 0014](../../adr/0014-collection-in-sqlite.md)).
+- A recipient address is public. These tables contain no secret ([ADR 0003](../../adr/0003-user-unlocked-secret-vault.md)).
 - The import from musicindex needs the musicindex API. The other parts of the picker work with no network.
 
 ## Invariants

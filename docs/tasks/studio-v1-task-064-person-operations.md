@@ -1,7 +1,7 @@
 # Studio v1 Task 064: The Operations Of A Person
 
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The People Module".
-Decisions: [ADR 0098](../archive/adr/0098-the-people-module.md) items 17 to 25, [ADR 0099](../archive/adr/0099-the-people-destination-and-the-page-of-a-person.md) items 7 to 12, [ADR 0091](../adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md), [ADR 0095](../adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md), [ADR 0097](../adr/0097-studio-suggests-the-lightning-address-of-a-wallet.md), [ADR 0057](../adr/0057-the-private-network-guard-of-the-server.md), [ADR 0045](../adr/0045-phase-9-crates-test-servers-and-host-forms.md) and [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md).
+Decisions: [ADR 0098](../archive/adr/0098-the-people-module.md) items 17 to 25, [ADR 0099](../archive/adr/0099-the-people-destination-and-the-page-of-a-person.md) items 7 to 12, [ADR 0091](../archive/adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md), [ADR 0095](../archive/adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md), [ADR 0097](../adr/0097-studio-suggests-the-lightning-address-of-a-wallet.md), [ADR 0057](../adr/0057-the-private-network-guard-of-the-server.md), [ADR 0045](../adr/0045-phase-9-crates-test-servers-and-host-forms.md) and [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md).
 
 Status: Complete, in three packets. It has no visual check and no human test, because the UI does not change. Notes from the reviews:
 

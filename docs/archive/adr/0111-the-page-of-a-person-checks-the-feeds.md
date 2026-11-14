@@ -13,7 +13,7 @@
 - Changed by: [ADR 0116](../../adr/0116-the-page-of-a-person-has-save-and-discard.md). Item 2: the page keeps pending changes until Save.
 - Changed by: [ADR 0118](../../adr/0118-member-of-offers-a-credit-on-the-artist-feed.md). Item 3: the hint of "Member of".
 - Changed by: [ADR 0132](../../adr/0132-a-person-can-be-part-of-many-artists-and-labels.md). Item 3: the section gets a list of links.
-- Uses: [ADR 0091](../../adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md) for the change set, [ADR 0095](../../adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md) for the wallets, [ADR 0071](../../adr/0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) for the tiers, and [ADR 0112](../../adr/0112-a-credit-role-comes-from-a-list.md) for the roles.
+- Uses: [ADR 0091](0091-a-change-set-edits-one-recipient-in-many-feeds.md) for the change set, [ADR 0095](0095-a-lightning-address-and-its-node-key-are-one-recipient.md) for the wallets, [ADR 0071](../../adr/0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) for the tiers, and [ADR 0112](../../adr/0112-a-credit-role-comes-from-a-list.md) for the roles.
 - Changed by: [ADR 0182](../../adr/0182-the-page-of-a-person-starts-with-its-links-and-has-a-nickname.md). Item 1: the linked pages and "Credits" come after the head, and "Payment" comes after "More from your feeds".
 - Changed by: [ADR 0120](0120-the-check-of-a-person-shows-each-difference.md), The Check Of A Person Shows Each Difference.
 - Changed by: [ADR 0141](../../adr/0141-the-form-of-add-a-wallet-comes-first.md), The Form Of Add a Wallet Comes First.

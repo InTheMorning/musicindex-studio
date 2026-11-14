@@ -6,6 +6,16 @@
 import { shortKey } from './nostrkey.js';
 import { memberLine, memberText, withFee, reviewLabel, checkedIds, payeesWithNoPerson } from './people.js';
 
+// Run due Lightning address lookups after the page reads the cached recipients (ADR 0201).
+export async function refreshLookups(api) {
+  try {
+    const result = await api('/recipients/lookups', { method: 'POST' });
+    return result.checked > 0;
+  } catch {
+    return false;
+  }
+}
+
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
 // ---- Shares and percentages ----

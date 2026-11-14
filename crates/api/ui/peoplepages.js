@@ -10,7 +10,7 @@ import { pageSequence } from './pages.js';
 import { shortKey } from './nostrkey.js';
 import { onListKey } from './listkeys.js';
 import {
-  recipientKey, recipientRow, addWalletSections, walletBodyOf, PERSON_SECTION_TITLE, PERSON_SECTION_LINE, breakParts, addressLines, lnaddressOf, suggestionField, OTHER_ADDRESS, walletActions, WALLET_TYPES,
+  recipientKey, recipientRow, addWalletSections, walletBodyOf, PERSON_SECTION_TITLE, PERSON_SECTION_LINE, breakParts, addressLines, lnaddressOf, suggestionField, OTHER_ADDRESS, walletActions, WALLET_TYPES, refreshLookups,
   CUSTOM_KEY_HINT, removeWalletHint, walletSheet, walletSheetStart, walletTypeChange, walletDetailsLine, walletSheetBody,
   walletSheetReady, recipientTitle,
 } from './recipients.js';
@@ -129,17 +129,37 @@ async function downloadPeople() {
 // the People list (ADR 0153).
 export function PeoplePage({ feeds, go, sort, reversed, onOrder }) {
   const [data, setData] = useState(null);
+  const loadId = useRef(0);
   const [query, setQuery] = useState('');
   const [making, setMaking] = useState(null);
   const [adding, setAdding] = useState(false);
   const [linkedReview, setLinkedReview] = useState(null);
   const { busy, error, run } = useAction();
   const load = () => run(async () => {
-    const [people, suggestions, sets, recipients, hidden] = await Promise.all([
-      api('/people'), api('/people/suggestions'), api('/change-sets'), api('/recipients'), api('/people/suggestions/hidden'),
+    const id = ++loadId.current;
+    const [people, suggestions, sets, hidden] = await Promise.all([
+      api('/people'), api('/people/suggestions'), api('/change-sets'), api('/people/suggestions/hidden'),
     ]);
-    setData({ people, suggestions, changes: openChanges(sets), recipients, hidden });
+    if (id !== loadId.current) return;
+    const base = { people, suggestions, changes: openChanges(sets), recipients: null, hidden };
+    setData(base);
+    // The recipients and the lookups come after the list, and the actions of
+    // the page do not wait for them (ADR 0201 items 2 and 6).
+    loadRecipients(id, base);
   });
+  const loadRecipients = async (id, base) => {
+    try {
+      const recipients = await api('/recipients');
+      if (id !== loadId.current) return;
+      setData({ ...base, recipients });
+      if (await refreshLookups(api) && id === loadId.current) {
+        const updated = await api('/recipients');
+        if (id === loadId.current) setData({ ...base, recipients: updated });
+      }
+    } catch {
+      // The list stays with no payees. The next load reads the recipients again.
+    }
+  };
   useEffect(() => { load(); }, []);
 
   const titles = new Map((feeds || []).map((f) => [f.id, f.title || 'Untitled feed']));
@@ -163,7 +183,7 @@ export function PeoplePage({ feeds, go, sort, reversed, onOrder }) {
         <${SortMenu} sorts=${order.sorts} sort=${order.sort} reversed=${order.reversed} onSort=${(id, reversed) => onOrder({ sort: id, reversed })} />
       </div>`}</div>`,
     changes: () => html`<section class="page-section"><h2>Changes to write</h2><${RowList}>${data.changes.map((set) => {
-      const row = changeRow(set, data.people, payeesWithNoPerson(data.recipients));
+      const row = changeRow(set, data.people, payeesWithNoPerson(data.recipients || []));
       return html`<${ListRow} key=${set.id} title=${row.title} lines=${[row.text]} roving=${true} onClick=${() => go(changeSetView(set))} />`;
     })}<//></section>`,
     // Each list folds (ADR 0146 item 10). A search opens the lists that it filters.
@@ -243,7 +263,7 @@ function LinkedPageReview({ people, onClose, onDone }) {
           <input type="checkbox" checked=${selected.includes(key)} onChange=${() => setSelected((ids) => ids.includes(key)
             ? ids.filter((id) => id !== key) : [...ids, key])} />
           ${line.kind === 'picture' && html`<${PersonArt} person=${{ img: line.value, name: row.name }} small />`}
-          <span class="text"><span class="label">${line.label}</span><span class="summary mono address-text">${line.value}</span>${line.source && html`<span class="summary">${line.source}</span>`}</span></label>`; })}</div>`)}</div>`}
+          <span class="text"><span class="label">${line.label}</span><span class="summary mono address-text" data-fit-allow-break>${line.value}</span>${line.source && html`<span class="summary">${line.source}</span>`}</span></label>`; })}</div>`)}</div>`}
         <${ErrorNotice} error=${error} /></div><footer><button class="button" type="button" disabled=${busy} onClick=${() => ref.current.close()}>Cancel</button>
         <button class="button primary" type="button" disabled=${busy || selected.length === 0} onClick=${save}>Update</button></footer>`}
   </dialog>`;
@@ -389,7 +409,7 @@ function AddPersonForm({ fields, setFields, view, pendingLink, setPendingLink, o
 function AddressRow({ member, count, note, tag, mark, pending, action }) {
   const { label, address, account } = memberLine(member, true);
   return html`<div class=${`link-row static address-row${pending ? ' pending' : ''}`}><span class="text"><span class="label">${label}${tag}</span>
-      ${address && html`<span class="summary mono address-text">${address}</span>`}
+      ${address && html`<span class="summary mono address-text" data-fit-allow-break>${address}</span>`}
       ${account && html`<span class="summary">Account ${account}</span>`}
       ${note && html`<span class="summary">${note}</span>`}</span>
     ${count && html`<span class="count">${count}</span>`}${mark}
@@ -417,7 +437,7 @@ function PersonFields({ values, saved, update, detail, profiles, titles, feeds, 
     if (list.state === 'none') return null;
     const rows = list.rows.map((row) => html`<div class="link-row static" key=${row.value}>
       ${key === 'img' && html`<${PersonArt} person=${{ img: row.value, name: '' }} />`}
-      <span class="text"><span class="summary mono address-text">${row.value}</span><span class="summary">${row.line}</span></span>
+      <span class="text"><span class="summary mono address-text" data-fit-allow-break>${row.value}</span><span class="summary">${row.line}</span></span>
       <button class="button action" type="button" aria-label=${`Add ${row.value}`}
         onClick=${() => update(addPersonValue(values, valueKind, row.value))}>Add</button></div>`);
     // A collapsed list has no heading: its summary line names the values
@@ -643,10 +663,19 @@ function OperationForm({ kind, person, groups, rows: startRows, feeds, go }) {
 // wallet. `reload` reads both again, with no loss of the error of an action.
 function usePerson(id) {
   const [data, setData] = useState(null);
+  const loadId = useRef(0);
   const { error, run } = useAction();
   const read = async () => {
+    const current = ++loadId.current;
     const [person, recipients] = await Promise.all([api(`/people/${id}`), api('/recipients')]);
+    if (current !== loadId.current) return;
     setData({ person, recipients });
+    // A read does not wait for the lookups (ADR 0201 item 6).
+    refreshLookups(api).then(async (checked) => {
+      if (!checked || current !== loadId.current) return;
+      const updated = await api('/recipients');
+      if (current === loadId.current) setData({ person, recipients: updated });
+    }).catch(() => {});
   };
   useEffect(() => { run(read); }, [id]);
   return { data, error, run, reload: () => read().catch(() => {}) };
@@ -804,7 +833,7 @@ function FillRow({ row, checked, onToggle }) {
   // A value that the person has already keeps its content and has a tag (ADR 0146 item 3).
   const taken = row.lines.includes(ALREADY_VALUE);
   const text = html`<span class="text"><span class="pick-name"><span class="label">${row.title}</span>${taken && html`<${TakenTag} text=${ALREADY_VALUE} />`}</span>
-    ${row.value && html`<span class=${row.id === 'name' ? 'summary' : 'summary mono address-text'}>${row.value}</span>`}
+    ${row.value && html`<span class=${row.id === 'name' ? 'summary' : 'summary mono address-text'} data-fit-allow-break=${row.id === 'name' ? undefined : true}>${row.value}</span>`}
     ${row.lines.filter((line) => line !== ALREADY_VALUE).map((line) => html`<span class="summary" key=${line}>${line}</span>`)}</span>`;
   if (!row.selectable) return html`<div class=${taken ? 'link-row static pick-taken' : 'link-row static'}>${lead}${text}</div>`;
   return html`<label class="link-row use-row"><input type="checkbox" checked=${checked} onChange=${onToggle} />${lead}${text}</label>`;
@@ -974,7 +1003,7 @@ export function PersonPage({ id, feeds, go }) {
   // One row of a page suggestion (ADR 0182 item 3).
   const pageRow = (row, onUse, art = false) => html`<div class="link-row static" key=${`${row.guid}-${row.value}`}>
     ${art && html`<${PersonArt} person=${{ img: row.value, name: '' }} />`}
-    <span class="text">${row.recipient_name && html`<span class="label">${row.recipient_name}</span>`}<span class="summary mono address-text">${row.value}</span><span class="summary">${row.line}</span></span>
+    <span class="text">${row.recipient_name && html`<span class="label">${row.recipient_name}</span>`}<span class="summary mono address-text" data-fit-allow-break>${row.value}</span><span class="summary">${row.line}</span></span>
     <button class="button action" type="button" aria-label=${row.ariaLabel} onClick=${onUse}>${row.button}</button></div>`;
   const feedOf = (feedId) => (feeds || []).find((f) => f.id === feedId);
   const remove = (kind, linkId) => withLeave(() => act(() => api(`/people/${id}/${kind}/${linkId}`, { method: 'DELETE' })));
@@ -1038,7 +1067,7 @@ export function PersonPage({ id, feeds, go }) {
       })}
         <div class="actions"><button class="button destructive" type="button" onClick=${() => remove('wallets', g.id)}>Remove Wallet</button></div></div>`)}
       ${shown.wallets.length > 0 && html`<div class="group">${shown.wallets.map((w) => html`<div class="link-row static" key=${`p${keyValue(w.key)}`}>
-        <span class="text"><span class="label">Wallet</span><span class="summary mono address-text">${w.key.address}</span><span class="summary">Not saved yet</span></span></div>`)}</div>`}
+        <span class="text"><span class="label">Wallet</span><span class="summary mono address-text" data-fit-allow-break>${w.key.address}</span><span class="summary">Not saved yet</span></span></div>`)}</div>`}
       ${suggestions.map((s) => html`<div class="group" key=${s.address}><${AddressRow} member=${{ address: s.address, recipient_type: 'lnaddress' }}
         note=${profileAddressNote(s.npub, profiles)} />
         <div class="actions"><button class="button action" type="button" onClick=${() => act(async () => {
@@ -1078,7 +1107,7 @@ export function PersonPage({ id, feeds, go }) {
         <${AddRow} title="Add a Nostr Key" onClick=${() => withLeave(() => setLinking('keys'))} /></div></section>`,
     support: () => html`<section class="page-section"><h2>Support links</h2>
       <div class="group">${person.support_links.map((l) => html`<div class="link-row static more-row" key=${l.id}><span class="text">
-          <span class="label">${l.label || 'Support link'}</span><span class="summary address-text">${l.url}</span></span>
+          <span class="label">${l.label || 'Support link'}</span><span class="summary address-text" data-fit-allow-break>${l.url}</span></span>
           <div class="actions more-actions">${removeButton('support-links', l.id, `Remove the support link ${l.label || l.url}`)}
           <button class="button action" type="button" aria-label=${`Edit the support link ${l.label || l.url}`}
             onClick=${() => withLeave(() => setEditing(supportLinkEdit(l)))}>Edit</button></div></div>`)}
@@ -1207,8 +1236,8 @@ function CreditAddForm({ person, feedId, title, position, onMade, close }) {
           <${PersonArt} person=${person} />
           <span class="text"><span class="label">${person.name}</span>
             ${roleLine && html`<span class="summary">${roleLine}</span>`}
-            ${person.img && html`<span class="summary address-text">${person.img}</span>`}
-            ${person.href && html`<span class="summary address-text">${person.href}</span>`}
+            ${person.img && html`<span class="summary address-text" data-fit-allow-break>${person.img}</span>`}
+            ${person.href && html`<span class="summary address-text" data-fit-allow-break>${person.href}</span>`}
             ${hasKey && html`<span class="summary mono">${shortKey(person.keys[0].npub)}</span>`}</span>
         </div></div>
       </section>

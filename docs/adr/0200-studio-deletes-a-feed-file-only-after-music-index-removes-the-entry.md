@@ -4,7 +4,7 @@
 - Date: 2026-11-14
 - Owner: operator, with the technical choices of the planning model
 - Accepted: 2026-11-14 by the operator, during the human check of ADR 0198. The operator selected "Only a held feed" for the scope, and "No text" for a hint about a delete outside the app.
-- Technical choices: the planning model selected items 3 to 8. The operator note "consider 'retire it first'" is open (see Open Points).
+- Technical choices: the planning model selected items 3 to 8. The operator closed the note "consider 'retire it first'" on 2026-11-14 with no change.
 - Changes: [ADR 0131](0131-delete-a-feed-from-its-file-host.md) items 1, 4, 6 and 9.
 - Uses: [ADR 0198](0198-the-review-of-a-delete-names-the-delete-and-a-deleted-feed-shows-only-what-it-can-do.md) item 4: the UI adds no rule that the core holds.
 
@@ -38,10 +38,6 @@ The retire state of the core (`feed_retire::retire_state`) already gives `remova
 - A feed with no GUID cannot be deleted in Studio.
 - The sheet can show its third row a short time after it opens.
 - The delete draft needs a network read. With no network, the delete stays off.
-
-## Open Points
-
-- The operator note "consider 'retire it first'". The text of **Retire It** already says "After Music Index removes the entry, you can delete the file." The planning model kept the label **Retire It**. The operator decides at the human check whether a label or a text "Retire it first" is necessary.
 
 ## How This Decision Is Checked
 

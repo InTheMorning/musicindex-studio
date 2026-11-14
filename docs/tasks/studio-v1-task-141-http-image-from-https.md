@@ -2,7 +2,13 @@
 
 Decision: [ADR 0202](../adr/0202-an-http-image-shows-from-its-https-address.md).
 
-Status: Open.
+Status: Complete on 2026-11-14. The human check of ADR 0202 is open.
+
+## Result
+
+- `imageSource(url, held)` in `media.js` gives `mediaSource` of the `https` form when `mediaSource` gives `reason: 'http'`. An op3 prefix stays. `useImage` in `app.js` uses it. The audio player still uses `mediaSource`.
+- The main session added an assertion to the scan test, so that the test fails when it does not find `AudioPlayer`.
+- The walk browser has no network, so no screenshot shows a real `http` picture. The operator check covers it.
 
 ## Goal
 

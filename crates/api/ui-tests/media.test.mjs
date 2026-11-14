@@ -1,11 +1,33 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { playerMark, playerProgress, HTTP_NOTICE, PLAYER_ERROR, DIRECT_PLAYER_ERROR, canPlay, heldMap, isPlaceholderAddress, mediaSource, playerError, playerNotice, plainAddress, playWasReplaced } from '../ui/media.js';
+import { readFile } from 'node:fs/promises';
+import { playerMark, playerProgress, HTTP_NOTICE, PLAYER_ERROR, DIRECT_PLAYER_ERROR, canPlay, heldMap, imageSource, isPlaceholderAddress, mediaSource, playerError, playerNotice, plainAddress, playWasReplaced } from '../ui/media.js';
 
 // ADR 0109 item 5 and the acceptance criteria: the source of an image and of
 // the player. Fix a failure in crates/api/ui/media.js, not in the test.
 
 const held = heldMap({ files: [{ file: 7, url: 'https://music.example/a.mp3', media_type: 'audio/mpeg' }] });
+
+test('ADR 0202: an http image uses its https address, including a held file', () => {
+  const message = 'ADR 0202: use the https form for images and keep mediaSource unchanged for audio.';
+  assert.deepEqual(imageSource('http://host.example/a.png', held), { kind: 'direct', src: 'https://host.example/a.png' }, message);
+  assert.deepEqual(imageSource('https://op3.dev/e,pg=abc/http://host.example/a.png', held), { kind: 'direct', src: 'https://host.example/a.png' }, message);
+  const heldImage = new Map([['https://host.example/a.png', 12]]);
+  assert.deepEqual(imageSource('http://host.example/a.png', heldImage), { kind: 'held', file: 12 }, message);
+  for (const url of ['https://host.example/a.png', '', null]) {
+    assert.deepEqual(imageSource(url, held), mediaSource(url, held), message);
+  }
+});
+
+test('ADR 0202: useImage uses imageSource and the audio player does not', async () => {
+  const app = await readFile(new URL('../ui/app.js', import.meta.url), 'utf8');
+  const editor = await readFile(new URL('../ui/editor.js', import.meta.url), 'utf8');
+  const hook = app.match(/export function useImage\(url\) \{[\s\S]*?\n\}/)?.[0] || '';
+  const player = editor.match(/function AudioPlayer\([\s\S]*?\n\}/)?.[0] || '';
+  assert.match(hook, /imageSource\(url, held\)/, 'ADR 0202: call imageSource from useImage.');
+  assert.match(player, /mediaSource\(url, heldFiles\)/, 'ADR 0202: the scan did not find AudioPlayer in editor.js. Correct the pattern of this test.');
+  assert.doesNotMatch(player, /imageSource/, 'ADR 0202: keep imageSource out of the audio player.');
+});
 
 test('ADR 0109: an https address of a file on its host loads from the host', () => {
   assert.deepEqual(mediaSource('https://host.example/cover.jpg', held), { kind: 'direct', src: 'https://host.example/cover.jpg' });

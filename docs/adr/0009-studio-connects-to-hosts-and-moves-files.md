@@ -3,6 +3,7 @@
 - Status: Accepted. [ADR 0035](0035-a-release-library-is-the-master-of-each-feed.md) replaces item 1 when Phase 7 implements it.
 - Date: 2026-10-22
 - Owner: operator
+- Changed by: [ADR 0148](0148-a-move-keeps-the-old-files-until-the-user-reviews-the-deletion.md), A Move Keeps The Old Files Until The User Reviews The Deletion.
 
 ## Context
 

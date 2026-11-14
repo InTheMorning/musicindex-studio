@@ -10,6 +10,7 @@
 - Changes: [ADR 0091](0091-a-change-set-edits-one-recipient-in-many-feeds.md) items 2 to 8 and 12. An operation acts on each address of one wallet, and the page of a recipient has a fifth operation.
 - Changed by: [ADR 0097](0097-studio-suggests-the-lightning-address-of-a-wallet.md), Studio Suggests The Lightning Address Of A Wallet.
 - Uses: [ADR 0027](0027-the-recipient-picker.md) for the identity of a recipient, and [ADR 0057](0057-the-private-network-guard-of-the-server.md) for the network policy. Also [ADR 0065](0065-the-core-applies-each-feed-rule.md) for the feed rules, and [ADR 0045](0045-phase-9-crates-test-servers-and-host-forms.md) for the test servers.
+- Changed by: [ADR 0138](0138-the-names-of-a-wallet-address-and-the-correction-of-a-wrong-key.md), The Names Of A Wallet Address And The Correction Of A Wrong Key.
 
 ## Context
 

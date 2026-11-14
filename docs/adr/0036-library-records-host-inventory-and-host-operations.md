@@ -5,6 +5,7 @@
 - Owner: operator, with the technical choices of the planning model
 - Changed by: [ADR 0180](0180-the-files-page-has-a-folder-picker-and-one-step-for-each-copy.md). Item 8: a library file has no host of its own. Item 12: the Files page names "Reference" **Use This Copy**, and has no "Move" for one file.
 - Changed by: [ADR 0167](0167-each-release-has-an-editable-library-folder.md), Each Release Has An Editable Library Folder.
+- Changed by: [ADR 0148](0148-a-move-keeps-the-old-files-until-the-user-reviews-the-deletion.md), A Move Keeps The Old Files Until The User Reviews The Deletion.
 
 ## Context
 

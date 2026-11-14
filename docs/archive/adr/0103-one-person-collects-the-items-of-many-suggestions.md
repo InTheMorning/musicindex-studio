@@ -13,6 +13,7 @@
 - Changed by: [ADR 0111](0111-the-page-of-a-person-checks-the-feeds.md). Items 8 and 9: one sheet "Check: {name}" with the menu "Person" replaces the sheets "Make a Person" and "Add to a Person".
 - Changed by: [ADR 0193](../../adr/0193-a-destructive-button-is-the-first-button-of-its-row.md). Item 14: "Delete Person" is the first button of its row, before "Merge with a Person".
 - Changed by: [ADR 0156](0156-the-page-of-a-person-lists-where-the-person-is.md), The Page Of A Person Lists Where The Person Is.
+- Changed by: [ADR 0138](../../adr/0138-the-names-of-a-wallet-address-and-the-correction-of-a-wrong-key.md), The Names Of A Wallet Address And The Correction Of A Wrong Key.
 
 ## Context
 

@@ -55,5 +55,5 @@ If a restatement needs a change of a rule, the work stops, and the orchestrator 
 | Feed files, moves and the server | 0204 | Done | `5750c54` |
 | Publisher feeds, announcements and grants | 0205 | Done | `805491b` |
 | The shell and the editor pages | 0206 | Done | `ea1e1cc` |
-| Recipients | 0207 | Done | — |
-| Limit check in the gate | — | Not started | — |
+| Recipients | 0207 | Done | `5382986` |
+| Limit check in the gate | — | Done | This commit |

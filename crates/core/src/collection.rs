@@ -911,7 +911,7 @@ impl PublisherRole {
 }
 
 /// The roles of a `rel` value, in their sequence, each one time (ADR 0082
-/// item 3, musicindex ADR 0011 item 1). A value with a comma is a comma
+/// item 3, musicindex ADR 0067 item 82). A value with a comma is a comma
 /// list, and each other value is a list separated by white space. A word
 /// that is not a role is not in the result.
 #[must_use]

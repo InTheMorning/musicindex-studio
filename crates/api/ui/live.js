@@ -34,7 +34,7 @@ export function setLiveStreamType(model, guid, mediaType) {
 }
 
 // The class of the type dot of a live item. Red is only for live now. A
-// show that is not live now uses the feed color (musicindex ADR 0012 item 3).
+// show that is not live now uses the feed color (musicindex ADR 0067 item 41).
 export function liveDot(status) {
   return status === 'live' ? 'live' : 'feed';
 }

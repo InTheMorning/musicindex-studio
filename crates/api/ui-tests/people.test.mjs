@@ -231,21 +231,37 @@ test('the Add a Person view searches People and gives its button text', () => {
 
 
 test('Add a Person selects a page without making a request, then plans create and link calls', () => {
-  const values = { title: 'Aurora Lane', image_url: 'https://img.example/a.png', website: 'https://aurora.example' };
+  const values = { title: 'Aurora Lane', image_url: 'https://img.example/a.png', website: 'https://aurora.example', feed_url: 'https://wavlake.com/feed.xml' };
   const row = { feed_guid: 'GUID-7', title: 'Aurora', kind: { type: 'inferred_artist' } };
   const selected = addPersonSelection(values, null, row);
   assert.deepEqual(selected, {
     name: 'Aurora Lane', img: 'https://img.example/a.png', href: 'https://aurora.example', feed_guid: 'GUID-7', title: 'Aurora Lane',
+    feed_url: 'https://wavlake.com/feed.xml', page_img: 'https://img.example/a.png', page_href: 'https://aurora.example',
   }, 'ADR 0192 item 3: a page of any kind fills the fields and the pending link. Fix addPersonSelection in crates/api/ui/people.js.');
   assert.equal(addPersonSelection(values, { feed_guid: 'R-1', artist: 'Aurora' }, row), null,
     'ADR 0192 item 3: a release gives no person values. Fix addPersonSelection in crates/api/ui/people.js.');
   const own = { id: 7, podcast_guid: 'guid-7', title: 'Aurora Lane' };
   assert.deepEqual(addPersonPlan(selected, selected, [own]), {
-    create: { method: 'POST', path: '/people', body: { name: 'Aurora Lane', img: 'https://img.example/a.png', href: 'https://aurora.example' } },
+    create: { method: 'POST', path: '/people', body: { name: 'Aurora Lane', img: 'https://img.example/a.png', href: 'https://aurora.example', source: {
+      feed_guid: 'GUID-7', title: 'Aurora Lane', feed_url: 'https://wavlake.com/feed.xml', img_source: true, href_source: true,
+    } } },
     link: { method: 'POST', path: '/people/{id}/save', body: { members: [7] } },
   }, 'ADR 0192 item 5: a page of the user links as a member. Fix addPersonPlan in crates/api/ui/people.js.');
+  assert.deepEqual(addPersonBody(selected).source, {
+    feed_guid: 'GUID-7', title: 'Aurora Lane', feed_url: 'https://wavlake.com/feed.xml', img_source: true, href_source: true,
+  }, 'ADR 0199 items 5 and 6: a selected page supplies both unchanged values. Fix addPersonBody in crates/api/ui/people.js.');
   assert.deepEqual(addPersonPlan(selected, selected, []).link.body, { pages: [{ feed_guid: 'GUID-7', title: 'Aurora Lane' }] },
     'ADR 0192 item 5: another page links as a read-only page. Fix addPersonPlan in crates/api/ui/people.js.');
+  assert.equal('source' in addPersonPlan(selected).create.body, false,
+    'ADR 0199 item 5: a page source needs a selected page link. Fix addPersonPlan in crates/api/ui/people.js.');
+  const typed = { name: 'Aurora Lane', img: 'https://img.example/a.png', href: 'https://aurora.example' };
+  assert.equal(addPersonPlan(typed, selected, []).create.body.source.img_source, true,
+    'ADR 0199 item 5: the source comes from the pending page link, not from the fields. Fix addPersonPlan in crates/api/ui/people.js.');
+  assert.equal('source' in addPersonPlan(typed, { feed_id: '3', title: 'Mine' }).create.body, false,
+    'ADR 0199 item 5: a link that replaces the page sends no source. Fix addPersonPlan in crates/api/ui/people.js.');
+  assert.deepEqual(addPersonBody({ ...selected, img: 'https://img.example/changed.png' }).source, {
+    feed_guid: 'GUID-7', title: 'Aurora Lane', feed_url: 'https://wavlake.com/feed.xml', img_source: false, href_source: true,
+  }, 'ADR 0199 item 6: a changed picture has no page source. Fix addPersonBody in crates/api/ui/people.js.');
   assert.deepEqual(addPersonPlan({ name: ' Sam ', img: '', href: '' }, { feed_id: '3', title: 'Mine' }).link.body, { members: [3] });
   assert.equal(addPersonPlan({ name: 'Sam', img: '', href: '' }).link, null,
     'ADR 0192 item 5: a person with no page sends no link. Fix addPersonPlan in crates/api/ui/people.js.');
@@ -1910,6 +1926,21 @@ test('a read-only row says "Read only", and a page that Music Index does not kno
     ['Zed', `${READ_ONLY_LINK} · Not saved yet`],
   ]);
   assert.equal(rows[0].page, 'g-ann');
+});
+
+test('linked page rows show the host on a separate line', () => {
+  const saved = savedValues({ ...MK, members: [], pages: [PAGE] });
+  const values = { ...saved, pages: [...saved.pages, { feed_guid: 'g-2', title: 'Zed' }, { feed_guid: 'g-3', title: 'Null host' }] };
+  const rows = linkRows(values, saved, PAGE_FEEDS, [], [
+    { feed_guid: 'g-ann', host: 'wavlake.com' }, { feed_guid: 'g-3', host: null },
+  ]);
+  const byPage = new Map(rows.map((row) => [row.page, row.hostLine]));
+  assert.equal(byPage.get('g-ann'), 'On wavlake.com',
+    'ADR 0199 items 1 and 2: show the matching suggestion host. Fix linkRows in crates/api/ui/people.js.');
+  assert.equal(byPage.get('g-2'), 'Host not known',
+    'ADR 0199 item 3: show the fallback without a suggestion. Fix linkRows in crates/api/ui/people.js.');
+  assert.equal(byPage.get('g-3'), 'Host not known',
+    'ADR 0199 item 3: show the fallback when the host is null. Fix linkRows in crates/api/ui/people.js.');
 });
 
 test('a page that differs gives suggestions, and a page that agrees gives none (ADR 0159 items 8 and 9)', () => {

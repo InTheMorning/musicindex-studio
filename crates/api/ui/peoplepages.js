@@ -446,7 +446,7 @@ function PersonFields({ values, saved, update, detail, profiles, titles, feeds, 
         const pending = !savedList.has(item.value) || (isDefault && isPending(saved, values, field));
         return html`<div class=${`link-row static address-row${pending ? ' pending' : ''}`} key=${item.value}>
           ${art && html`<${PersonArt} person=${{ img: item.value, name: '' }} />`}
-          <span class="text"><span class="summary mono address-text">${item.value}</span><span class="summary">${personValueLine(item.source)}</span></span>
+          <span class="text"><span class="summary mono address-text" data-fit-allow-break>${item.value}</span><span class="summary">${personValueLine(item.source)}</span></span>
           <button class="button destructive" type="button" aria-label=${`Remove ${item.value}`} onClick=${() => update(removePersonValue(values, kind, item.value))}>Remove</button>
           ${isDefault
             // The slot has the width of Make Default, so that each Remove is in one column.
@@ -1089,7 +1089,7 @@ export function PersonPage({ id, feeds, go }) {
       <div class="group">${rows.length === 0
         ? html`<div class="link-row static"><span class="text"><span class="summary">${LINK_EMPTY}</span></span></div>`
         : rows.map((row) => html`<div class="link-row static" key=${row.id}><span class=${`dot ${row.dot}`} aria-hidden="true"></span>
-          <span class="text"><span class="label">${row.title}</span><span class="summary">${row.line}</span></span>
+          <span class="text"><span class="label">${row.title}</span><span class="summary">${row.line}</span>${row.hostLine && html`<span class="summary">${row.hostLine}</span>`}</span>
           <button class="button destructive" type="button" aria-label=${`Remove the link to ${row.title}`}
             onClick=${() => update(row.page ? { pages: shown.pages.filter((p) => p.feed_guid !== row.page) } : { members: shown.members.filter((feedId) => feedId !== row.id) })}>Remove</button></div>`)}</div>
       ${hasPageSuggestions(fromPages) && html`<div class="actions">

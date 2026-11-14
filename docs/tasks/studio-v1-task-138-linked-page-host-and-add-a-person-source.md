@@ -2,7 +2,19 @@
 
 Decision: [ADR 0199](../adr/0199-a-linked-page-row-names-its-host-and-add-a-person-keeps-the-source-of-its-values.md).
 
-Status: Open.
+Status: Complete on 2026-11-14. The human check of ADR 0199 is open.
+
+## Result
+
+- `linkRows` gives each linked page that is not in the collection a `hostLine` from the page suggestions: `On {host}`, or `Host not known`. The person page shows it as one more line of the row. Rows of collection feeds get no host line.
+- `feed_host` in the core gives the host for `page_suggestions` and for `add_person`.
+- The body shape is `source: { feed_guid, title, feed_url, img_source, href_source }`. `PersonFields.source` is optional, so a body with no source does not change.
+- The source data stays in the pending link of the sheet, not in the fields. Thus **Remove** of the link, or a pick of a feed of the collection, sends no source. The main session made this change after the independent review found old source data in the fields.
+- The main session also added the cases of the review to the tests: a changed picture with the website source kept, and a body with values and no source. The core test fails on the code before the change, because `insert_person` gave no source.
+- The walk found that the address of a picture row or a website row broke inside a word at 761 px (musicindex ADR 0065 R-FIT-3). These rows come from task 133. The address element now has `data-fit-allow-break`.
+- Walk: `setup-138.py` with `steps-138-{light,dark}.json`. At 1280 px light and 390 px dark, the two "Prosperous Soul" rows show "On feeds.fountain.example" and "On wavlake.example". A person from **Add a Person** with "Ann Bell Music" shows `From "Ann Bell Music" on feeds.example` on the picture and the website. `$edges()`, `$overflow()` and the fit check at 390 px and 761 px give no finding.
+- A first fit check at 390 px gave an overlap of **Save** and the role menu, because the page was scrolled below the top bar. With the page at the top, the check gives no finding.
+- Open: ADR 0199 item 1 says that the host is the second line and that "Read only" stays on the first line. The row already shows "Read only" on its own line below the title, so the host is the third line. The main session kept the current row and added the host as one more line, as change 6 of this task says. The human check decides whether this is correct.
 
 ## Goal
 

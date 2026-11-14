@@ -132,12 +132,21 @@ export function addPersonView(people, query) {
 export function addPersonSelection(values, release, row) {
   if (release || !row) return null;
   const title = values.title || row.title || '';
-  return { name: title, img: values.image_url || '', href: values.website || '', feed_guid: row.feed_guid, title };
+  return {
+    name: title, img: values.image_url || '', href: values.website || '', feed_guid: row.feed_guid, title,
+    feed_url: values.feed_url || '', page_img: values.image_url || '', page_href: values.website || '',
+  };
 }
 
 // The API calls that add a person and then add the selected page link.
 export function addPersonPlan(fields, link = null, feeds = []) {
-  const create = { method: 'POST', path: '/people', body: addPersonBody(fields) };
+  // Only a selected Music Index page supplies a source (ADR 0199 item 5).
+  // The source data stays in the link, so a removed link sends no source.
+  const own = { name: fields.name, img: fields.img, href: fields.href };
+  const createFields = link && link.feed_id === undefined && link.feed_url
+    ? { ...own, feed_guid: link.feed_guid, title: link.title, feed_url: link.feed_url, page_img: link.page_img, page_href: link.page_href }
+    : own;
+  const create = { method: 'POST', path: '/people', body: addPersonBody(createFields) };
   if (!link) return { create, link: null };
   const change = link.feed_id !== undefined
     ? { members: [link.feed_id] }
@@ -498,9 +507,17 @@ export const dismissBody = (suggestion) => ({ identity: suggestion.identity, ite
 // The body of `POST /people` from the sheet "Add a Person".
 export const addPersonBody = (fields) => {
   const values = typeof fields === 'object' && fields !== null ? fields : { name: fields };
+  const img = String(values.img ?? '').trim();
+  const href = String(values.href ?? '').trim();
+  const source = values.feed_guid && values.title && values.feed_url ? {
+    feed_guid: values.feed_guid, title: values.title, feed_url: values.feed_url,
+    img_source: img === String(values.page_img ?? '').trim(),
+    href_source: href === String(values.page_href ?? '').trim(),
+  } : null;
   return {
     name: String(values.name ?? '').trim(),
-    ...(values.img !== undefined || values.href !== undefined ? { img: String(values.img ?? '').trim(), href: String(values.href ?? '').trim() } : {}),
+    ...(values.img !== undefined || values.href !== undefined ? { img, href } : {}),
+    ...(source ? { source } : {}),
   };
 };
 
@@ -1127,6 +1144,8 @@ export function linkRows(values, saved, feeds, linkedCredits = [], suggestions =
   // A read-only link shows "Read only" (ADR 0159 item 5), and a page that
   // Music Index does not know now has the note of item 10.
   const missing = new Set((suggestions || []).filter((s) => s.missing).map((s) => s.feed_guid));
+  // The host of a page comes from its suggestion (ADR 0199 items 2 and 3).
+  const hosts = new Map((suggestions || []).filter((s) => s.host).map((s) => [s.feed_guid, s.host]));
   const pages = (values.pages || []).map((p) => ({
     id: `page:${p.feed_guid}`,
     page: p.feed_guid,
@@ -1134,6 +1153,7 @@ export function linkRows(values, saved, feeds, linkedCredits = [], suggestions =
     dot: 'feed',
     line: [READ_ONLY_LINK, !guidsOf(saved.pages).includes(p.feed_guid) ? 'Not saved yet' : '',
       missing.has(p.feed_guid) ? PAGE_MISSING : ''].filter((text) => text).join(' · '),
+    hostLine: hosts.has(p.feed_guid) ? `On ${hosts.get(p.feed_guid)}` : 'Host not known',
   }));
   return [...rows, ...pages].sort((x, y) => compareNames(x.title, y.title));
 }

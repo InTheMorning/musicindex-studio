@@ -65,3 +65,5 @@ Visual, by the planning model:
 Human, by the operator. This gate stays open until it runs:
 
 - In the desktop app, start a delete of a test feed on a file host. The review shows the red **Delete N Files** first. **Cancel the Delete** stops the delete.
+
+The operator also examined the deleted test feed in the desktop app on 2026-11-14. Step 1 says "Hide from apps is on in the last write.", **Check Again** is the only action, and the link select menu is not on the page. This part passed.

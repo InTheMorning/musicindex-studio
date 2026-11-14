@@ -53,3 +53,21 @@ export function retireSteps(state) {
 export function deleteButtonEnabled(confirmText, typedText) {
   return typeof confirmText === 'string' && confirmText.length > 0 && confirmText === typedText;
 }
+
+// The second line of an operation row: what the operation means for the
+// feed (task 022b, review of milestone 7a).
+const OPERATION_NOTE = {
+  upload: 'The feed uses this file.',
+  copy: 'A spare copy. The feed does not use it.',
+  delete: 'Studio deletes it after the feed is written.',
+  confirm: 'Studio makes sure that the file host gives this file.',
+  hold: 'The old copy stays. Studio asks you before it deletes this file.',
+};
+
+// The note of an operation row. The core marks the row that deletes the feed
+// file with `deletes_feed_file`, so the UI does not compare paths
+// (ADR 0131 item 12).
+export function operationNote(op) {
+  if (op.kind === 'delete' && op.deletes_feed_file) return 'This write deletes the feed file.';
+  return OPERATION_NOTE[op.kind] || '';
+}

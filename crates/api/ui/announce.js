@@ -27,6 +27,8 @@ export function announceLines(diff) {
   const skip = diff ? diff.announce_skip : null;
   if (skip === 'no_address') {
     lines.push('No announcement: this feed has no public address.');
+  } else if (skip === 'feed_deleted') {
+    lines.push('No announcement: this write deletes the feed file.');
   }
   return lines;
 }

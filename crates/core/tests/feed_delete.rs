@@ -448,6 +448,18 @@ fn a_delete_draft_has_no_announcement_and_a_discard_removes_its_mark() {
     let draft =
         feed_delete::start_delete_draft(&e.collection, &e.hosts, &e.library, feed, true).unwrap();
     assert_eq!(draft.diff.announcements.len(), 0);
+    assert_eq!(
+        draft.diff.announce_skip,
+        Some(studio_core::announce::AnnounceSkip::FeedDeleted)
+    );
+    let feed_file: Vec<_> = draft
+        .diff
+        .operations
+        .iter()
+        .filter(|op| op.deletes_feed_file)
+        .map(|op| op.path.as_str())
+        .collect();
+    assert_eq!(feed_file, ["album.xml"]);
     assert!(pipeline::draft_changed(&e.collection, feed).unwrap());
     pipeline::discard_draft(&e.collection, feed).unwrap();
     assert!(!e.collection.has_draft_feed_delete(feed).unwrap());

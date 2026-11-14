@@ -543,6 +543,9 @@ pub struct HostOperation {
     /// library yet, and the write refuses the draft until the download is
     /// complete (ADR 0038 item 12).
     pub waiting: bool,
+    /// True for the deletion of the feed file of a delete draft
+    /// (ADR 0131 item 12). The review sheet shows a note for this row.
+    pub deletes_feed_file: bool,
 }
 
 /// A deletion that Studio refuses because a feed refers to the file
@@ -2877,7 +2880,7 @@ fn plan_announcements(
 ) -> Result<(Vec<PlannedAnnouncement>, Option<AnnounceSkip>), PipelineError> {
     // A delete of the feed file announces nothing (ADR 0131).
     if collection.has_draft_feed_delete(row.id)? {
-        return Ok((Vec::new(), Some(AnnounceSkip::NoAddress)));
+        return Ok((Vec::new(), Some(AnnounceSkip::FeedDeleted)));
     }
     // A granted write always announces, because a live show needs it (ADR 0136
     // item 6).
@@ -3466,6 +3469,7 @@ fn copy_operation(
         url: connector.public_url(&operation.path),
         operation_id: Some(operation.id.0),
         waiting,
+        deletes_feed_file: false,
     }))
 }
 
@@ -3502,6 +3506,7 @@ fn confirm_operation(
             .public_url(&operation.path),
         operation_id: Some(operation.id.0),
         waiting: false,
+        deletes_feed_file: false,
     })
 }
 
@@ -3588,6 +3593,7 @@ fn host_operations(
                     url: planned.url,
                     operation_id: None,
                     waiting: false,
+                    deletes_feed_file: false,
                 });
             }
         }
@@ -3631,6 +3637,7 @@ fn host_operations(
                     library_file_id: None,
                     operation_id: Some(operation.id.0),
                     waiting: false,
+                    deletes_feed_file: false,
                 });
             }
             DraftOperationKind::Delete => {
@@ -3681,6 +3688,7 @@ fn host_operations(
                         url,
                         operation_id: Some(operation.id.0),
                         waiting: false,
+                        deletes_feed_file: false,
                     });
                 } else {
                     blocked.push(BlockedDelete {
@@ -3724,6 +3732,7 @@ fn host_operations(
             url: hosts.get(connector_id)?.public_url(path),
             operation_id: None,
             waiting: false,
+            deletes_feed_file: true,
         });
     }
 

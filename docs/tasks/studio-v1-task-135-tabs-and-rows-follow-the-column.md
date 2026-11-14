@@ -2,7 +2,17 @@
 
 Decision: [ADR 0197](../adr/0197-the-tabs-and-the-field-rows-follow-the-editor-column.md).
 
-Status: Open.
+Status: Complete. The human check in the desktop app is open.
+
+## Result
+
+- `tabsFit` in `shell.js` and `useTabsFit` with `PageTabs` in `app.js` give the switch of items 1 and 2. A `ResizeObserver` watches the column and a hidden copy of the labels. The hook measures again after `document.fonts.ready`.
+- `.segment` has `white-space: nowrap`. The closed menu is as wide as its longest option. Its left edge is at 32 px from the column, and at 16 px at 760 px or less.
+- `.group` has `container-type: inline-size`. The field rows, the setting rows and the `.host-op-row` rows follow `@container (min-width: 560px)`.
+- Node tests: "the tabs fit at the exact width and not at 1 px less" and "each tab segment has the width of the longest label". The four commit checks pass.
+- The fit walks of criterion 3 give no finding at 390 px and 761 px. On Settings at 761 px, the overlap check gives four findings for left panel rows below the edge of `.sidebar-scroll`. A measure on 2026-11-14 put the row "Not linked" at 764 to 798 px, and the scroll box ends at 667 px. The check does not remove a control that a scroll box hides. This defect is in the shared fit check of musicindex-lib.
+- Screenshots on 2026-11-14 in the light and the dark theme: at 1280 px and 1000 px the tabs are a segmented control, and at 900 px, 761 px and 390 px they are the menu. A group narrower than 560 px puts the label above the value. The button of a check row goes below its text at 761 px.
+- WebKitGTK 4.1 applies `@container`. At 761 px, the group is 417 px wide and has one column. At 1000 px, it is 656 px wide and has the columns 170 px and 438 px.
 
 ## Goal
 

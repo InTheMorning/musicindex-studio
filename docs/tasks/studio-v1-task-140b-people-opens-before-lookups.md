@@ -2,7 +2,7 @@
 
 Decision: [ADR 0201](../adr/0201-people-opens-before-the-lightning-address-lookups.md).
 
-Status: Complete on 2026-11-14. The human check of ADR 0201 is open.
+Status: Complete on 2026-11-14. The human check of ADR 0201 passed on 2026-11-14.
 
 ## Result
 

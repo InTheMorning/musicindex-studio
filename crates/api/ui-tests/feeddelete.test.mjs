@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DELETE_CHOICES, deleteButtonEnabled, retireSteps } from '../ui/feeddelete.js';
+import { DELETE_CHOICES, deleteButtonEnabled, retireSteps, operationNote } from '../ui/feeddelete.js';
 
 test('the first sheet orders its choices and marks only the last choice destructive', () => {
   assert.deepEqual(DELETE_CHOICES.map(({ title, destructive }) => [title, destructive]), [
@@ -38,4 +38,10 @@ test('the final button waits for an exact, nonempty confirmation', () => {
   assert.equal(deleteButtonEnabled('Album', 'Album '), false);
   assert.equal(deleteButtonEnabled('', ''), false);
   assert.equal(deleteButtonEnabled(null, ''), false);
+});
+
+test('operationNote marks only the row of the feed file', () => {
+  assert.equal(operationNote({ kind: 'delete', deletes_feed_file: true }), 'This write deletes the feed file.');
+  assert.equal(operationNote({ kind: 'delete', deletes_feed_file: false }), 'Studio deletes it after the feed is written.');
+  assert.equal(operationNote({ kind: 'upload', deletes_feed_file: false }), 'The feed uses this file.');
 });

@@ -41,6 +41,8 @@ test('announceLines gives the reason for no announcement', () => {
   assert.deepEqual(announceLines({ announcements: [], announce_skip: 'off' }), []);
   assert.deepEqual(announceLines({ announcements: [], announce_skip: 'no_address' }),
     ['No announcement: this feed has no public address.']);
+  assert.deepEqual(announceLines({ announcements: [], announce_skip: 'feed_deleted' }),
+    ['No announcement: this write deletes the feed file.']);
   assert.deepEqual(announceLines({ announcements: [], announce_skip: null }), []);
   assert.deepEqual(announceLines({}), []);
 });

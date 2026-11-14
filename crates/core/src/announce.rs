@@ -103,6 +103,8 @@ pub enum AnnounceSkip {
     Off,
     /// The write has no public address to announce.
     NoAddress,
+    /// The write deletes the feed file (ADR 0131).
+    FeedDeleted,
 }
 
 impl AnnounceSkip {
@@ -112,6 +114,7 @@ impl AnnounceSkip {
         match self {
             Self::Off => "off",
             Self::NoAddress => "no_address",
+            Self::FeedDeleted => "feed_deleted",
         }
     }
 }

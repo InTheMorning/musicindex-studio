@@ -2,7 +2,16 @@
 
 Decision: [ADR 0131](../adr/0131-delete-a-feed-from-its-file-host.md) items 10 to 12. This task corrects defects. It makes no new rule.
 
-Status: Open.
+Status: Complete. It needs no human check.
+
+## Result
+
+- `loadPreview` keeps the old preview while the request runs. A walk on 2026-11-14 added a delay of 1.5 s to the request. During the request, the title, the file host row and the line of the linking feed stayed, and the check box was off. The sheet height changed once at the click, because the note of the check box changes. It then stayed the same until the answer arrived.
+- `HostOperation` has the field `deletes_feed_file`. The core sets it only on the row that deletes the feed file. `operationNote` in `feeddelete.js` gives "This write deletes the feed file." for that row.
+- `AnnounceSkip::FeedDeleted` gives `feed_deleted` for a delete draft. `announceLines` gives "No announcement: this write deletes the feed file." The review also hides the announce check box for this value, the same as for `no_address`.
+- The diff ID of a delete draft includes the skip value. Thus a delete draft that is open during the update must go through Review again.
+- Tests: the core test `a_delete_draft_has_no_announcement_and_a_discard_removes_its_mark`, the Node test `operationNote marks only the row of the feed file`, and a new case in `announceLines gives the reason for no announcement`. The four commit checks pass.
+- Screenshots show the sheet before, during and after the request, and the review. They are at 1280 px in the light theme and at 390 px in the dark theme. The fit check gives no finding at 390 px and 761 px. Walk: `setup-131.py` with `steps-136-{light,dark}.json`.
 
 ## Goal
 

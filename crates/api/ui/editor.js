@@ -46,7 +46,7 @@ import { shortType as formatLabel, propertiesSummary, propertiesOpen, propertyRo
 import { MOVE_SCOPES, fileHostRows, planRows, stayRows, deleteLabel, deleteAllLabel, DELETE_NOTE_ON, DELETE_NOTE_OFF, waitLabel, waitingView, readyNotice, partMoveNotice, existsRefusalView, addDisabled, replacesCopyNote, replaceWarning } from './releasemove.js';
 import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary, artworkPreview } from './artwork.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, addsAsTrackFile, refusedText, wrongKindText, replacedAddresses, selectedFacts } from './picker.js';
-import { DELETE_CHOICES, deleteButtonEnabled, retireSteps } from './feeddelete.js';
+import { DELETE_CHOICES, deleteButtonEnabled, retireSteps, operationNote } from './feeddelete.js';
 
 // A text where only each web address can break inside a word (musicindex ADR
 // 0065 R-FIT-3 item 3).
@@ -1678,16 +1678,6 @@ function operationKindLabel(kind) {
   }
 }
 
-// The second line of an operation row: what the operation means for the
-// feed (task 022b, review of milestone 7a).
-const OPERATION_NOTE = {
-  upload: 'The feed uses this file.',
-  copy: 'A spare copy. The feed does not use it.',
-  delete: 'Studio deletes it after the feed is written.',
-  confirm: 'Studio makes sure that the file host gives this file.',
-  hold: 'The old copy stays. Studio asks you before it deletes this file.',
-};
-
 // One row of a host operation of the diff: its kind, its host, its path
 // and its size (ADR 0036 item 14). An upload has no draft operation of its
 // own, so it has no Remove button. "Remove" takes the operation out of the
@@ -1698,7 +1688,7 @@ function HostOperationRow({ op, connectors, onRemove, busy }) {
     <span class="text">
       <span class="title">${connectorName(connectors, op.connector_id)}</span>
       <span class="sub mono">${op.path}</span>
-      <span class="sub">${OPERATION_NOTE[op.kind] || ''}</span>
+      <span class="sub">${operationNote(op)}</span>
       ${op.waiting && html`<span class="sub waiting">Waiting for the download. Studio writes it after the download.</span>`}
     </span>
     <span class="size">${fileSize(op.size)}</span>
@@ -2202,7 +2192,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
       ${showsExamine({ merge, diff, stale }) && html`<div class="actions">
         <button class="button" type="button" disabled=${busy || draft.status === 'loading'} onClick=${examine}>Examine the Changes</button>
       </div>`}
-      ${diff && hasWork && !addressesBlocked && !choosing && diff.announce_skip !== 'no_address' && html`<${AnnounceChoice} onChange=${refreshDiff} wait=${returnWait} />`}
+      ${diff && hasWork && !addressesBlocked && !choosing && diff.announce_skip !== 'no_address' && diff.announce_skip !== 'feed_deleted' && html`<${AnnounceChoice} onChange=${refreshDiff} wait=${returnWait} />`}
     </div>
     <footer>
       <button class="button destructive" type="button" disabled=${busy || !draft.changed} onClick=${discard}>Discard the Draft</button>
@@ -2375,8 +2365,9 @@ function FeedDelete({ feed, draft }) {
     action.run(async () => setRetire(await api(`/feeds/${feed.id}/retire/state`, { method: 'POST' })));
   }, [retiring, feed.id]);
   const loadPreview = (include) => action.run(async () => {
+    // The old preview stays while the request runs. The sheet keeps its
+    // height, and the check box and Delete are off (`action.busy`).
     setWithFiles(include);
-    setPreview(null);
     const answer = await api(`/feeds/${feed.id}/delete/draft`, { method: 'POST', body: { with_files: include } });
     deleteDraftStarted.current = true;
     setPreview(answer);

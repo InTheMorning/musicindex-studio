@@ -52,7 +52,7 @@ On 2026-10-25 the operator selected three login methods and a confirmation of th
 - A patch of `ssh2` that wraps a libssh2 rename. Rejected: libssh2 has no `posix-rename` call, and a patch of a C binding must be kept.
 - Delete and then rename. Rejected: the feed has no file for a short time.
 - The `known_hosts` file of the user. Not chosen by the operator: the server shell has no such file.
-- A redirect through an Apache `.htaccess` file. Deferred: it works only on some hosts, and a feed move can use the pointer file of [ADR 0038](0038-published-feeds-downloads-folder-scan-and-feed-moves.md) item 18.
+- A redirect through an Apache `.htaccess` file. Deferred: it works only on some hosts, and a feed move can use the pointer file of [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) item 18.
 
 ## Consequences
 

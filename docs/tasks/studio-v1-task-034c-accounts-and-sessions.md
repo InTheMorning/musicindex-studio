@@ -1,6 +1,6 @@
 # Studio v1 Task 034c: Accounts, User Folders And Sessions
 
-Parent: [task 034](studio-v1-task-034-server-core.md). Decisions: [ADR 0055](../adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) items 1 to 8, 10 to 13 and 18 to 20, and [ADR 0056](../adr/0056-server-sign-in-methods-and-vault-wrappers.md) items 4, 7 and 8.
+Parent: [task 034](studio-v1-task-034-server-core.md). Decisions: [ADR 0055](../archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) items 1 to 8, 10 to 13 and 18 to 20, and [ADR 0056](../adr/0056-server-sign-in-methods-and-vault-wrappers.md) items 4, 7 and 8.
 Sequence: the third packet of task 034. It depends on 034b.
 
 ## Goal

@@ -5,7 +5,7 @@
 - Owner: operator
 - Accepted: 2026-11-06 by the operator, who asked for the setting and accepted the proposal of finding 11.
 - Technical choices: the times of item 1, the maximum of item 3 and items 4 to 6 are choices of the planning model.
-- Changes: [ADR 0055](0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) item 16, the fixed time of the server.
+- Changes: [ADR 0055](../archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) item 16, the fixed time of the server.
 - Source: [findings of local use, finding 11](../reviews/2026-11-06-local-use-findings.md)
 
 ## Context

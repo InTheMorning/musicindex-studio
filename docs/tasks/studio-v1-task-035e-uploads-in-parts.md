@@ -1,6 +1,6 @@
 # Studio v1 Task 035e: Uploads In Parts
 
-Parent: [task 035](studio-v1-task-035-phone.md). Decisions: [ADR 0059](../adr/0059-uploads-in-parts-and-the-home-screen-app.md) items 1 to 7, [ADR 0026](../adr/0026-import-music-files-through-the-draft.md), [ADR 0033](../adr/0033-a-lossless-import-gives-an-mp3-enclosure.md) and [ADR 0055](../adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) item 21.
+Parent: [task 035](studio-v1-task-035-phone.md). Decisions: [ADR 0059](../adr/0059-uploads-in-parts-and-the-home-screen-app.md) items 1 to 7, [ADR 0026](../adr/0026-import-music-files-through-the-draft.md), [ADR 0033](../adr/0033-a-lossless-import-gives-an-mp3-enclosure.md) and [ADR 0055](../archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) item 21.
 Sequence: the fifth packet of task 035. It depends on task 034.
 
 ## Goal

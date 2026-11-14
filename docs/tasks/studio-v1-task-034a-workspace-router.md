@@ -1,6 +1,6 @@
 # Studio v1 Task 034a: The Router Of One Workspace
 
-Parent: [task 034](studio-v1-task-034-server-core.md). Decisions: [ADR 0055](../adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) items 4, 5 and 20, and [ADR 0017](../adr/0017-local-api-access.md).
+Parent: [task 034](studio-v1-task-034-server-core.md). Decisions: [ADR 0055](../archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) items 4, 5 and 20, and [ADR 0017](../adr/0017-local-api-access.md).
 Sequence: the first packet of task 034.
 
 ## Goal

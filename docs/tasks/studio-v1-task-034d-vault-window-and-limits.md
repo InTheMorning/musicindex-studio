@@ -1,6 +1,6 @@
 # Studio v1 Task 034d: The Vault Window, The Limits And The Server Rules
 
-Parent: [task 034](studio-v1-task-034-server-core.md). Decisions: [ADR 0055](../adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) items 3, 9, 14 to 17 and 21 to 25, and [ADR 0013](../adr/0013-vault-format-and-cryptography.md) item 15.
+Parent: [task 034](studio-v1-task-034-server-core.md). Decisions: [ADR 0055](../archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) items 3, 9, 14 to 17 and 21 to 25, and [ADR 0013](../adr/0013-vault-format-and-cryptography.md) item 15.
 Sequence: the fourth packet of task 034. It depends on 034c.
 
 ## Goal

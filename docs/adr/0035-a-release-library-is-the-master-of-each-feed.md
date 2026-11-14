@@ -1,9 +1,9 @@
 # ADR 0035: A Release Library Is The Master Of Each Feed
 
-- Status: Accepted. Phase 7 of the [Studio v1 phase plan](../plans/studio-v1-phase-plan.md) implements it. Until then, the rules that this ADR replaces stay in force. [ADR 0036](0036-library-records-host-inventory-and-host-operations.md) gives the records, the host inventory and the host operations. [ADR 0038](0038-published-feeds-downloads-folder-scan-and-feed-moves.md) gives milestone 7b, and item 21 waits for Phase 10.
+- Status: Accepted. Phase 7 of the [Studio v1 phase plan](../plans/studio-v1-phase-plan.md) implements it. Until then, the rules that this ADR replaces stay in force. [ADR 0036](0036-library-records-host-inventory-and-host-operations.md) gives the records, the host inventory and the host operations. [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) gives milestone 7b, and item 21 waits for Phase 10.
 - Date: 2026-10-23
 - Owner: operator
-- Changed by: [ADR 0055](0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) item 3 answers item 4: the server keeps the library of each user in the user folder.
+- Changed by: [ADR 0055](../archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) item 3 answers item 4: the server keeps the library of each user in the user folder.
 - Changed by: [ADR 0067](0067-a-read-only-feed-opens-in-the-editor.md) item 8: a move from a read-only feed sets no redirect and writes no pointer file. Items 19 and 20 do not apply to that move.
 
 - Changed by: [ADR 0105](0105-a-public-server-holds-no-assets.md), for a server with `--hold-assets off`. Item 2: the host is the master of each file.

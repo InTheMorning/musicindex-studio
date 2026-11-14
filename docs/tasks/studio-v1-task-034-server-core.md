@@ -1,7 +1,7 @@
 # Studio v1 Task 034: The Server Core
 
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), Phase 12, milestone 12a.
-Decisions: [ADR 0055](../adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md), [ADR 0056](../adr/0056-server-sign-in-methods-and-vault-wrappers.md) items 1 to 11, [ADR 0057](../adr/0057-the-private-network-guard-of-the-server.md), [ADR 0003](../adr/0003-user-unlocked-secret-vault.md), [ADR 0013](../adr/0013-vault-format-and-cryptography.md) and [ADR 0017](../adr/0017-local-api-access.md).
+Decisions: [ADR 0055](../archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md), [ADR 0056](../adr/0056-server-sign-in-methods-and-vault-wrappers.md) items 1 to 11, [ADR 0057](../adr/0057-the-private-network-guard-of-the-server.md), [ADR 0003](../adr/0003-user-unlocked-secret-vault.md), [ADR 0013](../adr/0013-vault-format-and-cryptography.md) and [ADR 0017](../adr/0017-local-api-access.md).
 
 ## Goal
 

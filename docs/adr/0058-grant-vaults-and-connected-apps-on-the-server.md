@@ -11,7 +11,7 @@
 
 [ADR 0054](0054-live-items-connected-apps-and-show-grants.md) lets a connected app such as v4vmm start and end a live show and set its live value under a show grant. A granted write needs the secret of a host. ADR 0054 item 16 refuses a granted change while the vault is locked. Its consequences leave the connected apps of a server user to the Server Shell phase.
 
-[ADR 0003](0003-user-unlocked-secret-vault.md) item 4 says: "The server can write to a host only while the user's session is open. The server has no key that opens a vault without the user." On the server, the vault key exists only in the vault window of [ADR 0055](0055-the-server-shell-user-folders-sessions-and-the-vault-window.md).
+[ADR 0003](0003-user-unlocked-secret-vault.md) item 4 says: "The server can write to a host only while the user's session is open. The server has no key that opens a vault without the user." On the server, the vault key exists only in the vault window of [ADR 0055](../archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md).
 
 A show can start hours after the user prepares it. The research of 2026-10-26 ([Phase 12 authentication research](../research/2026-10-26-phase-12-auth-research.md)) examined these methods:
 

@@ -4,7 +4,7 @@
 - Date: 2026-10-22
 - Owner: operator
 - Changed by: [ADR 0056](0056-server-sign-in-methods-and-vault-wrappers.md) items 12, 22 and 28 supersede item 19, add the passkey wrapper and change the derivation of a new recovery key.
-- Changed by: [ADR 0055](0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) item 2 answers the open question: one vault file for each user.
+- Changed by: [ADR 0055](../archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) item 2 answers the open question: one vault file for each user.
 
 ## Context
 

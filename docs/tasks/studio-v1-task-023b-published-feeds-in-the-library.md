@@ -1,6 +1,6 @@
 # Studio v1 Task 023b: Published Feeds In The Library
 
-Parent: [task 023](studio-v1-task-023-release-library-7b.md). Decisions: [ADR 0038](../adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) items 3 to 5, [ADR 0035](../adr/0035-a-release-library-is-the-master-of-each-feed.md) item 5.
+Parent: [task 023](studio-v1-task-023-release-library-7b.md). Decisions: [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) items 3 to 5, [ADR 0035](../adr/0035-a-release-library-is-the-master-of-each-feed.md) item 5.
 Sequence: after [task 023a](studio-v1-task-023a-remote-file-records.md).
 
 ## Goal

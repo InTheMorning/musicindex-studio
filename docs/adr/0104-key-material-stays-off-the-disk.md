@@ -4,7 +4,7 @@
 - Date: 2026-11-01
 - Owner: operator
 - Accepted: 2026-11-01 by the operator, from the inspection of the production storage on the same day.
-- Uses: [ADR 0013](0013-vault-format-and-cryptography.md) items 10, 13 and 15 (no plain secret in a file, keys only in memory), [ADR 0055](0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) item 2 (one user folder for each account) and [ADR 0066](0066-the-server-ships-as-a-container-image.md) (the server image).
+- Uses: [ADR 0013](0013-vault-format-and-cryptography.md) items 10, 13 and 15 (no plain secret in a file, keys only in memory), [ADR 0055](../archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) item 2 (one user folder for each account) and [ADR 0066](0066-the-server-ships-as-a-container-image.md) (the server image).
 
 ## Context
 

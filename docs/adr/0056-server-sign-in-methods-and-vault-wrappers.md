@@ -43,7 +43,7 @@ On 2026-10-26 the operator selected the decisions below.
 
 ### Email And Passphrase
 
-7. The passphrase opens the vault, and that is the proof of the sign-in (ADR 0013 item 16). The sign-in thus also opens the vault window of [ADR 0055](0055-the-server-shell-user-folders-sessions-and-the-vault-window.md).
+7. The passphrase opens the vault, and that is the proof of the sign-in (ADR 0013 item 16). The sign-in thus also opens the vault window of [ADR 0055](../archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md).
 8. For an unknown email address, the server does an Argon2id derivation on a fixed wrapper with the same parameters. It gives the same error (ADR 0013 item 17).
 
 ### NIP-07

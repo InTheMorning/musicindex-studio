@@ -1,6 +1,6 @@
 # Studio v1 Task 023c: The Download Queue
 
-Parent: [task 023](studio-v1-task-023-release-library-7b.md). Decisions: [ADR 0038](../adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) items 6 to 12, [ADR 0036](../adr/0036-library-records-host-inventory-and-host-operations.md) item 17.
+Parent: [task 023](studio-v1-task-023-release-library-7b.md). Decisions: [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) items 6 to 12, [ADR 0036](../adr/0036-library-records-host-inventory-and-host-operations.md) item 17.
 Sequence: after [task 023b](studio-v1-task-023b-published-feeds-in-the-library.md).
 
 ## Goal

@@ -4,7 +4,7 @@
 - Date: 2026-11-01
 - Owner: operator
 - Accepted: 2026-11-01 by the operator, from the security audit of the user data on the same day.
-- Uses: [ADR 0055](0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) items 14 to 17 and 23 (sessions, the vault window and the limits), [ADR 0056](0056-server-sign-in-methods-and-vault-wrappers.md) items 3, 5, 10 and 11 (methods, challenges and the vault key for a signer) and [ADR 0110](0110-a-connected-app-signs-each-request-with-its-own-key.md) item 5 (connect an app).
+- Uses: [ADR 0055](../archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) items 14 to 17 and 23 (sessions, the vault window and the limits), [ADR 0056](0056-server-sign-in-methods-and-vault-wrappers.md) items 3, 5, 10 and 11 (methods, challenges and the vault key for a signer) and [ADR 0110](0110-a-connected-app-signs-each-request-with-its-own-key.md) item 5 (connect an app).
 - Changes: ADR 0055 item 23 (the limits of failed sign-ins).
 
 ## Context

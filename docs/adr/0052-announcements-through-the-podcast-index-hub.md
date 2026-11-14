@@ -11,7 +11,7 @@
 
 ## Context
 
-[ADR 0007](0007-draft-diff-write-and-announce.md) item 5 tells Studio to send a podping and a Podcast Index pubnotify after a write, with a setting for each. ADR 0007 did not decide the send method. [ADR 0035](0035-a-release-library-is-the-master-of-each-feed.md) item 21 tells Studio to give the new address of a moved feed to the musicindex API and Podcast Index. [ADR 0038](0038-published-feeds-downloads-folder-scan-and-feed-moves.md) item 21 keeps ADR 0035 item 21 out of force until Phase 10, and puts the announcement in the same diff. [ADR 0041](0041-publisher-feeds-and-two-way-links.md) leaves the announcement of a publisher feed to Phase 10.
+[ADR 0007](0007-draft-diff-write-and-announce.md) item 5 tells Studio to send a podping and a Podcast Index pubnotify after a write, with a setting for each. ADR 0007 did not decide the send method. [ADR 0035](0035-a-release-library-is-the-master-of-each-feed.md) item 21 tells Studio to give the new address of a moved feed to the musicindex API and Podcast Index. [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) item 21 keeps ADR 0035 item 21 out of force until Phase 10, and puts the announcement in the same diff. [ADR 0041](0041-publisher-feeds-and-two-way-links.md) leaves the announcement of a publisher feed to Phase 10.
 
 The research gives these observations:
 

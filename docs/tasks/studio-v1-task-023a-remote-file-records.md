@@ -1,6 +1,6 @@
 # Studio v1 Task 023a: The Records Of Remote Files
 
-Parent: [task 023](studio-v1-task-023-release-library-7b.md). Decisions: [ADR 0038](../adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) items 1 to 5, 9, 13, 16 and 20, [ADR 0036](../adr/0036-library-records-host-inventory-and-host-operations.md).
+Parent: [task 023](studio-v1-task-023-release-library-7b.md). Decisions: [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) items 1 to 5, 9, 13, 16 and 20, [ADR 0036](../adr/0036-library-records-host-inventory-and-host-operations.md).
 Sequence: the first packet of task 023.
 
 ## Goal

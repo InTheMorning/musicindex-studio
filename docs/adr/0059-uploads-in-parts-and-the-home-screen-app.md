@@ -6,7 +6,7 @@
 
 ## Context
 
-The goal of the operator for Phase 12 is a change of a feed from a phone ([ADR 0055](0055-the-server-shell-user-folders-sessions-and-the-vault-window.md)).
+The goal of the operator for Phase 12 is a change of a feed from a phone ([ADR 0055](../archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md)).
 
 An import sends each music file to `POST /api/v1/feeds/{id}/files` in one request, with a limit of 2 GiB ([ADR 0026](0026-import-music-files-through-the-draft.md), [ADR 0032](0032-new-releases-formats-paths-and-new-feeds.md)). A WAV file or a FLAC file can be hundreds of MiB. On a mobile network, one request of that size often fails, and the user must then send the full file again. A reverse proxy also limits the size of a request body. The PodSovereign server sends uploads in parts of 8 MB for the same reason (`research_notes/studio/podsovereign-comparison.md` in `musicindex-research`).
 

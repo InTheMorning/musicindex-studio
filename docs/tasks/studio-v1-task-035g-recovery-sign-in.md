@@ -1,6 +1,6 @@
 # Studio v1 Task 035g: Sign-In With The Recovery Key
 
-Parent: [task 035](studio-v1-task-035-phone.md). Decisions: [ADR 0056](../adr/0056-server-sign-in-methods-and-vault-wrappers.md) items 3, 8 and 29, [ADR 0055](../adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) items 15, 22 and 23, [ADR 0013](../adr/0013-vault-format-and-cryptography.md) item 9 and [ADR 0018](../adr/0018-passphrase-strength-and-error-color.md).
+Parent: [task 035](studio-v1-task-035-phone.md). Decisions: [ADR 0056](../adr/0056-server-sign-in-methods-and-vault-wrappers.md) items 3, 8 and 29, [ADR 0055](../archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) items 15, 22 and 23, [ADR 0013](../adr/0013-vault-format-and-cryptography.md) item 9 and [ADR 0018](../adr/0018-passphrase-strength-and-error-color.md).
 Sequence: the second packet of task 035. It depends on 035a. Packet 035b depends on it.
 
 ## Goal

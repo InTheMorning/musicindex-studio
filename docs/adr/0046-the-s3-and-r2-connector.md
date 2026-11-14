@@ -52,7 +52,7 @@ On 2026-10-25 the operator selected a test of the provider when the user adds th
 - The AWS SDK or `object_store`. Rejected: each one needs an async runtime ([ADR 0015](0015-connector-interface-and-write-pipeline.md) item 1).
 - No provider test. Not chosen by the operator: a provider that ignores the conditions can lose a concurrent change with no error.
 - A SHA-256 in the object metadata. Rejected for v1: `write_from` must then read the file two times. The pipeline already records the SHA-256 of each file that it uploads.
-- A per-object redirect through the AWS website endpoint. Deferred: R2 does not document it, and a feed move can use the pointer file of [ADR 0038](0038-published-feeds-downloads-folder-scan-and-feed-moves.md) item 18.
+- A per-object redirect through the AWS website endpoint. Deferred: R2 does not document it, and a feed move can use the pointer file of [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) item 18.
 
 ## Consequences
 

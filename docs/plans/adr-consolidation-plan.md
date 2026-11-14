@@ -52,7 +52,7 @@ If a restatement needs a change of a rule, the work stops, and the orchestrator 
 | Area | New ADR | Condition | Commit |
 | --- | --- | --- | --- |
 | Gate | — | Done | `e2eb2b7` |
-| Feed files, moves and the server | 0204 | Not started | — |
+| Feed files, moves and the server | 0204 | Done | — |
 | Publisher feeds, announcements and grants | 0205 | Not started | — |
 | The shell and the editor pages | 0206 | Not started | — |
 | Recipients | 0207 | Not started | — |

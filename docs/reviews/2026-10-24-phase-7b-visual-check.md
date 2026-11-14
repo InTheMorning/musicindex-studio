@@ -2,7 +2,7 @@
 
 - Date: 2026-10-24
 - Reviewed: the visual criterion of Phase 7 in the [phase plan](../plans/studio-v1-phase-plan.md), for milestone 7b ([task 023](../tasks/studio-v1-task-023-release-library-7b.md)). The operator adds a published feed, downloads its files, puts a file on two hosts, changes one audio file, and writes the release. The operator then moves the feed XML to a different host.
-- Decisions: [ADR 0035](../adr/0035-a-release-library-is-the-master-of-each-feed.md), [ADR 0036](../adr/0036-library-records-host-inventory-and-host-operations.md) and [ADR 0038](../adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md)
+- Decisions: [ADR 0035](../adr/0035-a-release-library-is-the-master-of-each-feed.md), [ADR 0036](../adr/0036-library-records-host-inventory-and-host-operations.md) and [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md)
 - Data: the data of the [milestone 7a visual check](2026-10-23-phase-7a-visual-check.md) in `.studio-dev/phase-7a/`, and the published feed "Live Check" in `.studio-dev/phase-7b/`. A local web server gives `hostC` at `http://127.0.0.1:8766`. A second web server at `http://127.0.0.1:8767` gives one audio file, and Studio has no host for it.
 - Checker: operator for steps 1 to 12. The planning model did the light theme check and the check of the corrections with `tools/drive-ui.mjs`.
 - Result: pass after four corrections

@@ -75,7 +75,7 @@ This section is a proposal for the module ADR. It is not a decision.
 - The wallet of ADR 0095 stays as it is. A person holds one or more wallets. The keysend lookup links the addresses of one wallet. Only the user links two wallets to one person.
 - `saved_recipients` becomes a part of `people`. A migration moves each saved recipient into a person.
 - In the left panel, "People" replaces "Recipients". The page of a person holds its batch edits. A batch edit for a wallet with no person stays available.
-- The same module serves the desktop shell and the server shell. On the server, each user folder has its own collection, so each user has an address book of its own ([ADR 0055](../adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md)).
+- The same module serves the desktop shell and the server shell. On the server, each user folder has its own collection, so each user has an address book of its own ([ADR 0055](../archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md)).
 
 ## Support Links In The Suite
 

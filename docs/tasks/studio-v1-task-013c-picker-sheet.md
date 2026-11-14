@@ -1,6 +1,6 @@
 # Studio v1 Task 013c: The Picker Sheet
 
-Parent: [task 013](studio-v1-task-013-recipient-picker.md). Decisions: [ADR 0027](../adr/0027-the-recipient-picker.md) items 1, 5 to 7, [ADR 0029](../adr/0029-editor-pages-toolbar-and-three-levels.md) and [ADR 0028](../adr/0028-summary-lines-and-one-open-entry.md).
+Parent: [task 013](studio-v1-task-013-recipient-picker.md). Decisions: [ADR 0027](../archive/adr/0027-the-recipient-picker.md) items 1, 5 to 7, [ADR 0029](../adr/0029-editor-pages-toolbar-and-three-levels.md) and [ADR 0028](../adr/0028-summary-lines-and-one-open-entry.md).
 Sequence: after [task 013b](studio-v1-task-013b-recipient-routes.md). It is the last packet.
 
 ## Goal

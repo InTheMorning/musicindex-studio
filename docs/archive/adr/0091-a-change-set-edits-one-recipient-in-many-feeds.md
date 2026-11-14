@@ -1,18 +1,20 @@
+> Archived: superseded by [ADR 0207](../../adr/0207-recipients-change-sets-and-wallets.md) on 2026-11-14. ADR 0207 restates each live rule of this ADR. Its item map gives the new item of each item.
+
 # ADR 0091: A Change Set Edits One Recipient In Many Feeds
 
-- Status: Accepted
+- Status: Superseded by ADR 0207
 - Date: 2026-10-30
 - Owner: operator
 - Accepted: 2026-10-30 by the operator.
 - Changed by: [ADR 0095](0095-a-lightning-address-and-its-node-key-are-one-recipient.md). Items 2 to 8 and 12: an operation acts on each address of one wallet, and the page of a recipient has a fifth operation.
-- Changed by: [ADR 0099](../archive/adr/0099-the-people-destination-and-the-page-of-a-person.md). Items 1 to 4 and 21: People replaces the Recipients page, each sheet lists the feeds, and the review has its buttons at the top.
-- Changed by: [ADR 0098](../archive/adr/0098-the-people-module.md) item 20 adds the operations of a person.
-- Changes: [ADR 0039](../archive/adr/0039-the-shell-releases-and-the-outline.md) items 1, 5 and 11, for the destinations at the bottom of the left panel.
-- Changes: [ADR 0030](0030-an-added-recipient-gets-no-split.md), for a recipient that a change set adds.
-- Changed by: [ADR 0092](0092-file-hosts-and-the-destination-icons.md), File Hosts And The Destination Icons.
-- Changed by: [ADR 0096](0096-add-to-an-artist-or-label.md), Add To An Artist Or Label.
-- Uses: [ADR 0027](0027-the-recipient-picker.md) for the identity of a recipient, [ADR 0088](0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) for the levels, and [ADR 0007](0007-draft-diff-write-and-announce.md) for the review and the write.
-- Changed by: [ADR 0148](0148-a-move-keeps-the-old-files-until-the-user-reviews-the-deletion.md), A Move Keeps The Old Files Until The User Reviews The Deletion.
+- Changed by: [ADR 0099](0099-the-people-destination-and-the-page-of-a-person.md). Items 1 to 4 and 21: People replaces the Recipients page, each sheet lists the feeds, and the review has its buttons at the top.
+- Changed by: [ADR 0098](0098-the-people-module.md) item 20 adds the operations of a person.
+- Changes: [ADR 0039](0039-the-shell-releases-and-the-outline.md) items 1, 5 and 11, for the destinations at the bottom of the left panel.
+- Changes: [ADR 0030](../../adr/0030-an-added-recipient-gets-no-split.md), for a recipient that a change set adds.
+- Changed by: [ADR 0092](../../adr/0092-file-hosts-and-the-destination-icons.md), File Hosts And The Destination Icons.
+- Changed by: [ADR 0096](../../adr/0096-add-to-an-artist-or-label.md), Add To An Artist Or Label.
+- Uses: [ADR 0027](0027-the-recipient-picker.md) for the identity of a recipient, [ADR 0088](../../adr/0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) for the levels, and [ADR 0007](../../adr/0007-draft-diff-write-and-announce.md) for the review and the write.
+- Changed by: [ADR 0148](../../adr/0148-a-move-keeps-the-old-files-until-the-user-reviews-the-deletion.md), A Move Keeps The Old Files Until The User Reviews The Deletion.
 
 ## Context
 
@@ -29,7 +31,7 @@
 
 ### The Recipients Page
 
-1. The left panel gets the destination "Recipients" at its bottom, before File hosts. The sequence at the bottom is Recipients, File hosts, Settings, then Lock Studio. The names and the icons of the bottom group are in [ADR 0092](0092-file-hosts-and-the-destination-icons.md). This changes ADR 0039 items 1, 5 and 11.
+1. The left panel gets the destination "Recipients" at its bottom, before File hosts. The sequence at the bottom is Recipients, File hosts, Settings, then Lock Studio. The names and the icons of the bottom group are in [ADR 0092](../../adr/0092-file-hosts-and-the-destination-icons.md). This changes ADR 0039 items 1, 5 and 11.
 2. The Recipients page lists each recipient one time, with the identity of ADR 0027. A row shows the name, the type, and the number of feeds that use the recipient. A saved recipient that no feed uses shows the text "Saved, not used". The number comes from the same model of each feed as the list of item 3: the draft of the feed, or else its library copy. Thus the two pages give the same number. The planning model added this rule on 2026-10-30, after the visual check of task 054c.
 3. A row opens the page of the recipient. That page lists each feed that uses the recipient, with its places: "Channel", the number of tracks, and the number of live items. Each feed has a checkbox, and each checkbox starts selected.
 4. The page of a recipient has four operations: Change address, Rename, Remove, and Add to a level.
@@ -42,7 +44,7 @@
 8. The scope of Change address, Rename and Remove is each selected feed of item 3.
 9. Add to a level adds the recipient to each value block of each feed of a level. A level is a publisher feed and each feed below it, through `child_ids` (ADR 0088). The user selects the level, then the core lists its feeds with checkboxes, and each checkbox starts selected. The user gives a percentage from 1 to 99.
 10. An operation changes each value block of the channel, of each item and of each live item. It does not change a value time split.
-11. A publisher feed is in a scope as each other feed. Studio copies no recipient from a publisher feed to its releases, or from a release to its publisher feed ([ADR 0075](0075-the-publisher-page-has-payments-and-credits.md) item 4).
+11. A publisher feed is in a scope as each other feed. Studio copies no recipient from a publisher feed to its releases, or from a release to its publisher feed ([ADR 0075](../../adr/0075-the-publisher-page-has-payments-and-credits.md) item 4).
 12. A change of the address or of the name of a saved recipient also changes the saved recipient. The core makes this change with the change set, and keeps the saved recipient from before the change. A change set in which no feed changed does not change the saved recipient.
 
 ### The Splits
@@ -50,7 +52,7 @@
 13. Add to a level sets the split of the new recipient to the percentage p. The core then scales the other non-fee splits of the block, so that their total is 100 − p. Each recipient keeps its relative share. The core rounds each split to an integer, and gives the remainder to the largest split.
 14. Remove scales the other non-fee splits of the block, so that their total is the non-fee total before the change. Each recipient keeps its relative share. A block with a non-fee total of 100 keeps a total of 100. The core rounds as item 13 says.
 15. A fee split does not change.
-16. These calculations are feed rules. They are in the core ([ADR 0065](0065-the-core-applies-each-feed-rule.md)).
+16. These calculations are feed rules. They are in the core ([ADR 0065](../../adr/0065-the-core-applies-each-feed-rule.md)).
 
 ### The Change Set
 
@@ -65,11 +67,11 @@
 
 ### The Review And The Write
 
-21. The review of a change set lists each feed with its outcome. Each changed feed opens its diff. The first changed feed starts open, so the page shows a diff before the first write ([findings of local use, finding 22](../reviews/2026-11-06-local-use-findings.md)). The diff of a feed with an earlier draft also shows the earlier edits.
-22. The review also lists each changed feed that Studio cannot write now, with the cause. For example, a read-only feed has no host ([ADR 0067](0067-a-read-only-feed-opens-in-the-editor.md)), or the vault is locked.
+21. The review of a change set lists each feed with its outcome. Each changed feed opens its diff. The first changed feed starts open, so the page shows a diff before the first write ([findings of local use, finding 22](../../reviews/2026-11-06-local-use-findings.md)). The diff of a feed with an earlier draft also shows the earlier edits.
+22. The review also lists each changed feed that Studio cannot write now, with the cause. For example, a read-only feed has no host ([ADR 0067](../../adr/0067-a-read-only-feed-opens-in-the-editor.md)), or the vault is locked.
 23. "Write" writes each feed that the user can write, one at a time, through `pipeline::write_draft` with the ID of the diff of that feed. The review shows the status of each feed during the write.
 24. When the write of one feed fails, Studio does not stop the write of the other feeds. A conflict of ADR 0007 item 3 stops only that feed. The draft of a feed that is not written stays, and the change set stays open.
-25. Each write announces its feed as each other write does ([ADR 0052](../archive/adr/0052-announcements-through-the-podcast-index-hub.md)).
+25. Each write announces its feed as each other write does ([ADR 0052](0052-announcements-through-the-podcast-index-hub.md)).
 26. A show grant does not cover a change set. A change set needs the vault of the user.
 
 ## Alternatives Considered
@@ -86,7 +88,7 @@
 ## Consequences
 
 - The user changes one recipient in many feeds with one review.
-- The collection schema gets a table for the change sets and the draft of each feed before the change. This is a new migration ([ADR 0014](0014-collection-in-sqlite.md)).
+- The collection schema gets a table for the change sets and the draft of each feed before the change. This is a new migration ([ADR 0014](../../adr/0014-collection-in-sqlite.md)).
 - A change set with many feeds makes many writes and many announcements.
 - An added recipient gets a split. ADR 0030 continues to apply to the recipient picker of the editor.
 

@@ -1,6 +1,6 @@
 # Studio v1 Task 013a: The Recipient Store And The Musicindex Routes
 
-Parent: [task 013](studio-v1-task-013-recipient-picker.md). Decision: [ADR 0027](../adr/0027-the-recipient-picker.md) items 2 to 6.
+Parent: [task 013](studio-v1-task-013-recipient-picker.md). Decision: [ADR 0027](../archive/adr/0027-the-recipient-picker.md) items 2 to 6.
 Sequence: the first packet of task 013. It changes only the core.
 
 ## Goal

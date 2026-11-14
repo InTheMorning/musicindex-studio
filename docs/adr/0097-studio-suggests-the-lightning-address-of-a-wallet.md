@@ -4,7 +4,7 @@
 - Date: 2026-10-31
 - Owner: operator
 - Accepted: 2026-10-31 by the operator.
-- Changes: [ADR 0095](0095-a-lightning-address-and-its-node-key-are-one-recipient.md) item 12, for a wallet with no Lightning address in the collection.
+- Changes: [ADR 0095](../archive/adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md) item 12, for a wallet with no Lightning address in the collection.
 - Uses: [ADR 0074](0074-nostr-keys-for-artists-labels-and-contributors.md) for the Nostr keys of a feed and the lookup relays, [ADR 0057](0057-the-private-network-guard-of-the-server.md) for the network policy, and [ADR 0065](0065-the-core-applies-each-feed-rule.md).
 
 ## Context

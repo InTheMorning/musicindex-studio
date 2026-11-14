@@ -4,7 +4,7 @@
 - Date: 2026-11-06
 - Owner: operator
 - Accepted: 2026-11-06 by the operator, through the questionnaire, from drawings of the rows. The operator selected "Correct the Feeds" with "Add Anyway". The operator also selected the names "LNURL address" and "Node address".
-- Changes: the words of [ADR 0095](0095-a-lightning-address-and-its-node-key-are-one-recipient.md) in the UI.
+- Changes: the words of [ADR 0095](../archive/adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md) in the UI.
 - Changes: the words of [ADR 0099](../archive/adr/0099-the-people-destination-and-the-page-of-a-person.md) item 15 in the UI.
 - Changes: the button of [ADR 0103](../archive/adr/0103-one-person-collects-the-items-of-many-suggestions.md) item 18 for a key with a warning.
 - Uses: [ADR 0111](../archive/adr/0111-the-page-of-a-person-checks-the-feeds.md) for the correction of a key.

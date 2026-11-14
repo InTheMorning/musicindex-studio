@@ -1,7 +1,7 @@
 # Studio v1 Task 080: Find On musicindex
 
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The People Module".
-Decision: [ADR 0117](../adr/0117-the-page-of-a-person-finds-values-on-musicindex.md). It uses [ADR 0116](../adr/0116-the-page-of-a-person-has-save-and-discard.md) and [ADR 0095](../adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md).
+Decision: [ADR 0117](../adr/0117-the-page-of-a-person-finds-values-on-musicindex.md). It uses [ADR 0116](../adr/0116-the-page-of-a-person-has-save-and-discard.md) and [ADR 0095](../archive/adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md).
 
 Status: Complete. Packets 080a and 080b are committed. The screenshot visual check passed on 2026-11-02. The human test is open.
 

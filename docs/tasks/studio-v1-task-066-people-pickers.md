@@ -1,7 +1,7 @@
 # Studio v1 Task 066: The People Pickers
 
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The People Module".
-Decisions: [ADR 0099](../archive/adr/0099-the-people-destination-and-the-page-of-a-person.md) items 14 and 19 to 21, [ADR 0098](../archive/adr/0098-the-people-module.md) item 3, [ADR 0027](../adr/0027-the-recipient-picker.md), [ADR 0030](../adr/0030-an-added-recipient-gets-no-split.md), [ADR 0042](../adr/0042-ui-models-with-node-tests.md) and [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md).
+Decisions: [ADR 0099](../archive/adr/0099-the-people-destination-and-the-page-of-a-person.md) items 14 and 19 to 21, [ADR 0098](../archive/adr/0098-the-people-module.md) item 3, [ADR 0027](../archive/adr/0027-the-recipient-picker.md), [ADR 0030](../adr/0030-an-added-recipient-gets-no-split.md), [ADR 0042](../adr/0042-ui-models-with-node-tests.md) and [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md).
 
 Status: Complete, in two packets, with their screenshot visual checks. The human test is open. Notes from the reviews:
 

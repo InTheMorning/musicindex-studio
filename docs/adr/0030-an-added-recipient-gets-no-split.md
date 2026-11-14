@@ -3,12 +3,12 @@
 - Status: Accepted
 - Date: 2026-10-23
 - Owner: operator
-- Changed by: [ADR 0091](0091-a-change-set-edits-one-recipient-in-many-feeds.md), A Change Set Edits One Recipient In Many Feeds.
-- Changes: [ADR 0027](0027-the-recipient-picker.md), The Recipient Picker. ADR 0027 names the changed items.
+- Changed by: [ADR 0091](../archive/adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md), A Change Set Edits One Recipient In Many Feeds.
+- Changes: [ADR 0027](../archive/adr/0027-the-recipient-picker.md), The Recipient Picker. ADR 0027 names the changed items.
 
 ## Context
 
-[ADR 0027](0027-the-recipient-picker.md) item 7 says that each recipient that the picker adds keeps the split of its source. Task 013 implemented this for a recipient from musicindex.
+[ADR 0027](../archive/adr/0027-the-recipient-picker.md) item 7 says that each recipient that the picker adds keeps the split of its source. Task 013 implemented this for a recipient from musicindex.
 
 On 2026-10-23 the operator did the visual check of task 013. The operator imported a recipient from a musicindex track, and it arrived with a split of about half the shares of the track. The operator decided that an imported recipient must not keep its split. A split in a different feed is for a different set of recipients, so it is not correct in the feed of the editor.
 

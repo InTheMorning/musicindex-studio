@@ -1,6 +1,6 @@
 # Task 013 Review Checklist
 
-Reviewed work: the diff of each packet of [task 013](../tasks/studio-v1-task-013-recipient-picker.md), against [ADR 0027](../adr/0027-the-recipient-picker.md).
+Reviewed work: the diff of each packet of [task 013](../tasks/studio-v1-task-013-recipient-picker.md), against [ADR 0027](../archive/adr/0027-the-recipient-picker.md).
 The planning model uses this list after each packet, before the commit of that packet.
 
 ## Each Packet

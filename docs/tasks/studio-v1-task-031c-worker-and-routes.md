@@ -1,6 +1,6 @@
 # Studio v1 Task 031c: The Worker And The Routes
 
-Parent: [task 031](studio-v1-task-031-announce.md). Decisions: [ADR 0052](../adr/0052-announcements-through-the-podcast-index-hub.md) items 1, 5, 6, 14 to 18 and 20, and [ADR 0045](../adr/0045-phase-9-crates-test-servers-and-host-forms.md).
+Parent: [task 031](studio-v1-task-031-announce.md). Decisions: [ADR 0052](../archive/adr/0052-announcements-through-the-podcast-index-hub.md) items 1, 5, 6, 14 to 18 and 20, and [ADR 0045](../adr/0045-phase-9-crates-test-servers-and-host-forms.md).
 Sequence: the third packet of task 031. It depends on 031b.
 
 ## Goal

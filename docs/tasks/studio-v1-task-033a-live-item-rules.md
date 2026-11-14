@@ -1,6 +1,6 @@
 # Studio v1 Task 033a: The Live Item Rules In The Core
 
-Parent: [task 033](studio-v1-task-033-live-items.md). Decisions: [ADR 0054](../adr/0054-live-items-connected-apps-and-show-grants.md) items 2 to 5, and [ADR 0012](../adr/0012-lossless-tree-with-a-typed-model.md).
+Parent: [task 033](studio-v1-task-033-live-items.md). Decisions: [ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md) items 2 to 5, and [ADR 0012](../adr/0012-lossless-tree-with-a-typed-model.md).
 Sequence: the first packet of task 033.
 
 ## Goal

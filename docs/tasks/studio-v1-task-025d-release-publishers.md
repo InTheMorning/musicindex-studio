@@ -1,6 +1,6 @@
 # Studio v1 Task 025d: The Publisher Feeds Of A Release
 
-Parent: [task 025](studio-v1-task-025-publisher-feeds.md). Decisions: [ADR 0041](../adr/0041-publisher-feeds-and-two-way-links.md) items 5, 7 to 9 and 13, [ADR 0037](../adr/0037-button-roles.md).
+Parent: [task 025](studio-v1-task-025-publisher-feeds.md). Decisions: [ADR 0041](../archive/adr/0041-publisher-feeds-and-two-way-links.md) items 5, 7 to 9 and 13, [ADR 0037](../adr/0037-button-roles.md).
 Sequence: the last packet of task 025. It depends on 025c.
 
 ## Goal

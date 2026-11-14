@@ -2,7 +2,7 @@
 
 - Date: 2026-10-25
 - Reviewed: each packet of [task 025](../tasks/studio-v1-task-025-publisher-feeds.md)
-- Decisions: [ADR 0041](../adr/0041-publisher-feeds-and-two-way-links.md)
+- Decisions: [ADR 0041](../archive/adr/0041-publisher-feeds-and-two-way-links.md)
 
 The planning model uses this list after each packet, before its commit.
 

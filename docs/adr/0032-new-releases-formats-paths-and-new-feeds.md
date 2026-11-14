@@ -3,7 +3,7 @@
 - Status: Accepted. [ADR 0033](0033-a-lossless-import-gives-an-mp3-enclosure.md) replaces the WAV conversion of items 2 and 5 on 2026-10-23. [ADR 0035](0035-a-release-library-is-the-master-of-each-feed.md) replaces items 4 and 10 to 12 when Phase 7 implements it.
 - Date: 2026-10-23
 - Owner: operator
-- Changed by: [ADR 0054](0054-live-items-connected-apps-and-show-grants.md) item 18 adds one exception to the invariant: a change that a show grant of the user covers.
+- Changed by: [ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md) item 18 adds one exception to the invariant: a change that a show grant of the user covers.
 - Changed by: [ADR 0121](../archive/adr/0121-a-folder-with-no-public-address-holds-practice-pages.md), A Folder With No Public Address Holds Practice Pages.
 - Changed by: [ADR 0122](0122-a-new-user-starts-with-a-default-file-host.md), A New User Starts With A Default File Host.
 
@@ -60,5 +60,5 @@ On 2026-10-23 the operator answered three questions about the formats, the file 
 
 ## Invariants
 
-- No file and no feed file goes to a host without a diff that the user saw. The only exception is a change that a show grant of the user covers ([ADR 0054](0054-live-items-connected-apps-and-show-grants.md)).
+- No file and no feed file goes to a host without a diff that the user saw. The only exception is a change that a show grant of the user covers ([ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md)).
 - No WAV file goes to a host (ADR 0033).

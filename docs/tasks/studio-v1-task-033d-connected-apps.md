@@ -1,6 +1,6 @@
 # Studio v1 Task 033d: Connected Apps
 
-Parent: [task 033](studio-v1-task-033-live-items.md). Decisions: [ADR 0054](../adr/0054-live-items-connected-apps-and-show-grants.md) items 7 to 10, and [ADR 0017](../adr/0017-local-api-access.md).
+Parent: [task 033](studio-v1-task-033-live-items.md). Decisions: [ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md) items 7 to 10, and [ADR 0017](../adr/0017-local-api-access.md).
 Sequence: the fourth packet of task 033. It depends on 033a.
 
 ## Goal

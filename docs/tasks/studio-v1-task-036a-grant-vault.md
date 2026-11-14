@@ -1,6 +1,6 @@
 # Studio v1 Task 036a: The Grant Vault
 
-Parent: [task 036](studio-v1-task-036-grant-vaults.md). Decisions: [ADR 0058](../adr/0058-grant-vaults-and-connected-apps-on-the-server.md) items 1 to 15, [ADR 0054](../adr/0054-live-items-connected-apps-and-show-grants.md) items 12 to 16, and [ADR 0013](../adr/0013-vault-format-and-cryptography.md).
+Parent: [task 036](studio-v1-task-036-grant-vaults.md). Decisions: [ADR 0058](../adr/0058-grant-vaults-and-connected-apps-on-the-server.md) items 1 to 15, [ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md) items 12 to 16, and [ADR 0013](../adr/0013-vault-format-and-cryptography.md).
 Sequence: the first packet of task 036. It depends on 035c.
 
 ## Goal

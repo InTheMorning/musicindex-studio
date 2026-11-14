@@ -1,6 +1,6 @@
 # Studio v1 Task 025c: The Publisher Page
 
-Parent: [task 025](studio-v1-task-025-publisher-feeds.md). Decisions: [ADR 0041](../adr/0041-publisher-feeds-and-two-way-links.md) items 1 to 6, 8, 10, 11 and 13, [ADR 0037](../adr/0037-button-roles.md), [ADR 0028](../adr/0028-summary-lines-and-one-open-entry.md), [ADR 0029](../adr/0029-editor-pages-toolbar-and-three-levels.md).
+Parent: [task 025](studio-v1-task-025-publisher-feeds.md). Decisions: [ADR 0041](../archive/adr/0041-publisher-feeds-and-two-way-links.md) items 1 to 6, 8, 10, 11 and 13, [ADR 0037](../adr/0037-button-roles.md), [ADR 0028](../adr/0028-summary-lines-and-one-open-entry.md), [ADR 0029](../adr/0029-editor-pages-toolbar-and-three-levels.md).
 Sequence: the third packet of task 025. It depends on 025b.
 
 ## Goal

@@ -1,6 +1,6 @@
 # Research: Host Secrets Under A Show Grant
 
-Date: 2026-11-01. This note is advisory. It makes no rule. The owning decisions are [ADR 0054](../adr/0054-live-items-connected-apps-and-show-grants.md) and [ADR 0058](../adr/0058-grant-vaults-and-connected-apps-on-the-server.md).
+Date: 2026-11-01. This note is advisory. It makes no rule. The owning decisions are [ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md) and [ADR 0058](../adr/0058-grant-vaults-and-connected-apps-on-the-server.md).
 
 ## The Question
 

@@ -1,7 +1,7 @@
 # Studio v1 Task 031: Announcements
 
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), Phase 10.
-Decisions: [ADR 0052](../adr/0052-announcements-through-the-podcast-index-hub.md) and [ADR 0007](../adr/0007-draft-diff-write-and-announce.md) item 5. Also [ADR 0035](../adr/0035-a-release-library-is-the-master-of-each-feed.md) item 21, [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) item 21 and [ADR 0045](../adr/0045-phase-9-crates-test-servers-and-host-forms.md).
+Decisions: [ADR 0052](../archive/adr/0052-announcements-through-the-podcast-index-hub.md) and [ADR 0007](../adr/0007-draft-diff-write-and-announce.md) item 5. Also [ADR 0035](../adr/0035-a-release-library-is-the-master-of-each-feed.md) item 21, [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) item 21 and [ADR 0045](../adr/0045-phase-9-crates-test-servers-and-host-forms.md).
 
 ## Goal
 

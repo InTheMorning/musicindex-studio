@@ -2,7 +2,7 @@
 
 - Date: 2026-10-25
 - Reviewed: each packet of [task 031](../tasks/studio-v1-task-031-announce.md)
-- Decisions: [ADR 0052](../adr/0052-announcements-through-the-podcast-index-hub.md) and [ADR 0007](../adr/0007-draft-diff-write-and-announce.md)
+- Decisions: [ADR 0052](../archive/adr/0052-announcements-through-the-podcast-index-hub.md) and [ADR 0007](../adr/0007-draft-diff-write-and-announce.md)
 
 The planning model uses this list after each packet, before its commit.
 
@@ -26,8 +26,8 @@ The planning model uses this list after each packet, before its commit.
 
 ## Invariants
 
-- No announcement occurs without a diff that the user has seen ([ADR 0007](../adr/0007-draft-diff-write-and-announce.md), [ADR 0052](../adr/0052-announcements-through-the-podcast-index-hub.md)).
-- An announcement never changes or stops a write ([ADR 0052](../adr/0052-announcements-through-the-podcast-index-hub.md)).
+- No announcement occurs without a diff that the user has seen ([ADR 0007](../adr/0007-draft-diff-write-and-announce.md), [ADR 0052](../archive/adr/0052-announcements-through-the-podcast-index-hub.md)).
+- An announcement never changes or stops a write ([ADR 0052](../archive/adr/0052-announcements-through-the-podcast-index-hub.md)).
 - A write to a host occurs only through `pipeline::write_draft` ([ADR 0007](../adr/0007-draft-diff-write-and-announce.md)).
 - No test sends a request to a host outside the computer ([ADR 0045](../adr/0045-phase-9-crates-test-servers-and-host-forms.md)).
 - The core has no async runtime and no HTTP server code outside `testing` ([ADR 0002](../adr/0002-rust-core-json-api-browser-ui.md), [ADR 0015](../adr/0015-connector-interface-and-write-pipeline.md)).

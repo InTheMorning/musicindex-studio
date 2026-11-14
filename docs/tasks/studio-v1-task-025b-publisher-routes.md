@@ -1,6 +1,6 @@
 # Studio v1 Task 025b: The Publisher Routes
 
-Parent: [task 025](studio-v1-task-025-publisher-feeds.md). Decisions: [ADR 0041](../adr/0041-publisher-feeds-and-two-way-links.md) items 1, 2, 4, 5, 8 and 11, [ADR 0017](../adr/0017-local-api-access.md).
+Parent: [task 025](studio-v1-task-025-publisher-feeds.md). Decisions: [ADR 0041](../archive/adr/0041-publisher-feeds-and-two-way-links.md) items 1, 2, 4, 5, 8 and 11, [ADR 0017](../adr/0017-local-api-access.md).
 Sequence: the second packet of task 025. It depends on 025a.
 
 ## Goal

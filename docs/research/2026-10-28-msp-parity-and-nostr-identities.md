@@ -27,7 +27,7 @@ The source of the crawler (`stophammer-crawler` and `stophammer-parser`) is not 
 ### Gaps That Can Stop A Move From MSP 2.0
 
 1. **A feed that MSP 2.0 hosts is read-only in Studio.** ADR 0006 item 4 rejects an MSP connector. The user must move the feed to a connected host ([ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md)). Studio cannot write a redirect into the feed on MSP. This is an inference from ADR 0006 and ADR 0067. It is not tested.
-2. **A publisher feed cannot list an album that the user does not control.** [ADR 0041](../adr/0041-publisher-feeds-and-two-way-links.md) item 5 offers only releases in the collection that are not read-only. MSP 2.0 lets a label add a Wavlake or Fountain album through a Podcast Index search (`CatalogFeedsSection.tsx`, `api/pisearch.ts`). This is a decision, not a defect.
+2. **A publisher feed cannot list an album that the user does not control.** [ADR 0041](../archive/adr/0041-publisher-feeds-and-two-way-links.md) item 5 offers only releases in the collection that are not read-only. MSP 2.0 lets a label add a Wavlake or Fountain album through a Podcast Index search (`CatalogFeedsSection.tsx`, `api/pisearch.ts`). This is a decision, not a defect.
 3. **The publisher page has no payments and no support links.** MSP 2.0 edits both (`PublisherValueSection.tsx`, `PublisherFundingSection.tsx`). The Studio model has `values` and `fundings` on each channel (`crates/core/src/feed.rs:106,119`). `crates/api/ui/pages.js:23-28` gives the publisher page no section for them. ADR 0041 lists "A value block in a publisher feed" as a non-goal. No ADR excludes the support links.
 4. **No OP3 prefix.** MSP 2.0 adds the OP3 prefix to each enclosure address (`origin/master:src/utils/xmlGenerator.ts:441`). Studio keeps a prefix that a feed has, because the address does not change. Studio does not add a prefix to a new track. No ADR names OP3.
 5. **No Nostr keys for people.** Part 2 gives the details.
@@ -35,7 +35,7 @@ The source of the crawler (`stophammer-crawler` and `stophammer-parser`) is not 
 ### Other Gaps
 
 - **Feed check.** MSP 2.0 `origin/master` examines links, artwork size and shape, `http` addresses and spaces in addresses (`src/utils/feedChecks.ts`). Studio refuses a malformed address only (ADR 0023).
-- **First submission to Podcast Index.** MSP 2.0 uses `add/byfeedurl` with a key (`api/pisubmit.ts`). Studio sends only the hub notification ([ADR 0052](../adr/0052-announcements-through-the-podcast-index-hub.md)). Nobody confirmed that the hub adds a feed that it does not know.
+- **First submission to Podcast Index.** MSP 2.0 uses `add/byfeedurl` with a key (`api/pisubmit.ts`). Studio sends only the hub notification ([ADR 0052](../archive/adr/0052-announcements-through-the-podcast-index-hub.md)). Nobody confirmed that the hub adds a feed that it does not know.
 - **A feed address check before the submission.** MSP 2.0 finds a host that refuses robots (`src/utils/verifyFeedUrl.ts`). Studio has no such check.
 - **A new album from an album that exists.** MSP 2.0 copies a feed with new GUIDs (`regenerateGuids.ts`). Studio has no copy function and no ADR for one.
 - **Nostr Music events.** MSP 2.0 imports and publishes kinds 36787 and 34139 (`nostrMusicConverter.ts`, `nostrSync.ts`). Studio has no ADR for them.

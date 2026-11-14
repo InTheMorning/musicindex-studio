@@ -53,7 +53,7 @@
 
 - "Storage". Not selected by the operator.
 - "Providers". Not selected by the operator. The S3 form uses "provider" for the company, and "hosting provider" is the usual name of a feed that has the role `hosting`. A local folder is not a provider.
-- "Connections". Not selected. Connected apps ([ADR 0054](0054-live-items-connected-apps-and-show-grants.md)) and the NIP-46 signer also connect.
+- "Connections". Not selected. Connected apps ([ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md)) and the NIP-46 signer also connect.
 - Icons on the bottom group only. Not selected by the operator. Releases then has no icon, and v4vmm has an icon on each destination.
 - A monochrome icon that does not change. Not selected by the operator.
 - The accent color on the label of the current destination, as in v4vmm. Not selected by the operator on 2026-10-30, after the contrast measurement of task 056a.

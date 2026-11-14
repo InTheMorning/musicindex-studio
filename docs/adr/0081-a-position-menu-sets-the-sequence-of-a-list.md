@@ -12,7 +12,7 @@
 - The Tracks page of a playlist and the Releases section of a publisher page had "Move up" and "Move down" on each row.
 - v4vmm changes the sequence of a playlist with a drag. A line in the accent color shows the position of the drop (`../v4vmm/src/ui/shells/playlist.rs`). No shared musicindex rule gives a control for a sequence.
 - Each function of Studio works from the keyboard ([ADR 0010](0010-studio-uses-the-afterglow-direction.md)). A drag alone does not.
-- [ADR 0041](0041-publisher-feeds-and-two-way-links.md) items 9 and 10, and [ADR 0053](0053-playlists-are-musicl-feeds-with-remote-items.md) item 6, say that the user changes a sequence. They do not give the control.
+- [ADR 0041](../archive/adr/0041-publisher-feeds-and-two-way-links.md) items 9 and 10, and [ADR 0053](0053-playlists-are-musicl-feeds-with-remote-items.md) item 6, say that the user changes a sequence. They do not give the control.
 
 ## Decision
 

@@ -1,19 +1,21 @@
+> Archived: superseded by [ADR 0205](../../adr/0205-publisher-feeds-announcements-and-show-grants.md) on 2026-11-14. ADR 0205 restates each live rule of this ADR. Its item map gives the new item of each item.
+
 # ADR 0041: Publisher Feeds And Two-Way Links
 
-- Status: Accepted
+- Status: Superseded by ADR 0205
 - Date: 2026-10-25
-- Changed by: [ADR 0135](0135-the-panel-holds-the-content-and-the-page-has-tabs.md). The pages of a publisher feed are tabs, and its outline lists its releases.
+- Changed by: [ADR 0135](../../adr/0135-the-panel-holds-the-content-and-the-page-has-tabs.md). The pages of a publisher feed are tabs, and its outline lists its releases.
 - Owner: operator, with the technical choices of the planning model
 - Changed by: [ADR 0054](0054-live-items-connected-apps-and-show-grants.md) item 18 adds one exception to the invariant: a change that a show grant of the user covers.
-- Changed by: [ADR 0075](0075-the-publisher-page-has-payments-and-credits.md) removes "A value block in a publisher feed" from the non-goals. The publisher page edits the value block, the support links, the people and the license.
-- Changed by: [ADR 0082](0082-a-publisher-feed-has-a-set-of-roles.md) gives a publisher feed a set of roles in the place of the one role of items 1, 4 and 11.
-- Changed by: [ADR 0086](0086-a-playlist-links-to-its-artist-or-label.md) makes a playlist a release in items 5, 6 and 11.
+- Changed by: [ADR 0075](../../adr/0075-the-publisher-page-has-payments-and-credits.md) removes "A value block in a publisher feed" from the non-goals. The publisher page edits the value block, the support links, the people and the license.
+- Changed by: [ADR 0082](../../adr/0082-a-publisher-feed-has-a-set-of-roles.md) gives a publisher feed a set of roles in the place of the one role of items 1, 4 and 11.
+- Changed by: [ADR 0086](../../adr/0086-a-playlist-links-to-its-artist-or-label.md) makes a playlist a release in items 5, 6 and 11.
 
 ## Context
 
-Phase 8 of the [Studio v1 phase plan](../plans/studio-v1-phase-plan.md) makes and edits publisher feeds for labels and artists. The plan asks for a decision on two questions: how a release refers to its publisher feed, and what Studio changes in the release feeds.
+Phase 8 of the [Studio v1 phase plan](../../plans/studio-v1-phase-plan.md) makes and edits publisher feeds for labels and artists. The plan asks for a decision on two questions: how a release refers to its publisher feed, and what Studio changes in the release feeds.
 
-[ADR 0008](0008-feed-types-and-feed-identity.md) item 1 makes publisher feeds a v1 feed type, with `remoteItem` and the `rel` role set of Podcast Namespace PR #793. The core reads and writes `podcast:publisher` and the channel `podcast:remoteItem` elements now.
+[ADR 0008](../../adr/0008-feed-types-and-feed-identity.md) item 1 makes publisher feeds a v1 feed type, with `remoteItem` and the `rel` role set of Podcast Namespace PR #793. The core reads and writes `podcast:publisher` and the channel `podcast:remoteItem` elements now.
 
 The corpus and the published feeds use one structure:
 
@@ -29,7 +31,7 @@ On 2026-10-25 the operator decided the questions of items 5, 8, 9 and 11.
 ### Publisher Feeds
 
 1. A publisher feed has `podcast:medium` `publisher`. It has a role, `artist` or `label`. The collection keeps the role of each publisher feed.
-2. The user makes a new publisher feed in "Add feeds", with a host, a file name, a name and a role. The feed GUID is the UUIDv5 of its address ([ADR 0008](0008-feed-types-and-feed-identity.md) item 2). The draft gives the name to `title` and to `itunes:author`. The feed gets a release folder ([ADR 0035](0035-a-release-library-is-the-master-of-each-feed.md) item 1).
+2. The user makes a new publisher feed in "Add feeds", with a host, a file name, a name and a role. The feed GUID is the UUIDv5 of its address ([ADR 0008](../../adr/0008-feed-types-and-feed-identity.md) item 2). The draft gives the name to `title` and to `itunes:author`. The feed gets a release folder ([ADR 0035](../../adr/0035-a-release-library-is-the-master-of-each-feed.md) item 1).
 3. A publisher feed on a connected host is editable. Its page has the title, the name, the description, the image, the website, the role and the list of releases. It has a Files page, as a release has.
 4. A publisher feed from a host can have no recorded role. Then Studio takes the `rel` of its `medium="music"` items when each one gives the same value, `artist` or `label`. If not, the user selects the role before the first change of a link.
 
@@ -38,7 +40,7 @@ On 2026-10-25 the operator decided the questions of items 5, 8, 9 and 11.
 5. A link joins a publisher feed and a release of the collection. Each of the two feeds is on a connected host. Studio does not offer a release that is not in the collection, or a release that is read-only.
 6. In the publisher feed, a link is a channel `podcast:remoteItem` with `medium="music"`. It has the `feedGuid` and the `feedUrl` of the release, its title in `title`, and the role in `rel`.
 7. In the release, a link is a `podcast:remoteItem` with `medium="publisher"` in `podcast:publisher`. It has the `feedGuid` and the `feedUrl` of the publisher feed, its title in `title`, and the role in `rel`. Studio does not write a channel `remoteItem` with `medium="publisher"` that is not in `podcast:publisher` (Stophammer ADR 0069 §1a).
-8. An add or a removal of a link changes the draft of each of the two feeds. Studio starts a draft for a feed that has none. Each feed keeps its own diff and its own write ([ADR 0007](0007-draft-diff-write-and-announce.md)). After the change, the page names the other feed that has a changed draft.
+8. An add or a removal of a link changes the draft of each of the two feeds. Studio starts a draft for a feed that has none. Each feed keeps its own diff and its own write ([ADR 0007](../../adr/0007-draft-diff-write-and-announce.md)). After the change, the page names the other feed that has a changed draft.
 9. A release can have more than one publisher feed. The album page shows them in the sequence of `podcast:publisher`, and the first one is the primary publisher. The user changes the sequence there. A new link goes last.
 10. The publisher page shows the releases in the sequence of the `medium="music"` items. The user changes the sequence there. A new link goes last.
 11. A change of the role changes the `rel` of each link in the draft of the publisher feed. It also changes the `rel` of the link in the draft of each linked release.
@@ -56,9 +58,9 @@ On 2026-10-25 the operator decided the questions of items 5, 8, 9 and 11.
 
 ## Consequences
 
-- The collection gets a column for the role of a publisher feed. A schema change is a new migration ([ADR 0014](0014-collection-in-sqlite.md)).
+- The collection gets a column for the role of a publisher feed. A schema change is a new migration ([ADR 0014](../../adr/0014-collection-in-sqlite.md)).
 - One link changes two drafts. The user writes each one.
-- Studio does not have the shell of [ADR 0039](0039-the-shell-releases-and-the-outline.md) at this time. Phase 8 uses the current feed tree. The work of ADR 0039 moves the publisher pages into the outline.
+- Studio does not have the shell of [ADR 0039](../../adr/0039-the-shell-releases-and-the-outline.md) at this time. Phase 8 uses the current feed tree. The work of ADR 0039 moves the publisher pages into the outline.
 
 ## Non-Goals
 
@@ -82,6 +84,6 @@ Visual, for the operator:
 
 ## Invariants
 
-- No feed changes without a diff that the user saw, or a change that a show grant of the user covers ([ADR 0007](0007-draft-diff-write-and-announce.md), [ADR 0054](0054-live-items-connected-apps-and-show-grants.md)).
+- No feed changes without a diff that the user saw, or a change that a show grant of the user covers ([ADR 0007](../../adr/0007-draft-diff-write-and-announce.md), [ADR 0054](0054-live-items-connected-apps-and-show-grants.md)).
 - A link has the same `rel` on its two sides.
-- A link does not change the feed GUID or an item GUID ([ADR 0008](0008-feed-types-and-feed-identity.md)).
+- A link does not change the feed GUID or an item GUID ([ADR 0008](../../adr/0008-feed-types-and-feed-identity.md)).

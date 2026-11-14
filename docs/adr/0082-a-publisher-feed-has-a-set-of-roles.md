@@ -4,7 +4,7 @@
 - Date: 2026-10-29
 - Owner: operator
 - Accepted: 2026-10-29 by the operator.
-- Changes: [ADR 0041](0041-publisher-feeds-and-two-way-links.md) items 1, 4 and 11, which give one role, `artist` or `label`.
+- Changes: [ADR 0041](../archive/adr/0041-publisher-feeds-and-two-way-links.md) items 1, 4 and 11, which give one role, `artist` or `label`.
 - Changed by: [ADR 0083](0083-hosting-is-a-first-class-role.md) gives the sequence of musicindex ADR 0036 to item 1. It adds "Hosting" to the menu of item 7 and to the form of item 9.
 - Changed by: [ADR 0084](0084-the-label-of-a-feed-lists-each-role.md) replaces the label of item 6. The label lists each role.
 - Changed by: [ADR 0087](0087-the-two-sides-of-a-link-confirm-a-role.md) also fills the dot when the two sides of a link give the first role (items 5 and 6).

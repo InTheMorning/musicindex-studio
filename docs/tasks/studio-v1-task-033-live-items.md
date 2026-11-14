@@ -1,7 +1,7 @@
 # Studio v1 Task 033: Live Items, Connected Apps And Show Grants
 
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), Phase 11, milestone 11b.
-Decisions: [ADR 0054](../adr/0054-live-items-connected-apps-and-show-grants.md), [ADR 0007](../adr/0007-draft-diff-write-and-announce.md), [ADR 0017](../adr/0017-local-api-access.md), [ADR 0040](../adr/0040-replace-the-audio-of-a-track.md) and [ADR 0052](../adr/0052-announcements-through-the-podcast-index-hub.md).
+Decisions: [ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md), [ADR 0007](../adr/0007-draft-diff-write-and-announce.md), [ADR 0017](../adr/0017-local-api-access.md), [ADR 0040](../adr/0040-replace-the-audio-of-a-track.md) and [ADR 0052](../archive/adr/0052-announcements-through-the-podcast-index-hub.md).
 
 ## Goal
 

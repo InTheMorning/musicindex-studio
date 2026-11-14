@@ -2,7 +2,7 @@
 
 - Date: 2026-10-25
 - Reviewed: the visual check of Phase 8 in the [Studio v1 phase plan](../plans/studio-v1-phase-plan.md) and of [task 025](../tasks/studio-v1-task-025-publisher-feeds.md): the user makes a label feed and an artist feed for the releases in the collection, and writes each feed
-- Decision: [ADR 0041](../adr/0041-publisher-feeds-and-two-way-links.md)
+- Decision: [ADR 0041](../archive/adr/0041-publisher-feeds-and-two-way-links.md)
 - Host: a new local folder with the public address `https://music.example/feeds`, and a new data folder
 - Checker: the agent, with `tools/drive-ui.mjs` in headless Chromium. Node.js was not on the PATH, so Bun ran the script.
 - Result: pass

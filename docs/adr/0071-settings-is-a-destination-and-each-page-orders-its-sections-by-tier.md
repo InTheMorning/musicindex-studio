@@ -7,12 +7,12 @@
 - Owner: operator
 - Accepted: 2026-10-28 by the operator.
 - Changes: [ADR 0039](0039-the-shell-releases-and-the-outline.md), The Shell, Releases And The Outline Of A Feed. ADR 0039 names the changed items.
-- Changes: [ADR 0052](0052-announcements-through-the-podcast-index-hub.md), Announcements Through The Podcast Index Hub. ADR 0052 names the changed items.
+- Changes: [ADR 0052](../archive/adr/0052-announcements-through-the-podcast-index-hub.md), Announcements Through The Podcast Index Hub. ADR 0052 names the changed items.
 - Changes: [ADR 0068](0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md), The Sequence Of The Sections And Fields Of An Editor Page. ADR 0068 names the changed items.
 
 ## Context
 
-The Hosts page shows these sections in this sequence: Library, Announcements, Account (on a server only), Connected apps, the host cards, and "Add a host". Each section came with a different task. Hosts was the only page for settings, so each task put its section there. [ADR 0052](0052-announcements-through-the-podcast-index-hub.md) item 97 puts the announcement settings on the Hosts page.
+The Hosts page shows these sections in this sequence: Library, Announcements, Account (on a server only), Connected apps, the host cards, and "Add a host". Each section came with a different task. Hosts was the only page for settings, so each task put its section there. [ADR 0052](../archive/adr/0052-announcements-through-the-podcast-index-hub.md) item 97 puts the announcement settings on the Hosts page.
 
 On 2026-10-28 the operator examined the page. The first field on the page is "Largest download, in MB". The host cards are the function of the page, but they are at the bottom of the window. The operator asked for a settings page. The operator also asked for a guard that stops the settings with the minimum importance from coming first.
 

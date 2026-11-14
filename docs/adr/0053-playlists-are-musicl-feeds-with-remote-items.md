@@ -32,8 +32,8 @@ On 2026-10-26 the operator selected the scope and the track sources below.
    - The releases of the collection. Each release with a feed GUID gives its tracks from the last read, and its public address.
 6. A new track goes last. The user changes the sequence and removes a track on the playlist page. The same track (the same `feedGuid` and `itemGuid`) cannot be in a playlist two times.
 7. A playlist has no `<item>`. Studio does not add one, and the import of music files is not available on a playlist page.
-8. A playlist does not change the feeds of its tracks. It has no two-way link ([ADR 0041](0041-publisher-feeds-and-two-way-links.md) does not apply).
-9. A playlist has the same draft, diff, write and announcement as each other feed ([ADR 0007](0007-draft-diff-write-and-announce.md), [ADR 0052](0052-announcements-through-the-podcast-index-hub.md)).
+8. A playlist does not change the feeds of its tracks. It has no two-way link ([ADR 0041](../archive/adr/0041-publisher-feeds-and-two-way-links.md) does not apply).
+9. A playlist has the same draft, diff, write and announcement as each other feed ([ADR 0007](0007-draft-diff-write-and-announce.md), [ADR 0052](../archive/adr/0052-announcements-through-the-podcast-index-hub.md)).
 
 ## Alternatives Considered
 
@@ -45,7 +45,7 @@ On 2026-10-26 the operator selected the scope and the track sources below.
 
 - The shell treats `musicL` as an editable medium.
 - A playlist row with no `title` shows the feed GUID and the item GUID. Studio does not read each remote feed to find its title.
-- Phase 11 builds the playlist editor in milestone 11a, before the live items of [ADR 0054](0054-live-items-connected-apps-and-show-grants.md).
+- Phase 11 builds the playlist editor in milestone 11a, before the live items of [ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md).
 
 ## Verification
 

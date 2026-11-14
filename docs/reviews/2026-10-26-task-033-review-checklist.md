@@ -2,7 +2,7 @@
 
 - Date: 2026-10-26
 - Reviewed: each packet of [task 033](../tasks/studio-v1-task-033-live-items.md)
-- Decisions: [ADR 0054](../adr/0054-live-items-connected-apps-and-show-grants.md), [ADR 0007](../adr/0007-draft-diff-write-and-announce.md), [ADR 0017](../adr/0017-local-api-access.md) and [ADR 0052](../adr/0052-announcements-through-the-podcast-index-hub.md)
+- Decisions: [ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md), [ADR 0007](../adr/0007-draft-diff-write-and-announce.md), [ADR 0017](../adr/0017-local-api-access.md) and [ADR 0052](../archive/adr/0052-announcements-through-the-podcast-index-hub.md)
 
 The planning model uses this list after each packet, before its commit.
 
@@ -26,9 +26,9 @@ The planning model uses this list after each packet, before its commit.
 
 ## Invariants
 
-- No write occurs without a diff that the user has seen, or a change that a show grant of the user covers ([ADR 0007](../adr/0007-draft-diff-write-and-announce.md), [ADR 0054](../adr/0054-live-items-connected-apps-and-show-grants.md)).
+- No write occurs without a diff that the user has seen, or a change that a show grant of the user covers ([ADR 0007](../adr/0007-draft-diff-write-and-announce.md), [ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md)).
 - A write to a host occurs only through `pipeline::write_draft` ([ADR 0007](../adr/0007-draft-diff-write-and-announce.md), [ADR 0015](../adr/0015-connector-interface-and-write-pipeline.md)).
-- A connected app never gets a secret of the vault ([ADR 0054](../adr/0054-live-items-connected-apps-and-show-grants.md)).
+- A connected app never gets a secret of the vault ([ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md)).
 - The feed GUID and the item GUIDs do not change without a user action ([ADR 0008](../adr/0008-feed-types-and-feed-identity.md)).
 - No test sends a request to a host outside the computer ([ADR 0045](../adr/0045-phase-9-crates-test-servers-and-host-forms.md)).
 

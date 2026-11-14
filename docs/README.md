@@ -43,7 +43,6 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0037: Button roles](adr/0037-button-roles.md)
 - [ADR 0039: The shell, Releases and the outline of a feed](adr/0039-the-shell-releases-and-the-outline.md)
 - [ADR 0040: Replace the audio of a track](adr/0040-replace-the-audio-of-a-track.md)
-- [ADR 0041: Publisher feeds and two-way links](adr/0041-publisher-feeds-and-two-way-links.md)
 - [ADR 0042: UI models with Node tests](adr/0042-ui-models-with-node-tests.md)
 - [ADR 0043: The Phase 9 connectors and the interface change](adr/0043-phase-9-connectors-and-the-interface-change.md)
 - [ADR 0044: The nsite signer](adr/0044-the-nsite-signer.md)
@@ -54,9 +53,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0049: The Rust toolchain is pinned](adr/0049-the-rust-toolchain-is-pinned.md)
 - [ADR 0050: The nsite and Blossom signer, host environment and signing plan](adr/0050-nsite-and-blossom-signer-environment-and-plan.md)
 - [ADR 0051: The core signs Nostr events with secp256k1](adr/0051-the-core-signs-nostr-events-with-secp256k1.md)
-- [ADR 0052: Announcements through the Podcast Index hub](adr/0052-announcements-through-the-podcast-index-hub.md)
 - [ADR 0053: Playlists are musicL feeds with remote items](adr/0053-playlists-are-musicl-feeds-with-remote-items.md)
-- [ADR 0054: Live items, connected apps and show grants](adr/0054-live-items-connected-apps-and-show-grants.md)
 - [ADR 0056: Server sign-in methods and vault wrappers](adr/0056-server-sign-in-methods-and-vault-wrappers.md)
 - [ADR 0057: The private-network guard of the server](adr/0057-the-private-network-guard-of-the-server.md)
 - [ADR 0058: Grant vaults and connected apps on the server](adr/0058-grant-vaults-and-connected-apps-on-the-server.md)
@@ -196,6 +193,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0202: An http image shows from its https address](adr/0202-an-http-image-shows-from-its-https-address.md)
 - [ADR 0203: People](adr/0203-people.md)
 - [ADR 0204: Feed files, feed moves and the server shell](adr/0204-feed-files-moves-and-the-server.md)
+- [ADR 0205: Publisher feeds, announcements and show grants](adr/0205-publisher-feeds-announcements-and-show-grants.md)
 
 ## Plans
 
@@ -578,6 +576,9 @@ Each release candidate after 0.1.0-rc.8 has one notes file ([ADR 0100](adr/0100-
 Superseded decisions. Read them for research only. They bind no change.
 
 - [ADR 0038: Published feeds, downloads, the folder scan and feed moves](archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md), superseded by ADR 0204
+- [ADR 0041: Publisher feeds and two-way links](archive/adr/0041-publisher-feeds-and-two-way-links.md), superseded by ADR 0205
+- [ADR 0052: Announcements through the Podcast Index hub](archive/adr/0052-announcements-through-the-podcast-index-hub.md), superseded by ADR 0205
+- [ADR 0054: Live items, connected apps and show grants](archive/adr/0054-live-items-connected-apps-and-show-grants.md), superseded by ADR 0205
 - [ADR 0055: The server shell: user folders, accounts, sessions and the vault window](archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md), superseded by ADR 0204
 - [ADR 0098: The People module](archive/adr/0098-the-people-module.md), superseded by ADR 0203
 - [ADR 0099: The People destination and the page of a person](archive/adr/0099-the-people-destination-and-the-page-of-a-person.md), superseded by ADR 0203

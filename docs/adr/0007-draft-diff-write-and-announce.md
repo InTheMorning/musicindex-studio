@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-22
 - Owner: operator
-- Changed by: [ADR 0054](0054-live-items-connected-apps-and-show-grants.md) item 18 adds one exception to the invariant: a change that a show grant of the user covers.
+- Changed by: [ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md) item 18 adds one exception to the invariant: a change that a show grant of the user covers.
 
 ## Context
 
@@ -32,5 +32,5 @@ Stophammer reads podpings. It has no route that sends a podping for an editor.
 
 ## Invariants
 
-- No write occurs without a diff that the user has seen, or a change that a show grant of the user covers ([ADR 0054](0054-live-items-connected-apps-and-show-grants.md)).
+- No write occurs without a diff that the user has seen, or a change that a show grant of the user covers ([ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md)).
 - A snapshot is not changed after it is made.

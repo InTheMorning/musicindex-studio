@@ -38,12 +38,12 @@ A move from a host that Studio cannot write cannot use the redirect or the point
 7. "Move to a host" selects a connected host. That host becomes the host of the feed XML and the default host of new files ([ADR 0035](0035-a-release-library-is-the-master-of-each-feed.md) item 12). A read-only feed has no path. On the new host, the path of the feed XML is the release folder, then the file name of the public address (ADR 0035 item 13). The feed keeps its `podcast:guid` and each item GUID ([ADR 0008](0008-feed-types-and-feed-identity.md)).
 8. A move from a read-only feed sets no redirect and writes no pointer file, because Studio cannot write the first host. This changes ADR 0035 items 19 and 20 only for a move from a read-only feed.
 9. Before the write of such a move, Review tells the user that the file at the address before the move stays and does not change. An app that reads that address continues to receive the feed from before the move.
-10. The write announces the new address and the address before the move, as [ADR 0052](0052-announcements-through-the-podcast-index-hub.md) item 8 says.
+10. The write announces the new address and the address before the move, as [ADR 0052](../archive/adr/0052-announcements-through-the-podcast-index-hub.md) item 8 says.
 11. Each file of the feed keeps its address after the move. The user can move each file on the Files page ([ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md)).
 
 ### What Does Not Change
 
-12. A link between a publisher feed and a release needs a connector for each feed ([ADR 0041](0041-publisher-feeds-and-two-way-links.md) item 5). A read-only feed has no link until it has a host.
+12. A link between a publisher feed and a release needs a connector for each feed ([ADR 0041](../archive/adr/0041-publisher-feeds-and-two-way-links.md) item 5). A read-only feed has no link until it has a host.
 13. No write occurs without a diff that the user saw. The write occurs only through `pipeline::write_draft` ([ADR 0015](0015-connector-interface-and-write-pipeline.md)).
 
 ## Alternatives Considered

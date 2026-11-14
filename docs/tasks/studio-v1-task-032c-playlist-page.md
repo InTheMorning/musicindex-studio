@@ -1,6 +1,6 @@
 # Studio v1 Task 032c: The Playlist Page And The Picker
 
-Parent: [task 032](studio-v1-task-032-playlists.md). Decisions: [ADR 0053](../adr/0053-playlists-are-musicl-feeds-with-remote-items.md), [ADR 0028](../adr/0028-summary-lines-and-one-open-entry.md), [ADR 0029](../adr/0029-editor-pages-toolbar-and-three-levels.md), [ADR 0037](../adr/0037-button-roles.md) and [ADR 0039](../adr/0039-the-shell-releases-and-the-outline.md).
+Parent: [task 032](studio-v1-task-032-playlists.md). Decisions: [ADR 0053](../adr/0053-playlists-are-musicl-feeds-with-remote-items.md), [ADR 0028](../adr/0028-summary-lines-and-one-open-entry.md), [ADR 0029](../adr/0029-editor-pages-toolbar-and-three-levels.md), [ADR 0037](../adr/0037-button-roles.md) and [ADR 0039](../archive/adr/0039-the-shell-releases-and-the-outline.md).
 Sequence: the third packet of task 032. It depends on 032b.
 
 ## Goal

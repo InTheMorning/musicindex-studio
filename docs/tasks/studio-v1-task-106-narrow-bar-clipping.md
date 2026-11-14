@@ -10,7 +10,7 @@ At 760 px or less, the status wraps to a maximum of two lines. The bar has the p
 
 Owner of the rules: none new. The existing layout rules own the bar.
 
-- [ADR 0039](../adr/0039-the-shell-releases-and-the-outline.md) item 10a gives the two rows of the bar at 760 px or less.
+- [ADR 0039](../archive/adr/0039-the-shell-releases-and-the-outline.md) item 10a gives the two rows of the bar at 760 px or less.
 - [ADR 0029](../adr/0029-editor-pages-toolbar-and-three-levels.md) item 1 gives the draft toolbar.
 - [ADR 0116](../adr/0116-the-page-of-a-person-has-save-and-discard.md) item 2 gives the toolbar of the page of a person.
 

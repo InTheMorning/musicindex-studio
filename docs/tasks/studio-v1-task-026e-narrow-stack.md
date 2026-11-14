@@ -1,6 +1,6 @@
 # Studio v1 Task 026e: One Stack At Narrow Width
 
-Parent: [task 026](studio-v1-task-026-shell.md). Decisions: [ADR 0039](../adr/0039-the-shell-releases-and-the-outline.md) items 9 to 11a, [ADR 0042](../adr/0042-ui-models-with-node-tests.md).
+Parent: [task 026](studio-v1-task-026-shell.md). Decisions: [ADR 0039](../archive/adr/0039-the-shell-releases-and-the-outline.md) items 9 to 11a, [ADR 0042](../adr/0042-ui-models-with-node-tests.md).
 Shared rules: musicindex ADR 0030 R-SHELL-2, musicindex ADR 0027 R-NAV-2.
 Sequence: the last packet of task 026. It depends on 026d.
 

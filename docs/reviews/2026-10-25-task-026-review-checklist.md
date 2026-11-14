@@ -2,7 +2,7 @@
 
 - Date: 2026-10-25
 - Reviewed: each packet of [task 026](../tasks/studio-v1-task-026-shell.md)
-- Decisions: [ADR 0039](../adr/0039-the-shell-releases-and-the-outline.md) and [ADR 0042](../adr/0042-ui-models-with-node-tests.md)
+- Decisions: [ADR 0039](../archive/adr/0039-the-shell-releases-and-the-outline.md) and [ADR 0042](../adr/0042-ui-models-with-node-tests.md)
 
 The planning model uses this list after each packet, before its commit.
 

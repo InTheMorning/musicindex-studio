@@ -4,12 +4,12 @@
 - Date: 2026-10-28
 - Owner: operator
 - Accepted: 2026-10-28 by the operator.
-- Changes: [ADR 0039](0039-the-shell-releases-and-the-outline.md) items 1, 5 and 11, its verification and its invariant.
+- Changes: [ADR 0039](../archive/adr/0039-the-shell-releases-and-the-outline.md) items 1, 5 and 11, its verification and its invariant.
 - Changed by: [ADR 0119](0119-a-new-user-starts-as-a-musician-or-a-label.md), A New User Starts As A Musician Or A Label.
 
 ## Context
 
-[ADR 0039](0039-the-shell-releases-and-the-outline.md) item 1 puts Releases and Add a feed at the top of the left panel. Item 11 puts the same two rows on the root page at narrow width.
+[ADR 0039](../archive/adr/0039-the-shell-releases-and-the-outline.md) item 1 puts Releases and Add a feed at the top of the left panel. Item 11 puts the same two rows on the root page at narrow width.
 
 The other destinations are pages for a set of objects: Releases, Hosts and Settings. Add a feed is a procedure that changes the collection of Releases. The Hosts page gives its procedure in the page: "＋ Add a host" ([ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) item 12).
 

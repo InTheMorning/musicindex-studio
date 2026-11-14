@@ -1,18 +1,20 @@
+> Archived: superseded by [ADR 0206](../../adr/0206-the-shell-and-the-editor-pages.md) on 2026-11-14. ADR 0206 restates each live rule of this ADR. Its item map gives the new item of each item.
+
 # ADR 0064: The Editor Edits The Fields That MSP 2.0 Edits
 
-- Status: Accepted
+- Status: Superseded by ADR 0206
 - Date: 2026-10-27
 - Owner: operator
 - Changed by: [ADR 0068](0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md) item 4 puts "Language" on the page "Feed settings", with the fields of item 7.
-- Changed by: [ADR 0070](0070-a-cover-opens-the-artwork-sheet.md) puts the "More artwork" lists of item 10 in the Artwork sheet.
-- Changed by: [ADR 0074](0074-nostr-keys-for-artists-labels-and-contributors.md) item 26 keeps the Nostr key of each person in the copy of item 8.
-- Changed by: [ADR 0076](0076-an-op3-switch-on-feed-settings.md) adds the switch "OP3 statistics" to the page "Feed settings" of item 7.
-- Changed by: [ADR 0080](0080-the-season-of-a-track-is-an-experimental-disc-setting.md) shows the "Season" fields of item 8 as an experimental "Disc" entry.
-- Changed by: [ADR 0112](0112-a-credit-role-comes-from-a-list.md). The role of a credit is a select menu from the role list, then "Other role…".
+- Changed by: [ADR 0070](../../adr/0070-a-cover-opens-the-artwork-sheet.md) puts the "More artwork" lists of item 10 in the Artwork sheet.
+- Changed by: [ADR 0074](../../adr/0074-nostr-keys-for-artists-labels-and-contributors.md) item 26 keeps the Nostr key of each person in the copy of item 8.
+- Changed by: [ADR 0076](../../adr/0076-an-op3-switch-on-feed-settings.md) adds the switch "OP3 statistics" to the page "Feed settings" of item 7.
+- Changed by: [ADR 0080](../../adr/0080-the-season-of-a-track-is-an-experimental-disc-setting.md) shows the "Season" fields of item 8 as an experimental "Disc" entry.
+- Changed by: [ADR 0112](../../adr/0112-a-credit-role-comes-from-a-list.md). The role of a credit is a select menu from the role list, then "Other role…".
 
 ## Context
 
-Studio replaces MSP 2.0. On 2026-10-27, Claude compared MSP 2.0 (`../MSP-2.0`, branch `publisher-parties`, commit `09f3cf9`) with Studio. MSP 2.0 edits some fields that the Studio editor does not show. The tree keeps each of these fields with no change ([ADR 0012](0012-lossless-tree-with-a-typed-model.md) item 4), but the user cannot change them.
+Studio replaces MSP 2.0. On 2026-10-27, Claude compared MSP 2.0 (`../MSP-2.0`, branch `publisher-parties`, commit `09f3cf9`) with Studio. MSP 2.0 edits some fields that the Studio editor does not show. The tree keeps each of these fields with no change ([ADR 0012](../../adr/0012-lossless-tree-with-a-typed-model.md) item 4), but the user cannot change them.
 
 The operator decided on 2026-10-27 that `itunes:category` waits for a subsequent decision. The operator also made three decisions on that date. The core keeps the form of the explicit value (item 4). A lyrics file has its own kind in the picker (item 9). The page of item 7 has the name "Feed settings".
 
@@ -48,27 +50,27 @@ The corpus is `crates/core/tests/corpus`. A count gives the number of feeds with
 ### The Core
 
 1. The core models these elements: `itunes:explicit` of the channel and of each item, `itunes:owner` with `itunes:name` and `itunes:email`, `itunes:keywords`, `managingEditor`, `webMaster`, and `podcast:season` with its `name`. A read and a write with no edit give the same bytes.
-2. Each new element takes its hosted position ([ADR 0031](0031-a-new-element-takes-its-hosted-position.md)).
+2. Each new element takes its hosted position ([ADR 0031](../../adr/0031-a-new-element-takes-its-hosted-position.md)).
 3. Studio writes no field that the user did not set. A feed with no `itunes:explicit` gets none from Studio. A new track gets no `podcast:season`.
 4. A switch keeps the form of the feed. The UI sends `true` or `false`. At the draft save, the core compares the sent value with the draft value. It does the same for the GUIDs and the track numbers. When the draft has `yes` or `no`, the core writes `yes` or `no`, with the same capital letter. In each other case, the core writes `true` or `false`, as Apple specifies.
-5. Studio keeps a text value as the user types it, with no space at its ends ([ADR 0061](0061-a-text-value-has-no-space-at-its-ends.md)). Studio does not refuse a `managingEditor`, a `webMaster` or an owner email that is not an email address.
+5. Studio keeps a text value as the user types it, with no space at its ends ([ADR 0061](../../adr/0061-a-text-value-has-no-space-at-its-ends.md)). Studio does not refuse a `managingEditor`, a `webMaster` or an owner email that is not an email address.
 
 ### The Channel Fields
 
-6. The album page, the playlist page and the publisher page get these fields, as [ADR 0063](0063-one-switch-hides-a-feed-from-apps.md) item 3 does for its switch:
+6. The album page, the playlist page and the publisher page get these fields, as [ADR 0063](../../adr/0063-one-switch-hides-a-feed-from-apps.md) item 3 does for its switch:
    - "Explicit": one switch for `itunes:explicit`.
    - "Owner": the owner name and the owner email.
    - "Keywords": one text field.
    - "Lock against import": one switch for `podcast:locked`, and the owner email of the lock.
    - "Managing editor" and "Webmaster": one text field each.
-7. "Explicit" is in the first section of the page, after "Hide from apps". Apple requires this tag. The other fields of item 6 are on the page "Feed settings". A row of the details section opens it. The user does not change them in each visit ([ADR 0028](0028-summary-lines-and-one-open-entry.md)).
+7. "Explicit" is in the first section of the page, after "Hide from apps". Apple requires this tag. The other fields of item 6 are on the page "Feed settings". A row of the details section opens it. The user does not change them in each visit ([ADR 0028](../../adr/0028-summary-lines-and-one-open-entry.md)).
 
 ### The Track Fields
 
 8. The track page gets these fields:
    - "Explicit": one switch for the item `itunes:explicit`.
    - "Credits": a selection between "Use the album credits" and "Credits for this track". The second selection shows the People control of the album. When the user selects it, the list starts with a copy of the album credits, because the item list replaces the channel list. A change back to "Use the album credits" removes each item `podcast:person`, after a confirmation.
-   - "Lyrics": a list of `podcast:transcript` entries. Each entry has the address, the type, the language and a "Captions" check box for `rel="captions"`. The address field uses the file picker ([ADR 0062](0062-a-file-picker-for-each-file-field.md)).
+   - "Lyrics": a list of `podcast:transcript` entries. Each entry has the address, the type, the language and a "Captions" check box for `rel="captions"`. The address field uses the file picker ([ADR 0062](../../adr/0062-a-file-picker-for-each-file-field.md)).
    - "Season": a number field and a name field, in the "Identity" row.
 9. The file picker gets a third kind of file: a lyrics file. The extensions are `.srt`, `.vtt`, `.txt`, `.json` and `.html`. The three sources of ADR 0062 item 2 and the drop of ADR 0062 item 20 accept this kind in the lyrics field. An upload of a lyrics file goes to the release folder, as an image does. This extends ADR 0062 items 1 and 3.
 
@@ -90,7 +92,7 @@ The corpus is `crates/core/tests/corpus`. A count gives the number of feeds with
 - Refuse a `managingEditor` that is not an email address. Rejected: the corpus has such values, and the RSS readers accept them.
 - Put all the channel fields in the first section. Not chosen: the first section then gets fields that the user sets one time.
 - Edit one lyrics file for each track, as MSP 2.0 does. Rejected: the specification permits more than one, and Studio keeps more than one.
-- Apply the form rule of item 4 in the UI, as ADR 0063 does for its switch. Rejected: another client of the API can then write `true` into a feed that uses `yes` and `no`. Each feed rule is in the core ([ADR 0002](0002-rust-core-json-api-browser-ui.md)).
+- Apply the form rule of item 4 in the UI, as ADR 0063 does for its switch. Rejected: another client of the API can then write `true` into a feed that uses `yes` and `no`. Each feed rule is in the core ([ADR 0002](../../adr/0002-rust-core-json-api-browser-ui.md)).
 - Send a flag for the switch through the API. Rejected: the model then has two ways to change one value.
 - A text field with no picker for the lyrics address. Not chosen: each other file field has the picker.
 
@@ -98,7 +100,7 @@ The corpus is `crates/core/tests/corpus`. A count gives the number of feeds with
 
 - An MSP 2.0 user can change each field that MSP 2.0 edits. The categories are the only field that stays with no control.
 - A feed with no `itunes:explicit` stays with no tag until the user sets the switch. Apple requires the tag, but this decision does not add it without the user.
-- [Task 041](../tasks/studio-v1-task-041-msp-fields.md) does this work in five packets: the core elements, the channel fields, the lyrics kind, the track fields and the artwork list.
+- [Task 041](../../tasks/studio-v1-task-041-msp-fields.md) does this work in five packets: the core elements, the channel fields, the lyrics kind, the track fields and the artwork list.
 - When the operator accepts this decision, ADR 0062 gets an amendment for item 9.
 
 ## Verification

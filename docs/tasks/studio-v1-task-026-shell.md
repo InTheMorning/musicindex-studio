@@ -1,7 +1,7 @@
 # Studio v1 Task 026: The Shell, Releases And The Outline
 
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), the UI work before Phase 9.
-Decisions: [ADR 0039](../adr/0039-the-shell-releases-and-the-outline.md), [ADR 0042](../adr/0042-ui-models-with-node-tests.md) and [ADR 0037](../adr/0037-button-roles.md).
+Decisions: [ADR 0039](../archive/adr/0039-the-shell-releases-and-the-outline.md), [ADR 0042](../adr/0042-ui-models-with-node-tests.md) and [ADR 0037](../adr/0037-button-roles.md).
 Shared rules: musicindex ADR 0027 R-SHELL-1, R-NAV-2 and R-LIST-1, ADR 0023 R-WORD-2, ADR 0020 R-VALUE-1 and ADR 0024 R-PROFILE-1.
 
 ## Goal

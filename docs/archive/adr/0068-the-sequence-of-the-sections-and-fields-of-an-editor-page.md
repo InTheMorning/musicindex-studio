@@ -1,19 +1,21 @@
+> Archived: superseded by [ADR 0206](../../adr/0206-the-shell-and-the-editor-pages.md) on 2026-11-14. ADR 0206 restates each live rule of this ADR. Its item map gives the new item of each item.
+
 # ADR 0068: The Sequence Of The Sections And Fields Of An Editor Page
 
-- Status: Accepted
+- Status: Superseded by ADR 0206
 - Date: 2026-10-27
-- Changed by: [ADR 0135](0135-the-panel-holds-the-content-and-the-page-has-tabs.md). The first page has no rows for the pages that are now tabs.
+- Changed by: [ADR 0135](../../adr/0135-the-panel-holds-the-content-and-the-page-has-tabs.md). The first page has no rows for the pages that are now tabs.
 - Owner: operator
 - Accepted: 2026-10-27 by the operator.
-- Changed by: [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) item 15 replaces item 11 and the mechanical check. The sequences of items 2 to 9 are the start values of the model module. The module now owns the sequence, and the tier test of ADR 0071 item 6 is the guard.
-- Changed by: [ADR 0073](0073-the-add-pages-ask-one-question-at-a-time.md) item 11 replaces "Add a track" and "Import files" in item 2 with one row "Add tracks".
-- Changed by: [ADR 0130](0130-the-facts-of-an-audio-file-stay-locked.md). Item 10: the duration moves into "Properties". It is text until the user selects "Advanced".
-- Changes: [ADR 0053](0053-playlists-are-musicl-feeds-with-remote-items.md), Playlists Are musicL Feeds With Remote Items. ADR 0053 names the changed items.
+- Changed by: [ADR 0071](../../adr/0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) item 15 replaces item 11 and the mechanical check. The sequences of items 2 to 9 are the start values of the model module. The module now owns the sequence, and the tier test of ADR 0071 item 6 is the guard.
+- Changed by: [ADR 0073](../../adr/0073-the-add-pages-ask-one-question-at-a-time.md) item 11 replaces "Add a track" and "Import files" in item 2 with one row "Add tracks".
+- Changed by: [ADR 0130](../../adr/0130-the-facts-of-an-audio-file-stay-locked.md). Item 10: the duration moves into "Properties". It is text until the user selects "Advanced".
+- Changes: [ADR 0053](../../adr/0053-playlists-are-musicl-feeds-with-remote-items.md), Playlists Are musicL Feeds With Remote Items. ADR 0053 names the changed items.
 - Changes: [ADR 0064](0064-the-editor-edits-the-fields-that-msp-2-0-edits.md), The Editor Edits The Fields That MSP 2.0 Edits. ADR 0064 names the changed items.
 
 ## Context
 
-[ADR 0028](0028-summary-lines-and-one-open-entry.md) item 5 says that the control that the user uses most comes first in an open group. musicindex ADR 0028 R-PAGE-1 gives the sequence of the sections of an item page. For the Studio editor, R-PAGE-1 names only the outline, and the outline follows it ([ADR 0039](0039-the-shell-releases-and-the-outline.md) item 6). No test examines the sequence of an editor page.
+[ADR 0028](../../adr/0028-summary-lines-and-one-open-entry.md) item 5 says that the control that the user uses most comes first in an open group. musicindex ADR 0028 R-PAGE-1 gives the sequence of the sections of an item page. For the Studio editor, R-PAGE-1 names only the outline, and the outline follows it ([ADR 0039](0039-the-shell-releases-and-the-outline.md) item 6). No test examines the sequence of an editor page.
 
 On 2026-10-27 the operator said that the sequence of an editor page has no logic. Rare settings come before the fields that the user expects. The agent compared the pages in `crates/api/ui/editor.js` with these rules:
 
@@ -32,19 +34,19 @@ The Studio journeys in `../musicindex-research` (`research_notes/ui-design/journ
 ### The Album Page
 
 2. The album page has these sections in this sequence:
-   1. "Album": Title, Artist, Artwork, Description, Website, Hide from apps, Explicit. "Artwork" is the row of [ADR 0070](0070-a-cover-opens-the-artwork-sheet.md) item 9.
-   2. "Tracks": each track, then "Add tracks" ([ADR 0073](0073-the-add-pages-ask-one-question-at-a-time.md) item 11).
+   1. "Album": Title, Artist, Artwork, Description, Website, Hide from apps, Explicit. "Artwork" is the row of [ADR 0070](../../adr/0070-a-cover-opens-the-artwork-sheet.md) item 9.
+   2. "Tracks": each track, then "Add tracks" ([ADR 0073](../../adr/0073-the-add-pages-ask-one-question-at-a-time.md) item 11).
    3. "Album details": the rows Value routes, then Credits and links.
    4. "Artists and labels".
    5. "Feed": the rows Feed settings, then Feed facts.
 3. "Explicit" stays after "Hide from apps" in the first section, as [ADR 0064](0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) item 7 says.
-4. "Language" moves to the page "Feed settings". This changes ADR 0064 item 7 and [ADR 0053](0053-playlists-are-musicl-feeds-with-remote-items.md) item 3. The field is on the settings page, not on the first page.
+4. "Language" moves to the page "Feed settings". This changes ADR 0064 item 7 and [ADR 0053](../../adr/0053-playlists-are-musicl-feeds-with-remote-items.md) item 3. The field is on the settings page, not on the first page.
 
 ### The Playlist Page And The Publisher Page
 
 5. On the playlist page and the publisher page, the first section has the field sequence of the "Album" section of item 2. The second field has the name "Author" or "Name".
 6. The publisher page has these sections in this sequence: the first section, "Releases", "Role", then a section with the rows Feed settings and Feed facts.
-7. The playlist page has the first section, then a section with the rows Feed settings and Feed facts. Its tracks stay on their own page ([ADR 0053](0053-playlists-are-musicl-feeds-with-remote-items.md) item 4).
+7. The playlist page has the first section, then a section with the rows Feed settings and Feed facts. Its tracks stay on their own page ([ADR 0053](../../adr/0053-playlists-are-musicl-feeds-with-remote-items.md) item 4).
 
 ### The Feed Settings Page
 
@@ -56,9 +58,9 @@ The Studio journeys in `../musicindex-research` (`research_notes/ui-design/journ
    1. "Track": Title, the audio file with its duration and its alternative enclosures, Artwork, Description.
    2. "Credits".
    3. "Lyrics".
-   4. The payments of the track ([ADR 0029](0029-editor-pages-toolbar-and-three-levels.md) item 9).
+   4. The payments of the track ([ADR 0029](../../adr/0029-editor-pages-toolbar-and-three-levels.md) item 9).
    5. "More": Publication date, Explicit, Identity.
-10. The duration field stays, and the user can change it. The publication date keeps the hint of [ADR 0024](0024-track-numbers-follow-the-track-sequence.md) item 5.
+10. The duration field stays, and the user can change it. The publication date keeps the hint of [ADR 0024](../../adr/0024-track-numbers-follow-the-track-sequence.md) item 5.
 
 ### The Check
 
@@ -76,7 +78,7 @@ The Studio journeys in `../musicindex-research` (`research_notes/ui-design/journ
 ## Consequences
 
 - The album page, the playlist page, the publisher page, the settings page and the track page change their sequence.
-- The page code reads its sections and fields from a model module ([ADR 0042](0042-ui-models-with-node-tests.md)).
+- The page code reads its sections and fields from a model module ([ADR 0042](../../adr/0042-ui-models-with-node-tests.md)).
 - The playlist page and the publisher page get "Language" only on "Feed settings".
 
 ## Invariants

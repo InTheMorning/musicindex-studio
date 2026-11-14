@@ -8,7 +8,7 @@
 
 The UI has no build step ([ADR 0016](0016-ui-without-a-build-step.md)). Its tests are Rust tests that read the UI files as text, for example the test of the `details` elements ([ADR 0028](0028-summary-lines-and-one-open-entry.md)). A text test cannot examine the result of UI logic.
 
-[ADR 0039](0039-the-shell-releases-and-the-outline.md) asks for mechanical criteria at the owning layer. These are the destinations of the left panel, the sequence of the outline, and the marked row after "Releases". musicindex ADR 0027 asks for the same type of criteria for the back control. Each one is UI logic.
+[ADR 0039](../archive/adr/0039-the-shell-releases-and-the-outline.md) asks for mechanical criteria at the owning layer. These are the destinations of the left panel, the sequence of the outline, and the marked row after "Releases". musicindex ADR 0027 asks for the same type of criteria for the back control. Each one is UI logic.
 
 On 2026-10-25 the operator selected a plain JavaScript model with the test runner of Node.js. The operator then asked for no system installation of Node.js or Bun. `tools/node` gets a pinned Node.js into a folder that Git ignores.
 

@@ -41,7 +41,6 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0035: A release library is the master of each feed](adr/0035-a-release-library-is-the-master-of-each-feed.md)
 - [ADR 0036: Library records, the host inventory and host operations](adr/0036-library-records-host-inventory-and-host-operations.md)
 - [ADR 0037: Button roles](adr/0037-button-roles.md)
-- [ADR 0039: The shell, Releases and the outline of a feed](adr/0039-the-shell-releases-and-the-outline.md)
 - [ADR 0040: Replace the audio of a track](adr/0040-replace-the-audio-of-a-track.md)
 - [ADR 0042: UI models with Node tests](adr/0042-ui-models-with-node-tests.md)
 - [ADR 0043: The Phase 9 connectors and the interface change](adr/0043-phase-9-connectors-and-the-interface-change.md)
@@ -62,11 +61,9 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0061: A text value has no space at its ends](adr/0061-a-text-value-has-no-space-at-its-ends.md)
 - [ADR 0062: A file picker for each file field](adr/0062-a-file-picker-for-each-file-field.md)
 - [ADR 0063: One switch hides a feed from apps](adr/0063-one-switch-hides-a-feed-from-apps.md)
-- [ADR 0064: The editor edits the fields that MSP 2.0 edits](adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md)
 - [ADR 0065: The core applies each feed rule](adr/0065-the-core-applies-each-feed-rule.md)
 - [ADR 0066: The server ships as a container image](adr/0066-the-server-ships-as-a-container-image.md)
 - [ADR 0067: A read-only feed opens in the editor](adr/0067-a-read-only-feed-opens-in-the-editor.md)
-- [ADR 0068: The sequence of the sections and fields of an editor page](adr/0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md)
 - [ADR 0069: The outline head opens the feed page](adr/0069-the-outline-head-opens-the-feed-page.md)
 - [ADR 0070: A cover opens the artwork sheet](adr/0070-a-cover-opens-the-artwork-sheet.md)
 - [ADR 0071: Settings is a destination, and each page orders its sections by tier](adr/0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md)
@@ -194,6 +191,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0203: People](adr/0203-people.md)
 - [ADR 0204: Feed files, feed moves and the server shell](adr/0204-feed-files-moves-and-the-server.md)
 - [ADR 0205: Publisher feeds, announcements and show grants](adr/0205-publisher-feeds-announcements-and-show-grants.md)
+- [ADR 0206: The shell and the editor pages](adr/0206-the-shell-and-the-editor-pages.md)
 
 ## Plans
 
@@ -576,10 +574,13 @@ Each release candidate after 0.1.0-rc.8 has one notes file ([ADR 0100](adr/0100-
 Superseded decisions. Read them for research only. They bind no change.
 
 - [ADR 0038: Published feeds, downloads, the folder scan and feed moves](archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md), superseded by ADR 0204
+- [ADR 0039: The shell, Releases and the outline of a feed](archive/adr/0039-the-shell-releases-and-the-outline.md), superseded by ADR 0206
 - [ADR 0041: Publisher feeds and two-way links](archive/adr/0041-publisher-feeds-and-two-way-links.md), superseded by ADR 0205
 - [ADR 0052: Announcements through the Podcast Index hub](archive/adr/0052-announcements-through-the-podcast-index-hub.md), superseded by ADR 0205
 - [ADR 0054: Live items, connected apps and show grants](archive/adr/0054-live-items-connected-apps-and-show-grants.md), superseded by ADR 0205
 - [ADR 0055: The server shell: user folders, accounts, sessions and the vault window](archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md), superseded by ADR 0204
+- [ADR 0064: The editor edits the fields that MSP 2.0 edits](archive/adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md), superseded by ADR 0206
+- [ADR 0068: The sequence of the sections and fields of an editor page](archive/adr/0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md), superseded by ADR 0206
 - [ADR 0098: The People module](archive/adr/0098-the-people-module.md), superseded by ADR 0203
 - [ADR 0099: The People destination and the page of a person](archive/adr/0099-the-people-destination-and-the-page-of-a-person.md), superseded by ADR 0203
 - [ADR 0101: A suggestion groups the items of one name](archive/adr/0101-a-suggestion-groups-the-items-of-one-name.md), superseded by ADR 0103

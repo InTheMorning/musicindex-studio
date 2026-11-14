@@ -1,6 +1,6 @@
 # Studio v1 Task 026c: The Shell UI
 
-Parent: [task 026](studio-v1-task-026-shell.md). Decisions: [ADR 0039](../adr/0039-the-shell-releases-and-the-outline.md) items 1 to 11, [ADR 0037](../adr/0037-button-roles.md), [ADR 0029](../adr/0029-editor-pages-toolbar-and-three-levels.md) items 1 to 4 and 7 to 9.
+Parent: [task 026](studio-v1-task-026-shell.md). Decisions: [ADR 0039](../archive/adr/0039-the-shell-releases-and-the-outline.md) items 1 to 11, [ADR 0037](../adr/0037-button-roles.md), [ADR 0029](../adr/0029-editor-pages-toolbar-and-three-levels.md) items 1 to 4 and 7 to 9.
 Shared rules: musicindex ADR 0027 R-SHELL-1, R-NAV-2 and R-LIST-1, ADR 0024 R-PROFILE-1, ADR 0023 R-CASE-1.
 Sequence: the third packet of task 026. It depends on 026b.
 

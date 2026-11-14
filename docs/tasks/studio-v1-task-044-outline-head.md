@@ -1,7 +1,7 @@
 # Studio v1 Task 044: The Outline Head
 
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The Editor Files And Covers".
-Decisions: [ADR 0069](../adr/0069-the-outline-head-opens-the-feed-page.md), [ADR 0039](../adr/0039-the-shell-releases-and-the-outline.md) items 6, 7 and 11a, and [ADR 0042](../adr/0042-ui-models-with-node-tests.md).
+Decisions: [ADR 0069](../adr/0069-the-outline-head-opens-the-feed-page.md), [ADR 0039](../archive/adr/0039-the-shell-releases-and-the-outline.md) items 6, 7 and 11a, and [ADR 0042](../adr/0042-ui-models-with-node-tests.md).
 Sequence: one packet. It is the first task of tasks 044 to 046.
 
 Status: Complete - 2026-10-27. The four commit checks pass. The screenshot visual check passed, and the [review checklist](../reviews/2026-10-27-tasks-044-046-review-checklist.md) records it.

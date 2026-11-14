@@ -5,12 +5,12 @@
 - Changed by: [ADR 0135](0135-the-panel-holds-the-content-and-the-page-has-tabs.md). The head stays selected on each tab of the feed.
 - Owner: operator
 - Accepted: 2026-10-27 by the operator.
-- Changes: [ADR 0039](0039-the-shell-releases-and-the-outline.md) items 6 and 7.
+- Changes: [ADR 0039](../archive/adr/0039-the-shell-releases-and-the-outline.md) items 6 and 7.
 - Changed by: [ADR 0088](0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) item 6: a feed that opens from a level has "‹" with the name of that level. It does not have "‹ Releases".
 
 ## Context
 
-[ADR 0039](0039-the-shell-releases-and-the-outline.md) item 6 gives the outline of an open feed. It shows a link "Releases", the cover and the title of the feed, then a row for the first page. That row has the name "Album", "Playlist", "Artist", "Label" or "Feed". The rows of the tracks follow it. The head with the cover and the title is not a control.
+[ADR 0039](../archive/adr/0039-the-shell-releases-and-the-outline.md) item 6 gives the outline of an open feed. It shows a link "Releases", the cover and the title of the feed, then a row for the first page. That row has the name "Album", "Playlist", "Artist", "Label" or "Feed". The rows of the tracks follow it. The head with the cover and the title is not a control.
 
 On 2026-10-27 the operator examined the outline of an album, and found these defects:
 
@@ -27,7 +27,7 @@ musicindex ADR 0028 R-PAGE-1 gives the outline of an editor in this sequence: th
 2. The outline has no row for the first page. The rows "Album", "Playlist", "Artist", "Label" and "Feed" go.
 3. When the first page is open, the head has the selected fill and `aria-current="page"`, as each other row of the outline has.
 4. The accessible name of the head is the title of the feed, then its type label.
-5. The head is the same in the left panel and on the outline page at 760 px or less ([ADR 0039](0039-the-shell-releases-and-the-outline.md) item 11a).
+5. The head is the same in the left panel and on the outline page at 760 px or less ([ADR 0039](../archive/adr/0039-the-shell-releases-and-the-outline.md) item 11a).
 
 ### The Link To Releases
 

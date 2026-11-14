@@ -4,7 +4,7 @@
 - Date: 2026-10-28
 - Owner: operator
 - Accepted: 2026-10-28 by the operator.
-- Changes: [ADR 0064](0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) item 7, which gives the fields of the page "Feed settings".
+- Changes: [ADR 0064](../archive/adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) item 7, which gives the fields of the page "Feed settings".
 
 ## Context
 
@@ -31,7 +31,7 @@ The operator selected the scope of the switch from a questionnaire on 2026-10-28
 5. The page "Feed settings" of an album gets the switch "OP3 statistics".
 6. The core gives the start value of the switch. It is on when the album has one or more tracks, and the enclosure of each track has the prefix. In each other case it is off.
 7. When the album has tracks with the prefix and tracks with no prefix, the switch is off. Its hint gives the count, for example "2 of 9 tracks use OP3".
-8. At the draft save, the core compares the sent value with the draft value, as [ADR 0064](0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) item 4 does:
+8. At the draft save, the core compares the sent value with the draft value, as [ADR 0064](../archive/adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) item 4 does:
    - A sent `true` adds the prefix to each track enclosure with no prefix. This includes a track that the user adds while the switch is on.
    - A sent `false` over a draft `true` removes the prefix from each track enclosure.
    - A sent `false` over a draft `false` changes no address.

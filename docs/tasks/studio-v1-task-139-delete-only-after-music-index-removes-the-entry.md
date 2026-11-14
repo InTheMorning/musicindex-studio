@@ -2,7 +2,18 @@
 
 Decision: [ADR 0200](../adr/0200-studio-deletes-a-feed-file-only-after-music-index-removes-the-entry.md).
 
-Status: Open.
+Status: Complete on 2026-11-14. The human check of ADR 0200 is open.
+
+## Result
+
+- `deleteChoices(state)` in `feeddelete.js` gives the three rows and the tag only when `removal_done` is true. Each other state, also no answer, gives **Move It to a Different File Host** and **Retire It** with no tag. `DELETE_CHOICES` is no longer exported.
+- `retireSteps` gives step 3 no button before `removal_done`. **Delete Anyway** is gone.
+- `FeedDelete` reads `POST /feeds/{id}/retire/state` when the sheet opens. Only the answer of the last request sets the state. A failed read keeps the two rows.
+- `ensure_index_removed` in the core refuses each answer other than `removed` with `PipelineErrorKind::IndexHoldsFeed`. The API gives `409` and `index_holds_feed`. `delete_draft` gets the GUID with the lock, reads Music Index with no lock, and then starts the draft with the lock.
+- The main session corrected three items of the delegate run. The sheet had lost its error notice for **Retire It**. The API test no longer proved that retire, stop retiring, restore, diff and check send no index read. The core test module was in the middle of the file. The main session also added the "ADR 0200" failure messages to the Node tests.
+- Proof of criterion 4: with the call of `ensure_index_removed` removed, `delete_draft_refuses_a_held_feed_and_a_failed_index_read` fails with status `200`, not `409`.
+- Walk: `setup-139-held.py` (an index that holds Album 2) and `setup-137.py` (an index that gives 404), with `steps-139-{held,removed}-{light,dark}.json`. At 1280 px light and 390 px dark, the held sheet has two rows and no tag, and the other sheet has three rows, the tag and the red **Delete the File Only**. After the retire write of the held feed, step 3 says "Wait until Music Index removes the entry." with no button. `$edges()` and `$overflow()` give no item.
+- The 390 px fit check of the held walk first gave two overlaps of the top bar with the controls of "Artist X", because the walk ended with the page scrolled down. With the page at the top, the check gives no finding.
 
 ## Goal
 

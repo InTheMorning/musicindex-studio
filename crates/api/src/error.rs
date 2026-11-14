@@ -222,6 +222,7 @@ impl From<PipelineError> for ApiError {
             }
             PipelineErrorKind::InvalidModel => (StatusCode::UNPROCESSABLE_ENTITY, "invalid_model"),
             PipelineErrorKind::Conflict => (StatusCode::CONFLICT, "conflict"),
+            PipelineErrorKind::IndexHoldsFeed => (StatusCode::CONFLICT, "index_holds_feed"),
             PipelineErrorKind::InvalidFeed => (StatusCode::UNPROCESSABLE_ENTITY, "invalid_feed"),
             PipelineErrorKind::NoPublicAddress => {
                 (StatusCode::UNPROCESSABLE_ENTITY, "no_public_address")

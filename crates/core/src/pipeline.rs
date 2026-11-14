@@ -75,6 +75,8 @@ pub enum PipelineErrorKind {
     InvalidLiveValue,
     /// The live file changed after the draft started.
     Conflict,
+    /// Music Index still holds the feed that Studio would delete.
+    IndexHoldsFeed,
     /// The feed file is not a feed that Studio can read.
     InvalidFeed,
     /// The connector failed.

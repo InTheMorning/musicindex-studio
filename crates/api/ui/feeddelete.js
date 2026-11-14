@@ -1,7 +1,7 @@
 // The view data for deleting a feed from its file host (ADR 0131).
 // The API gives each state and each count. This module adds no feed rule.
 
-export const DELETE_CHOICES = [
+const DELETE_CHOICES = [
   {
     title: 'Move It to a Different File Host',
     text: 'You keep control. The index follows the new address. An app can stay at the earlier address.',
@@ -19,6 +19,11 @@ export const DELETE_CHOICES = [
     destructive: true,
   },
 ];
+
+export function deleteChoices(state) {
+  if (state?.removal_done === true) return DELETE_CHOICES;
+  return DELETE_CHOICES.slice(0, 2).map(({ recommended, ...choice }) => choice);
+}
 
 const step = (number, title, text, done, button = null) => ({ number, title, text, done, button });
 
@@ -38,9 +43,7 @@ export function retireSteps(state) {
   if (removal.answer === 'not_read') removalText = 'Studio has not checked Music Index.';
   const removed = state.removal_done;
   const deleted = state.delete === 'done';
-  // ADR 0131 item 9: before Music Index removes the entry, step 3 offers
-  // only "Delete Anyway".
-  const deleteButton = state.removal_done ? 'Delete the File' : 'Delete Anyway';
+  const deleteButton = state.removal_done ? 'Delete the File' : null;
   return [
     step(1, 'The feed asks to be removed', askText, askDone),
     step(2, 'Music Index removes the entry', removalText, removed),

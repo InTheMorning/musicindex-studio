@@ -47,7 +47,7 @@ import { shortType as formatLabel, propertiesSummary, propertiesOpen, propertyRo
 import { MOVE_SCOPES, fileHostRows, planRows, stayRows, deleteLabel, deleteAllLabel, DELETE_NOTE_ON, DELETE_NOTE_OFF, waitLabel, waitingView, readyNotice, partMoveNotice, existsRefusalView, addDisabled, replacesCopyNote, replaceWarning } from './releasemove.js';
 import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary, artworkPreview } from './artwork.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, addsAsTrackFile, refusedText, wrongKindText, replacedAddresses, selectedFacts } from './picker.js';
-import { DELETE_CHOICES, deleteButtonEnabled, retireSteps, operationNote } from './feeddelete.js';
+import { deleteChoices, deleteButtonEnabled, retireSteps, operationNote } from './feeddelete.js';
 
 // A text where only each web address can break inside a word (musicindex ADR
 // 0065 R-FIT-3 item 3).
@@ -2350,6 +2350,7 @@ function FeedDelete({ feed, draft }) {
   const [finalOpen, setFinalOpen] = useState(false);
   const [retireOpen, setRetireOpen] = useState(false);
   const [retire, setRetire] = useState(null);
+  const [deleteState, setDeleteState] = useState(null);
   const [preview, setPreview] = useState(null);
   const [typed, setTyped] = useState('');
   const [withFiles, setWithFiles] = useState(false);
@@ -2363,6 +2364,16 @@ function FeedDelete({ feed, draft }) {
     window.addEventListener('studio-open-feed-delete', open);
     return () => window.removeEventListener('studio-open-feed-delete', open);
   }, [feed.id]);
+  const deleteStateRequest = useRef(0);
+  useEffect(() => {
+    if (!firstOpen) return;
+    const request = ++deleteStateRequest.current;
+    setDeleteState(null);
+    api(`/feeds/${feed.id}/retire/state`, { method: 'POST' })
+      .then((answer) => { if (request === deleteStateRequest.current) setDeleteState(answer); })
+      .catch(() => { if (request === deleteStateRequest.current) setDeleteState(null); });
+    return () => { deleteStateRequest.current += 1; };
+  }, [firstOpen, feed.id]);
   const retiring = retireOpen || Boolean(draft && draft.hidden);
   // A write changes the version of the feed, and a delete sets
   // `host_deleted`. Each of them reads the retire state again, so the steps
@@ -2442,7 +2453,7 @@ function FeedDelete({ feed, draft }) {
       <header><h2 id="delete-host-title">Delete from File Host</h2><button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => firstRef.current.close()}>✕</button></header>
       <div class="body"><p>The address of the feed is your control of the feed. When the file is gone, Music Index keeps an entry for the feed. Podcast Index can also keep an entry. The entry keeps its last payment recipients.</p>
         <p>With no file, you cannot correct the entry, retire it or move it.</p><div class="group rows">
-          ${DELETE_CHOICES.map((choice) => html`<button class=${`delete-choice link-row${choice.destructive ? ' destructive' : ''}`} type="button" key=${choice.title}
+          ${deleteChoices(deleteState).map((choice) => html`<button class=${`delete-choice link-row${choice.destructive ? ' destructive' : ''}`} type="button" key=${choice.title}
             onClick=${choice.title === 'Retire It' ? startRetire : choice.title === 'Move It to a Different File Host' ? () => {
               setFirstOpen(false); window.dispatchEvent(new CustomEvent(OPEN_FEED_MOVE, { detail: feed.id }));
             } : () => { setFirstOpen(false); openFinal(); }}>

@@ -48,14 +48,17 @@ The UI starts on Releases and shows the outline of an open feed. Below Releases,
 
 ## Commands
 
-These four checks must pass before each commit. CI runs the same checks ([ADR 0042](docs/adr/0042-ui-models-with-node-tests.md) adds the fourth). `rust-toolchain.toml` pins the Rust version, and CI uses the same version ([ADR 0049](docs/adr/0049-the-rust-toolchain-is-pinned.md)).
+These five checks must pass before each commit. CI runs the first four ([ADR 0042](docs/adr/0042-ui-models-with-node-tests.md) adds the fourth). `rust-toolchain.toml` pins the Rust version, and CI uses the same version ([ADR 0049](docs/adr/0049-the-rust-toolchain-is-pinned.md)).
 
 ```sh
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 node --test crates/api/ui-tests/*.test.mjs
+python3 ~/.agents/skills/project-baseline/scripts/check_adr_links.py --skip limit --counts .
 ```
+
+The fifth check is the ADR link guard of the `project-baseline` skill. CI does not run it, because the script is not in this repository. `--skip limit` stays until 11 ADRs with more than three "Changed by" lines are consolidated (global `CLAUDE.md` §Consolidate A Changed Decision).
 
 On a computer with no Node.js, run `tools/node --test crates/api/ui-tests/*.test.mjs`. `tools/node` gets a pinned Node.js into `.studio-dev/tools/` at its first run. It also runs `tools/drive-ui.mjs`.
 

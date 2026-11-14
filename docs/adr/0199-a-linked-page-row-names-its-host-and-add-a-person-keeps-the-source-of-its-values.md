@@ -4,6 +4,7 @@
 - Date: 2026-11-14
 - Owner: operator, with the technical choices of the planning model
 - Accepted: 2026-11-14 by the operator, through the questionnaire about the findings of the human test of 0.1.0-rc.22. The operator selected "Host on its own line" for finding 7.
+- Changed: 2026-11-14 by the operator, at the human check. Item 1 puts the host below "Read only", as the app shows it.
 - Technical choices: the planning model selected the source of the host in item 2, the text of item 3, and items 4 to 7. Finding 8 is a defect against [ADR 0196](0196-a-person-keeps-a-list-of-pictures-and-websites-with-a-default.md) item 9, so it needs no new choice of the operator.
 - Uses: [ADR 0196](0196-a-person-keeps-a-list-of-pictures-and-websites-with-a-default.md) items 1 and 9, [ADR 0192](0192-add-a-person-has-the-layout-of-the-other-pickers.md) item 3, and the rule of one labeled line for each kind of value in a row.
 - Source: finding 7 and finding 8 of the [human test findings of 0.1.0-rc.22](../reviews/2026-11-13-rc22-human-test-findings.md).
@@ -20,9 +21,9 @@ The page of a person reads `GET /people/{id}/page-suggestions` each time it open
 
 ### The Host Of A Linked Page
 
-1. Each linked page row has a second line below the title: `On {host}`. "Read only" stays on the first line.
+1. Each linked page row has a line below "Read only": `On {host}`. The row is thus the title, "Read only", and then the host.
 2. The host comes from the page suggestions that the page already reads. The UI matches a row and a suggestion by `feed_guid`. Only the core gets a host from a feed address.
-3. When no suggestion gives a host, the second line is `Host not known`. Examples are a page that Music Index does not hold, and a page with no network.
+3. When no suggestion gives a host, the host line is `Host not known`. Examples are a page that Music Index does not hold, and a page with no network.
 4. A row of a feed in the collection keeps its current lines. Item 1 applies only to the linked pages that are not in the collection.
 
 ### The Source Of Add A Person
@@ -39,7 +40,7 @@ The page of a person reads `GET /people/{id}/page-suggestions` each time it open
 
 ## Consequences
 
-- Two pages with the same title show different second lines when Music Index holds both.
+- Two pages with the same title show different host lines when Music Index holds both.
 - A person from **Add a Person** shows the page as the source of the picture and the website. **Update from Linked Pages** then finds no new value for them.
 - Without network, each linked page row says `Host not known`.
 
@@ -47,14 +48,14 @@ The page of a person reads `GET /people/{id}/page-suggestions` each time it open
 
 Mechanical:
 
-- A Node test proves the second line of item 1 with a matching suggestion, and the text of item 3 with no suggestion and with a suggestion that has no host.
+- A Node test proves the host line of item 1 with a matching suggestion, and the text of item 3 with no suggestion and with a suggestion that has no host.
 - A Node test proves that the body of item 5 has the source for a page value, and has no source for a value that the user changed.
 - A Rust test proves that `add_person` with a source saves the picture and the website with `source_guid`, `source_title` and `source_host`. A second case proves item 7.
 - The four commit checks pass.
 
 Visual, by the planning model:
 
-- The page of a person with two linked pages that have the same title and different hosts, at 1280 px light and 390 px dark. Each row has its host on the second line.
+- The page of a person with two linked pages that have the same title and different hosts, at 1280 px light and 390 px dark. Each row has its host on the line below "Read only".
 - A person made with **Add a Person** from a page. The picture row and the website row say `From "{title}" on {host}`.
 
 Human, by the operator. This gate passed on 2026-11-14:

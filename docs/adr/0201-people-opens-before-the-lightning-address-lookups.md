@@ -16,7 +16,7 @@ The People page opens slowly. On 2026-11-14 the planning model measured the requ
 - `GET /recipients` sends a lookup for each Lightning address that is due (ADR 0095 item 3). An address is due when it has no result, a result older than one day, or a failed result older than one hour (`crates/core/src/keysend.rs`, `is_due`). Each lookup has a limit of 5 seconds. The first call sent 14 lookups. The second call sent none.
 - The route sends the lookups while it holds the workspace lock. The other requests of the page wait for the lock, and the page shows nothing until all five answers arrive.
 
-Thus the cost is the network lookups, not the parse of the feeds. The parse took about 20 ms. The walk data has no release folders, so the parse in a real collection can take longer. This is not measured (see Open Points).
+Thus the cost is the network lookups, not the parse of the feeds. The parse took about 20 ms. The walk data has no release folders, so the parse in a real collection can take longer. The operator found on 2026-11-14 that People opens fast in the desktop app, so no change of the parse is necessary.
 
 ## Decision
 
@@ -42,10 +42,6 @@ Thus the cost is the network lookups, not the parse of the feeds. The parse took
 - For a short time after People opens, a wallet row can show a result that is up to one day old, or one hour old for a failed result.
 - One more request goes from the page to the API.
 - The People page has a short time where the list of people shows and the payees with no person are not yet on the page.
-
-## Open Points
-
-- The time of the parse of each feed in a real collection with release folders. Measure it in the desktop app of the operator before a decision about `feed_recipients`.
 
 ## How This Decision Is Checked
 

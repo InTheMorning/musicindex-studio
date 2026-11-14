@@ -5,6 +5,7 @@
 - Owner: operator
 - Accepted: 2026-10-28 by the operator.
 - Changes: [ADR 0039](0039-the-shell-releases-and-the-outline.md) items 1, 5 and 11, its verification and its invariant.
+- Changed by: [ADR 0119](0119-a-new-user-starts-as-a-musician-or-a-label.md), A New User Starts As A Musician Or A Label.
 
 ## Context
 

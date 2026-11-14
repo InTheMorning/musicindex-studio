@@ -4,7 +4,7 @@
 - Date: 2026-11-10
 - Owner: operator
 - Accepted: 2026-11-10 by the operator, through the questionnaire. The operator selected the drawing "Row in Releases".
-- Amended: 2026-11-10 by the operator. Items 6 and 7 come from the check of the first version: the list view of a group also gets the action, and the title of the sheet names the page.
+- Revised: 2026-11-10 by the operator. Items 6 and 7 come from the check of the first version: the list view of a group also gets the action, and the title of the sheet names the page.
 - Changes: [ADR 0119](0119-a-new-user-starts-as-a-musician-or-a-label.md) item 9.
 - Uses: [ADR 0041](0041-publisher-feeds-and-two-way-links.md) for the two-way link and its notices. [ADR 0119](0119-a-new-user-starts-as-a-musician-or-a-label.md) item 8 for the first-step rows. [ADR 0007](0007-draft-diff-write-and-announce.md) for the write.
 

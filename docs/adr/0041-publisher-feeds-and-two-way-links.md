@@ -4,10 +4,10 @@
 - Date: 2026-10-25
 - Changed by: [ADR 0135](0135-the-panel-holds-the-content-and-the-page-has-tabs.md). The pages of a publisher feed are tabs, and its outline lists its releases.
 - Owner: operator, with the technical choices of the planning model
-- Amended: 2026-10-26 by operator decision. [ADR 0054](0054-live-items-connected-apps-and-show-grants.md) item 18 adds one exception to the invariant: a change that a show grant of the user covers.
-- Amended: 2026-10-28 by operator decision. [ADR 0075](0075-the-publisher-page-has-payments-and-credits.md) removes "A value block in a publisher feed" from the non-goals. The publisher page edits the value block, the support links, the people and the license.
-- Amended: 2026-10-29 by operator decision. [ADR 0082](0082-a-publisher-feed-has-a-set-of-roles.md) gives a publisher feed a set of roles in the place of the one role of items 1, 4 and 11.
-- Amended: 2026-10-30 by operator decision. [ADR 0086](0086-a-playlist-links-to-its-artist-or-label.md) makes a playlist a release in items 5, 6 and 11.
+- Changed by: [ADR 0054](0054-live-items-connected-apps-and-show-grants.md) item 18 adds one exception to the invariant: a change that a show grant of the user covers.
+- Changed by: [ADR 0075](0075-the-publisher-page-has-payments-and-credits.md) removes "A value block in a publisher feed" from the non-goals. The publisher page edits the value block, the support links, the people and the license.
+- Changed by: [ADR 0082](0082-a-publisher-feed-has-a-set-of-roles.md) gives a publisher feed a set of roles in the place of the one role of items 1, 4 and 11.
+- Changed by: [ADR 0086](0086-a-playlist-links-to-its-artist-or-label.md) makes a playlist a release in items 5, 6 and 11.
 
 ## Context
 

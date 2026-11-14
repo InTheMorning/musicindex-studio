@@ -5,7 +5,8 @@
 - Owner: operator
 - Accepted: 2026-11-12 by the operator, from the mockups in `.studio-dev/mockup-coll-2/site/`. The operator selected one menu on each row and the badge "✓ Current".
 - Technical choices: items 3, 7 and 8 are choices of the planning model.
-- Changes: [ADR 0176](0176-the-user-controls-each-collection.md) items 2, 3 and 10. [ADR 0149](0149-the-desktop-app-has-many-collections.md) item 6.
+- Changes: [ADR 0176](0176-the-user-controls-each-collection.md) items 2, 3 and 10.
+- Changes: [ADR 0149](0149-the-desktop-app-has-many-collections.md) item 6.
 - Uses: [ADR 0176](0176-the-user-controls-each-collection.md) items 6 and 7 for the sheets and the export. [ADR 0153](0153-the-people-list-has-a-sort-and-names-sort-with-numbers.md) for the menu control.
 - Source: finding 19 of the [human checks of 2026-11-11](../reviews/2026-11-11-local-human-test-findings.md).
 

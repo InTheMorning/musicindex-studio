@@ -4,6 +4,8 @@
 - Date: 2026-10-26
 - Owner: operator
 - Changed by: [ADR 0110](0110-a-connected-app-signs-each-request-with-its-own-key.md). Items 4, 5, 8, 9, 11, 15, 17, 18, 19 and 20 change. The app key is the key of the app, and the app signs each request. A grant vault has only the wrapper of the app that its grant names. A removed app causes a new grant vault key at the next unlock, and the index holds public keys.
+- Changes: [ADR 0003](0003-user-unlocked-secret-vault.md), Each User Unlocks A Secret Vault. ADR 0003 names the changed items.
+- Changes: [ADR 0054](0054-live-items-connected-apps-and-show-grants.md), Live Items, Connected Apps And Show Grants. ADR 0054 names the changed items.
 
 ## Context
 

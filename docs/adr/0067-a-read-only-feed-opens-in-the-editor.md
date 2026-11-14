@@ -4,7 +4,8 @@
 - Date: 2026-10-27
 - Owner: operator
 - Accepted: 2026-10-27 by the operator.
-- Corrected: 2026-10-27, before the first task. Item 7 said that the feed keeps its path. A read-only feed has no path, so item 7 now gives the path of ADR 0035 item 13.
+- Revised: 2026-10-27, before the first task. Item 7 said that the feed keeps its path. A read-only feed has no path, so item 7 now gives the path of ADR 0035 item 13.
+- Changes: [ADR 0035](0035-a-release-library-is-the-master-of-each-feed.md), A Release Library Is The Master Of Each Feed. ADR 0035 names the changed items.
 
 ## Context
 

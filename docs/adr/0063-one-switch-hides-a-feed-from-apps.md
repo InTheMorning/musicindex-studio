@@ -3,8 +3,8 @@
 - Status: Accepted
 - Date: 2026-10-27
 - Owner: operator
-- Amended: 2026-10-27 by operator decision. [ADR 0065](0065-the-core-applies-each-feed-rule.md) items 7 to 9 put items 2 to 5 in the core. The switch and "Advanced" call core routes, and the draft response gives `hidden`.
-- Amended: 2026-10-27 by operator decision, in the human test of task 041. The switch has no text that changes with its state. The label "Hide from apps" names it, and a checked switch means hidden.
+- Changed by: [ADR 0065](0065-the-core-applies-each-feed-rule.md) items 7 to 9 put items 2 to 5 in the core. The switch and "Advanced" call core routes, and the draft response gives `hidden`.
+- Revised: 2026-10-27 by operator decision, in the human test of task 041. The switch has no text that changes with its state. The label "Hide from apps" names it, and a checked switch means hidden.
 
 ## Context
 

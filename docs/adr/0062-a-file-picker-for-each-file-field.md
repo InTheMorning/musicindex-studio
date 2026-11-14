@@ -5,6 +5,7 @@
 - Owner: operator
 - Changed by: [ADR 0109](0109-images-and-audio-load-from-their-hosts.md). Items 26 to 29: the player loads a file from its `https` address. A media ticket holds a library file ID, and the audio route sends only a file that Studio holds.
 - Changed by: [ADR 0130](0130-the-facts-of-an-audio-file-stay-locked.md). Items 24 and 25: "Properties" shows the values as text, with the duration. The boxes show after "Advanced".
+- Changed by: [ADR 0125](0125-each-file-target-shows-that-it-takes-a-drop.md), Each File Target Shows That It Takes A Drop.
 
 ## Context
 

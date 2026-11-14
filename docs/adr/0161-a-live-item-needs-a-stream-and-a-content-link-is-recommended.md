@@ -6,6 +6,7 @@
 - Accepted: 2026-11-09 through the orchestrator session, on its research request.
 - Item 9 changed: 2026-11-12, after the human check of ADR 0187. The operator selected a text that gives the next step for a show with no stream type.
 - Changes: [ADR 0054](0054-live-items-connected-apps-and-show-grants.md) item 4 and its mechanical check of the content link.
+- Changed by: [ADR 0173](0173-a-live-show-problem-shows-at-its-field.md), A Live Show Problem Shows At Its Field.
 - Uses: the [research request on the live stream](../plans/research-live-item-stream-request.md), musicindex ADR 0025 R-STATUS-1, [ADR 0065](0065-the-core-applies-each-feed-rule.md).
 
 ## Context

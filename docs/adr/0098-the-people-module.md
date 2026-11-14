@@ -4,12 +4,18 @@
 - Date: 2026-11-01
 - Owner: operator
 - Accepted: 2026-11-01 by the operator.
-- Changes: [ADR 0027](0027-the-recipient-picker.md) items 2 and 5 (the saved recipients become people). [ADR 0074](0074-nostr-keys-for-artists-labels-and-contributors.md), its non-goal for `lud16`. [ADR 0095](0095-a-lightning-address-and-its-node-key-are-one-recipient.md), its non-goal "A link of two addresses by hand", for the wallets of one person.
+- Changes: [ADR 0027](0027-the-recipient-picker.md) items 2 and 5 (the saved recipients become people).
+- Changes: [ADR 0074](0074-nostr-keys-for-artists-labels-and-contributors.md), its non-goal for `lud16`.
+- Changes: [ADR 0095](0095-a-lightning-address-and-its-node-key-are-one-recipient.md), its non-goal "A link of two addresses by hand", for the wallets of one person.
+- Changes: [ADR 0091](0091-a-change-set-edits-one-recipient-in-many-feeds.md), A Change Set Edits One Recipient In Many Feeds. ADR 0091 names the changed items.
 - Changed by: [ADR 0103](0103-one-person-collects-the-items-of-many-suggestions.md). Item 12: a suggestion groups the items of one name. Item 14: the items of a suggestion can go to a person that exists, and two people can merge.
 - Uses: [ADR 0091](0091-a-change-set-edits-one-recipient-in-many-feeds.md) for the change sets, [ADR 0065](0065-the-core-applies-each-feed-rule.md) for the feed rules, [ADR 0057](0057-the-private-network-guard-of-the-server.md) for the network policy, and [ADR 0014](0014-collection-in-sqlite.md) for the collection.
 - Screens: [ADR 0099](0099-the-people-destination-and-the-page-of-a-person.md).
-- Amended: 2026-11-02 by operator decision. Item 18: "Dismiss" hides the Lightning address of a profile for one person. The human test of `0.1.0-rc.10` found an address of the wrong account with no way to hide it.
-- Changed by: [ADR 0111](0111-the-page-of-a-person-checks-the-feeds.md). Item 20: the operation "Correct". [ADR 0112](0112-a-credit-role-comes-from-a-list.md). Item 5: the usual role comes from the role list, with a usual group.
+- Revised: 2026-11-02 by operator decision. Item 18: "Dismiss" hides the Lightning address of a profile for one person. The human test of `0.1.0-rc.10` found an address of the wrong account with no way to hide it.
+- Changed by: [ADR 0111](0111-the-page-of-a-person-checks-the-feeds.md). Item 20: the operation "Correct".
+- Changed by: [ADR 0112](0112-a-credit-role-comes-from-a-list.md). Item 5: the usual role comes from the role list, with a usual group.
+- Changed by: [ADR 0101](../archive/adr/0101-a-suggestion-groups-the-items-of-one-name.md), A Suggestion Groups The Items Of One Name.
+- Changed by: [ADR 0158](0158-a-hidden-suggestion-can-come-back.md), A Hidden Suggestion Can Come Back.
 
 ## Context
 

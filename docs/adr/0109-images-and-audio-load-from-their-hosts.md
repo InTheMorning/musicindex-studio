@@ -5,7 +5,9 @@
 - Owner: operator
 - Accepted: 2026-11-01 by the operator.
 - Changed by: [ADR 0202](0202-an-http-image-shows-from-its-https-address.md) item 4 for images: an `http` image shows from its `https` address.
-- Changes: [ADR 0016](0016-ui-without-a-build-step.md) item 4 (the UI loads nothing from a third-party server). [ADR 0062](0062-a-file-picker-for-each-file-field.md) items 26 to 29 (the audio route and the media tickets). The image route of [ADR 0025](0025-studio-serves-cover-art.md).
+- Changes: [ADR 0016](0016-ui-without-a-build-step.md) item 4 (the UI loads nothing from a third-party server).
+- Changes: [ADR 0062](0062-a-file-picker-for-each-file-field.md) items 26 to 29 (the audio route and the media tickets). The image route of [ADR 0025](0025-studio-serves-cover-art.md).
+- Changes: [ADR 0025](0025-studio-serves-cover-art.md), Studio Serves Cover Art To The UI. ADR 0025 names the changed items.
 - Uses: [ADR 0057](0057-the-private-network-guard-of-the-server.md) (the network guard) and [ADR 0105](0105-a-public-server-holds-no-assets.md) (a server that holds no assets).
 
 ## Context

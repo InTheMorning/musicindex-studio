@@ -5,7 +5,8 @@
 - Owner: operator, with the technical choices of the planning model
 - Accepted: 2026-11-12 by the operator, through the questionnaire, in the human check of task 118. The operator selected the layout of the other pickers (ADR 0145) from a drawing.
 - Technical choices: items 3, 5 and 7 are choices of the planning model.
-- Changes: [ADR 0182](0182-the-page-of-a-person-starts-with-its-links-and-has-a-nickname.md) items 4 to 8, the sheet "Add a Person". [ADR 0163](0163-one-sheet-finds-and-links-a-page-on-music-index.md) item 2, the sequence of the parts of the sheet "Find on Music Index".
+- Changes: [ADR 0182](0182-the-page-of-a-person-starts-with-its-links-and-has-a-nickname.md) items 4 to 8, the sheet "Add a Person".
+- Changes: [ADR 0163](0163-one-sheet-finds-and-links-a-page-on-music-index.md) item 2, the sequence of the parts of the sheet "Find on Music Index".
 - Uses: [ADR 0145](0145-each-sheet-that-adds-a-value-has-one-layout.md) items 1 to 3, 5 and 7 for the layout and the search. [ADR 0159](0159-a-person-can-link-to-a-page-on-music-index.md) items 1, 4 and 8 to 15 for the link and the suggestions. ADR 0182 item 9 for the name match of "Already in People".
 - Source: the human check of task 118 on 2026-11-12.
 

@@ -5,6 +5,7 @@
 - Owner: operator
 - Accepted: 2026-10-27 by the operator.
 - Changes: [ADR 0064](0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) item 10, for the position of the list.
+- Changes: [ADR 0053](0053-playlists-are-musicl-feeds-with-remote-items.md), Playlists Are musicL Feeds With Remote Items. ADR 0053 names the changed items.
 
 ## Context
 

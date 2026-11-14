@@ -4,22 +4,22 @@
 - Date: 2026-10-25
 - Changed by: [ADR 0135](0135-the-panel-holds-the-content-and-the-page-has-tabs.md). The pages of a feed are tabs on its page, and the outline holds its content.
 - Owner: operator
-- Replaces: [ADR 0029](0029-editor-pages-toolbar-and-three-levels.md) items 5, 6 and 15, and its situational invariant "The sidebar tree has two levels".
-- Amended: 2026-10-25 by operator decision. Item 1 pins Hosts and Lock Studio to the bottom of the left panel. They always show, also with the outline of item 5 (musicindex ADR 0027 R-SHELL-1 item 4).
-- Amended: 2026-10-25 by operator decision. Items 10 and 11 put the left panel behind a menu button at narrow width. The menu button is at the top left and always visible. No tab bar shows.
-- Amended: 2026-10-25 by operator decision. Item 2a gives the sort and the view of Releases, as musicindex ADR 0027 R-LIST-1 item 6 asks. [ADR 0042](0042-ui-models-with-node-tests.md) gives the method of the mechanical criteria.
-- Amended: 2026-10-25 by operator decision, after the check of the touch back control in Firefox. Item 10a gives the bar of a feed two rows at narrow width.
-- Amended: 2026-10-25 by operator decision. musicindex ADR 0030 replaces the menu button and the drawer. Items 10, 10a, 11 and 11a now make Studio one stack at narrow width, with the root page and the outline page.
-- Amended: 2026-10-26 by operator decision, after the visual check of task 034f. On a server with a locked vault, "Unlock Studio" takes the place of "Lock Studio" in item 1. It opens the unlock sheet of [ADR 0056](0056-server-sign-in-methods-and-vault-wrappers.md).
-- Amended: 2026-10-27 by operator decision. [ADR 0069](0069-the-outline-head-opens-the-feed-page.md) changes items 6 and 7. The outline head opens the first page, and the outline has no row for it. The link shows "‹ Releases".
-- Amended: 2026-10-25 by operator decision. musicindex ADR 0031 makes the Touch back control of item 9 a circular icon button with no word.
-- Amended: 2026-10-25 by operator decision. Items 11 and 11a give the root page and the outline page the color of the left panel.
-- Amended: 2026-10-28 by operator decision. [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) items 9 and 10 add the destination "Settings" between Hosts and Lock Studio in items 1, 5 and 11.
-- Amended: 2026-10-28 by operator decision. [ADR 0072](0072-add-a-feed-opens-from-releases.md) removes Add a feed from items 1, 5 and 11. It opens from a button on Releases.
-- Amended: 2026-10-28 by operator decision. [ADR 0073](0073-the-add-pages-ask-one-question-at-a-time.md) item 11 replaces "Add a track" and "Import files" in item 6 with one row "Add tracks".
-- Amended: 2026-10-30 by operator decision. [ADR 0085](0085-each-artist-and-label-is-a-destination.md) adds a destination below Releases for each publisher feed in items 1 and 11. Releases no longer lists the publisher feeds (item 2).
-- Amended: 2026-10-30 by operator decision. [ADR 0091](0091-a-change-set-edits-one-recipient-in-many-feeds.md) item 1 adds the destination "Recipients" before Hosts in items 1, 5 and 11.
-- Amended: 2026-10-30 by operator decision. [ADR 0092](0092-file-hosts-and-the-destination-icons.md) renames Hosts to "File hosts" in items 1, 5 and 11, and gives each fixed destination an icon. No destination row shows a type dot.
+- Changes: [ADR 0029](0029-editor-pages-toolbar-and-three-levels.md) items 5, 6 and 15, and its situational invariant "The sidebar tree has two levels".
+- Revised: 2026-10-25 by operator decision. Item 1 pins Hosts and Lock Studio to the bottom of the left panel. They always show, also with the outline of item 5 (musicindex ADR 0027 R-SHELL-1 item 4).
+- Revised: 2026-10-25 by operator decision. Items 10 and 11 put the left panel behind a menu button at narrow width. The menu button is at the top left and always visible. No tab bar shows.
+- Revised: 2026-10-25 by operator decision. Item 2a gives the sort and the view of Releases, as musicindex ADR 0027 R-LIST-1 item 6 asks. [ADR 0042](0042-ui-models-with-node-tests.md) gives the method of the mechanical criteria.
+- Revised: 2026-10-25 by operator decision, after the check of the touch back control in Firefox. Item 10a gives the bar of a feed two rows at narrow width.
+- Revised: 2026-10-25 by operator decision. musicindex ADR 0030 replaces the menu button and the drawer. Items 10, 10a, 11 and 11a now make Studio one stack at narrow width, with the root page and the outline page.
+- Revised: 2026-10-26 by operator decision, after the visual check of task 034f. On a server with a locked vault, "Unlock Studio" takes the place of "Lock Studio" in item 1. It opens the unlock sheet of [ADR 0056](0056-server-sign-in-methods-and-vault-wrappers.md).
+- Changed by: [ADR 0069](0069-the-outline-head-opens-the-feed-page.md) changes items 6 and 7. The outline head opens the first page, and the outline has no row for it. The link shows "‹ Releases".
+- Revised: 2026-10-25 by operator decision. musicindex ADR 0031 makes the Touch back control of item 9 a circular icon button with no word.
+- Revised: 2026-10-25 by operator decision. Items 11 and 11a give the root page and the outline page the color of the left panel.
+- Changed by: [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) items 9 and 10 add the destination "Settings" between Hosts and Lock Studio in items 1, 5 and 11.
+- Changed by: [ADR 0072](0072-add-a-feed-opens-from-releases.md) removes Add a feed from items 1, 5 and 11. It opens from a button on Releases.
+- Changed by: [ADR 0073](0073-the-add-pages-ask-one-question-at-a-time.md) item 11 replaces "Add a track" and "Import files" in item 6 with one row "Add tracks".
+- Changed by: [ADR 0085](0085-each-artist-and-label-is-a-destination.md) adds a destination below Releases for each publisher feed in items 1 and 11. Releases no longer lists the publisher feeds (item 2).
+- Changed by: [ADR 0091](0091-a-change-set-edits-one-recipient-in-many-feeds.md) item 1 adds the destination "Recipients" before Hosts in items 1, 5 and 11.
+- Changed by: [ADR 0092](0092-file-hosts-and-the-destination-icons.md) renames Hosts to "File hosts" in items 1, 5 and 11, and gives each fixed destination an icon. No destination row shows a type dot.
 
 ## Context
 

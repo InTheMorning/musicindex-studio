@@ -4,7 +4,8 @@
 - Date: 2026-11-05
 - Owner: operator, with the technical choices of the planning model
 - Accepted: 2026-11-05 by the operator, through the questionnaire. The operator asked that the warnings say what a loss of control of a feed means.
-- Changed by: [ADR 0198](0198-the-review-of-a-delete-names-the-delete-and-a-deleted-feed-shows-only-what-it-can-do.md) items 8 and 12 for a feed with a done delete. [ADR 0200](0200-studio-deletes-a-feed-file-only-after-music-index-removes-the-entry.md) items 1, 4, 6 and 9: no delete of a feed that Music Index holds.
+- Changed by: [ADR 0198](0198-the-review-of-a-delete-names-the-delete-and-a-deleted-feed-shows-only-what-it-can-do.md) items 8 and 12 for a feed with a done delete.
+- Changed by: [ADR 0200](0200-studio-deletes-a-feed-file-only-after-music-index-removes-the-entry.md) items 1, 4, 6 and 9: no delete of a feed that Music Index holds.
 - Uses: [ADR 0007](0007-draft-diff-write-and-announce.md) for the review. [ADR 0038](0038-published-feeds-downloads-folder-scan-and-feed-moves.md) for a move. [ADR 0063](0063-one-switch-hides-a-feed-from-apps.md) for the block tags. Stophammer ADR 0052, ADR 0056, ADR 0057, ADR 0067 and ADR 0079 own the rules of the index. This record cites them and does not restate them as rules of Studio.
 
 ## Context

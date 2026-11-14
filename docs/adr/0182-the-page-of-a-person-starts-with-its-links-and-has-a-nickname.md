@@ -5,12 +5,17 @@
 - Owner: operator
 - Accepted: 2026-11-12 by the operator, from the mockups in `.studio-dev/mockup-people-3/site/`. The operator selected **Add**, **Add All Suggestions** and the search in "Add a Person". The operator also selected the section sequence, the separate buttons of variant A and the two names. The values in the update sheet and the line of a fill are also choices of the operator.
 - Technical choices: items 4, 9, 12, 14, 15 and 16 are choices of the planning model.
-- Changes: [ADR 0111](0111-the-page-of-a-person-checks-the-feeds.md) item 1, the sequence. [ADR 0156](0156-the-page-of-a-person-lists-where-the-person-is.md) item 1, the tier of "Where this person is". [ADR 0159](0159-a-person-can-link-to-a-page-on-music-index.md) items 8 and 15, the button of a suggestion.
-- Changes: [ADR 0170](0170-update-people-from-their-linked-pages.md) items 1, 2 and 5. [ADR 0169](0169-an-open-credit-can-find-on-music-index.md) item 2. [ADR 0099](0099-the-people-destination-and-the-page-of-a-person.md) item 4, the name in the head.
+- Changes: [ADR 0111](0111-the-page-of-a-person-checks-the-feeds.md) item 1, the sequence.
+- Changes: [ADR 0156](0156-the-page-of-a-person-lists-where-the-person-is.md) item 1, the tier of "Where this person is".
+- Changes: [ADR 0159](0159-a-person-can-link-to-a-page-on-music-index.md) items 8 and 15, the button of a suggestion.
+- Changes: [ADR 0170](0170-update-people-from-their-linked-pages.md) items 1, 2 and 5.
+- Changes: [ADR 0169](0169-an-open-credit-can-find-on-music-index.md) item 2.
+- Changes: [ADR 0099](0099-the-people-destination-and-the-page-of-a-person.md) item 4, the name in the head.
 - Uses: [ADR 0163](0163-one-sheet-finds-and-links-a-page-on-music-index.md) items 4 to 11 for the sheet "From Music Index". [ADR 0116](0116-the-page-of-a-person-has-save-and-discard.md) for the pending changes. [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) for the tiers. [ADR 0108](0108-people-data-at-rest-stays-plain.md) item 2 for the data at rest.
 - Source: findings 12, 13, 14, 15 and 17 of the [human checks of 2026-11-11](../reviews/2026-11-11-local-human-test-findings.md).
 - Changed by: [ADR 0192](0192-add-a-person-has-the-layout-of-the-other-pickers.md). Items 4 to 8: "Add a Person" has the layout of the other pickers, and Studio makes the person only at **Add the Person**.
 - Changed by: [ADR 0194](0194-the-nickname-saves-at-once-and-the-update-sheet-selects-each-value.md). Items 1 and 3: the picture and the website have **Use**. Item 13: **Change** saves the nickname at once.
+- Changed by: [ADR 0196](0196-a-person-keeps-a-list-of-pictures-and-websites-with-a-default.md), A Person Keeps A List Of Pictures And Websites, With A Default.
 
 ## Context
 

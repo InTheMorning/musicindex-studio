@@ -4,7 +4,7 @@
 - Date: 2026-11-10
 - Owner: operator
 - Accepted: 2026-11-10 by the operator, through the questionnaire. The operator selected "Exceptions only" and a mark that covers the feed and its releases. The operator selected the mockup with the pencil, the dashed circle and the red cloud. The operator also selected a startup check of the artist and label pages.
-- Amended: 2026-11-10 by the operator. Items 9 and 10 make the pencil current after each save.
+- Revised: 2026-11-10 by the operator. Items 9 and 10 make the pencil current after each save.
 - Technical choices: items 6, 7 and the time of item 10 are choices of the planning model.
 - Changes: [ADR 0150](0150-studio-shows-a-change-from-outside-when-a-page-opens.md) item 1.
 - Uses: [ADR 0150](0150-studio-shows-a-change-from-outside-when-a-page-opens.md) for the check. [ADR 0088](0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) for the rows of the left panel. musicindex ADR 0032 R-DOT-1 keeps the dot for the type only.

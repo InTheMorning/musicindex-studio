@@ -3,7 +3,9 @@
 - Status: Accepted. [ADR 0033](0033-a-lossless-import-gives-an-mp3-enclosure.md) replaces the WAV conversion of items 2 and 5 on 2026-10-23. [ADR 0035](0035-a-release-library-is-the-master-of-each-feed.md) replaces items 4 and 10 to 12 when Phase 7 implements it.
 - Date: 2026-10-23
 - Owner: operator
-- Amended: 2026-10-26 by operator decision. [ADR 0054](0054-live-items-connected-apps-and-show-grants.md) item 18 adds one exception to the invariant: a change that a show grant of the user covers.
+- Changed by: [ADR 0054](0054-live-items-connected-apps-and-show-grants.md) item 18 adds one exception to the invariant: a change that a show grant of the user covers.
+- Changed by: [ADR 0121](../archive/adr/0121-a-folder-with-no-public-address-holds-practice-pages.md), A Folder With No Public Address Holds Practice Pages.
+- Changed by: [ADR 0122](0122-a-new-user-starts-with-a-default-file-host.md), A New User Starts With A Default File Host.
 
 ## Context
 

@@ -5,6 +5,9 @@
 - Owner: operator
 - Accepted: 2026-11-05 by the operator, through the questionnaire. The operator selected the warning sheet, the boxes after "Advanced" also for a missing value, and each audio file.
 - Changes: [ADR 0062](0062-a-file-picker-for-each-file-field.md) items 24 and 25, [ADR 0068](0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md) item 10, [ADR 0073](0073-the-add-pages-ask-one-question-at-a-time.md) item 14 and [ADR 0094](0094-a-duration-is-edited-as-minutes-and-seconds.md) item 3.
+- Changes: [ADR 0068](0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md), The Sequence Of The Sections And Fields Of An Editor Page. ADR 0068 names the changed items.
+- Changes: [ADR 0073](0073-the-add-pages-ask-one-question-at-a-time.md), The Add Pages Ask One Question At A Time. ADR 0073 names the changed items.
+- Changes: [ADR 0094](0094-a-duration-is-edited-as-minutes-and-seconds.md), A Duration Is Edited As Minutes And Seconds. ADR 0094 names the changed items.
 - Uses: musicindex ADR 0023 R-CONFIRM-1 for the sheet. [ADR 0065](0065-the-core-applies-each-feed-rule.md): the lock is an edit aid, and the core keeps each feed rule.
 
 ## Context

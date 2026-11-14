@@ -88,4 +88,4 @@ Durable:
 Situational, until a decision replaces this layout:
 
 - The user can see the draft status, "Versions" and "Review" at all scroll positions and at all widths.
-- Replaced by [ADR 0039](0039-the-shell-releases-and-the-outline.md): the sidebar tree has two levels.
+- [ADR 0039](0039-the-shell-releases-and-the-outline.md) replaced the invariant of the sidebar tree. The sidebar tree has two levels.

@@ -9,6 +9,7 @@
 - Changes: [ADR 0111](../archive/adr/0111-the-page-of-a-person-checks-the-feeds.md) item 3.
 - Changed by: [ADR 0159](0159-a-person-can-link-to-a-page-on-music-index.md). Items 5 and 6: "Link to an Artist or Label Page" opens one sheet with the search of Music Index, and a page that is not in the collection is a read-only link.
 - Uses: [ADR 0037](0037-button-roles.md) for the button roles. [ADR 0065](0065-the-core-applies-each-feed-rule.md) for the core. [ADR 0088](0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) for the first role. [ADR 0098](../archive/adr/0098-the-people-module.md) item 6 for the link. [ADR 0116](0116-the-page-of-a-person-has-save-and-discard.md) for Save.
+- Changed by: [ADR 0146](0146-link-words-already-marks-and-credit-edits.md), Link Words, The Mark Of A Value That Is Already There, Edits Of A Person And Credits Of A Feed.
 
 ## Context
 

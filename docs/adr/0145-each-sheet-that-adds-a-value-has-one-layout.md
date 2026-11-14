@@ -11,6 +11,7 @@
 - Changed by: [ADR 0169](0169-an-open-credit-can-find-on-music-index.md), An Open Credit Can Find On Music Index.
 - Uses: [ADR 0123](0123-one-type-of-value-has-one-picker.md) and [ADR 0141](0141-the-form-of-add-a-wallet-comes-first.md) item 1, the form stays in view. [ADR 0117](0117-the-page-of-a-person-finds-values-on-musicindex.md) for the search of artist and label feeds. [ADR 0098](../archive/adr/0098-the-people-module.md), a value from a person is a start value.
 - Source: [findings of local use, finding 29](../reviews/2026-11-06-local-use-findings.md)
+- Changed by: [ADR 0146](0146-link-words-already-marks-and-credit-edits.md), Link Words, The Mark Of A Value That Is Already There, Edits Of A Person And Credits Of A Feed.
 
 ## Context
 

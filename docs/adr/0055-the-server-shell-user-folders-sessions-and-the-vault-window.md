@@ -9,6 +9,7 @@
 - Changes: [ADR 0013](0013-vault-format-and-cryptography.md), Vault Format And Cryptography. ADR 0013 names the changed items.
 - Changes: [ADR 0014](0014-collection-in-sqlite.md), The Collection Is In SQLite. ADR 0014 names the changed items.
 - Changes: [ADR 0035](0035-a-release-library-is-the-master-of-each-feed.md), A Release Library Is The Master Of Each Feed. ADR 0035 names the changed items.
+- Changed by: [ADR 0106](0106-a-sensitive-account-change-needs-a-recent-unlock.md) item 5. Item 23: the limits of failed sign-ins.
 
 ## Context
 

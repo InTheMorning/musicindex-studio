@@ -20,6 +20,8 @@
 - Changed by: [ADR 0123](../../adr/0123-one-type-of-value-has-one-picker.md), One Type Of Value Has One Picker.
 - Changed by: [ADR 0139](../../adr/0139-the-default-address-is-on-its-row.md), The Default Address Is On Its Row.
 - Changed by: [ADR 0145](../../adr/0145-each-sheet-that-adds-a-value-has-one-layout.md), Each Sheet That Adds A Value Has One Layout.
+- Changed by: [ADR 0138](../../adr/0138-the-names-of-a-wallet-address-and-the-correction-of-a-wrong-key.md), The Names Of A Wallet Address And The Correction Of A Wrong Key.
+- Changed by: [ADR 0140](../../adr/0140-a-credit-name-shows-where-it-is-used.md), A Credit Name Shows Where It Is Used.
 
 ## Context
 

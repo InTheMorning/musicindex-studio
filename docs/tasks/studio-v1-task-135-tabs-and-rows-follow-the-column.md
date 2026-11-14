@@ -2,7 +2,7 @@
 
 Decision: [ADR 0197](../adr/0197-the-tabs-and-the-field-rows-follow-the-editor-column.md).
 
-Status: Complete. The human check in the desktop app is open.
+Status: Complete. The human check in the desktop app passed on 2026-11-14.
 
 ## Result
 

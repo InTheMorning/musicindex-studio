@@ -2,7 +2,16 @@
 
 Decision: [ADR 0201](../adr/0201-people-opens-before-the-lightning-address-lookups.md).
 
-Status: Open.
+Status: Complete on 2026-11-14.
+
+## Result
+
+- `keysend.rs` has `due_addresses`, `request_lookups` (no collection) and `store_lookups`. `refresh` calls the three. It now gives the stored result of each wanted address, not only of the due addresses. Its callers ignore the result or merge it with the same stored data.
+- `recipient_list_inputs` in `routes.rs` builds the list for `GET /recipients` and for `POST /recipients/lookups`. `GET /recipients` sends no lookup.
+- `lookup_recipients` finds the due addresses with the lock, sends the requests with `blocking_unlocked`, and keeps the results with the lock. With no scheme or no due address, it gives `{ "checked": 0 }`.
+- `TestServer::set_delayed` gives a test route that waits before it answers.
+- The test `a_people_request_does_not_wait_for_recipient_lookups` of the delegate passed also with the requests inside the lock: `GET /people` then waited 1.90 s, and the limit was 2 s. The main session changed the limit to 1 s. The test now fails with the requests inside the lock and passes with the change.
+- The four checks pass: 1915 Rust tests and 774 Node tests.
 
 ## Goal
 

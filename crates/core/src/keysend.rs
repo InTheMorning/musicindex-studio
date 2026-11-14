@@ -216,7 +216,34 @@ pub fn refresh(
     addresses: &[String],
     now: i64,
 ) -> Result<HashMap<String, Lookup>, CollectionError> {
-    let mut wanted: Vec<String> = Vec::new();
+    let due = due_addresses(collection, scheme, addresses, now)?;
+    let results = request_lookups(web, scheme, &due);
+    store_lookups(collection, results, now)?;
+    let wanted: HashSet<String> = addresses
+        .iter()
+        .map(|address| address.trim().to_lowercase())
+        .filter(|address| lookup_url(scheme, address).is_some())
+        .collect();
+    Ok(collection
+        .keysend_lookups()?
+        .into_iter()
+        .filter(|lookup| wanted.contains(&lookup.address))
+        .map(|lookup| (lookup.address.clone(), lookup))
+        .collect())
+}
+
+/// Give the normalized addresses that need a lookup.
+///
+/// # Errors
+///
+/// Gives a [`CollectionError`] when SQLite fails.
+pub fn due_addresses(
+    collection: &Collection,
+    scheme: &str,
+    addresses: &[String],
+    now: i64,
+) -> Result<Vec<String>, CollectionError> {
+    let mut wanted = Vec::new();
     let mut seen = HashSet::new();
     for address in addresses {
         let address = address.trim().to_lowercase();
@@ -229,21 +256,29 @@ pub fn refresh(
         .into_iter()
         .map(|lookup| (lookup.address.clone(), lookup))
         .collect();
-    let due: Vec<&String> = wanted
-        .iter()
-        .filter(|address| is_due(stored.get(*address), now))
-        .collect();
-    let results: Vec<(&String, LookupResult)> = thread::scope(|scope| {
+    Ok(wanted
+        .into_iter()
+        .filter(|address| is_due(stored.get(address), now))
+        .collect())
+}
+
+/// Request each due lookup in parallel, with no collection access.
+#[must_use]
+pub fn request_lookups(web: &Web, scheme: &str, due: &[String]) -> Vec<(String, LookupResult)> {
+    thread::scope(|scope| {
         let handles: Vec<_> = due
             .iter()
             .map(|address| {
                 scope.spawn(move || {
                     let web = web.clone();
                     let scheme = scheme.to_owned();
-                    let text = (*address).clone();
-                    let result = within(LOOKUP_LIMIT, move || request(&web, &scheme, &text))
-                        .unwrap_or(LookupResult::Failed);
-                    (*address, result)
+                    let address = address.clone();
+                    let request_address = address.clone();
+                    let result = within(LOOKUP_LIMIT, move || {
+                        request(&web, &scheme, &request_address)
+                    })
+                    .unwrap_or(LookupResult::Failed);
+                    (address, result)
                 })
             })
             .collect();
@@ -251,7 +286,25 @@ pub fn refresh(
             .into_iter()
             .filter_map(|handle| handle.join().ok())
             .collect()
-    });
+    })
+}
+
+/// Store lookup results and give the stored rows for the requested addresses.
+///
+/// # Errors
+///
+/// Gives a [`CollectionError`] when SQLite fails.
+pub fn store_lookups(
+    collection: &Collection,
+    results: Vec<(String, LookupResult)>,
+    now: i64,
+) -> Result<HashMap<String, Lookup>, CollectionError> {
+    let stored: HashMap<String, Lookup> = collection
+        .keysend_lookups()?
+        .into_iter()
+        .map(|lookup| (lookup.address.clone(), lookup))
+        .collect();
+    let seen: HashSet<String> = results.iter().map(|(address, _)| address.clone()).collect();
     for (address, result) in results {
         let row = |pubkey, custom_key, custom_value, status| Lookup {
             address: address.clone(),
@@ -275,8 +328,8 @@ pub fn refresh(
             LookupResult::None => {
                 collection.set_keysend_lookup(&row(None, None, None, LookupStatus::None))?;
             }
-            LookupResult::Failed if stored.contains_key(address) => {
-                collection.touch_keysend_lookup(address, now)?;
+            LookupResult::Failed if stored.contains_key(&address) => {
+                collection.touch_keysend_lookup(&address, now)?;
             }
             LookupResult::Failed => {
                 collection.set_keysend_lookup(&row(None, None, None, LookupStatus::Failed))?;
@@ -725,6 +778,38 @@ mod tests {
         assert_eq!(later[&found].status, LookupStatus::Found);
         assert_eq!(later[&found].pubkey.as_deref(), Some("02abc"));
         assert_eq!(later[&found].checked_at, 1000 + REFRESH_AFTER);
+    }
+
+    #[test]
+    fn lookup_steps_keep_a_found_result_after_a_failed_request() {
+        let (_dir, collection) = collection();
+        let address = "ann@127.0.0.1:1".to_owned();
+        collection
+            .set_keysend_lookup(&Lookup {
+                address: address.clone(),
+                pubkey: Some("02abc".into()),
+                custom_key: Some("696969".into()),
+                custom_value: Some("x1".into()),
+                status: LookupStatus::Found,
+                checked_at: 100,
+            })
+            .unwrap();
+        let due = due_addresses(
+            &collection,
+            "http",
+            std::slice::from_ref(&address),
+            100 + REFRESH_AFTER,
+        )
+        .unwrap();
+        assert_eq!(due, vec![address.clone()]);
+        let stored = store_lookups(
+            &collection,
+            vec![(address.clone(), LookupResult::Failed)],
+            100 + REFRESH_AFTER,
+        )
+        .unwrap();
+        assert_eq!(stored[&address].status, LookupStatus::Found);
+        assert_eq!(stored[&address].pubkey.as_deref(), Some("02abc"));
     }
 
     #[test]

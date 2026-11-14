@@ -4,10 +4,10 @@
 - Date: 2026-10-28
 - Owner: operator
 - Accepted: 2026-10-28 by the operator.
-- Changes: [ADR 0023](0023-web-addresses-and-audio-file-facts.md) item 6, [ADR 0029](0029-editor-pages-toolbar-and-three-levels.md) item 8, [ADR 0039](0039-the-shell-releases-and-the-outline.md) item 6 and [ADR 0068](0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md) item 2.
+- Changes: [ADR 0023](0023-web-addresses-and-audio-file-facts.md) item 6, [ADR 0029](0029-editor-pages-toolbar-and-three-levels.md) item 8, [ADR 0039](../archive/adr/0039-the-shell-releases-and-the-outline.md) item 6 and [ADR 0068](../archive/adr/0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md) item 2.
 - Changes: [ADR 0029](0029-editor-pages-toolbar-and-three-levels.md), Editor Pages, The Toolbar And Three Background Levels. ADR 0029 names the changed items.
-- Changes: [ADR 0039](0039-the-shell-releases-and-the-outline.md), The Shell, Releases And The Outline Of A Feed. ADR 0039 names the changed items.
-- Changes: [ADR 0068](0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md), The Sequence Of The Sections And Fields Of An Editor Page. ADR 0068 names the changed items.
+- Changes: [ADR 0039](../archive/adr/0039-the-shell-releases-and-the-outline.md), The Shell, Releases And The Outline Of A Feed. ADR 0039 names the changed items.
+- Changes: [ADR 0068](../archive/adr/0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md), The Sequence Of The Sections And Fields Of An Editor Page. ADR 0068 names the changed items.
 - Changed by: [ADR 0077](0077-a-new-album-can-start-from-an-album.md) adds the select menu "Start from" to the form of items 5 and 6, for the type Album.
 - Changed by: [ADR 0130](0130-the-facts-of-an-audio-file-stay-locked.md). Item 14: "Properties" of the add sheet shows the values as text. The boxes show after "Advanced".
 - Changed by: [ADR 0119](0119-a-new-user-starts-as-a-musician-or-a-label.md), A New User Starts As A Musician Or A Label.

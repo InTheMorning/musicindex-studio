@@ -13,7 +13,7 @@ This document binds nothing in Studio. Studio records each decision in its own
 ADR.
 
 **The hold is lifted.** On 2026-10-25 the operator lifted the hold. musicindex
-ADRs 0027 to 0029 state the shared rules. [ADR 0039](../adr/0039-the-shell-releases-and-the-outline.md)
+ADRs 0027 to 0029 state the shared rules. [ADR 0039](../archive/adr/0039-the-shell-releases-and-the-outline.md)
 states sections 1 and 2 of this request for Studio. Section 3 stays open.
 
 The research examined Studio at commit `24980a3`. The mockups are research

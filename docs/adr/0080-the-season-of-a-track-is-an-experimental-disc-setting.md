@@ -4,7 +4,7 @@
 - Date: 2026-10-29
 - Owner: operator
 - Accepted: 2026-10-29 by the operator.
-- Changes: [ADR 0064](0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) item 8, the "Season" fields of the "Identity" row.
+- Changes: [ADR 0064](../archive/adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) item 8, the "Season" fields of the "Identity" row.
 - Uses: musicindex ADR 0034 R-EXPERIMENT-1 (the Experimental badge) and musicindex ADR 0025 R-STATUS-1 (the Warning color).
 
 ## Context

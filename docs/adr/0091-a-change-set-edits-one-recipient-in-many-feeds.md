@@ -7,7 +7,7 @@
 - Changed by: [ADR 0095](0095-a-lightning-address-and-its-node-key-are-one-recipient.md). Items 2 to 8 and 12: an operation acts on each address of one wallet, and the page of a recipient has a fifth operation.
 - Changed by: [ADR 0099](../archive/adr/0099-the-people-destination-and-the-page-of-a-person.md). Items 1 to 4 and 21: People replaces the Recipients page, each sheet lists the feeds, and the review has its buttons at the top.
 - Changed by: [ADR 0098](../archive/adr/0098-the-people-module.md) item 20 adds the operations of a person.
-- Changes: [ADR 0039](0039-the-shell-releases-and-the-outline.md) items 1, 5 and 11, for the destinations at the bottom of the left panel.
+- Changes: [ADR 0039](../archive/adr/0039-the-shell-releases-and-the-outline.md) items 1, 5 and 11, for the destinations at the bottom of the left panel.
 - Changes: [ADR 0030](0030-an-added-recipient-gets-no-split.md), for a recipient that a change set adds.
 - Changed by: [ADR 0092](0092-file-hosts-and-the-destination-icons.md), File Hosts And The Destination Icons.
 - Changed by: [ADR 0096](0096-add-to-an-artist-or-label.md), Add To An Artist Or Label.

@@ -1,7 +1,7 @@
 # Studio v1 Task 052: An OP3 Switch On Feed Settings
 
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "MSP 2.0 Parity".
-Decisions: [ADR 0076](../adr/0076-an-op3-switch-on-feed-settings.md), [ADR 0035](../adr/0035-a-release-library-is-the-master-of-each-feed.md), [ADR 0042](../adr/0042-ui-models-with-node-tests.md), [ADR 0064](../adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) and [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md).
+Decisions: [ADR 0076](../adr/0076-an-op3-switch-on-feed-settings.md), [ADR 0035](../adr/0035-a-release-library-is-the-master-of-each-feed.md), [ADR 0042](../adr/0042-ui-models-with-node-tests.md), [ADR 0064](../archive/adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) and [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md).
 
 Status: Complete - 2026-10-28, except the human test. The four commit checks pass. The screenshot visual check passed in the two themes and at 390 px. The human test is open.
 

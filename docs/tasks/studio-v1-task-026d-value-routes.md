@@ -1,6 +1,6 @@
 # Studio v1 Task 026d: The Value Routes Page
 
-Parent: [task 026](studio-v1-task-026-shell.md). Decisions: [ADR 0039](../adr/0039-the-shell-releases-and-the-outline.md) items 6 and 12, [ADR 0029](../adr/0029-editor-pages-toolbar-and-three-levels.md) item 9.
+Parent: [task 026](studio-v1-task-026-shell.md). Decisions: [ADR 0039](../archive/adr/0039-the-shell-releases-and-the-outline.md) items 6 and 12, [ADR 0029](../adr/0029-editor-pages-toolbar-and-three-levels.md) item 9.
 Shared rules: musicindex ADR 0023 R-WORD-2, ADR 0020 R-VALUE-1.
 Sequence: the last packet of task 026. It depends on 026c.
 

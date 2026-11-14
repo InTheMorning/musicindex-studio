@@ -1,6 +1,6 @@
 # Studio v1 Task 041a: The New Elements In The Core
 
-Parent: [task 041](studio-v1-task-041-msp-fields.md). Decisions: [ADR 0064](../adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) items 1 to 5, [ADR 0002](../adr/0002-rust-core-json-api-browser-ui.md), [ADR 0012](../adr/0012-lossless-tree-with-a-typed-model.md) and [ADR 0031](../adr/0031-a-new-element-takes-its-hosted-position.md).
+Parent: [task 041](studio-v1-task-041-msp-fields.md). Decisions: [ADR 0064](../archive/adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) items 1 to 5, [ADR 0002](../adr/0002-rust-core-json-api-browser-ui.md), [ADR 0012](../adr/0012-lossless-tree-with-a-typed-model.md) and [ADR 0031](../adr/0031-a-new-element-takes-its-hosted-position.md).
 Sequence: the first packet of task 041. It depends on task 040.
 
 Status: Complete on 2026-10-27.

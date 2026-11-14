@@ -60,7 +60,7 @@ On 2026-10-25 the operator decided the questions of items 5, 8, 9 and 11.
 
 - The collection gets a column for the role of a publisher feed. A schema change is a new migration ([ADR 0014](../../adr/0014-collection-in-sqlite.md)).
 - One link changes two drafts. The user writes each one.
-- Studio does not have the shell of [ADR 0039](../../adr/0039-the-shell-releases-and-the-outline.md) at this time. Phase 8 uses the current feed tree. The work of ADR 0039 moves the publisher pages into the outline.
+- Studio does not have the shell of [ADR 0039](0039-the-shell-releases-and-the-outline.md) at this time. Phase 8 uses the current feed tree. The work of ADR 0039 moves the publisher pages into the outline.
 
 ## Non-Goals
 

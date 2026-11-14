@@ -2,7 +2,7 @@
 
 - Date: 2026-10-27
 - Reviewed: the visual criteria of [task 041](../tasks/studio-v1-task-041-msp-fields.md) and of packets 041b, 041d and 041e
-- Decision: [ADR 0064](../adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md)
+- Decision: [ADR 0064](../archive/adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md)
 - Host: a local folder with the public address `https://music.example/`. A local test server gave the images, the audio files and the lyrics files.
 - Feed: one album with each new channel element, and a track with "Explicit", two persons, two lyrics files, a season and two images
 - Checker: the agent, with `tools/drive-ui.mjs` in headless Chromium. Each screenshot is in the dark theme and the light theme at 1100 px, and in the dark theme at 390 px with touch.

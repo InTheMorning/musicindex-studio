@@ -1,6 +1,6 @@
 # Task 041 Review Checklist, 2026-10-27
 
-This record holds the orchestration of [task 041](../tasks/studio-v1-task-041-msp-fields.md). It records each packet, each review result, and each decision that the planning model made in the limits of the ADRs. It states no rule. [ADR 0064](../adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) owns the rules.
+This record holds the orchestration of [task 041](../tasks/studio-v1-task-041-msp-fields.md). It records each packet, each review result, and each decision that the planning model made in the limits of the ADRs. It states no rule. [ADR 0064](../archive/adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) owns the rules.
 
 ## Sequence
 

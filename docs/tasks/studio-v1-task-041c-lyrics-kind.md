@@ -1,6 +1,6 @@
 # Studio v1 Task 041c: The Lyrics Kind Of The Picker
 
-Parent: [task 041](studio-v1-task-041-msp-fields.md). Decisions: [ADR 0064](../adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) item 9, [ADR 0062](../adr/0062-a-file-picker-for-each-file-field.md) items 1 to 3, 11, 13 and 20, and [ADR 0042](../adr/0042-ui-models-with-node-tests.md).
+Parent: [task 041](studio-v1-task-041-msp-fields.md). Decisions: [ADR 0064](../archive/adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) item 9, [ADR 0062](../adr/0062-a-file-picker-for-each-file-field.md) items 1 to 3, 11, 13 and 20, and [ADR 0042](../adr/0042-ui-models-with-node-tests.md).
 Sequence: the third packet of task 041. It depends on 041b. Packet 041d uses the new kind.
 
 Status: Complete on 2026-10-27.

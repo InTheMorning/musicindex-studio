@@ -6,9 +6,9 @@
 - Changed by: [ADR 0166](0166-settings-has-tabs-and-one-save-bar.md), Settings Has Tabs And One Save Bar.
 - Owner: operator
 - Accepted: 2026-10-28 by the operator.
-- Changes: [ADR 0039](0039-the-shell-releases-and-the-outline.md), The Shell, Releases And The Outline Of A Feed. ADR 0039 names the changed items.
+- Changes: [ADR 0039](../archive/adr/0039-the-shell-releases-and-the-outline.md), The Shell, Releases And The Outline Of A Feed. ADR 0039 names the changed items.
 - Changes: [ADR 0052](../archive/adr/0052-announcements-through-the-podcast-index-hub.md), Announcements Through The Podcast Index Hub. ADR 0052 names the changed items.
-- Changes: [ADR 0068](0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md), The Sequence Of The Sections And Fields Of An Editor Page. ADR 0068 names the changed items.
+- Changes: [ADR 0068](../archive/adr/0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md), The Sequence Of The Sections And Fields Of An Editor Page. ADR 0068 names the changed items.
 
 ## Context
 
@@ -16,7 +16,7 @@ The Hosts page shows these sections in this sequence: Library, Announcements, Ac
 
 On 2026-10-28 the operator examined the page. The first field on the page is "Largest download, in MB". The host cards are the function of the page, but they are at the bottom of the window. The operator asked for a settings page. The operator also asked for a guard that stops the settings with the minimum importance from coming first.
 
-[ADR 0068](0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md) item 1 gives a principle for the editor pages. Identity comes first, then content, then money and credits. The settings that the user sets one time come next, and the technical facts are last. Its test compares each page with a list in the ADR. Thus each new section needs a change to the ADR. The operator does not want a new ADR for each new feature.
+[ADR 0068](../archive/adr/0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md) item 1 gives a principle for the editor pages. Identity comes first, then content, then money and credits. The settings that the user sets one time come next, and the technical facts are last. Its test compares each page with a list in the ADR. Thus each new section needs a change to the ADR. The operator does not want a new ADR for each new feature.
 
 The Studio journeys in `../musicindex-research` (`research_notes/ui-design/journeys/studio/`) count the steps of six tasks. They give no data on how frequently a user does each task. They are research, not rules.
 
@@ -48,7 +48,7 @@ v4vmm has a destination "Settings". musicindex ADR 0027 R-SHELL-1 item 4 lets an
 
 ### The Settings Page
 
-9. "Settings" is a destination. It is at the bottom of the left panel, between Hosts and Lock Studio. It stays at that position with the outline, as Hosts does ([ADR 0039](0039-the-shell-releases-and-the-outline.md) item 1). At 760 px or less, the root page shows it at the same position.
+9. "Settings" is a destination. It is at the bottom of the left panel, between Hosts and Lock Studio. It stays at that position with the outline, as Hosts does ([ADR 0039](../archive/adr/0039-the-shell-releases-and-the-outline.md) item 1). At 760 px or less, the root page shows it at the same position.
 10. The Settings page has these sections:
     1. "Account" (`setup`), on a server only.
     2. "Connected apps" (`setup`).

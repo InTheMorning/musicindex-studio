@@ -20,7 +20,7 @@ The report was composed in STE. The shared checker reports findings that are mos
 
 The source of the crawler (`stophammer-crawler` and `stophammer-parser`) is not on this computer. The mapping of `podcast:txt purpose="npub"` to `entity_ids` comes from the example in `api.json`. It is not examined in code.
 
-[ADR 0064](../adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) compared the fields at `09f3cf9`. This report does not repeat those fields.
+[ADR 0064](../archive/adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md) compared the fields at `09f3cf9`. This report does not repeat those fields.
 
 ## Part 1: Functions That Studio Does Not Have
 

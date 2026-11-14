@@ -1,25 +1,27 @@
+> Archived: superseded by [ADR 0206](../../adr/0206-the-shell-and-the-editor-pages.md) on 2026-11-14. ADR 0206 restates each live rule of this ADR. Its item map gives the new item of each item.
+
 # ADR 0039: The Shell, Releases And The Outline Of A Feed
 
-- Status: Accepted
+- Status: Superseded by ADR 0206
 - Date: 2026-10-25
-- Changed by: [ADR 0135](0135-the-panel-holds-the-content-and-the-page-has-tabs.md). The pages of a feed are tabs on its page, and the outline holds its content.
+- Changed by: [ADR 0135](../../adr/0135-the-panel-holds-the-content-and-the-page-has-tabs.md). The pages of a feed are tabs on its page, and the outline holds its content.
 - Owner: operator
-- Changes: [ADR 0029](0029-editor-pages-toolbar-and-three-levels.md) items 5, 6 and 15, and its situational invariant "The sidebar tree has two levels".
+- Changes: [ADR 0029](../../adr/0029-editor-pages-toolbar-and-three-levels.md) items 5, 6 and 15, and its situational invariant "The sidebar tree has two levels".
 - Revised: 2026-10-25 by operator decision. Item 1 pins Hosts and Lock Studio to the bottom of the left panel. They always show, also with the outline of item 5 (musicindex ADR 0027 R-SHELL-1 item 4).
 - Revised: 2026-10-25 by operator decision. Items 10 and 11 put the left panel behind a menu button at narrow width. The menu button is at the top left and always visible. No tab bar shows.
-- Revised: 2026-10-25 by operator decision. Item 2a gives the sort and the view of Releases, as musicindex ADR 0027 R-LIST-1 item 6 asks. [ADR 0042](0042-ui-models-with-node-tests.md) gives the method of the mechanical criteria.
+- Revised: 2026-10-25 by operator decision. Item 2a gives the sort and the view of Releases, as musicindex ADR 0027 R-LIST-1 item 6 asks. [ADR 0042](../../adr/0042-ui-models-with-node-tests.md) gives the method of the mechanical criteria.
 - Revised: 2026-10-25 by operator decision, after the check of the touch back control in Firefox. Item 10a gives the bar of a feed two rows at narrow width.
 - Revised: 2026-10-25 by operator decision. musicindex ADR 0030 replaces the menu button and the drawer. Items 10, 10a, 11 and 11a now make Studio one stack at narrow width, with the root page and the outline page.
-- Revised: 2026-10-26 by operator decision, after the visual check of task 034f. On a server with a locked vault, "Unlock Studio" takes the place of "Lock Studio" in item 1. It opens the unlock sheet of [ADR 0056](0056-server-sign-in-methods-and-vault-wrappers.md).
-- Changed by: [ADR 0069](0069-the-outline-head-opens-the-feed-page.md) changes items 6 and 7. The outline head opens the first page, and the outline has no row for it. The link shows "‹ Releases".
+- Revised: 2026-10-26 by operator decision, after the visual check of task 034f. On a server with a locked vault, "Unlock Studio" takes the place of "Lock Studio" in item 1. It opens the unlock sheet of [ADR 0056](../../adr/0056-server-sign-in-methods-and-vault-wrappers.md).
+- Changed by: [ADR 0069](../../adr/0069-the-outline-head-opens-the-feed-page.md) changes items 6 and 7. The outline head opens the first page, and the outline has no row for it. The link shows "‹ Releases".
 - Revised: 2026-10-25 by operator decision. musicindex ADR 0031 makes the Touch back control of item 9 a circular icon button with no word.
 - Revised: 2026-10-25 by operator decision. Items 11 and 11a give the root page and the outline page the color of the left panel.
-- Changed by: [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) items 9 and 10 add the destination "Settings" between Hosts and Lock Studio in items 1, 5 and 11.
-- Changed by: [ADR 0072](0072-add-a-feed-opens-from-releases.md) removes Add a feed from items 1, 5 and 11. It opens from a button on Releases.
-- Changed by: [ADR 0073](0073-the-add-pages-ask-one-question-at-a-time.md) item 11 replaces "Add a track" and "Import files" in item 6 with one row "Add tracks".
-- Changed by: [ADR 0085](0085-each-artist-and-label-is-a-destination.md) adds a destination below Releases for each publisher feed in items 1 and 11. Releases no longer lists the publisher feeds (item 2).
-- Changed by: [ADR 0091](0091-a-change-set-edits-one-recipient-in-many-feeds.md) item 1 adds the destination "Recipients" before Hosts in items 1, 5 and 11.
-- Changed by: [ADR 0092](0092-file-hosts-and-the-destination-icons.md) renames Hosts to "File hosts" in items 1, 5 and 11, and gives each fixed destination an icon. No destination row shows a type dot.
+- Changed by: [ADR 0071](../../adr/0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) items 9 and 10 add the destination "Settings" between Hosts and Lock Studio in items 1, 5 and 11.
+- Changed by: [ADR 0072](../../adr/0072-add-a-feed-opens-from-releases.md) removes Add a feed from items 1, 5 and 11. It opens from a button on Releases.
+- Changed by: [ADR 0073](../../adr/0073-the-add-pages-ask-one-question-at-a-time.md) item 11 replaces "Add a track" and "Import files" in item 6 with one row "Add tracks".
+- Changed by: [ADR 0085](../../adr/0085-each-artist-and-label-is-a-destination.md) adds a destination below Releases for each publisher feed in items 1 and 11. Releases no longer lists the publisher feeds (item 2).
+- Changed by: [ADR 0091](../../adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md) item 1 adds the destination "Recipients" before Hosts in items 1, 5 and 11.
+- Changed by: [ADR 0092](../../adr/0092-file-hosts-and-the-destination-icons.md) renames Hosts to "File hosts" in items 1, 5 and 11, and gives each fixed destination an icon. No destination row shows a type dot.
 
 ## Context
 
@@ -27,7 +29,7 @@ musicindex ADR 0027 R-SHELL-1 gives the shell of musicindex.org, Studio and v4vm
 
 On 2026-10-24 the research examined Studio at commit `24980a3` (`docs/plans/research-ui-shell-request.md`). It found these facts:
 
-- The sidebar holds a tree of the feeds and their pages ([ADR 0029](0029-editor-pages-toolbar-and-three-levels.md) items 5 and 6).
+- The sidebar holds a tree of the feeds and their pages ([ADR 0029](../../adr/0029-editor-pages-toolbar-and-three-levels.md) items 5 and 6).
 - With no feed open, the editor area says "Select a feed". It is a placeholder.
 - The tree has Credits and links before Recipients and before the tracks.
 
@@ -37,22 +39,22 @@ The operator checked the Studio mockup of the research repository (`research_not
 
 ### The Destinations
 
-1. With no feed open, the left panel holds the destinations. Releases is at the top. Add a feed opens from Releases ([ADR 0072](0072-add-a-feed-opens-from-releases.md)). Hosts, Settings and Lock Studio are at the bottom of the panel, and stay there at each height of the window. On a server with a locked vault, "Unlock Studio" is in the place of "Lock Studio".
+1. With no feed open, the left panel holds the destinations. Releases is at the top. Add a feed opens from Releases ([ADR 0072](../../adr/0072-add-a-feed-opens-from-releases.md)). Hosts, Settings and Lock Studio are at the bottom of the panel, and stay there at each height of the window. On a server with a locked vault, "Unlock Studio" is in the place of "Lock Studio".
 2. Releases is a list page at the full width of the content area. Each row shows the cover, the type label, the host and the draft state, for example "Saved, not written".
 2a. Releases has the sort and the view of musicindex ADR 0027 R-LIST-1:
    - The sorts are "Newest", the default, and "A to Z" with a letter bar. "Newest" gives the feed that joined the collection last first.
    - The views are rows, the default, and tiles.
    - A sort or a view that is not the default is in the query of the address, as `sort=az` and `view=tiles`.
 
-3. Releases is the start page. An empty collection starts the first-run wizard of [ADR 0020](0020-first-run-asks-one-question.md).
+3. Releases is the start page. An empty collection starts the first-run wizard of [ADR 0020](../../adr/0020-first-run-asks-one-question.md).
 4. No page is a placeholder. "Select a feed" goes.
 
 ### The Outline Of An Open Feed
 
 5. While a feed is open, the left panel shows the outline of that feed in place of Releases. Hosts, Settings and Lock Studio stay at the bottom (item 1). The left panel is one panel at any time.
-6. The outline shows a link "Releases", the cover and the title of the feed, then these items in this sequence: Album, each track by its number and title, "Add tracks" ([ADR 0073](0073-the-add-pages-ask-one-question-at-a-time.md) item 11), Value routes, Credits and links, Files.
+6. The outline shows a link "Releases", the cover and the title of the feed, then these items in this sequence: Album, each track by its number and title, "Add tracks" ([ADR 0073](../../adr/0073-the-add-pages-ask-one-question-at-a-time.md) item 11), Value routes, Credits and links, Files.
 7. The link "Releases" opens the Releases page at the same scroll position, with the row of the feed marked. It is a destination link, not a back control (musicindex ADR 0027 R-NAV-2 item 5).
-8. Each item of the outline opens one page of the editor. [ADR 0029](0029-editor-pages-toolbar-and-three-levels.md) items 7 to 9 stay.
+8. Each item of the outline opens one page of the editor. [ADR 0029](../../adr/0029-editor-pages-toolbar-and-three-levels.md) items 7 to 9 stay.
 
 ### Back
 
@@ -82,12 +84,12 @@ The operator checked the Studio mockup of the research repository (`research_not
 
 - The sidebar tree of ADR 0029 goes, and the outline replaces it.
 - The tests that examine the tree change with the build of this ADR.
-- The draft status, "Versions" and "Review" stay in the editor bar ([ADR 0029](0029-editor-pages-toolbar-and-three-levels.md) items 1 to 4).
+- The draft status, "Versions" and "Review" stay in the editor bar ([ADR 0029](../../adr/0029-editor-pages-toolbar-and-three-levels.md) items 1 to 4).
 - Open: a search of the collection (O-9). No decision covers it.
 
 ## Verification
 
-Mechanical, at the owning layer, in the model modules of [ADR 0042](0042-ui-models-with-node-tests.md):
+Mechanical, at the owning layer, in the model modules of [ADR 0042](../../adr/0042-ui-models-with-node-tests.md):
 
 - With no feed open, the UI model of the left panel gives the destinations of item 1, and no text "Select a feed".
 - With a feed open, the outline model gives its items in the sequence of item 6.

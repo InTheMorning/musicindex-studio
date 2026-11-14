@@ -27,7 +27,7 @@ Studio has no record of a person. The data is in three places that do not refer 
 | Value recipients of each feed | Table `feed_recipients`, from each read and write | [ADR 0027](../adr/0027-the-recipient-picker.md) |
 | Recipients that the user saved | Table `saved_recipients` | ADR 0027 item 5 |
 | The wallet of a Lightning address | Table `keysend_lookups` | [ADR 0095](../adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md) |
-| Credits (`podcast:person`) | Only in the feed model of each feed. No table. | [ADR 0064](../adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md), [ADR 0075](../adr/0075-the-publisher-page-has-payments-and-credits.md) |
+| Credits (`podcast:person`) | Only in the feed model of each feed. No table. | [ADR 0064](../archive/adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md), [ADR 0075](../adr/0075-the-publisher-page-has-payments-and-credits.md) |
 | Nostr keys of persons and feeds | Only in the feed model. The profile search gets profiles from relays and musicindex. | [ADR 0074](../adr/0074-nostr-keys-for-artists-labels-and-contributors.md) |
 | Support links (`podcast:funding`) | Only in the feed model, as `fundings` on the channel and on each item. The editor shows them as "Support links". No table and no picker. | ADR 0023, ADR 0075 |
 

@@ -1,6 +1,6 @@
 # Studio v1 Task 026a: The Feed List Facts
 
-Parent: [task 026](studio-v1-task-026-shell.md). Decisions: [ADR 0039](../adr/0039-the-shell-releases-and-the-outline.md) items 2 and 2a.
+Parent: [task 026](studio-v1-task-026-shell.md). Decisions: [ADR 0039](../archive/adr/0039-the-shell-releases-and-the-outline.md) items 2 and 2a.
 Sequence: the first packet of task 026.
 
 ## Goal

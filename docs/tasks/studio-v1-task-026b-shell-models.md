@@ -1,6 +1,6 @@
 # Studio v1 Task 026b: The Shell Models And The Node Tests
 
-Parent: [task 026](studio-v1-task-026-shell.md). Decisions: [ADR 0042](../adr/0042-ui-models-with-node-tests.md), [ADR 0039](../adr/0039-the-shell-releases-and-the-outline.md) items 1 to 9 and the Verification section, musicindex ADR 0027 R-NAV-2 items 2 to 4 and R-LIST-1.
+Parent: [task 026](studio-v1-task-026-shell.md). Decisions: [ADR 0042](../adr/0042-ui-models-with-node-tests.md), [ADR 0039](../archive/adr/0039-the-shell-releases-and-the-outline.md) items 1 to 9 and the Verification section, musicindex ADR 0027 R-NAV-2 items 2 to 4 and R-LIST-1.
 Sequence: the second packet of task 026. It depends on 026a.
 
 ## Goal

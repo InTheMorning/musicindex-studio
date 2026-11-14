@@ -130,6 +130,10 @@ export function overflows({ controls = 'button, [role=button], [role=radio], [ro
 // For a text field (input or textarea), the helper uses its content box, not its
 // border box. Thus a control in the padding of a field, such as a clear button, is
 // not in the list, because the text of the field never goes under it.
+// The helper uses only the visible part of each control. Each ancestor with an
+// overflow value that is not `visible` cuts the box on the axis of that value.
+// A control with no visible part, such as a row below the end of a scroll area,
+// is not in the list.
 export function overlaps({ controls = 'button, a, input, select, textarea, [role=button], [role=radio], [role=tab]' } = {}) {
   const shown = (e) => (e.checkVisibility ? e.checkVisibility() : !!e.offsetParent);
   const label = (e) => (e.getAttribute('aria-label') || e.textContent || e.getAttribute('placeholder') || '').trim().replace(/\s+/g, ' ').slice(0, 40) || e.outerHTML.slice(0, 70);
@@ -159,12 +163,26 @@ export function overlaps({ controls = 'button, a, input, select, textarea, [role
       bottom: r.bottom - px('border-bottom-width') - px('padding-bottom'),
     };
   };
+  // The part of the box that the ancestors that clip or scroll do not cut.
+  const clip = (e, box) => {
+    let { left, right, top, bottom } = box;
+    for (let a = e.parentElement; a; a = a.parentElement) {
+      const s = getComputedStyle(a);
+      if (s.overflowX === 'visible' && s.overflowY === 'visible') continue;
+      const b = a.getBoundingClientRect();
+      if (s.overflowX !== 'visible') { left = Math.max(left, b.left); right = Math.min(right, b.right); }
+      if (s.overflowY !== 'visible') { top = Math.max(top, b.top); bottom = Math.min(bottom, b.bottom); }
+    }
+    return { left, right, top, bottom };
+  };
   const items = [];
   for (const e of document.querySelectorAll(controls)) {
     if (!shown(e)) continue;
     const r = e.getBoundingClientRect();
     if (r.width === 0 || r.height === 0 || under(e, r)) continue;
-    items.push({ e, r, box: content(e, r) });
+    const box = clip(e, content(e, r));
+    if (box.right - box.left <= 0 || box.bottom - box.top <= 0) continue;
+    items.push({ e, r, box });
   }
   const found = [];
   for (let i = 0; i < items.length; i++) {

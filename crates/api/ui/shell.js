@@ -229,6 +229,19 @@ export function pageTabs(feed, view, checkCount = 0) {
   return list.map((tab) => ({ ...tab, current: tab.page === shown }));
 }
 
+// Do the tabs fit as a segmented control in their column (ADR 0197 item 1)?
+// Each segment has the width of the longest label, plus 4 px at each side
+// (musicindex ADR 0051 R-SEG-1 items 4 and 5). `available` is the width of the
+// tray. `labelWidths` are the widths of the labels on one line, with the mark
+// of a tab that is not saved. `gap` is the space between two segments.
+// `padding` is the space between the tray and a segment, at one side.
+export function tabsFit({ available, labelWidths, gap, padding }) {
+  if (labelWidths.length === 0) return true;
+  const segment = Math.max(...labelWidths) + 8;
+  const needed = labelWidths.length * segment + (labelWidths.length - 1) * gap + 2 * padding;
+  return needed <= available;
+}
+
 // Is the view a feed, or the outline of a feed? Both open one feed.
 export function isFeedView(view) {
   return view.name === 'feed' || view.name === 'outline';

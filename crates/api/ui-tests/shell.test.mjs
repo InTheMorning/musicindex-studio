@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  pageTabs, mediumKind, roleChoice, toggleRole, isEditable, isReadOnly, reviewHost, moveNote, isPublisher, isPlaylist, trackKey, isTrack,
+  pageTabs, tabsFit, mediumKind, roleChoice, toggleRole, isEditable, isReadOnly, reviewHost, moveNote, isPublisher, isPlaylist, trackKey, isTrack,
   leftPanel, releasesList, listQuery, queryText, sortLabel, sortEntries, compareNames, byName, segmentKey, levelFeedSet,
   startNav, pushNav, backNav, forwardNav, canBack, canForward, setScroll, releasesView,
   narrowStack, openFeedView, navAtWidth, widthNav, wideView, publisherArt, mosaicCells, otherFeedText,
@@ -387,6 +387,22 @@ test('a playlist has only its head in the outline', () => {
   const playlist = { ...album, id: 4, medium: 'musicL' };
   const panel = leftPanel({ view: { name: 'feed', id: 4, page: 'tracks' }, feeds: [playlist], model, vaultOpen: false });
   assert.deepEqual(labels(panel.items), ['Releases'], 'ADR 0135 item 4: a playlist has no track pages.');
+});
+
+test('the tabs fit at the exact width and not at 1 px less', () => {
+  const owner = 'ADR 0197 item 1: check tabsFit in shell.js.';
+  // Three segments of 60 + 8 px, two gaps of 2 px and a tray padding of 2 px at each side.
+  const input = { labelWidths: [60, 60, 60], gap: 2, padding: 2 };
+  assert.equal(tabsFit({ ...input, available: 3 * 68 + 2 * 2 + 4 }), true, owner);
+  assert.equal(tabsFit({ ...input, available: 3 * 68 + 2 * 2 + 4 - 1 }), false, owner);
+});
+
+test('each tab segment has the width of the longest label', () => {
+  const owner = 'ADR 0197 item 1: check tabsFit in shell.js.';
+  const input = { labelWidths: [30, 90, 40], gap: 2, padding: 2 };
+  assert.equal(tabsFit({ ...input, available: 3 * 98 + 4 + 4 }), true, owner);
+  assert.equal(tabsFit({ ...input, available: 3 * 98 + 4 + 4 - 1 }), false, owner);
+  assert.equal(tabsFit({ labelWidths: [], gap: 2, padding: 2, available: 0 }), true, owner);
 });
 
 test('the page of a feed gives the tabs of its type', () => {

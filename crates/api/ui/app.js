@@ -1,5 +1,5 @@
 // Music Index Studio UI (ADR 0016). Preact and htm, with no build step.
-import { html, render, useState, useEffect, useCallback, useRef, useContext, createContext } from './vendor/htm-preact-standalone.module.js';
+import { html, render, useState, useEffect, useLayoutEffect, useCallback, useRef, useContext, createContext } from './vendor/htm-preact-standalone.module.js';
 import { checkCount } from './feedcheck.js';
 import { pageSequence, settingsTabs } from './pages.js';
 import { useFieldList, RowList } from './pickers.js';
@@ -47,7 +47,7 @@ import {
   mediumKind, feedKind, FIRST_CLASS_ROLES, roleWord, kindGlow, isEditable, isReadOnly, isPublisher, trackKey, isTrack,
   leftPanel, releasesList, listQuery, queryText, sortLabel, sortEntries, mosaicCells, otherFeedText, feedCover,
   startNav, pushNav, backNav, forwardNav, releasesView, canBack, canForward, setScroll,
-  isFeedView, openFeedView, navAtWidth, pageTabs, segmentKey, levelFeedSet } from './shell.js';
+  isFeedView, openFeedView, navAtWidth, pageTabs, tabsFit, segmentKey, levelFeedSet } from './shell.js';
 import {
   eventsToSign, signErrorText,
   npubOf, addressLines, linesText, invalidConfigField, blossomDefaultName, siteAddress, siteNameFromGuid, isNsec,
@@ -2122,30 +2122,67 @@ export function useFeedCheck(feedId, draft) {
   return { check, count: checkCount(check), reading, repairing, error, refused, readAgain, repair };
 }
 
+// The width of the column that holds the tabs, and the width of each label on
+// one line (ADR 0197 item 2). `host` is the element of the column. `probe` is
+// a hidden element with one copy of each label. The hook measures again when
+// the column, a label or the page font changes, and gives true when the
+// segmented control fits (`tabsFit`).
+function useTabsFit(labelKey) {
+  const host = useRef(null);
+  const probe = useRef(null);
+  const [fit, setFit] = useState(false);
+  useLayoutEffect(() => {
+    const hostNode = host.current;
+    const probeNode = probe.current;
+    if (!hostNode || !probeNode) return undefined;
+    const measure = () => {
+      const labelWidths = [...probeNode.children].map((node) => node.getBoundingClientRect().width);
+      // The tray has a margin of 32 px at each side and a maximum width of 816 px.
+      const available = Math.min(hostNode.clientWidth - 64, 816);
+      setFit(tabsFit({ available, labelWidths, gap: 2, padding: 2 }));
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(hostNode);
+    for (const node of probeNode.children) observer.observe(node);
+    // A font that loads late changes the width of each label.
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(measure);
+    return () => observer.disconnect();
+  }, [labelKey]);
+  return { host, probe, fit };
+}
+
 // The tabs of the page of a feed (ADR 0135), or the `tabs` of a different
-// page with `current` and `onSelect`, such as Settings (ADR 0166 item 3). At a
-// narrow width they are one select menu, so that no tab starts outside the
-// window.
+// page with `current` and `onSelect`, such as Settings (ADR 0166 item 3). They
+// are a segmented control when each segment can hold its longest label on one
+// line. Else they are one select menu, so that no label breaks (ADR 0197).
+// At 760 px or less they are always the menu.
 function PageTabs({ feed, view, go, checkCount = 0, tabs: suppliedTabs, current: selected, onSelect, label = 'Pages of this feed' }) {
   const narrow = useNarrow();
   const settings = suppliedTabs !== undefined;
   const tabs = settings
     ? suppliedTabs.map((tab) => ({ page: tab.id, label: tab.label, current: tab.id === selected, pending: tab.pending }))
     : pageTabs(feed, view, checkCount);
+  const { host, probe, fit } = useTabsFit(tabs.map((tab) => `${tab.label}:${tab.pending ? 1 : 0}`).join('|'));
   if (tabs.length === 0) return null;
   const open = settings
     ? (page) => onSelect(page)
     : (page) => go({ name: 'feed', id: feed.id, page, ...(view.from ? { from: view.from } : {}) });
-  if (narrow) {
-    return html`<select class="button page-tab-menu" aria-label=${settings ? label : 'Page of this feed'}
+  // The labels of the probe have the weight of a selected segment, which is
+  // the widest.
+  const probeLabels = html`<div class="page-tabs-probe" aria-hidden="true" ref=${probe}>
+    ${tabs.map((tab) => html`<span key=${tab.page}>${tab.label}<${SettingsPencil} pending=${tab.pending} /></span>`)}
+  </div>`;
+  if (narrow || !fit) {
+    return html`<div class="page-tabs-host" ref=${host}>${probeLabels}<select class="button page-tab-menu" aria-label=${settings ? label : 'Page of this feed'}
       value=${tabs.find((tab) => tab.current)?.page} onChange=${(e) => open(e.target.value)}>
       ${tabs.map((tab) => html`<option key=${tab.page} value=${tab.page}>${tab.label}${tab.pending ? ' (Not saved)' : ''}</option>`)}
-    </select>`;
+    </select></div>`;
   }
-  return html`<nav class="page-tabs segmented" aria-label=${settings ? label : 'Pages of this feed'} onKeyDown=${onSegmentKey}>
+  return html`<div class="page-tabs-host" ref=${host}>${probeLabels}<nav class="page-tabs segmented" aria-label=${settings ? label : 'Pages of this feed'} onKeyDown=${onSegmentKey}>
     ${tabs.map((tab) => html`<button key=${tab.page} class="segment" type="button" tabIndex=${tab.current ? 0 : -1}
       aria-current=${tab.current ? 'page' : undefined} onClick=${() => open(tab.page)}>${tab.label}<${SettingsPencil} pending=${tab.pending} /></button>`)}
-  </nav>`;
+  </nav></div>`;
 }
 
 // The toolbar title: the feed title on the album page, or the feed title in

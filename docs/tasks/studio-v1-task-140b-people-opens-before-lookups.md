@@ -2,7 +2,15 @@
 
 Decision: [ADR 0201](../adr/0201-people-opens-before-the-lightning-address-lookups.md).
 
-Status: Open. Task 140a must be complete first, because this task uses its route.
+Status: Complete on 2026-11-14. The human check of ADR 0201 is open.
+
+## Result
+
+- `refreshLookups(api)` in `recipients.js` sends `POST /recipients/lookups` and gives `true` only when `checked` is more than 0.
+- `PeoplePage` shows the list after the four other requests. `loadRecipients` then reads `/recipients`, sends the lookups, and reads `/recipients` again when an address was checked. Only the answers of the last load set the state.
+- The delegate ran the recipients and the lookups inside `run()`. Thus **Update from Linked Pages**, **Export People** and the hide action stayed disabled until the lookups ended. The main session moved them out of `run()`, and `usePerson` no longer waits for the lookups. The scan test now proves both.
+- Walk: `setup-138.py` with `steps-140-{light,dark}.json`. The four list requests ended in about 10 ms and `/recipients` in about 50 ms. The lookups took 300 ms to 1500 ms after that, and the two buttons stayed enabled. After the lookups, the list had 104 rows in place of 107, because a found lookup joins a Lightning address and its node key into one wallet.
+- The fit check found addresses on the page of a person that broke inside a word (musicindex ADR 0065 R-FIT-3). Only one of the ten `address-text` elements had `data-fit-allow-break`. The main session gave the attribute to each `address-text` element in `peoplepages.js` and `values.js`. The fit check at 390 px and 761 px then gave no finding, and `$edges()` and `$overflow()` gave no item.
 
 ## Goal
 

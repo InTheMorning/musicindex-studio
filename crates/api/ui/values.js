@@ -165,7 +165,7 @@ function Recipients({ id, recipients, defaultType, onChange }) {
           onChange=${(e) => change('fee')(e.target.checked ? 'true' : null)} />
           Fee, paid first</label>
         <div class="link-row static address-row"><span class="text"><span class="label">${line.label}</span>
-            ${line.address && html`<span class="summary mono address-text">${line.address}</span>`}
+            ${line.address && html`<span class="summary mono address-text" data-fit-allow-break>${line.address}</span>`}
             ${line.account && html`<span class="summary">Account ${line.account}</span>`}</span>
           <${SaveRecipientButton} recipient=${r} />
           <button class="button" type="button" aria-label=${`Change the address of ${r.name || r.address || 'this recipient'}`} onClick=${() => setSheet({ cid: r._cid })}>Change…</button>

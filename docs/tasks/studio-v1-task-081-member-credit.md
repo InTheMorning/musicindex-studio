@@ -1,7 +1,7 @@
 # Studio v1 Task 081: The Credit Of A Member And The Members Of A Feed
 
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The People Module".
-Decision: [ADR 0118](../adr/0118-member-of-offers-a-credit-on-the-artist-feed.md). It uses [ADR 0116](../adr/0116-the-page-of-a-person-has-save-and-discard.md), [ADR 0091](../adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md), [ADR 0111](../adr/0111-the-page-of-a-person-checks-the-feeds.md) item 10 and [ADR 0112](../adr/0112-a-credit-role-comes-from-a-list.md).
+Decision: [ADR 0118](../adr/0118-member-of-offers-a-credit-on-the-artist-feed.md). It uses [ADR 0116](../adr/0116-the-page-of-a-person-has-save-and-discard.md), [ADR 0091](../adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md), [ADR 0111](../archive/adr/0111-the-page-of-a-person-checks-the-feeds.md) item 10 and [ADR 0112](../adr/0112-a-credit-role-comes-from-a-list.md).
 
 Status: Complete. Packets 081a and 081b are committed. The screenshot visual check passed on 2026-11-02. The human test is open. The visual check found two open items. The operator decided them on 2026-11-02 as ADR 0118 items 11 and 12, and [task 082](studio-v1-task-082-credit-name-and-title.md) gives their work.
 

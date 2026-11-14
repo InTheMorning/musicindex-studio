@@ -4,8 +4,8 @@
 - Date: 2026-10-31
 - Owner: operator
 - Accepted: 2026-10-31 by the operator.
-- Changed by: [ADR 0099](0099-the-people-destination-and-the-page-of-a-person.md). Items 6 to 8, 10 to 12, 14 and 15: the words of the rows, the menus and the hint, and the pages of People.
-- Changed by: [ADR 0098](0098-the-people-module.md): a person holds more than one wallet.
+- Changed by: [ADR 0099](../archive/adr/0099-the-people-destination-and-the-page-of-a-person.md). Items 6 to 8, 10 to 12, 14 and 15: the words of the rows, the menus and the hint, and the pages of People.
+- Changed by: [ADR 0098](../archive/adr/0098-the-people-module.md): a person holds more than one wallet.
 - Changed by: [ADR 0201](0201-people-opens-before-the-lightning-address-lookups.md) item 3: the list of the recipients sends no lookup, and a separate route sends the lookups with no lock.
 - Changes: [ADR 0091](0091-a-change-set-edits-one-recipient-in-many-feeds.md) items 2 to 8 and 12. An operation acts on each address of one wallet, and the page of a recipient has a fifth operation.
 - Changed by: [ADR 0097](0097-studio-suggests-the-lightning-address-of-a-wallet.md), Studio Suggests The Lightning Address Of A Wallet.

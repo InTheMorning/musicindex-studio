@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-11-06
 - Owner: operator
-- Changes: [ADR 0111](0111-the-page-of-a-person-checks-the-feeds.md) item 8, the payees first in the sheet "Add a Wallet" and the row that adds a wallet.
+- Changes: [ADR 0111](../archive/adr/0111-the-page-of-a-person-checks-the-feeds.md) item 8, the payees first in the sheet "Add a Wallet" and the row that adds a wallet.
 - Source: [findings of local use, finding 24](../reviews/2026-11-06-local-use-findings.md)
 
 ## Context

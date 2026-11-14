@@ -1,15 +1,17 @@
+> Archived: superseded by [ADR 0203](../../adr/0203-people.md) on 2026-11-14. ADR 0203 restates each live rule of this ADR. Its item map gives the new item of each item.
+
 # ADR 0103: One Person Collects The Items Of Many Suggestions
 
-- Status: Accepted
+- Status: Superseded by ADR 0203
 - Date: 2026-11-01
 - Owner: operator
 - Accepted: 2026-11-01 by the operator, from the mockups in `.studio-dev/mockup-101/site/merge.html`.
 - Changes: [ADR 0098](0098-the-people-module.md) items 12 and 14, the grouping of the suggestions and the make of a person.
 - Changes: [ADR 0099](0099-the-people-destination-and-the-page-of-a-person.md) items 3 and 4, the sheet "Make a Person" and the page of a person.
-- Supersedes: [ADR 0101](../archive/adr/0101-a-suggestion-groups-the-items-of-one-name.md). Items 1 to 7 of ADR 0101 are items 1 to 7 of this ADR.
-- Uses: [ADR 0102](0102-delete-a-person-changes-no-feed.md) for "Delete Person", and [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) for the tiers.
+- Supersedes: [ADR 0101](0101-a-suggestion-groups-the-items-of-one-name.md). Items 1 to 7 of ADR 0101 are items 1 to 7 of this ADR.
+- Uses: [ADR 0102](0102-delete-a-person-changes-no-feed.md) for "Delete Person", and [ADR 0071](../../adr/0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) for the tiers.
 - Changed by: [ADR 0111](0111-the-page-of-a-person-checks-the-feeds.md). Items 8 and 9: one sheet "Check: {name}" with the menu "Person" replaces the sheets "Make a Person" and "Add to a Person".
-- Changed by: [ADR 0193](0193-a-destructive-button-is-the-first-button-of-its-row.md). Item 14: "Delete Person" is the first button of its row, before "Merge with a Person".
+- Changed by: [ADR 0193](../../adr/0193-a-destructive-button-is-the-first-button-of-its-row.md). Item 14: "Delete Person" is the first button of its row, before "Merge with a Person".
 - Changed by: [ADR 0156](0156-the-page-of-a-person-lists-where-the-person-is.md), The Page Of A Person Lists Where The Person Is.
 
 ## Context

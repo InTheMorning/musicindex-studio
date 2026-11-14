@@ -1,23 +1,25 @@
+> Archived: superseded by [ADR 0203](../../adr/0203-people.md) on 2026-11-14. ADR 0203 restates each live rule of this ADR. Its item map gives the new item of each item.
+
 # ADR 0099: The People Destination And The Page Of A Person
 
-- Status: Accepted
+- Status: Superseded by ADR 0203
 - Date: 2026-11-01
 - Owner: operator
 - Accepted: 2026-11-01 by the operator.
-- Changes: [ADR 0091](0091-a-change-set-edits-one-recipient-in-many-feeds.md) items 1 to 4 and 21.
-- Changes: [ADR 0092](0092-file-hosts-and-the-destination-icons.md), the name and the icon of the first destination of the bottom group.
-- Changes: [ADR 0095](0095-a-lightning-address-and-its-node-key-are-one-recipient.md) items 6 to 8, 10 to 12, 14 and 15.
-- Changes: [ADR 0096](0096-add-to-an-artist-or-label.md), the name of the operation.
-- Changes: [ADR 0027](0027-the-recipient-picker.md) items 1 to 3 and 7, for the rows of the picker.
+- Changes: [ADR 0091](../../adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md) items 1 to 4 and 21.
+- Changes: [ADR 0092](../../adr/0092-file-hosts-and-the-destination-icons.md), the name and the icon of the first destination of the bottom group.
+- Changes: [ADR 0095](../../adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md) items 6 to 8, 10 to 12, 14 and 15.
+- Changes: [ADR 0096](../../adr/0096-add-to-an-artist-or-label.md), the name of the operation.
+- Changes: [ADR 0027](../../adr/0027-the-recipient-picker.md) items 1 to 3 and 7, for the rows of the picker.
 - Changed by: [ADR 0103](0103-one-person-collects-the-items-of-many-suggestions.md). Items 3 and 4: "Add to a Person", "More from your feeds", "Merge With a Person", and the profile of each key.
 - Changed by: [ADR 0102](0102-delete-a-person-changes-no-feed.md). Items 4 and 11: the page of a person gets "Delete Person", and "Remove" reads "Remove From Feeds".
-- Uses: [ADR 0098](0098-the-people-module.md) for the data and the operations. Also [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) for the tiers, [ADR 0028](0028-summary-lines-and-one-open-entry.md) and [ADR 0029](0029-editor-pages-toolbar-and-three-levels.md) for the rows and the levels, and musicindex ADR 0023 for the words.
+- Uses: [ADR 0098](0098-the-people-module.md) for the data and the operations. Also [ADR 0071](../../adr/0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) for the tiers, [ADR 0028](../../adr/0028-summary-lines-and-one-open-entry.md) and [ADR 0029](../../adr/0029-editor-pages-toolbar-and-three-levels.md) for the rows and the levels, and musicindex ADR 0023 for the words.
 - Changed by: [ADR 0111](0111-the-page-of-a-person-checks-the-feeds.md). Items 3 to 5 and 7: the sheet "Check: {name}", the sequence of the page of a person, "Check your feeds" in the place of "Where used", and "Add to a Person" for a wallet.
-- Changed by: [ADR 0182](0182-the-page-of-a-person-starts-with-its-links-and-has-a-nickname.md). Item 4: the head shows the nickname of the person.
-- Changed by: [ADR 0193](0193-a-destructive-button-is-the-first-button-of-its-row.md). In a row of buttons, the destructive action of a recipient is the first button.
-- Changed by: [ADR 0123](0123-one-type-of-value-has-one-picker.md), One Type Of Value Has One Picker.
-- Changed by: [ADR 0139](0139-the-default-address-is-on-its-row.md), The Default Address Is On Its Row.
-- Changed by: [ADR 0145](0145-each-sheet-that-adds-a-value-has-one-layout.md), Each Sheet That Adds A Value Has One Layout.
+- Changed by: [ADR 0182](../../adr/0182-the-page-of-a-person-starts-with-its-links-and-has-a-nickname.md). Item 4: the head shows the nickname of the person.
+- Changed by: [ADR 0193](../../adr/0193-a-destructive-button-is-the-first-button-of-its-row.md). In a row of buttons, the destructive action of a recipient is the first button.
+- Changed by: [ADR 0123](../../adr/0123-one-type-of-value-has-one-picker.md), One Type Of Value Has One Picker.
+- Changed by: [ADR 0139](../../adr/0139-the-default-address-is-on-its-row.md), The Default Address Is On Its Row.
+- Changed by: [ADR 0145](../../adr/0145-each-sheet-that-adds-a-value-has-one-layout.md), Each Sheet That Adds A Value Has One Layout.
 
 ## Context
 
@@ -51,7 +53,7 @@
     - Identity: the picture, the name, the usual role, "Member of" with a link to each publisher feed, and the Nostr key with the result of its check.
     - The buttons "Use This Address", "Rename" and "Add to All Releases" (action), then "Remove" (destructive).
     - One navigation row "Where used", with "Pays in N feeds · Credited in N feeds" and the number of feeds.
-    - Content: "Payment", with the default address on its own row ([ADR 0139](0139-the-default-address-is-on-its-row.md)), one group for each wallet, a `lud16` suggestion with its lookup result, and "Add a Wallet".
+    - Content: "Payment", with the default address on its own row ([ADR 0139](../../adr/0139-the-default-address-is-on-its-row.md)), one group for each wallet, a `lud16` suggestion with its lookup result, and "Add a Wallet".
     - Details: "Credits", with the fields "Usual role", "Picture address" and "Information address".
     - Details: "Support links", with each link and "Add a Support Link".
 5. The page "Where used" lists each feed of the person. A row shows the type and the places, the line "Pays {address}", and the line "Credited as {role}". A row opens the feed in the editor.
@@ -82,7 +84,7 @@
 ### The Pickers
 
 19. The recipient picker of the value editor shows "People" first. A person row shows the address that it adds, which is the default address. Then the picker shows "Payees with no person". An added recipient gets no split (ADR 0030).
-20. Changed by [ADR 0145](0145-each-sheet-that-adds-a-value-has-one-layout.md): the list is in the sheet "Add a Credit", and a selection fills its form. The credits editor gets "Pick From Your People". A person row shows the usual role and the Nostr key. A pick adds one credit with the name, the usual role, the picture, the information address and the key of the person.
+20. Changed by [ADR 0145](../../adr/0145-each-sheet-that-adds-a-value-has-one-layout.md): the list is in the sheet "Add a Credit", and a selection fills its form. The credits editor gets "Pick From Your People". A person row shows the usual role and the Nostr key. A pick adds one credit with the name, the usual role, the picture, the information address and the key of the person.
 21. Changed by ADR 0145: the list is in the sheet "Add a Support Link". The support links editor gets "Pick From Your People", with the support links of each person.
 
 ## Alternatives Considered

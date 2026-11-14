@@ -5,7 +5,7 @@
 - Owner: operator
 - Accepted: 2026-11-01 by the operator.
 - Examined by: [ADR 0159](0159-a-person-can-link-to-a-page-on-music-index.md) item 11. A read-only link keeps a public feed GUID and a title. The People data stays plain at rest.
-- Uses: [ADR 0014](0014-collection-in-sqlite.md) (the collection in SQLite), [ADR 0055](0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) items 9 and 14 (account deletion, and the work with a locked vault), [ADR 0098](0098-the-people-module.md) and [ADR 0103](0103-one-person-collects-the-items-of-many-suggestions.md) (the People module).
+- Uses: [ADR 0014](0014-collection-in-sqlite.md) (the collection in SQLite), [ADR 0055](0055-the-server-shell-user-folders-sessions-and-the-vault-window.md) items 9 and 14 (account deletion, and the work with a locked vault), [ADR 0098](../archive/adr/0098-the-people-module.md) and [ADR 0103](../archive/adr/0103-one-person-collects-the-items-of-many-suggestions.md) (the People module).
 - Changed by: [ADR 0159](0159-a-person-can-link-to-a-page-on-music-index.md), A Person Can Link To A Page On Music Index.
 
 ## Context

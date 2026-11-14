@@ -1,13 +1,15 @@
+> Archived: superseded by [ADR 0203](../../adr/0203-people.md) on 2026-11-14. ADR 0203 restates each live rule of this ADR. Its item map gives the new item of each item.
+
 # ADR 0156: The Page Of A Person Lists Where The Person Is
 
-- Status: Accepted
+- Status: Superseded by ADR 0203
 - Date: 2026-11-08
 - Owner: operator
 - Accepted: 2026-11-08 by the operator, from the mockups of the questionnaire. The operator asked to see which tracks pay and credit a person, with the split of each track.
-- Uses: [ADR 0143](0143-a-feed-row-names-the-tracks-of-a-person.md) for the places, [ADR 0028](0028-summary-lines-and-one-open-entry.md) for the entries, [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) for the tier.
+- Uses: [ADR 0143](../../adr/0143-a-feed-row-names-the-tracks-of-a-person.md) for the places, [ADR 0028](../../adr/0028-summary-lines-and-one-open-entry.md) for the entries, [ADR 0071](../../adr/0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) for the tier.
 - Changes: [ADR 0111](0111-the-page-of-a-person-checks-the-feeds.md) item 12, the lines of the row "Check your feeds".
 - Changes: [ADR 0103](0103-one-person-collects-the-items-of-many-suggestions.md), the lines of a credit row of "More from your feeds".
-- Changed by: [ADR 0182](0182-the-page-of-a-person-starts-with-its-links-and-has-a-nickname.md). Item 1: "Where this person is" comes after "Credits".
+- Changed by: [ADR 0182](../../adr/0182-the-page-of-a-person-starts-with-its-links-and-has-a-nickname.md). Item 1: "Where this person is" comes after "Credits".
 
 ## Context
 
@@ -34,4 +36,4 @@ Mechanical:
 
 Visual, by the agent: the page of a person with an open entry, at 1280 px and at 390 px with touch. The agent examines the dark and the light theme.
 
-Visual result: passed on 2026-11-08 ([visual checks of 2026-11-08](../reviews/2026-11-08-visual-checks.md)).
+Visual result: passed on 2026-11-08 ([visual checks of 2026-11-08](../../reviews/2026-11-08-visual-checks.md)).

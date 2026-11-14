@@ -1,28 +1,30 @@
+> Archived: superseded by [ADR 0203](../../adr/0203-people.md) on 2026-11-14. ADR 0203 restates each live rule of this ADR. Its item map gives the new item of each item.
+
 # ADR 0098: The People Module
 
-- Status: Accepted
+- Status: Superseded by ADR 0203
 - Date: 2026-11-01
 - Owner: operator
 - Accepted: 2026-11-01 by the operator.
-- Changes: [ADR 0027](0027-the-recipient-picker.md) items 2 and 5 (the saved recipients become people).
-- Changes: [ADR 0074](0074-nostr-keys-for-artists-labels-and-contributors.md), its non-goal for `lud16`.
-- Changes: [ADR 0095](0095-a-lightning-address-and-its-node-key-are-one-recipient.md), its non-goal "A link of two addresses by hand", for the wallets of one person.
-- Changes: [ADR 0091](0091-a-change-set-edits-one-recipient-in-many-feeds.md), A Change Set Edits One Recipient In Many Feeds. ADR 0091 names the changed items.
+- Changes: [ADR 0027](../../adr/0027-the-recipient-picker.md) items 2 and 5 (the saved recipients become people).
+- Changes: [ADR 0074](../../adr/0074-nostr-keys-for-artists-labels-and-contributors.md), its non-goal for `lud16`.
+- Changes: [ADR 0095](../../adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md), its non-goal "A link of two addresses by hand", for the wallets of one person.
+- Changes: [ADR 0091](../../adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md), A Change Set Edits One Recipient In Many Feeds. ADR 0091 names the changed items.
 - Changed by: [ADR 0103](0103-one-person-collects-the-items-of-many-suggestions.md). Item 12: a suggestion groups the items of one name. Item 14: the items of a suggestion can go to a person that exists, and two people can merge.
-- Uses: [ADR 0091](0091-a-change-set-edits-one-recipient-in-many-feeds.md) for the change sets, [ADR 0065](0065-the-core-applies-each-feed-rule.md) for the feed rules, [ADR 0057](0057-the-private-network-guard-of-the-server.md) for the network policy, and [ADR 0014](0014-collection-in-sqlite.md) for the collection.
+- Uses: [ADR 0091](../../adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md) for the change sets, [ADR 0065](../../adr/0065-the-core-applies-each-feed-rule.md) for the feed rules, [ADR 0057](../../adr/0057-the-private-network-guard-of-the-server.md) for the network policy, and [ADR 0014](../../adr/0014-collection-in-sqlite.md) for the collection.
 - Screens: [ADR 0099](0099-the-people-destination-and-the-page-of-a-person.md).
 - Revised: 2026-11-02 by operator decision. Item 18: "Dismiss" hides the Lightning address of a profile for one person. The human test of `0.1.0-rc.10` found an address of the wrong account with no way to hide it.
 - Changed by: [ADR 0111](0111-the-page-of-a-person-checks-the-feeds.md). Item 20: the operation "Correct".
-- Changed by: [ADR 0112](0112-a-credit-role-comes-from-a-list.md). Item 5: the usual role comes from the role list, with a usual group.
-- Changed by: [ADR 0101](../archive/adr/0101-a-suggestion-groups-the-items-of-one-name.md), A Suggestion Groups The Items Of One Name.
+- Changed by: [ADR 0112](../../adr/0112-a-credit-role-comes-from-a-list.md). Item 5: the usual role comes from the role list, with a usual group.
+- Changed by: [ADR 0101](0101-a-suggestion-groups-the-items-of-one-name.md), A Suggestion Groups The Items Of One Name.
 - Changed by: [ADR 0158](0158-a-hidden-suggestion-can-come-back.md), A Hidden Suggestion Can Come Back.
 
 ## Context
 
-- The [People module design note](../research/2026-11-01-people-module-design-note.md) gives the evidence, the jobs J1 to J11 and the answers of the operator of 2026-11-01.
+- The [People module design note](../../research/2026-11-01-people-module-design-note.md) gives the evidence, the jobs J1 to J11 and the answers of the operator of 2026-11-01.
 - Studio keeps no record of a person. A payee, a credit, a Nostr key and a support link exist only in the feeds. Only `saved_recipients` and `keysend_lookups` exist outside the feeds.
 - One person can have more than one wallet. On 2026-11-01 the operator gave an example: one artist has a Fountain wallet and a wallet on a home node, with four addresses in total. No lookup proves that two nodes are of one person.
-- Stophammer [ADR 0082](../../../stophammer/docs/adr/0082-a-funding-link-is-a-source-link.md) keeps each `podcast:funding` tag. The operator asked that each app of the suite includes the support links.
+- Stophammer [ADR 0082](../../../../stophammer/docs/adr/0082-a-funding-link-is-a-source-link.md) keeps each `podcast:funding` tag. The operator asked that each app of the suite includes the support links.
 - The contributor database research of 2026-10-31 in `../musicindex-research` gives three recommendations. They are an identity rule for a known person, the raw role text, and the `lud16` of a signed Nostr profile.
 - The operator accepted the mockups in `.studio-dev/mockup-098/site/people.html` on 2026-11-01.
 
@@ -30,10 +32,10 @@
 
 ### The Module
 
-1. The core gets the module `people`. It keeps the people of the collection of one user. It has no feed rule and no HTTP server code ([ADR 0002](0002-rust-core-json-api-browser-ui.md)).
+1. The core gets the module `people`. It keeps the people of the collection of one user. It has no feed rule and no HTTP server code ([ADR 0002](../../adr/0002-rust-core-json-api-browser-ui.md)).
 2. `people` writes no feed. A change of a feed from a person is a change set of ADR 0091. Each feed writes through `pipeline::write_draft` with the ID of its own diff.
 3. A value from a person is a start value in a feed. The feed keeps its own copy, so a change of a person does not change a feed. This is an edit aid (ADR 0065).
-4. The module serves the desktop shell and the server shell. On the server, each user folder has its own collection, and thus its own people ([ADR 0055](0055-the-server-shell-user-folders-sessions-and-the-vault-window.md)).
+4. The module serves the desktop shell and the server shell. On the server, each user folder has its own collection, and thus its own people ([ADR 0055](../../adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md)).
 
 ### A Person
 
@@ -82,7 +84,7 @@
 
 24. The route `GET /people/export` gives a JSON file of the people. Each link has its evidence: the statement of the user, the keysend lookup or a Nostr signature, and the time of the link.
 25. The export holds no secret. An import is not a part of this decision.
-26. The core gives a wallet of a person its type from its address, at each write and at each read. An address with `@` is a Lightning address, and each other address is a node key. A form cannot store a node key as a Lightning address (the [local use findings](../reviews/2026-11-06-local-use-findings.md), finding 19).
+26. The core gives a wallet of a person its type from its address, at each write and at each read. An address with `@` is a Lightning address, and each other address is a node key. A form cannot store a node key as a Lightning address (the [local use findings](../../reviews/2026-11-06-local-use-findings.md), finding 19).
 
 ## Alternatives Considered
 
@@ -123,6 +125,6 @@ Mechanical:
 - A core test: the `lud16` of a profile is a suggestion only when its lookup gives `found`, and the collection keeps no lookup of it.
 - An API test: the export gives each person with the evidence of each link, and no secret.
 - The corpus tests pass with no change.
-- No test sends a request to a host outside the computer ([ADR 0045](0045-phase-9-crates-test-servers-and-host-forms.md)).
+- No test sends a request to a host outside the computer ([ADR 0045](../../adr/0045-phase-9-crates-test-servers-and-host-forms.md)).
 
 Human, on `studio.musicindex.org`: the operator makes a person from a suggestion. The person has a Fountain wallet and a second wallet. Use this address changes one feed from the Fountain node to the second wallet. The feed on its file host has the expected recipient and method.

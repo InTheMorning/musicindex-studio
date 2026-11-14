@@ -1,11 +1,13 @@
+> Archived: superseded by [ADR 0203](../../adr/0203-people.md) on 2026-11-14. ADR 0203 restates each live rule of this ADR. Its item map gives the new item of each item.
+
 # ADR 0120: The Check Of A Person Shows Each Difference
 
-- Status: Accepted
+- Status: Superseded by ADR 0203
 - Date: 2026-11-02
 - Owner: operator
 - Accepted: 2026-11-02 by the operator, from screen 8 of the mockups in `.studio-dev/mockup-start/site/`.
 - Changes: [ADR 0111](0111-the-page-of-a-person-checks-the-feeds.md) items 9 to 13, the rows of "Check your feeds".
-- Uses: [ADR 0111](0111-the-page-of-a-person-checks-the-feeds.md) items 14 to 17 for the operation "Correct". [ADR 0098](0098-the-people-module.md) item 10 for the credit index. [ADR 0028](0028-summary-lines-and-one-open-entry.md) for the open entry.
+- Uses: [ADR 0111](0111-the-page-of-a-person-checks-the-feeds.md) items 14 to 17 for the operation "Correct". [ADR 0098](0098-the-people-module.md) item 10 for the credit index. [ADR 0028](../../adr/0028-summary-lines-and-one-open-entry.md) for the open entry.
 
 ## Context
 

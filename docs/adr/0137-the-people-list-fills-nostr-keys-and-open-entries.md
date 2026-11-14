@@ -8,7 +8,7 @@
 - Changes: [ADR 0074](0074-nostr-keys-for-artists-labels-and-contributors.md) item 20, the text of the field.
 - Changed by: [ADR 0144](0144-recipients-use-one-picker-and-sort-by-split.md), Recipients Use One Picker And Sort By Split.
 - Changed by: [ADR 0145](0145-each-sheet-that-adds-a-value-has-one-layout.md), Each Sheet That Adds A Value Has One Layout.
-- Uses: [ADR 0098](0098-the-people-module.md), a value from a person is a start value. [ADR 0123](0123-one-type-of-value-has-one-picker.md), one sheet for each Nostr key field. [ADR 0065](0065-the-core-applies-each-feed-rule.md), an edit aid in the UI.
+- Uses: [ADR 0098](../archive/adr/0098-the-people-module.md), a value from a person is a start value. [ADR 0123](0123-one-type-of-value-has-one-picker.md), one sheet for each Nostr key field. [ADR 0065](0065-the-core-applies-each-feed-rule.md), an edit aid in the UI.
 - Source: [findings of local use, finding 3](../reviews/2026-11-06-local-use-findings.md)
 
 ## Context

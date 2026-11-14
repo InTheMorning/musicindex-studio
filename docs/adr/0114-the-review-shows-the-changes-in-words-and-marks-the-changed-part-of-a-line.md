@@ -21,7 +21,7 @@
 
 1. The core compares the typed model of the live file with the model of the draft. It gives a list of field changes, in groups. A group names its element, for example "Title", "Credits · HeyCitizen" or "Track 3". A change gives the field, the old value and the new value, for example "musician · Nostr key: none → City Radio (npub12um…f5ck)".
 2. A group with more than two changes of the same kind gives one summary line, for example "6 credits get the Nostr key City Radio". It shows two changes, and the others in one collapsed line.
-3. The UI shows the profile name of a key and the warning of [ADR 0103](0103-one-person-collects-the-items-of-many-suggestions.md) item 18 in a change of a Nostr key.
+3. The UI shows the profile name of a key and the warning of [ADR 0103](../archive/adr/0103-one-person-collects-the-items-of-many-suggestions.md) item 18 in a change of a Nostr key.
 4. The core marks each changed line of the XML that a field change explains. When changed lines are left over, the field view ends with this row:
     - "1 more change in the XML" or "N more changes in the XML"
     - "This list does not show it. Select the detailed view to see each changed line." (for one change), or "This list does not show them. Select the detailed view to see each changed line." (for more than one)

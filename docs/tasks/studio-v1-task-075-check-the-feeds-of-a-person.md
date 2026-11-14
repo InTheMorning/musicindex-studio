@@ -1,7 +1,7 @@
 # Studio v1 Task 075: Check The Feeds Of A Person
 
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The People Module".
-Decision: [ADR 0111](../adr/0111-the-page-of-a-person-checks-the-feeds.md). It uses [ADR 0098](../adr/0098-the-people-module.md) items 6, 10 and 20, [ADR 0091](../adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md), [ADR 0095](../adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md), [ADR 0103](../adr/0103-one-person-collects-the-items-of-many-suggestions.md) items 9 to 11 and [ADR 0112](../adr/0112-a-credit-role-comes-from-a-list.md).
+Decision: [ADR 0111](../archive/adr/0111-the-page-of-a-person-checks-the-feeds.md). It uses [ADR 0098](../archive/adr/0098-the-people-module.md) items 6, 10 and 20, [ADR 0091](../adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md), [ADR 0095](../adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md), [ADR 0103](../archive/adr/0103-one-person-collects-the-items-of-many-suggestions.md) items 9 to 11 and [ADR 0112](../adr/0112-a-credit-role-comes-from-a-list.md).
 
 Status: Complete, in three packets, with the screenshot visual checks of 075b and 075c on 2026-11-02. The human test is open. Notes from the reviews:
 

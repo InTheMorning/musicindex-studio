@@ -49,6 +49,6 @@ Visual, by the planning model:
 
 - A person with an `http` picture shows the picture at 1280 px light, when the walk can reach the host. The walk browser has no network, so this check can be open.
 
-Human, by the operator. This gate stays open until it runs:
+Human, by the operator. This gate passed on 2026-11-14:
 
 - In the desktop app, open the person "Strange Love". The picture shows, and its row still gives the `http` address.

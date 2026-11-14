@@ -2,7 +2,7 @@
 
 Decision: [ADR 0202](../adr/0202-an-http-image-shows-from-its-https-address.md).
 
-Status: Complete on 2026-11-14. The human check of ADR 0202 is open.
+Status: Complete on 2026-11-14. The human check of ADR 0202 passed on 2026-11-14: the picture of Strange Love shows, and its row keeps the `http` address.
 
 ## Result
 

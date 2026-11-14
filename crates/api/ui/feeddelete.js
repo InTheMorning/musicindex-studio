@@ -54,6 +54,19 @@ export function deleteButtonEnabled(confirmText, typedText) {
   return typeof confirmText === 'string' && confirmText.length > 0 && confirmText === typedText;
 }
 
+export function deleteWrite(diff) {
+  const operations = diff?.operations || [];
+  if (!operations.some((op) => op.deletes_feed_file)) return null;
+  const deletes = operations.filter((op) => op.kind === 'delete');
+  return {
+    label: deletes.length === 1
+      ? 'Delete the Feed File'
+      : `Delete ${deletes.length} Files`,
+    destructive: true,
+    cancel: 'Cancel the Delete',
+  };
+}
+
 // The second line of an operation row: what the operation means for the
 // feed (task 022b, review of milestone 7a).
 const OPERATION_NOTE = {

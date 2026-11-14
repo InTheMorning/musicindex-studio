@@ -1008,6 +1008,8 @@ pub struct FeedRow {
     pub connector_id: Option<ConnectorId>,
     /// The path of the feed file in the connector.
     pub path: Option<String>,
+    /// True when Studio deleted the feed file from its host.
+    pub host_deleted: bool,
     /// `podcast:guid`, from the last read.
     pub podcast_guid: Option<String>,
     /// The title, from the last read.
@@ -1828,6 +1830,7 @@ impl Collection {
                 )
             })?;
         fill_addresses(&self.db, &mut row)?;
+        row.host_deleted = self.feed_host_delete(id)?.is_some();
         Ok(row)
     }
 
@@ -1929,6 +1932,14 @@ impl Collection {
             .collect::<Result<_, _>>()?;
         for row in &mut rows {
             fill_addresses(&self.db, row)?;
+        }
+        let deleted: std::collections::HashSet<i64> = self
+            .db
+            .prepare("SELECT feed_id FROM feed_host_deletes")?
+            .query_map([], |r| r.get(0))?
+            .collect::<Result<_, _>>()?;
+        for row in &mut rows {
+            row.host_deleted = deleted.contains(&row.id.0);
         }
         Ok(rows)
     }
@@ -4783,6 +4794,7 @@ fn feed_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<FeedRow> {
         public_url: r.get(1)?,
         connector_id: r.get::<_, Option<i64>>(2)?.map(ConnectorId),
         path: r.get(3)?,
+        host_deleted: false,
         podcast_guid: r.get(4)?,
         title: r.get(5)?,
         medium: r.get(6)?,

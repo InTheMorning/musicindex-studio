@@ -30,6 +30,7 @@ import { progressPercent } from './upload.js';
 import { conflictNotice } from './conflict.js';
 import { coverOf, coverConflict } from './cover.js';
 import { platformBlocks } from './listing.js';
+import { deleteWrite } from './feeddelete.js';
 import { pageSequence } from './pages.js';
 import { nextStep, firstStart, releaseAdd, FIRST_STEPS, HOST_STEP } from './welcome.js';
 import {
@@ -2107,6 +2108,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
   const hasWork = diff && (diff.changed || diff.operations.length > 0 || diff.blocked.length > 0 || !!diff.feed_move || diff.grants.length > 0);
   const streamRows = diff ? streamProblemRows(diff.stream_problems, draft.model && draft.model.live_items) : [];
   const streamRefusal = streamRows.some((problem) => problem.blocksWrite);
+  const deletion = diff && deleteWrite(diff);
   return html`<dialog ref=${ref} class="sheet" aria-labelledby="review-title" onClose=${onClose}>
     <header>
       <h2 id="review-title">Review changes</h2>
@@ -2195,8 +2197,10 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
       ${diff && hasWork && !addressesBlocked && !choosing && diff.announce_skip !== 'no_address' && diff.announce_skip !== 'feed_deleted' && html`<${AnnounceChoice} onChange=${refreshDiff} wait=${returnWait} />`}
     </div>
     <footer>
-      <button class="button destructive" type="button" disabled=${busy || !draft.changed} onClick=${discard}>Discard the Draft</button>
-      ${diff && hasWork && !addressesBlocked && !choosing && html`<button class="button primary" type="button" disabled=${busy || waiting || needsSigner || streamRefusal || blocksWrite(links)} onClick=${write}>
+      ${deletion && diff && hasWork && !addressesBlocked && !choosing && html`<button class="button destructive" type="button" disabled=${busy || waiting || needsSigner || streamRefusal || blocksWrite(links)} onClick=${write}>
+        ${progress ? signProgressLabel(progress) : busy ? 'Writing…' : deletion.label}</button>`}
+      <button class=${`button${deletion ? '' : ' destructive'}`} type="button" disabled=${busy || (!deletion && !draft.changed)} onClick=${discard}>${deletion ? deletion.cancel : 'Discard the Draft'}</button>
+      ${!deletion && diff && hasWork && !addressesBlocked && !choosing && html`<button class="button primary" type="button" disabled=${busy || waiting || needsSigner || streamRefusal || blocksWrite(links)} onClick=${write}>
         ${progress ? signProgressLabel(progress) : busy ? 'Writing…' : 'Write to the File Host'}</button>`}
     </footer>
   </dialog>`;
@@ -2360,10 +2364,24 @@ function FeedDelete({ feed, draft }) {
     return () => window.removeEventListener('studio-open-feed-delete', open);
   }, [feed.id]);
   const retiring = retireOpen || Boolean(draft && draft.hidden);
+  // A write changes the version of the feed, and a delete sets
+  // `host_deleted`. Each of them reads the retire state again, so the steps
+  // do not show the state before the write (finding 6 of the rc.22 test).
+  const written = `${JSON.stringify(feed.last_version)}|${feed.host_deleted}`;
+  // Only the answer of the last request sets the state. An earlier answer
+  // that arrives late does not show the state before the write again.
+  const retireRequest = useRef(0);
+  const loadRetire = () => {
+    const request = ++retireRequest.current;
+    return action.run(async () => {
+      const state = await api(`/feeds/${feed.id}/retire/state`, { method: 'POST' });
+      if (request === retireRequest.current) setRetire(state);
+    });
+  };
   useEffect(() => {
-    if (!retiring) { setRetire(null); return; }
-    action.run(async () => setRetire(await api(`/feeds/${feed.id}/retire/state`, { method: 'POST' })));
-  }, [retiring, feed.id]);
+    if (!retiring) { retireRequest.current += 1; setRetire(null); return; }
+    loadRetire();
+  }, [retiring, feed.id, written]);
   const loadPreview = (include) => action.run(async () => {
     // The old preview stays while the request runs. The sheet keeps its
     // height, and the check box and Delete are off (`action.busy`).
@@ -2417,8 +2435,8 @@ function FeedDelete({ feed, draft }) {
           <span class="num">${row.done ? '✓' : row.number}</span><span class="text"><span class="label">${row.title}</span><span class="summary">${row.text}</span></span>
           ${row.button && html`<button class="button destructive" type="button" disabled=${action.busy} onClick=${openFinal}>${row.button}</button>`}
         </div>`)}
-      <div class="actions"><button class="button" type="button" disabled=${action.busy} onClick=${() => action.run(async () => setRetire(await api(`/feeds/${feed.id}/retire/state`, { method: 'POST' })))}>Check Again</button>
-        <button class="button" type="button" disabled=${action.busy} onClick=${stopRetire}>Stop Retiring</button></div>
+      <div class="actions"><button class="button" type="button" disabled=${action.busy} onClick=${loadRetire}>Check Again</button>
+        ${retire.delete !== 'done' && html`<button class="button" type="button" disabled=${action.busy} onClick=${stopRetire}>Stop Retiring</button>`}</div>
       <${ErrorNotice} error=${action.error} />`}
     <dialog ref=${firstRef} class="sheet small" aria-labelledby="delete-host-title" onClose=${() => setFirstOpen(false)}>
       <header><h2 id="delete-host-title">Delete from File Host</h2><button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => firstRef.current.close()}>✕</button></header>
@@ -2506,7 +2524,7 @@ function ArtistsAndLabels({ feed, feeds, model, update, draft, go, onListChanged
             onClick=${() => movePublisher(row.index, 1)}>Move Down</button>
         </div>
       </div>`)}
-      ${candidates.length > 0 && html`<div class="field">
+      ${!feed.host_deleted && candidates.length > 0 && html`<div class="field">
         <label for="album-publisher">Link to an artist or label page</label>
         <div class="field-body">
           <select id="album-publisher" value=${chosen} onChange=${(e) => setChosen(e.target.value)}>
@@ -2517,7 +2535,7 @@ function ArtistsAndLabels({ feed, feeds, model, update, draft, go, onListChanged
       </div>
       <div class="actions"><button class="button action" type="button" disabled=${!chosen || linkAction.busy}
         onClick=${addPublisher}>Link to This Page</button></div>`}
-      ${candidates.length === 0 && html`<p class="hint">Studio has no other artist or label page to link to.</p>`}
+      ${!feed.host_deleted && candidates.length === 0 && html`<p class="hint">Studio has no other artist or label page to link to.</p>`}
       <${ErrorNotice} error=${publisherError(linkAction.error, 'Open that feed and select its role first.')} />
     </div>
   </section>`;

@@ -57,7 +57,7 @@ Visual, by the planning model:
 - The page of a person with two linked pages that have the same title and different hosts, at 1280 px light and 390 px dark. Each row has its host on the second line.
 - A person made with **Add a Person** from a page. The picture row and the website row say `From "{title}" on {host}`.
 
-Human, by the operator. This gate stays open until it runs:
+Human, by the operator. This gate passed on 2026-11-14:
 
 - In the desktop app, open the page of Prosperous Soul. Each linked page row names its host.
 - Add a person from a live page on Music Index. The picture and the website name that page.

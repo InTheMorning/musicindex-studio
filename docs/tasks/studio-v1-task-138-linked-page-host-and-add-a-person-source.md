@@ -2,7 +2,7 @@
 
 Decision: [ADR 0199](../adr/0199-a-linked-page-row-names-its-host-and-add-a-person-keeps-the-source-of-its-values.md).
 
-Status: Complete on 2026-11-14. The human check of ADR 0199 is open.
+Status: Complete on 2026-11-14. The human check of ADR 0199 passed on 2026-11-14. The two Prosperous Soul rows showed "On wavlake.com" and "On feeds.fountain.fm", and a person from **Add a Person** showed `From "Strange Love" on musicsideproject.com` on the picture and the website. The position of the host line (item 1) is open.
 
 ## Result
 

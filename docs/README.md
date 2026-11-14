@@ -202,6 +202,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0198: The review of a delete names the delete, and a deleted feed shows only what it can do](adr/0198-the-review-of-a-delete-names-the-delete-and-a-deleted-feed-shows-only-what-it-can-do.md)
 - [ADR 0199: A linked page row names its host, and Add a Person keeps the source of its values](adr/0199-a-linked-page-row-names-its-host-and-add-a-person-keeps-the-source-of-its-values.md)
 - [ADR 0200: Studio deletes a feed file only after Music Index removes the entry](adr/0200-studio-deletes-a-feed-file-only-after-music-index-removes-the-entry.md)
+- [ADR 0201: People opens before the Lightning address lookups](adr/0201-people-opens-before-the-lightning-address-lookups.md)
 
 ## Plans
 
@@ -479,6 +480,8 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 137: The review of a delete names the delete, and a deleted feed shows only what it can do](tasks/studio-v1-task-137-delete-review-and-deleted-feed.md)
 - [Studio v1 task 138: A linked page row names its host, and Add a Person keeps the source of its values](tasks/studio-v1-task-138-linked-page-host-and-add-a-person-source.md)
 - [Studio v1 task 139: Studio deletes a feed file only after Music Index removes the entry](tasks/studio-v1-task-139-delete-only-after-music-index-removes-the-entry.md)
+- [Studio v1 task 140a: The Lightning address lookups get their own route](tasks/studio-v1-task-140a-recipient-lookups-route.md)
+- [Studio v1 task 140b: The People page opens before the recipients and the lookups](tasks/studio-v1-task-140b-people-opens-before-lookups.md)
 - [Studio v1 task 055: The date and time fields](tasks/studio-v1-task-055-date-time-fields.md)
 - [Studio v1 task 055a: The times in the core](tasks/studio-v1-task-055a-times-in-the-core.md)
 - [Studio v1 task 055b: The date and time field](tasks/studio-v1-task-055b-date-time-field.md)

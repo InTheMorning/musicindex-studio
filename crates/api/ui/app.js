@@ -33,7 +33,7 @@ import { collectionMark, collectionRow, collectionSectionActions, collectionShee
 import { localInputToIso, isoToLocalInput, zoneHint, nowInput, unreadDateHint } from './datetime.js';
 import { durationText, readDuration, DURATION_ERROR, unreadDurationHint } from './duration.js';
 import { coverOf } from './cover.js';
-import { heldMap, mediaSource } from './media.js';
+import { heldMap, imageSource } from './media.js';
 import { SignerConnect } from './signer.js';
 import { dropHandlers, watchFileDrags, accountDropResult } from './filedrop.js';
 import { useDraft } from './draft.js';
@@ -311,10 +311,9 @@ function probeImage(src) {
   });
 }
 
-// The image at an address: `{ src, failed }`. `src` is the `https` address,
-// a `data:` address of a held file, or `null` while the image loads, when the
-// address gives no source (an `http` address) or when the image does not
-// load.
+// The image at an address: `{ src, failed }`. An `http` address loads from its
+// `https` form. `src` can also be a `data:` address of a held file, or `null`
+// while the image loads or when the image does not load.
 export function useImage(url) {
   const [result, setResult] = useState(null);
   useEffect(() => {
@@ -324,7 +323,7 @@ export function useImage(url) {
     let current = true;
     const finish = (found) => { if (current) setResult(found); };
     loadHeld().promise.then((held) => {
-      const source = mediaSource(url, held);
+      const source = imageSource(url, held);
       if (source.kind === 'direct') {
         probeImage(source.src).then((ok) => finish({ src: ok ? source.src : null, failed: !ok }));
       } else if (source.kind === 'held') {

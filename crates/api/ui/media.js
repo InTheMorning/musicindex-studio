@@ -65,6 +65,15 @@ export function mediaSource(url, held) {
   return { kind: 'direct', src: plain };
 }
 
+// An image uses the https form of an http address (ADR 0202). The saved
+// address stays unchanged, and mediaSource keeps the player's http rule.
+export function imageSource(url, held) {
+  const source = mediaSource(url, held);
+  if (source.kind !== 'none' || source.reason !== 'http') return source;
+  const secureUrl = url.trim().replace(/http:\/\//i, 'https://');
+  return mediaSource(secureUrl, held);
+}
+
 // The notice below the player: the http text for an `http` address, else
 // nothing.
 export function playerNotice(source) {

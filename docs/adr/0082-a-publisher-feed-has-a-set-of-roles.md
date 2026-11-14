@@ -8,7 +8,8 @@
 - Changed by: [ADR 0083](0083-hosting-is-a-first-class-role.md) gives the sequence of musicindex ADR 0036 to item 1. It adds "Hosting" to the menu of item 7 and to the form of item 9.
 - Changed by: [ADR 0084](0084-the-label-of-a-feed-lists-each-role.md) replaces the label of item 6. The label lists each role.
 - Changed by: [ADR 0087](0087-the-two-sides-of-a-link-confirm-a-role.md) also fills the dot when the two sides of a link give the first role (items 5 and 6).
-- Uses: musicindex ADR 0011 item 1 (`rel` is a set of role words), musicindex ADR 0012 items 5 and 8 (the sequence and the color of the roles, and the hollow dot), musicindex ADR 0033 R-WORD-3 and musicindex ADR 0035 R-WORD-6 (the label).
+- Uses: musicindex ADR 0067 item 82 (`rel` is a set of role words), musicindex ADR 0012 items 5 and 8 (the sequence and the color of the roles, and the hollow dot), musicindex ADR 0033 R-WORD-3 and musicindex ADR 0035 R-WORD-6 (the label).
+- Revised: 2026-11-14. musicindex ADR 0067 item 82 replaces musicindex ADR 0011 item 1. The citations name the new item. No rule changes.
 
 ## Context
 
@@ -21,7 +22,7 @@
 
 1. A publisher feed has a set of roles from the eight roles of musicindex ADR 0012 item 5. Studio keeps the set in the sequence of that item.
 2. The collection keeps the set of each publisher feed, and a state: inferred or confirmed.
-3. Studio reads `rel` as musicindex ADR 0011 item 1 does: a value with a comma is a comma list, and each other value is a list separated by white space. Each word is lowercased. A word that is not one of the eight roles is not recorded.
+3. Studio reads `rel` as musicindex ADR 0067 item 82 does: a value with a comma is a comma list, and each other value is a list separated by white space. Each word is lowercased. A word that is not one of the eight roles is not recorded.
 4. When Studio reads a publisher feed that has no confirmed set, it records an inferred set: each role that the `rel` of a channel `remoteItem` with `medium="music"` gives.
 5. A set becomes confirmed when the user selects it, or when Studio records it for a change of a link (ADR 0041 item 4).
 6. The type label of a publisher feed is its first role (musicindex ADR 0035 R-WORD-6). An inferred set has a hollow dot, and a confirmed set has a filled dot (musicindex ADR 0033 R-WORD-3 item 3). A feed with no role has the label "Feed" and a hollow dot.

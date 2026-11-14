@@ -11293,6 +11293,38 @@ async fn a_person_is_added_read_changed_and_removed() {
 }
 
 #[tokio::test]
+async fn adding_a_person_from_a_page_saves_sources_on_both_values() {
+    let app = app();
+    let (status, created) = call(
+        &app,
+        "POST",
+        "/api/v1/people",
+        Some(json!({
+            "name": "Ann",
+            "img": "https://img.example/a.png",
+            "href": "https://ann.example",
+            "source": {
+                "feed_guid": "guid-ann",
+                "title": "Ann Music",
+                "feed_url": "https://wavlake.com/ann.xml",
+                "img_source": true,
+                "href_source": true
+            }
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{created}");
+    let id = created["id"].as_i64().unwrap();
+    let (status, person) = call(&app, "GET", &format!("/api/v1/people/{id}"), None).await;
+    assert_eq!(status, StatusCode::OK, "{person}");
+    for value in [&person["pictures"][0], &person["websites"][0]] {
+        assert_eq!(value["source"]["feed_guid"], "guid-ann");
+        assert_eq!(value["source"]["title"], "Ann Music");
+        assert_eq!(value["source"]["host"], "wavlake.com");
+    }
+}
+
+#[tokio::test]
 async fn one_save_changes_a_person() {
     let (app, connector) = publisher_app().await;
     let label = make_feed(

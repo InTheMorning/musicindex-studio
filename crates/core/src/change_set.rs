@@ -1868,6 +1868,7 @@ fn set_person_name(collection: &Collection, id: PersonId, name: &str) -> Result<
             usual_group: person.usual_group,
             img: person.img,
             href: person.href,
+            source: None,
         },
     )?;
     Ok(())

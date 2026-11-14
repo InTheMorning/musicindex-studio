@@ -271,6 +271,24 @@ pub struct PersonFields {
     pub img: String,
     /// The information address.
     pub href: String,
+    /// The page that supplied selected values.
+    pub source: Option<NewValueSource>,
+}
+
+/// The linked page that can supply the picture or website of a new person.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Deserialize)]
+#[serde(default)]
+pub struct NewValueSource {
+    /// The feed GUID of the page.
+    pub feed_guid: String,
+    /// The title of the page.
+    pub title: String,
+    /// The address of the page feed.
+    pub feed_url: String,
+    /// Whether the page supplied the picture.
+    pub img_source: bool,
+    /// Whether the page supplied the website.
+    pub href_source: bool,
 }
 
 fn missing(id: PersonId) -> CollectionError {
@@ -335,6 +353,7 @@ fn clean_fields(fields: &PersonFields) -> Result<PersonFields, CollectionError> 
         usual_group: fields.usual_group.trim().to_owned(),
         img: fields.img.trim().to_owned(),
         href: fields.href.trim().to_owned(),
+        source: fields.source.clone(),
     })
 }
 
@@ -353,8 +372,32 @@ fn insert_person(db: &Connection, fields: &PersonFields) -> Result<PersonId, Col
         ],
     )?;
     let id = PersonId(db.last_insert_rowid());
-    add_person_value(db, id, "picture", &fields.img, None)?;
-    add_person_value(db, id, "website", &fields.href, None)?;
+    let source = fields.source.as_ref().and_then(|source| {
+        let host = feed_host(&source.feed_url)?;
+        (!source.feed_guid.trim().is_empty()).then(|| ValueSource {
+            feed_guid: source.feed_guid.clone(),
+            title: source.title.clone(),
+            host,
+        })
+    });
+    add_person_value(
+        db,
+        id,
+        "picture",
+        &fields.img,
+        source
+            .as_ref()
+            .filter(|_| fields.source.as_ref().is_some_and(|s| s.img_source)),
+    )?;
+    add_person_value(
+        db,
+        id,
+        "website",
+        &fields.href,
+        source
+            .as_ref()
+            .filter(|_| fields.source.as_ref().is_some_and(|s| s.href_source)),
+    )?;
     Ok(id)
 }
 
@@ -3545,8 +3588,7 @@ pub fn page_suggestions<S: BuildHasher>(
         title: page.title.clone(),
         host: values
             .and_then(|v| v.feed_url.as_deref())
-            .and_then(|url| url::Url::parse(url).ok())
-            .and_then(|url| url.host_str().map(str::to_owned)),
+            .and_then(feed_host),
         missing: values.is_none(),
         picture: None,
         website: None,
@@ -3598,6 +3640,12 @@ pub fn page_suggestions<S: BuildHasher>(
         }
     }
     suggestion
+}
+
+fn feed_host(feed_url: &str) -> Option<String> {
+    url::Url::parse(feed_url)
+        .ok()
+        .and_then(|url| url.host_str().map(str::to_owned))
 }
 
 // ---- The Lightning address of a profile (ADR 0098 items 17 to 19) ----
@@ -5522,6 +5570,58 @@ mod tests {
                 .picture
                 .is_none()
         );
+    }
+
+    #[test]
+    fn add_person_keeps_selected_page_sources_and_omits_missing_sources() {
+        let collection = Collection::open_in_memory().unwrap();
+        let sourced = PersonFields {
+            name: "Ann from page".into(),
+            img: "https://img.example/a.png".into(),
+            href: "https://ann.example".into(),
+            source: Some(NewValueSource {
+                feed_guid: "guid-ann".into(),
+                title: "Ann Music".into(),
+                feed_url: "https://wavlake.com/ann.xml".into(),
+                img_source: true,
+                href_source: true,
+            }),
+            ..PersonFields::default()
+        };
+        let sourced_id = add_person(&collection, &sourced).unwrap();
+        let sourced_person = person(&collection, sourced_id).unwrap();
+        for value in [&sourced_person.pictures[0], &sourced_person.websites[0]] {
+            assert_eq!(value.source.as_ref().unwrap().feed_guid, "guid-ann");
+            assert_eq!(value.source.as_ref().unwrap().title, "Ann Music");
+            assert_eq!(value.source.as_ref().unwrap().host, "wavlake.com");
+        }
+
+        // A changed picture has no source, and the website keeps its source.
+        let changed = PersonFields {
+            name: "Ann changed".into(),
+            source: Some(NewValueSource {
+                img_source: false,
+                ..sourced.source.clone().unwrap()
+            }),
+            ..sourced.clone()
+        };
+        let changed = person(&collection, add_person(&collection, &changed).unwrap()).unwrap();
+        assert!(changed.pictures[0].source.is_none());
+        assert_eq!(
+            changed.websites[0].source.as_ref().unwrap().host,
+            "wavlake.com"
+        );
+
+        // A body with no source saves its values with no source (ADR 0199 item 7).
+        let plain = PersonFields {
+            name: "Plain Ann".into(),
+            source: None,
+            ..sourced.clone()
+        };
+        let plain = person(&collection, add_person(&collection, &plain).unwrap()).unwrap();
+        assert_eq!((plain.pictures.len(), plain.websites.len()), (1, 1));
+        assert!(plain.pictures[0].source.is_none());
+        assert!(plain.websites[0].source.is_none());
     }
 
     #[test]

@@ -162,6 +162,8 @@ const HOST_ALLOWED = [
   // The role host of a credit (ADR 0112).
   "|| 'host · cast'",
   'as Host.',
+  // The host of a linked page (ADR 0199 item 1).
+  'On ${hosts.get(p.feed_guid)}',
 ];
 
 test('no UI text names a connector with the word host alone', () => {

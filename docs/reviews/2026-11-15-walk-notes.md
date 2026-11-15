@@ -180,3 +180,4 @@ The step numbers are those of the section "What to test" of the [notes of `0.1.0
 - Step 5: open. The collection of the operator has no release in the group "Not linked".
 - Step 6: pass. The sheet shows the goals and the domain line with the real domain.
 - Step 7: pass, from the report of the operator.
+- Step 8: pass. The check box "Send a podping" stays in view in a long review.

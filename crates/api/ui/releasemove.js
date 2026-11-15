@@ -106,6 +106,16 @@ const INDEX_TEXT = {
   unknown: 'No answer. The days decide.',
 };
 
+// Music Index reads a moved feed some time after the write, so the first
+// answer after a move can be "different". The Files page then reads the
+// moves again: each 20 seconds, 15 times at most. "unknown" gets no read
+// again, because Music Index gave no answer.
+export const INDEX_READ_AGAIN_MS = 20000;
+export const INDEX_READ_AGAIN_MAX = 15;
+export function indexNeedsRead(moves, reads) {
+  return reads < INDEX_READ_AGAIN_MAX && (moves || []).some((move) => move.index === 'different');
+}
+
 // The rows of a move that waits (ADR 0148 item 8).
 export function waitingView(move, connectors) {
   const from = hostName(connectors, move.connector_id);

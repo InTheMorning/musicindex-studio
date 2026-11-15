@@ -2,7 +2,13 @@
 
 Decision: none. This is Note 3 of the walk. [ADR 0088](../adr/0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) item 7 and [ADR 0085](../adr/0085-each-artist-and-label-is-a-destination.md) item 7 own the narrow layout. musicindex ADR 0069 R-SHELL-2 owns the rule of the three apps. This task changes no rule and no code. Its result gives the options for a decision of the operator.
 
-Status: Not started. The packet is ready for a delegate.
+Status: Complete on 2026-11-15. The [research note](../research/2026-11-15-keyboard-shortcut-for-the-narrow-shell.md) is ready for the operator decision.
+
+## Result
+
+- The delegate was `gpt-6-luna`. The first run, with medium effort, left most cells of the key table empty. The second run, with high effort, gave the note.
+- Gate of the main session: met for the code locations and the ADR items. The main session compared them with the code and with musicindex ADR 0069.
+- The main session did not read the web sources. Examine the row of the messaging app in the table of sidebar shortcuts before a decision uses it.
 
 Source: [walk notes of 2026-11-15](../reviews/2026-11-15-walk-notes.md), Note 3.
 

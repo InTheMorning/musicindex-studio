@@ -44,12 +44,23 @@ test('the page settings gives op3 after locked for an album only', () => {
   assert.equal(tierError('settings', pageSequence('settings', { album: true })), null);
 });
 
-test('the release kind section starts Settings and does not appear for a show', () => {
-  const owner = 'ADR 0213 item 13: Settings of a release starts with Kind. Fix pages.js and editor.js.';
-  const release = pageSequence('settings', { album: true, release: true });
-  assert.equal(release[0].id, 'kind', owner);
-  assert.equal(tierError('settings', release), null, owner);
-  assert.ok(!pageSequence('settings', { album: true, release: false }).some((section) => section.id === 'kind'), owner);
+test('the release kind field follows Title in the first tab', () => {
+  const owner = 'ADR 0213 item 13: put Kind between Title and Artist on the first tab of a release. Fix pages.js.';
+  assert.deepEqual(pageSequence('album', { release: true })[0].fields.slice(0, 3), ['title', 'kind', 'author'], owner);
+  assert.ok(!pageSequence('album', { release: false })[0].fields.includes('kind'), owner);
+});
+
+test('Settings has no release kind section', () => {
+  assert.ok(!pageSequence('settings', { album: true, release: true }).some((section) => section.id === 'kind'),
+    'ADR 0213 item 13: remove Kind from Settings. Fix pages.js.');
+});
+
+test('the release kind hint says that the value saves at once', () => {
+  const text = readFileSync(new URL('../ui/editor.js', import.meta.url), 'utf8');
+  assert.ok(text.includes('Saves at once. The feed file has no tag for the kind.'),
+    'ADR 0213 item 16: add the save hint to the Kind menu in crates/api/ui/editor.js.');
+  assert.ok(!text.includes('Studio shows this kind. The feed file has no tag for it.'),
+    'ADR 0213 item 16: remove the old Kind hint from crates/api/ui/editor.js.');
 });
 
 for (const server of [true, false]) {

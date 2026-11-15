@@ -152,6 +152,8 @@ Facts:
 - `crates/core/src/review.rs` gives the two fields to the review.
 - A `podcast:block` with an `id` applies to one platform. The switch does not change it (ADR 0063 item 5), and it is in the same field `blocks`.
 
+Operator choice: the row has the name "Hide from apps", and its values stay "Yes" and "No". The values are not "On" and "Off".
+
 Open: no task. One row with the name of the switch is possible when the two tags change together. The task must say what Review shows when only one tag changes, and what it shows for a block of one platform.
 
 ### Note 11: A Confirmation That Music Index Got A Write
@@ -177,3 +179,4 @@ The step numbers are those of the section "What to test" of the [notes of `0.1.0
 - Step 4: pass. The operator made a release with the kind "EP" from the page of the artist.
 - Step 5: open. The collection of the operator has no release in the group "Not linked".
 - Step 6: pass. The sheet shows the goals and the domain line with the real domain.
+- Step 7: pass, from the report of the operator.

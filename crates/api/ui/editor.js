@@ -2661,10 +2661,11 @@ function FeedKeyRow({ feedId, model, update, bad }) {
     onSet=${(npub) => update((m) => withFeedKey(m, npub))} />`;
 }
 
-function ChannelFields({ feedId, draft, model, update, bad, artistLabel, onArtwork, fields }) {
+function ChannelFields({ feedId, draft, model, update, bad, artistLabel, onArtwork, fields, kindField = null }) {
   const field = (name) => (value) => update((m) => set(m, name, value));
   const shown = {
     title: () => html`<${TextField} id="ch-title" label="Title" value=${model.title} onChange=${field('title')} />`,
+    kind: () => kindField,
     author: () => html`<${TextField} id="ch-author" label=${artistLabel} hint="The itunes:author of the feed." value=${model.author} onChange=${field('author')} />`,
     nostr: () => html`<${FeedKeyRow} feedId=${feedId} model=${model} update=${update} bad=${bad} />`,
     description: () => html`<${TextArea} id="ch-description" label="Description" value=${model.description} onChange=${field('description')} />`,
@@ -2700,6 +2701,20 @@ function ExplicitField({ id, model, update }) {
     </div>`;
 }
 
+// The menu "Kind" of a release. A change saves at once and is not a part
+// of the draft (ADR 0213 items 13 and 16).
+function ReleaseKindField({ feed, onListChanged }) {
+  const action = useAction();
+  const save = (kind) => action.run(async () => {
+    await api(`/feeds/${feed.id}/kind`, { method: 'PUT', body: { kind: kind || null } });
+    await onListChanged();
+  });
+  // No wrapper: the menu is a direct row of the group, as each other field.
+  return html`<${ChoiceSelect} id="release-kind" label="Kind" value=${feed.release_kind || ''}
+      options=${RELEASE_KINDS} hint="Saves at once. The feed file has no tag for the kind." onChange=${save} />
+    <${ErrorNotice} error=${action.error} />`;
+}
+
 // Does the channel lock say "yes"? This is a display value only.
 const isLocked = (locked) => !!locked && (locked.value || '').trim().toLowerCase() === 'yes';
 
@@ -2707,12 +2722,7 @@ const isLocked = (locked) => !!locked && (locked.value || '').trim().toLowerCase
 // and the two editor fields (ADR 0064 items 3 to 7, ADR 0068 item 8). An empty field gives `null`, so that
 // Studio writes no empty element. No field refuses a value that is not an
 // email address. The core removes the space at the ends of each text.
-function SettingsPage({ feed, model, update, album, release, op3Tracks, onListChanged }) {
-  const kindAction = useAction();
-  const saveKind = (kind) => kindAction.run(async () => {
-    await api(`/feeds/${feed.id}/kind`, { method: 'PUT', body: { kind: kind || null } });
-    await onListChanged();
-  });
+function SettingsPage({ model, update, album, op3Tracks }) {
   const field = (name) => (value) => update((m) => set(m, name, value));
   const owner = model.owner || { name: null, email: null };
   const setOwner = (name, value) => update((m) => {
@@ -2729,13 +2739,6 @@ function SettingsPage({ feed, model, update, album, release, op3Tracks, onListCh
   const hint = op3Hint(op3Tracks);
   const setLockOwner = (value) => update((m) => set(m, 'locked', { ...m.locked, owner: value }));
   const shown = {
-    kind: () => html`<section class="page-section"><h2>Kind</h2>
-      <div class="group"><${ChoiceSelect} id="release-kind" label="Kind" value=${feed.release_kind || ''}
-        options=${RELEASE_KINDS}
-        hint="Studio shows this kind. The feed file has no tag for it."
-        onChange=${saveKind} /></div>
-      <${ErrorNotice} error=${kindAction.error} />
-    </section>`,
     language: () => html`<section class="page-section"><h2>Language</h2>
       <div class="group">
         <${TextField} id="ch-language" label="Language" hint="For example en or de-AT." value=${model.language} onChange=${field('language')} />
@@ -2787,7 +2790,7 @@ function SettingsPage({ feed, model, update, album, release, op3Tracks, onListCh
       </div>
     </section>`,
   };
-  return showSections(pageSequence('settings', { album, release }), shown);
+  return showSections(pageSequence('settings', { album }), shown);
 }
 
 // The listing control of a channel (ADR 0063, ADR 0065). One switch hides the
@@ -2825,14 +2828,15 @@ function ListingField({ id, feedId, draft, model }) {
     </details>`}`;
 }
 
-function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImporting, onRemoved, onListChanged, onArtwork }) {
+function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImporting, onRemoved, onListChanged, onArtwork, release = false }) {
   const openPage = (page) => go({ name: 'feed', id: feed.id, ...page });
   // No wrapper: each section is a direct row of .page, with the gap of
   // .page between sections (review of task 014c, defect 2).
   const shown = {
     album: (s) => html`<section class="page-section"><h2>Album</h2>
       <div class="group">
-        <${ChannelFields} feedId=${feed.id} draft=${draft} model=${model} update=${update} bad=${bad} artistLabel="Artist" onArtwork=${onArtwork} fields=${s.fields} />
+        <${ChannelFields} feedId=${feed.id} draft=${draft} model=${model} update=${update} bad=${bad} artistLabel="Artist" onArtwork=${onArtwork} fields=${s.fields}
+          kindField=${release ? html`<${ReleaseKindField} feed=${feed} onListChanged=${onListChanged} />` : null} />
       </div>
     </section>`,
     publishers: () => html`<${ArtistsAndLabels} feed=${feed} feeds=${feeds} model=${model} update=${update} draft=${draft} go=${go} onListChanged=${onListChanged} />`,
@@ -2861,7 +2865,7 @@ function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImp
       <p class="note">Studio sets the track numbers (podcast:episode and itunes:episode) from this sequence. It does not change the publication dates.</p>
     </section>`,
   };
-  return showSections(pageSequence('album'), shown);
+  return showSections(pageSequence('album', { release }), shown);
 }
 
 // The playlist page (ADR 0053 item 4): the channel fields and the feed facts.
@@ -5012,11 +5016,8 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
   if (page === 'check') {
     body = html`<${CheckPage} feed=${feed} model=${model} check=${check} go=${go} />`;
   } else if (page === 'settings') {
-    // The API gives `kind_shown` only for a feed with the medium `music`
-    // (ADR 0213 items 13 and 15).
-    const release = !!feed.kind_shown;
-    body = html`<${SettingsPage} feed=${feed} model=${model} update=${update} album=${!publisher && !playlist}
-      release=${release} op3Tracks=${draft.op3Tracks} onListChanged=${onListChanged} />`;
+    body = html`<${SettingsPage} model=${model} update=${update} album=${!publisher && !playlist}
+      op3Tracks=${draft.op3Tracks} />`;
   } else if (publisher && page !== 'files' && page !== 'credits' && page !== 'recipients') {
     body = html`<${PublisherPage} feed=${feed} feeds=${feeds} model=${model} update=${update} bad=${draft.bad}
       draft=${draft} go=${go} onListChanged=${onListChanged} onArtwork=${onArtwork} onRemoved=${onRemoved} connectors=${connectors} />`;
@@ -5040,8 +5041,11 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
     body = html`<${FilesPage} feed=${feed} connectors=${connectors} onOpsChanged=${onOpsChanged} reloadKey=${filesReloadKey}
       differences=${differences} onRescan=${onRescan} />`;
   } else {
+    // The API gives `kind_shown` only for a feed with the medium `music`
+    // (ADR 0213 items 13 and 15).
     body = html`<${AlbumPage} feed=${feed} feeds=${feeds} model=${model} update=${update} bad=${draft.bad} draft=${draft} go=${go}
-      onAdding=${onAdding} onImporting=${onImporting} onRemoved=${onRemoved} onListChanged=${onListChanged} onArtwork=${onArtwork} />`;
+      onAdding=${onAdding} onImporting=${onImporting} onRemoved=${onRemoved} onListChanged=${onListChanged} onArtwork=${onArtwork}
+      release=${!!feed.kind_shown} />`;
   }
   const onAdd = (item) => {
     const [added] = withCids([item]);

@@ -4,6 +4,7 @@
 - Date: 2026-11-14
 - Owner: operator, with the technical choices of the planning model
 - Accepted: 2026-11-14 by the operator, through the questionnaire. The operator rejected a block that shows the levels as a tree. The operator selected "Remove the row" for the row "Album" and "Studio keeps it and shows it" for the release kind. For a release with no artist page, the operator selected "A finding on the tab Check" and also a stop in Review.
+- Revised: 2026-11-15 by operator decision, from the [walk notes of 2026-11-15](../reviews/2026-11-15-walk-notes.md). Item 13 moves the menu "Kind" from the tab **Settings** to the first tab. Item 16 gives the hint of that menu.
 - Technical choices: the planning model selected items 3 to 6, 8, 10 to 16, 19 to 22 and 24 to 27.
 - Changes: [ADR 0212](0212-the-add-pages.md) items 1, 6 to 8: the page "Add a Feed" and its form make no release.
 - Changes: [ADR 0164](0164-the-releases-of-a-publisher-feed-have-an-add-row.md) item 2: only the page of an artist has the add row.
@@ -40,10 +41,10 @@ The form has no release kind. The operator wants a select menu with album, EP an
 10. A release has a kind: album, EP or single. Studio keeps the kind in the collection. The feed file does not hold it, and no app gets it.
 11. A release with no kept kind gets its kind from the count of its tracks: 1 to 3 tracks give a single, 4 to 6 give an EP, and each other count gives an album. The core gives this rule.
 12. The menu "Kind" has four values: "From the tracks", "Album", "EP" and "Single". The form starts with "From the tracks".
-13. The tab **Settings** of a release has the same menu. A change saves at once. It is not a part of the draft, and it needs no write.
+13. The first tab of a release has the same menu, between "Title" and "Artist". The tab **Settings** has no menu "Kind". A change saves at once. It is not a part of the draft, and it needs no write.
 14. The type label of a release shows the kind, in each place that showed "Album": the tile, the row, the head of the feed page and the left panel.
 15. A playlist and a publisher feed have no kind. A feed with live shows and no track keeps the label "Album" from item 11.
-16. A hint at the menu says "Studio shows this kind. The feed file has no tag for it."
+16. A hint at the menu of the form says "Studio shows this kind. The feed file has no tag for it." A hint at the menu of the first tab says "Saves at once. The feed file has no tag for the kind."
 
 ### A Feed With No Page
 
@@ -98,7 +99,7 @@ Mechanical:
 
 Visual, by the planning model:
 
-- The page "Add a Feed", the release form from an artist page, the tab **Settings** with the menu, a tile of each kind, the finding on the tab **Check**, and the refusal in Review, at 1280 px light and 390 px dark, with the fit checks.
+- The page "Add a Feed", the release form from an artist page, the first tab of a release with the menu, a tile of each kind, the finding on the tab **Check**, and the refusal in Review, at 1280 px light and 390 px dark, with the fit checks.
 
 Human, by the operator. This gate is open:
 

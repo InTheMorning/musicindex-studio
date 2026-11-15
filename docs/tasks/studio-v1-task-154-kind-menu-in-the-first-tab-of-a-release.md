@@ -2,7 +2,16 @@
 
 Decision: [ADR 0213](../adr/0213-a-release-starts-on-the-page-of-its-artist.md) items 13 and 16. The main session changes the two items in the commit of this task, with a `- Revised:` line. Item 13 then gives the position between "Title" and "Artist". Item 16 then gives the hint of this file.
 
-Status: Not started. The packet is ready for a delegate.
+Status: Complete on 2026-11-15, with the screenshot visual check. The visual gate for the operator is open.
+
+## Result
+
+- The delegate was `gpt-6-luna` with medium effort.
+- Corrections of the main session: the delegate put the menu in an extra `div`, and the row did not follow the layout of the other fields. The menu is a direct row of the group. The page table and the page **Settings** do not get the release flag, because no code uses it there.
+- The main session changed ADR 0213 items 13 and 16 in the commit of this task. The form of a new release keeps the hint "Studio shows this kind. The feed file has no tag for it."
+- The gate passed on the tree with this change.
+- Screenshots of the main session, at 1280 px and at 390 px, in the light theme and the dark theme: the first tab of a release has the fields "Title", "Kind" and "Artist" in that sequence, with the hint. A change to "EP" changes the tab name, the type label of the head and the left panel. The top bar shows "No changes". The tab **Settings** has no menu "Kind". `$edges()` and `$overflow()` are empty, and the fit check has no finding.
+- A playlist and a publisher feed have no screenshot. Only `AlbumPage` gives the field, and the API gives `kind_shown` only for a feed with the medium `music`. This is a check of the source.
 
 Source: [walk notes of 2026-11-15](../reviews/2026-11-15-walk-notes.md), Note 7.
 

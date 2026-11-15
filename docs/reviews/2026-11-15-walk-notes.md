@@ -128,6 +128,47 @@ Facts:
 
 Open: no decision. Different words after a done delete change ADR 0208 items 1 and 4. The orchestrator said on 2026-11-15 that ADR 0208 is not decided, so this session changed nothing.
 
+### Note 9: The Review Sheet Has No Row **Announce**, And The Check Box Moves
+
+Comment: the check box "Send a podping" moves to the right side of the review sheet, above the button **Write to the File Host**. The row **Announce** goes.
+
+Facts:
+
+- This note continues Note 1, which gives the four things that only the row **Announce** shows.
+- [ADR 0209](../adr/0209-the-review-sheet-keeps-the-podping-box-in-view-and-names-each-delete.md) item 1 puts the check box in the footer, in its own row above the buttons. Items 2 and 3 keep the row **Announce**.
+
+Operator choice: remove the row **Announce**, and put the check box at the right side above **Write to the File Host**.
+
+Open: the choice changes ADR 0209 items 1 to 3. Each of the four things of Note 1 needs a new position, or a decision removes it. The orchestrator said on 2026-11-15 that ADR 0209 is not decided, so this session changed nothing.
+
+### Note 10: One Row In Review For "Hide From Apps"
+
+Comment: the text "Block in Apple Podcasts" is not good, because a musician has no interest in Apple Podcasts. The word "Blocks" is not clear. Review must show this change as one row with a good name.
+
+Facts:
+
+- [ADR 0063](../adr/0063-one-switch-hides-a-feed-from-apps.md) items 3 and 4 give the switch "Hide from apps". The switch changes two tags: `itunes:block`, and each `podcast:block` with no `id`.
+- Review shows one row for each field of the feed. `KEY_WORDS` in `crates/api/ui/review.js` names the field `itunes_block` "Block in Apple Podcasts" and the field `blocks` "Blocks". Thus one change of the switch gives two rows.
+- `crates/core/src/review.rs` gives the two fields to the review.
+- A `podcast:block` with an `id` applies to one platform. The switch does not change it (ADR 0063 item 5), and it is in the same field `blocks`.
+
+Open: no task. One row with the name of the switch is possible when the two tags change together. The task must say what Review shows when only one tag changes, and what it shows for a block of one platform.
+
+### Note 11: A Confirmation That Music Index Got A Write
+
+Comment: after a write with a podping, Studio must show a confirmation when Music Index has the change.
+
+Facts:
+
+- Studio has no such confirmation, and no task for it.
+- The row "Announcement" of "Feed facts" shows the state of the podping in the queue of Studio. It does not show what Music Index did.
+- [ADR 0175](../adr/0175-the-check-shows-what-music-index-holds.md) item 10 gives the one line about this subject. The tab **Check** says "Music Index has not read your last write yet." when the build date of the index is earlier than the date of the last write.
+- The line shows only the negative state. The requests go out only when the user opens the check or selects **Check Again** (ADR 0175 item 1).
+- ADR 0175 lists two alternatives that the operator did not select on that date: a request some minutes after each write, and a row for a last write that the index has not read.
+- [ADR 0184](../adr/0184-after-a-move-studio-shows-the-podping-of-the-move.md) gives a notice with the podping state after a move only. The notice goes when Music Index gives the new address.
+
+Open: no decision. A confirmation after each write needs a request to Music Index after the write. That changes ADR 0175 item 1 and replaces the alternative that the operator did not select.
+
 ## Results Of The Steps
 
 The step numbers are those of the section "What to test" of the [notes of `0.1.0-rc.23`](../releases/0.1.0-rc.23.md).
@@ -135,3 +176,4 @@ The step numbers are those of the section "What to test" of the [notes of `0.1.0
 - Step 3: the kind of each release agrees with its track count. A release of 2 tracks shows "Single" (two releases). A release of 7 tracks and a release of 19 tracks show "Album". The collection has no release of 4 to 6 tracks, so the upgrade to "EP" stays open.
 - Step 4: pass. The operator made a release with the kind "EP" from the page of the artist.
 - Step 5: open. The collection of the operator has no release in the group "Not linked".
+- Step 6: pass. The sheet shows the goals and the domain line with the real domain.

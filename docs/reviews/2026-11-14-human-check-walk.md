@@ -348,8 +348,9 @@ The operator answered a questionnaire about the list above. These lines record t
     - The root of the levels is a publisher feed with the role hosting, not a file host. A hosting page and a label page are optional. A release must have an artist page.
     - The release kind (album, EP, single) is a value that Studio keeps and shows. The feed file has no tag for it. Its start value comes from the count of the tracks: 1 to 3 tracks a single, 4 to 6 an EP, 7 or more an album.
     - A release with no artist page gets a finding on the tab **Check**, and Review also stops its write.
-    - Open: ADR 0073 owns the rows of the page "Add a Feed" and the menu "Type" of its form. It has three "Changed by" lines, which is the limit. A change of it needs a consolidation of ADR 0073 first.
-    - Open: it is not decided if a show feed and a playlist are also made only from within an artist.
+    - ADR 0073 owned the rows of the page "Add a Feed" and the menu "Type" of its form. It had three "Changed by" lines, which is the limit. The operator selected its consolidation, and [ADR 0212](../adr/0212-the-add-pages.md) is that consolidation.
+    - Operator choice: the row "Album" leaves the page "Add a Feed". A release starts only on the page of an artist.
+    - Operator choice: a show feed and a playlist do not need an artist page. They need a publisher feed: a hosting page, a label page or an artist page.
 - Operator choice for text 5: the button of the confirm of **Delete Now…** is **Review the Deletion**. The click already opens Review.
 - Operator choice for text 7: when a move copies no file and no old file stays, the plan of the move sheet has the row "Old files" with "None. No waiting time." Defect 2 needs a measurement in WebKitGTK.
 

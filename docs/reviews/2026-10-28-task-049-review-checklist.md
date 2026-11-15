@@ -1,6 +1,6 @@
 # Task 049 Review Checklist, 2026-10-28
 
-Task: [task 049](../tasks/studio-v1-task-049-add-pages.md). Decision: [ADR 0073](../adr/0073-the-add-pages-ask-one-question-at-a-time.md).
+Task: [task 049](../tasks/studio-v1-task-049-add-pages.md). Decision: [ADR 0073](../archive/adr/0073-the-add-pages-ask-one-question-at-a-time.md).
 
 ## Decisions Of The Planning Model
 

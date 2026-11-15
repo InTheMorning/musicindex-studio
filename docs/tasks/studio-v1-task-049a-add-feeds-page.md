@@ -1,6 +1,6 @@
 # Studio v1 Task 049a: The Add Feeds Page And One Form To Make A Feed
 
-Parent: [task 049](studio-v1-task-049-add-pages.md). Decision: [ADR 0073](../adr/0073-the-add-pages-ask-one-question-at-a-time.md) items 1 to 10.
+Parent: [task 049](studio-v1-task-049-add-pages.md). Decision: [ADR 0073](../archive/adr/0073-the-add-pages-ask-one-question-at-a-time.md) items 1 to 10.
 
 Status: Complete - 2026-10-28.
 

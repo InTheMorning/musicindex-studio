@@ -8,7 +8,7 @@
 - Owner: operator
 - Accepted: 2026-10-27 by the operator.
 - Changed by: [ADR 0071](../../adr/0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) item 15 replaces item 11 and the mechanical check. The sequences of items 2 to 9 are the start values of the model module. The module now owns the sequence, and the tier test of ADR 0071 item 6 is the guard.
-- Changed by: [ADR 0073](../../adr/0073-the-add-pages-ask-one-question-at-a-time.md) item 11 replaces "Add a track" and "Import files" in item 2 with one row "Add tracks".
+- Changed by: [ADR 0073](0073-the-add-pages-ask-one-question-at-a-time.md) item 11 replaces "Add a track" and "Import files" in item 2 with one row "Add tracks".
 - Changed by: [ADR 0130](../../adr/0130-the-facts-of-an-audio-file-stay-locked.md). Item 10: the duration moves into "Properties". It is text until the user selects "Advanced".
 - Changes: [ADR 0053](../../adr/0053-playlists-are-musicl-feeds-with-remote-items.md), Playlists Are musicL Feeds With Remote Items. ADR 0053 names the changed items.
 - Changes: [ADR 0064](0064-the-editor-edits-the-fields-that-msp-2-0-edits.md), The Editor Edits The Fields That MSP 2.0 Edits. ADR 0064 names the changed items.
@@ -35,7 +35,7 @@ The Studio journeys in `../musicindex-research` (`research_notes/ui-design/journ
 
 2. The album page has these sections in this sequence:
    1. "Album": Title, Artist, Artwork, Description, Website, Hide from apps, Explicit. "Artwork" is the row of [ADR 0070](../../adr/0070-a-cover-opens-the-artwork-sheet.md) item 9.
-   2. "Tracks": each track, then "Add tracks" ([ADR 0073](../../adr/0073-the-add-pages-ask-one-question-at-a-time.md) item 11).
+   2. "Tracks": each track, then "Add tracks" ([ADR 0073](0073-the-add-pages-ask-one-question-at-a-time.md) item 11).
    3. "Album details": the rows Value routes, then Credits and links.
    4. "Artists and labels".
    5. "Feed": the rows Feed settings, then Feed facts.

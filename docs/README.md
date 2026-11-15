@@ -67,7 +67,6 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0070: A cover opens the artwork sheet](adr/0070-a-cover-opens-the-artwork-sheet.md)
 - [ADR 0071: Settings is a destination, and each page orders its sections by tier](adr/0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md)
 - [ADR 0072: Add a feed opens from Releases](adr/0072-add-a-feed-opens-from-releases.md)
-- [ADR 0073: The add pages ask one question at a time](adr/0073-the-add-pages-ask-one-question-at-a-time.md)
 - [ADR 0074: Nostr keys for artists, labels and contributors](adr/0074-nostr-keys-for-artists-labels-and-contributors.md)
 - [ADR 0075: The publisher page has payments and credits](adr/0075-the-publisher-page-has-payments-and-credits.md)
 - [ADR 0076: An OP3 switch on Feed settings](adr/0076-an-op3-switch-on-feed-settings.md)
@@ -194,6 +193,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0209: The review sheet keeps the podping box in view and names each delete](adr/0209-the-review-sheet-keeps-the-podping-box-in-view-and-names-each-delete.md)
 - [ADR 0210: A row has one menu, and a live show can be removed](adr/0210-a-row-has-one-menu-and-a-live-show-can-be-removed.md)
 - [ADR 0211: Studio follows a move that a different Studio made](adr/0211-studio-follows-a-move-that-a-different-studio-made.md)
+- [ADR 0212: The add pages](adr/0212-the-add-pages.md)
 
 ## Plans
 
@@ -581,6 +581,7 @@ Each release candidate after 0.1.0-rc.8 has one notes file ([ADR 0100](adr/0100-
 Superseded decisions. Read them for research only. They bind no change.
 
 - [ADR 0027: The recipient picker](archive/adr/0027-the-recipient-picker.md), superseded by ADR 0207
+- [ADR 0073: The add pages ask one question at a time](archive/adr/0073-the-add-pages-ask-one-question-at-a-time.md), superseded by ADR 0212
 - [ADR 0038: Published feeds, downloads, the folder scan and feed moves](archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md), superseded by ADR 0204
 - [ADR 0039: The shell, Releases and the outline of a feed](archive/adr/0039-the-shell-releases-and-the-outline.md), superseded by ADR 0206
 - [ADR 0041: Publisher feeds and two-way links](archive/adr/0041-publisher-feeds-and-two-way-links.md), superseded by ADR 0205

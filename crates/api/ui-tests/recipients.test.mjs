@@ -4,10 +4,33 @@ import assert from 'node:assert/strict';
 import {
   recipientRow, rowLines, placesText, useRow, outcomeText, causeText, blockedText,
   initialStatuses, refreshedStatuses, addressLines, lnaddressOf, nodeOf, recipientTitle, lookupHint, memberStart, startType, operationLine, suggestionField, breakParts, OTHER_ADDRESS, startWrite, finishWrite, nextToWrite, statusText, writableIds, writeLabel, retryStatuses, nameOf, statusError,
-  walletActions, walletSheet, walletSheetStart, walletTypeChange, walletDetailsLine, walletSheetBody, walletSheetReady, WALLET_TYPES, CUSTOM_KEY_HINT, shareParts,
+  walletActions, walletSheet, walletSheetStart, walletTypeChange, walletDetailsLine, walletSheetBody, walletSheetReady, WALLET_TYPES, CUSTOM_KEY_HINT, shareParts, percentages, feeLine,
 } from '../ui/recipients.js';
 
 const equalParts = (count) => Array.from({ length: count }, (_, i) => ({ name: `R${i}`, address: `r${i}`, split: '1' }));
+const VALUE_5 = 'musicindex ADR 0075 R-VALUE-5: each recipient gets n / S x 100, and S includes the fee shares. Fix percentages in recipients.js.';
+const block = (rows) => rows.map(([split, fee], i) => ({ name: `R${i}`, split: split === null ? null : String(split), fee: fee ? 'true' : null }));
+const round = (list) => list.map((p) => (p === null ? null : Math.round(p * 100) / 100));
+
+test('the split uses the shares method of musicindex ADR 0075 R-VALUE-5', () => {
+  // The cases of musicindex-research value-split-fee-2026-11-15.md, column "BMB and Podverse v5".
+  assert.deepEqual(round(percentages(block([[100], [100], [10, true]]))), [47.62, 47.62, 4.76], VALUE_5);
+  assert.deepEqual(round(percentages(block([[50], [50], [5, true], [5, true]]))), [45.45, 45.45, 4.55, 4.55], VALUE_5);
+  assert.deepEqual(round(percentages(block([[90], [10], [0.5, true]]))), [89.55, 9.95, 0.5], VALUE_5);
+  assert.deepEqual(round(percentages(block([[100], [150, true]]))), [40, 60], VALUE_5);
+  assert.deepEqual(round(percentages(block([[49], [46], [5], [1, true]]))), [48.51, 45.54, 4.95, 0.99], VALUE_5);
+  assert.deepEqual(percentages(block([[10, true]])), [100], 'musicindex ADR 0075 R-VALUE-5 item 5: one recipient gets 100 %. Fix percentages in recipients.js.');
+  assert.deepEqual(percentages(block([['x'], [3], [null], [-1]])), [null, 100, null, null], 'musicindex ADR 0075 R-VALUE-5 item 3: a share that is not valid gives no percentage and counts as 0. Fix percentages in recipients.js.');
+  assert.deepEqual(percentages(block([[0], [0]])), [null, null], 'musicindex ADR 0075 R-VALUE-5 item 4: S of 0 gives no percentage. Fix percentages in recipients.js.');
+});
+
+test('the fee line names each fee and says that it comes out of the payment (musicindex ADR 0075 R-VALUE-5 item 7)', () => {
+  const fix = 'musicindex ADR 0075 R-VALUE-5 item 7. Fix feeLine in recipients.js.';
+  assert.equal(feeLine(block([[100], [100], [10, true]])), 'Fee: R2 4.8 %. The fee comes out of the payment, not on top of it.', fix);
+  assert.equal(feeLine(block([[50], [50], [5, true], [5, true]])), 'Fees: R2 4.5 %, R3 4.5 %. The fees come out of the payment, not on top of it.', fix);
+  assert.equal(feeLine(block([[100], [100]])), null, fix);
+});
+
 const SHARE_BAR = 'ADR 0133: "Other" holds at most 10 % and each part of 5 % or more stays visible. Check shareParts in recipients.js.';
 
 test('the share bar shows each equal part, and the legend gives the sum of the rest', () => {

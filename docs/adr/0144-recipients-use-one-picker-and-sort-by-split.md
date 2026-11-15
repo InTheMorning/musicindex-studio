@@ -7,6 +7,7 @@
 - Changes: [ADR 0027](../archive/adr/0027-the-recipient-picker.md) item 7 and [ADR 0099](../archive/adr/0099-the-people-destination-and-the-page-of-a-person.md) item 19: only the search of musicindex selects many recipients, and a row of the user fills the form.
 - Changes: [ADR 0137](0137-the-people-list-fills-nostr-keys-and-open-entries.md) items 4 and 6 for a recipient.
 - Changed by: [ADR 0145](0145-each-sheet-that-adds-a-value-has-one-layout.md), Each Sheet That Adds A Value Has One Layout.
+- Changed: 2026-11-15 by the operator, through musicindex ADR 0075 (musicindex `bf58554`). Item 1 has the check box "Fee", one split label and the fee line.
 - Uses: [ADR 0123](0123-one-type-of-value-has-one-picker.md) and [ADR 0141](0141-the-form-of-add-a-wallet-comes-first.md) for the layout of the sheet. [ADR 0065](0065-the-core-applies-each-feed-rule.md) for the sort at the draft save. [ADR 0012](0012-lossless-tree-with-a-typed-model.md) for a block that does not change.
 - Source: [findings of local use, finding 27](../reviews/2026-11-06-local-use-findings.md)
 
@@ -16,7 +17,7 @@ An open recipient had three rows of buttons. "Add a recipient", "Pick from your 
 
 ## Decision
 
-1. An open recipient holds its split, the check box "Fee, paid first", its address with "Change…", and "Remove".
+1. An open recipient holds its split, the check box "Fee", its address with "Change…", and "Remove". The split of each recipient, a fee included, has the label "Split (shares)". Below the fees, a line names each fee and says that it comes out of the payment (musicindex ADR 0075 R-VALUE-5 item 7).
 2. "Add a recipient" and "Change…" open one sheet: the layout of [ADR 0145](0145-each-sheet-that-adds-a-value-has-one-layout.md). A selection of a person or a payee fills the form. The row "Copy from a Feed" opens the search with check boxes for many recipients.
 3. "Add to People" shows only for a row with an address that no person holds, on an open recipient and on a payee row of the sheet.
 4. The rows have no move buttons and no position menu. The screen shows the biggest split first, with each fee in its own group. The rows sort when the focus leaves the open row, so that a row does not move during the typing or before a click in that row. The share bar has the same sequence.

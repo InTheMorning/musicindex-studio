@@ -19,10 +19,11 @@ export async function refreshLookups(api) {
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
 // ---- Shares and percentages ----
-// A split is a number of shares, not a percentage. A fee recipient
-// (fee="true") takes its split as a percentage first. The other recipients
-// share the rest in proportion to their shares. The editor shows the
-// percentage as information and does not change a split.
+// A split is a number of shares, not a percentage. Each recipient gets its
+// shares in the total of the shares of all recipients, fee recipients
+// included (musicindex ADR 0075 R-VALUE-5). The fee flag does not change the
+// percentage. The crate `musicindex-value` has the same rule for the core.
+// The editor shows the percentage as information and does not change a split.
 
 export const isFee = (r) => (r.fee || '').toLowerCase() === 'true';
 export const shares = (r) => {
@@ -31,15 +32,25 @@ export const shares = (r) => {
 };
 
 export function percentages(recipients) {
-  const fees = recipients.filter(isFee).reduce((sum, r) => sum + (shares(r) ?? 0), 0);
-  const total = recipients.filter((r) => !isFee(r)).reduce((sum, r) => sum + (shares(r) ?? 0), 0);
-  const rest = Math.max(0, 100 - fees);
+  // R-VALUE-5 item 5: one recipient gets 100 %, whatever its share.
+  if (recipients.length === 1) return [100];
+  const total = recipients.reduce((sum, r) => sum + (shares(r) ?? 0), 0);
   return recipients.map((r) => {
     const n = shares(r);
-    if (n === null) return null;
-    if (isFee(r)) return n;
-    return total > 0 ? (n / total) * rest : null;
+    return n === null || !(total > 0) ? null : (n / total) * 100;
   });
+}
+
+// The line that names the fees of a block, or null with no fee (musicindex
+// ADR 0075 R-VALUE-5 item 7).
+export function feeLine(recipients) {
+  const percent = percentages(recipients);
+  const fees = recipients
+    .map((r, i) => (isFee(r) ? `${r.name || r.address || 'Recipient'} ${percentText(percent[i])}` : null))
+    .filter((text) => text !== null);
+  if (fees.length === 0) return null;
+  const it = fees.length === 1 ? 'The fee comes' : 'The fees come';
+  return `${fees.length === 1 ? 'Fee' : 'Fees'}: ${fees.join(', ')}. ${it} out of the payment, not on top of it.`;
 }
 
 // The parts of the share bar (ADR 0133). "Other" holds at most MAX_OTHER

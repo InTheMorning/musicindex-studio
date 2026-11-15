@@ -2986,7 +2986,7 @@ dependencies = [
 [[package]]
 name = "musicindex-value"
 version = "0.1.0"
-source = "git+https://github.com/InTheMorning/musicindex-lib?rev=0fadde6c993fe5aec87a7627c6149c1cc9ccc9a0#0fadde6c993fe5aec87a7627c6149c1cc9ccc9a0"
+source = "git+https://github.com/InTheMorning/musicindex-lib?rev=be0f855e65cd12b1cc9bffd66566cc8f720ce203#be0f855e65cd12b1cc9bffd66566cc8f720ce203"
 
 [[package]]
 name = "ndk"

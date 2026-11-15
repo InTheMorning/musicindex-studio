@@ -19,7 +19,7 @@ serde_json = "1"
 sha2 = "0.11"
 similar = { version = "3", features = ["inline"] }
 musicindex-search = { git = "https://github.com/InTheMorning/musicindex-lib", rev = "e84bab570ef53fb6daad3fc59681ec64abe5417f" }
-musicindex-value = { git = "https://github.com/InTheMorning/musicindex-lib", rev = "0fadde6c993fe5aec87a7627c6149c1cc9ccc9a0" }
+musicindex-value = { git = "https://github.com/InTheMorning/musicindex-lib", rev = "be0f855e65cd12b1cc9bffd66566cc8f720ce203" }
 ureq = "3.5"
 quick-xml = "0.42"
 rusty-s3.workspace = true

@@ -492,26 +492,17 @@ fn item_place(item: &Item, number: usize) -> CreditPlace {
     }
 }
 
-fn is_fee(recipient: &Recipient) -> bool {
-    recipient
-        .fee
-        .as_deref()
-        .is_some_and(|fee| fee.eq_ignore_ascii_case("true"))
-}
-
 /// The split of each recipient of one value block in percent. The crate
-/// `musicindex-value` gives the rule (musicindex ADR 0074 R-VALUE-4). Studio
-/// gives the share and the fee flag of each recipient. A recipient with no
-/// `split` attribute has a share that is not a number.
+/// `musicindex-value` gives the rule (musicindex ADR 0075 R-VALUE-4 and
+/// R-VALUE-5). Each recipient gets its share in the total of all shares, fee
+/// recipients included. A recipient with no `split` attribute has a share
+/// that is not a number.
 fn percentages(recipients: &[&Recipient]) -> Vec<Option<f64>> {
-    let split: Vec<musicindex_value::Recipient> = recipients
+    let shares: Vec<Option<f64>> = recipients
         .iter()
-        .map(|r| {
-            let share = r.split.as_deref().and_then(musicindex_value::parse_share);
-            musicindex_value::Recipient::new(share, is_fee(r))
-        })
+        .map(|r| r.split.as_deref().and_then(musicindex_value::parse_share))
         .collect();
-    musicindex_value::percentages(&split)
+    musicindex_value::percentages(&shares)
 }
 
 /// Add each recipient of `values` with its place and its split (ADR 0143,
@@ -1057,7 +1048,7 @@ mod tests {
             values: vec![block(&[
                 ("plain-a", Some("3"), None),
                 ("plain-b", Some("1"), None),
-                ("fee", Some("20"), Some("true")),
+                ("fee", Some("4"), Some("true")),
                 ("bad", Some("x"), None),
                 ("none", None, None),
             ])],
@@ -1068,10 +1059,11 @@ mod tests {
             .into_iter()
             .map(|(p, _)| p.percent)
             .collect();
-        // ADR 0133: a fee keeps its share. The others share the rest.
+        // musicindex ADR 0075 R-VALUE-5: each share in the total of all
+        // shares, the fee included.
         assert_eq!(
             percent,
-            [Some(60.0), Some(20.0), Some(20.0), None, None],
+            [Some(37.5), Some(12.5), Some(50.0), None, None],
             "ADR 0156 item 4"
         );
     }

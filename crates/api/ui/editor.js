@@ -44,7 +44,7 @@ import { usesAlbumCredits, withTrackCredits, withAlbumCredits, creditNameChange 
 import { readDuration, durationText } from './duration.js';
 import { mediaSource, playerNotice, canPlay, playerError, isPlaceholderAddress, PLAYER_STARTING, PLAYER_STARTING_DELAY_MS, playerMark, playWasReplaced, playerProgress } from './media.js';
 import { shortType as formatLabel, propertiesSummary, propertiesOpen, propertyRows, propertiesNotice, needsMetadataRead, clockText } from './audio.js';
-import { MOVE_SCOPES, fileHostRows, planRows, stayRows, deleteLabel, deleteAllLabel, DELETE_NOTE_ON, DELETE_NOTE_OFF, waitLabel, waitingView, readyNotice, partMoveNotice, existsRefusalView, addDisabled, replacesCopyNote, replaceWarning } from './releasemove.js';
+import { MOVE_SCOPES, fileHostRows, planRows, stayRows, deleteLabel, deleteAllLabel, DELETE_NOTE_ON, DELETE_NOTE_OFF, waitLabel, waitingView, readyNotice, partMoveNotice, existsRefusalView, addDisabled, replacesCopyNote, replaceWarning, indexNeedsRead, INDEX_READ_AGAIN_MS } from './releasemove.js';
 import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary, artworkPreview } from './artwork.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, addsAsTrackFile, refusedText, wrongKindText, replacedAddresses, selectedFacts } from './picker.js';
 import { deleteChoices, deleteButtonEnabled, retireSteps, operationNote } from './feeddelete.js';
@@ -4456,6 +4456,19 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
   const [moving, setMoving] = useState(null);
   const loadMoves = () => api(`/feeds/${feed.id}/moves`).then((r) => setMoves(r.moves), () => setMoves([]));
   useEffect(() => { loadMoves(); }, [feed.id, reloadKey]);
+  // The row "Music Index" of a move reads again until the index follows
+  // the new address.
+  const indexReads = useRef(0);
+  useEffect(() => { indexReads.current = 0; }, [feed.id, reloadKey]);
+  const readIndexAgain = indexNeedsRead(moves, indexReads.current);
+  useEffect(() => {
+    if (!readIndexAgain) return undefined;
+    const timer = setInterval(() => {
+      indexReads.current += 1;
+      loadMoves();
+    }, INDEX_READ_AGAIN_MS);
+    return () => clearInterval(timer);
+  }, [readIndexAgain, feed.id]);
   // The downloads of this feed, from the downloads route.
   const [downloads, setDownloads] = useState([]);
   const lastActive = useRef(new Set());

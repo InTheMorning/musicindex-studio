@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { outcomeText, operationLine } from '../ui/recipients.js';
 import { changeTitle, changeRow, afterDiscard } from '../ui/people.js';
-import { MOVE_SCOPES, fileHostRows, planRows, stayRows, deleteLabel, waitingView, readyNotice, partMoveNotice, existsRefusalView, addDisabled, replacesCopyNote, replaceWarning, REPLACE_LABEL } from '../ui/releasemove.js';
+import { MOVE_SCOPES, fileHostRows, planRows, stayRows, deleteLabel, waitingView, readyNotice, partMoveNotice, existsRefusalView, addDisabled, replacesCopyNote, replaceWarning, REPLACE_LABEL, indexNeedsRead, INDEX_READ_AGAIN_MAX } from '../ui/releasemove.js';
 
 const hosts = [{ id: 1, name: 'Old Host' }, { id: 2, name: 'New Host' }];
 const empty = { count: 0, bytes: 0 };
@@ -146,4 +146,14 @@ test('Review rows of a move that replaces a copy or a different file (ADR 0178 i
   const plain = replaceWarning({ path: 'a.xml', replaces_file: { title: null, guid: null, size: 1 } });
   assert.match(plain.text, /a\.xml/);
   assert.equal(replaceWarning({ path: 'a.xml', replaces_file: null }), null);
+});
+
+test('the Files page reads the moves again while Music Index gives a different address', () => {
+  assert.equal(indexNeedsRead([{ index: 'different' }], 0), true);
+  assert.equal(indexNeedsRead([{ index: 'follows' }, { index: 'different' }], 3), true);
+  assert.equal(indexNeedsRead([{ index: 'follows' }], 0), false);
+  assert.equal(indexNeedsRead([{ index: 'unknown' }], 0), false, 'No answer gets no read again.');
+  assert.equal(indexNeedsRead([], 0), false);
+  assert.equal(indexNeedsRead(null, 0), false);
+  assert.equal(indexNeedsRead([{ index: 'different' }], INDEX_READ_AGAIN_MAX), false, 'The reads stop at the limit.');
 });

@@ -330,6 +330,12 @@ The operator answered a questionnaire about the list above. These lines record t
     - The phone and the live shows: missing function 3 and design 9.
 - Defect 1 is corrected: a live show that the draft does not have gives the tab **Live Shows** (`viewAfterLiveGone` in `crates/api/ui/live.js`, with a test). An agent walk at 1280 px showed "Album 2 › Live shows", the tab **Live Shows** and "No live show yet." after the discard. The human check in the next candidate is open.
 - Defect 5 is corrected: while the row "Music Index" of a move says "Gives a different feed address", the **Files** page reads the moves again each 20 seconds, 15 times at most (`indexNeedsRead` in `crates/api/ui/releasemove.js`, with a test). An agent walk with a test index showed the row change to "✓ Follows the new feed address" with no new open of the page.
+- Defects 3 and 4 have one cause, from a read of the code. No test reproduced it.
+    - **Read Again** reads the file in the folder of the file host. On the server, that file is the pointer file. `record_read` in `crates/core/src/outside.rs` keeps its hash.
+    - The outside check reads the public address of the feed. On the server, that address is the new address on the other file host. Thus the two files are always different, and **Read Again** cannot remove the notice.
+    - `compare` gives "moved" only when the new address is not the public address of the feed. Here the public address is already the new address, so the result is "changed".
+    - A correction needs the decision of missing function 1, how Studio follows a move by a different Studio. Defects 3 and 4 go into that group of mockups.
+- Correction of the line "Runbook text that is out of date" below: the three texts are in the steps of the notes of 0.1.0-rc.21, which the runbook names. The notes of a released candidate do not change. The notes of the next candidate give the current steps.
 - Open: texts 3, 5 and 7 have no new words. Defect 2 needs a measurement in WebKitGTK.
 
 Runbook text that is out of date: `docs/runbooks/operator-human-checks.md` says 7 days for a move, the button **Use** for a suggestion, and the return warning below the move row.

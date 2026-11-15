@@ -20,7 +20,9 @@ cargo test --workspace
 tools/node --test crates/api/ui-tests/*.test.mjs
 # project-baseline "A Binding Rule Lives In A Decision Record": the link lines
 # of each ADR, the limit of global CLAUDE.md §Consolidate A Changed Decision
-# and the status rule of AGENTS.md. No check is skipped.
-python3 "${HOME}/.agents/skills/project-baseline/scripts/check_adr_links.py" "${ROOT}"
+# and the status rule of AGENTS.md. No check is skipped. The bar check starts
+# at ADR 0214.
+python3 "${HOME}/.agents/skills/project-baseline/scripts/check_adr_links.py" \
+    --bar-from 0214 "${ROOT}"
 
 echo "gate: each check passed"

@@ -850,12 +850,12 @@ export function widthNav(view, narrow) {
   return { entries, index: entries.length - 1 };
 }
 
-// The edge grip of musicindex ADR 0071 R-GRIP-2 shows only with the Touch
+// The edge indicator of musicindex ADR 0071 R-EDGE-2 shows only with the Touch
 // profile, in the narrow layout, when an entry of Studio is below the
 // current entry, and not on the root page. `mirrored` is true while the
 // browser history has one entry for each entry of the state. Only then
-// does Back in the browser open a page of Studio (R-GRIP-2 item 3).
-export function showsEdgeGrip(nav, narrow, coarse, mirrored) {
+// does Back in the browser open a page of Studio (R-EDGE-2 item 3).
+export function showsEdgeIndicator(nav, narrow, coarse, mirrored) {
   if (!narrow || !coarse || !mirrored || !nav || nav.index <= 0) return false;
   const view = nav.entries[nav.index];
   return Boolean(view) && view.name !== 'root';

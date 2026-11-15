@@ -49,7 +49,7 @@
 
 ### Narrow Width
 
-11. At 760 px or less, Studio is one stack (musicindex ADR 0069 R-SHELL-2). It has no menu button and no drawer. musicindex ADR 0070 gives the website the same stack. musicindex ADR 0071 gives the edge grip of the narrow layout, and Studio shows it as that record says. The back control of item 10 is the first control of the bar.
+11. At 760 px or less, Studio is one stack (musicindex ADR 0069 R-SHELL-2). It has no menu button and no drawer. musicindex ADR 0070 gives the website the same stack. musicindex ADR 0071 gives the edge indicator of the narrow layout, and Studio shows it as that record says. The back control of item 10 is the first control of the bar.
 12. At 760 px or less, the bar of a feed has two rows. The first row has the back control and the title. The second row has the draft status, then "Versions" and "Review". No part of the bar is hidden.
 13. The root page "Studio" shows the destinations of item 1. It has no back control. Releases stays the start page (item 4), and the root page is below it in the stack. The root page has the color of the left panel, and its bar has the color of the other bars.
 14. A selection of a feed on Releases opens the outline page of the feed: the items of item 7 as a page. A selection on the outline page opens its part. Back from a part opens the outline page, and Back from the outline page opens Releases with the row of the feed marked. The outline page has the color of the left panel, as the root page has.

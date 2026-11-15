@@ -124,15 +124,19 @@ export function nextStep(feed) {
 }
 
 // The add action of the releases of a publisher feed (ADR 0164 items 1, 2
-// and 6). It needs a file host. Each role gets "Add a Release". An
-// artist gets the artist name as the author. Any other role gets no
-// start value. The page of the feed shows it only with no first-step row.
+// and 6, ADR 0213 item 4). A writable artist page gets the action. The page
+// of the feed shows it only with no first-step row.
 export function releaseAdd(feed, name) {
-  if (!feed || !isPublisher(feed) || !feed.connector_id) return null;
-  if ((feed.publisher_roles || [])[0] === 'artist') {
-    return { label: 'Add a Release', start: { author: name || '' } };
-  }
-  return { label: 'Add a Release', start: {} };
+  if (!feed || !isPublisher(feed) || !feed.connector_id || !(feed.publisher_roles || []).includes('artist')) return null;
+  return { label: 'Add a Release', start: { author: name || '', publisher_id: feed.id } };
+}
+
+// The artist pages that can receive a new release. A read-only page cannot
+// receive the link of the new release.
+export function releaseArtistChoices(feeds) {
+  return (feeds || [])
+    .filter((feed) => isPublisher(feed) && feed.connector_id && (feed.publisher_roles || []).includes('artist'))
+    .map((feed) => [String(feed.id), feed.title || feed.path || 'Untitled feed']);
 }
 
 // The rows of the page of a new publisher feed (ADR 0119 item 8). `open` is
@@ -156,8 +160,8 @@ export const FIRST_STEPS = {
 // 8). An album of an artist starts with the artist as its author. A new
 // artist of a label starts with the role `artist`. These are edit aids, not
 // feed rules (ADR 0065).
-export function firstStart(first, open, model) {
-  if (first === 'album' && open === 'album') return { author: (model && model.title) || '' };
+export function firstStart(first, open, model, publisherId) {
+  if (first === 'album' && open === 'album') return { author: (model && model.title) || '', publisher_id: publisherId };
   if (first === 'label' && open === 'publisher') return { role: 'artist' };
   return {};
 }

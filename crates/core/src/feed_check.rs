@@ -199,20 +199,22 @@ pub struct Facts {
 pub fn check(feed: &Feed, facts: &Facts) -> Vec<Finding> {
     let mut found = Vec::new();
     if let Some(refusal) = page_refusal(feed) {
-        let (kind, reason) = match refusal {
+        let (kind, title, reason) = match refusal {
             PageRefusal::NoArtistPage => (
                 FindingKind::NoArtistPage,
+                "No artist page",
                 "This release has no artist page.",
             ),
             PageRefusal::NoPublisherPage => (
                 FindingKind::NoPublisherPage,
+                "No linked page",
                 "This feed has no artist, label or hosting page.",
             ),
         };
         found.push(Finding {
             kind,
             level: FindingLevel::Notice,
-            title: reason.to_owned(),
+            title: title.to_owned(),
             reason: reason.to_owned(),
             entry: None,
             repair: Some(RepairKind::LinkAPage),

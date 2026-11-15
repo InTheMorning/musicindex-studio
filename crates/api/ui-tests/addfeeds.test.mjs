@@ -1,7 +1,8 @@
 // The rules of the Add feeds page and of the form that makes a feed (ADR 0073).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addChoices, makeFields, makeTitle, feedFileStart, startChoices, MAKE_TYPES } from '../ui/addfeeds.js';
+import { readFileSync } from 'node:fs';
+import { addChoices, makeFields, makeTitle, feedFileStart, startChoices, MAKE_TYPES, RELEASE_KINDS } from '../ui/addfeeds.js';
 
 test('feedFileStart gives the file name from the title', () => {
   assert.equal(feedFileStart('Pixel Palace'), 'pixel-palace.xml');
@@ -16,9 +17,11 @@ test('feedFileStart gives an empty path when the title has no usable character',
 });
 
 test('addChoices gives two groups with all rows when a host exists', () => {
+  const owner = 'ADR 0213 item 2: the make group leaves out Album and gives the release hint. Fix addChoices in crates/api/ui/addfeeds.js.';
   const groups = addChoices({ hasHost: true });
   assert.deepEqual(groups.map((g) => [g.id, g.label]), [['make', 'Make a new feed'], ['have', 'Add a feed you have']]);
-  assert.deepEqual(groups[0].rows.map((r) => r.id), ['album', 'publisher', 'show', 'playlist']);
+  assert.deepEqual(groups[0].rows.map((r) => r.id), ['publisher', 'show', 'playlist'], owner);
+  assert.equal(groups[0].hint, 'A release starts on the page of its artist.', owner);
   assert.deepEqual(groups[1].rows.map((r) => r.id), ['find', 'folder', 'msp']);
   assert.equal(groups[0].connect, undefined);
   for (const row of groups.flatMap((g) => g.rows)) {
@@ -28,7 +31,9 @@ test('addChoices gives two groups with all rows when a host exists', () => {
 
 test('addChoices leaves out the make rows and the folder row when no host exists', () => {
   const groups = addChoices({ hasHost: false });
-  assert.deepEqual(groups[0].rows, []);
+  const owner = 'ADR 0213 item 2: the make group keeps its release hint without a file host. Fix addChoices in crates/api/ui/addfeeds.js.';
+  assert.deepEqual(groups[0].rows, [], owner);
+  assert.equal(groups[0].hint, 'A release starts on the page of its artist.', owner);
   assert.equal(groups[0].connect, true);
   assert.deepEqual(groups[1].rows.map((r) => r.id), ['find', 'msp']);
 });
@@ -40,9 +45,20 @@ test('makeFields gives the fields of each type', () => {
   assert.deepEqual(makeFields('playlist'), { medium: 'musicL', titleLabel: 'Playlist name', authorLabel: 'Author', role: false, button: 'Make the Playlist', busyLabel: 'Making the Playlist…' });
 });
 
-test('MAKE_TYPES lists the four types that makeFields knows', () => {
-  assert.deepEqual(MAKE_TYPES.map(([id]) => id), ['album', 'publisher', 'show', 'playlist']);
-  for (const [id] of MAKE_TYPES) assert.ok(makeFields(id).button);
+test('MAKE_TYPES leaves out album, and release fields have a kind menu', () => {
+  const owner = 'ADR 0213 items 2, 6 and 12: keep Album out of Type and give the release fields and Kind values. Fix addfeeds.js and app.js.';
+  assert.deepEqual(MAKE_TYPES.map(([id]) => id), ['publisher', 'show', 'playlist'], owner);
+  for (const [id] of MAKE_TYPES) assert.ok(makeFields(id).button, owner);
+  assert.deepEqual(RELEASE_KINDS, [['', 'From the tracks'], ['album', 'Album'], ['ep', 'EP'], ['single', 'Single']], owner);
+  assert.deepEqual(makeFields('album'), { medium: 'music', titleLabel: 'Album title', authorLabel: 'Artist', role: false, button: 'Make the Release', busyLabel: 'Making the Release…' }, owner);
+  const source = readFileSync(new URL('../ui/app.js', import.meta.url), 'utf8');
+  assert.match(source, /body\.kind = releaseKind \|\| null/, owner);
+  assert.match(source, /body\.publisher_id = start\.publisher_id/, owner);
+  assert.match(source, /label="Kind" value=\$\{releaseKind\}/, owner);
+  const form = source.slice(source.indexOf('function MakeFeedForm'), source.indexOf('// Choose a feed file'));
+  const fieldOrder = [form.indexOf('label="Kind"'), form.indexOf('id="make-title"'), form.indexOf('id="make-author"'),
+    form.indexOf('id="make-from"'), form.lastIndexOf('for="make-host"'), form.indexOf('label">Feed file')];
+  assert.ok(fieldOrder.every((position, index) => position >= 0 && (index === 0 || fieldOrder[index - 1] < position)), owner);
 });
 
 test('startChoices gives only the empty album when no album exists', () => {
@@ -70,6 +86,15 @@ test('startChoices leaves out a publisher feed and a playlist', () => {
     { id: 3, medium: 'music', title: 'Album' },
   ];
   assert.deepEqual(startChoices(feeds), [['', 'Empty album'], ['3', 'Album']]);
+});
+
+test('startChoices includes releases with a kept EP or single kind', () => {
+  const feeds = [
+    { id: 1, medium: 'music', kind_shown: 'ep', title: 'EP' },
+    { id: 2, medium: 'music', kind_shown: 'single', title: 'Single' },
+  ];
+  assert.deepEqual(startChoices(feeds), [['', 'Empty album'], ['1', 'EP'], ['2', 'Single']],
+    'ADR 0077 item 1: Start from must list each music release. Fix startChoices in crates/api/ui/addfeeds.js.');
 });
 
 test('makeTitle names the page that the sheet makes (ADR 0164 item 7)', () => {

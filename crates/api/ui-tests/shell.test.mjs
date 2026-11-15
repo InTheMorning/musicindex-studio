@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  pageTabs, tabsFit, mediumKind, roleChoice, toggleRole, isEditable, isReadOnly, reviewHost, moveNote, isPublisher, isPlaylist, trackKey, isTrack,
+  pageTabs, tabsFit, mediumKind, feedKind, roleChoice, toggleRole, isEditable, isReadOnly, reviewHost, moveNote, isPublisher, isPlaylist, trackKey, isTrack,
   leftPanel, releasesList, listQuery, queryText, sortLabel, sortEntries, compareNames, byName, segmentKey, levelFeedSet,
   startNav, pushNav, backNav, forwardNav, canBack, canForward, setScroll, releasesView,
   narrowStack, openFeedView, navAtWidth, widthNav, wideView, publisherArt, mosaicCells, otherFeedText,
@@ -26,6 +26,14 @@ test('the medium kind gives the dot and the label', () => {
   assert.deepEqual(mediumKind('MUSIC'), { dot: 'feed', label: 'Album' });
   assert.deepEqual(mediumKind('musicL'), { dot: 'playlist', label: 'Playlist' });
   assert.deepEqual(mediumKind(undefined), { dot: 'feed', label: 'Feed' });
+});
+
+test('feedKind gives the release kind and defaults to Album', () => {
+  const owner = 'ADR 0213 item 14: feedKind shows kind_shown. Fix feedKind in crates/api/ui/shell.js.';
+  assert.equal(feedKind({ medium: 'music', kind_shown: 'album' }).label, 'Album', owner);
+  assert.equal(feedKind({ medium: 'music', kind_shown: 'ep' }).label, 'EP', owner);
+  assert.equal(feedKind({ medium: 'music', kind_shown: 'single' }).label, 'Single', owner);
+  assert.equal(feedKind({ medium: 'music' }).label, 'Album', owner);
 });
 
 test('an album or a publisher feed with a connector is editable', () => {

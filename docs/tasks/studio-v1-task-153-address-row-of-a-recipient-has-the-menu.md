@@ -2,7 +2,20 @@
 
 Decision: [ADR 0207](../adr/0207-recipients-change-sets-and-wallets.md) item 60. Items 53 to 59 give the menu of an address row in People.
 
-Status: Not started. The packet is ready for a delegate.
+Status: Complete on 2026-11-15, with the screenshot visual check. The visual gate for the operator is open.
+
+## Result
+
+- The delegate was `gpt-6-luna` with medium effort. It made the shared row `crates/api/ui/addressrow.js`.
+- Corrections of the main session: the recipient row gives the icon component to the menu control. The accessible name of the menu button uses the menu label, because a recipient can have no address. An error of **Add to People** shows above the row. One property that was given two times and one import with no use are removed.
+- The entry **Add to People** leaves the menu after the save. The text "Added" for 2 seconds does not show in this row.
+- The gate passed on the tree with this change.
+- Screenshots of the main session, at 1280 px and at 390 px, in the light theme and the dark theme: the tab **Value Routes** of a release and the payments of a track. Each address row has one menu button, and **Remove** is a destructive button below the row. The menu has **Change…**, **Copy** and **Add to People**. **Change…** opens the sheet "Change the Address". After **Add to People**, the menu has only **Change…** and **Copy**. Escape closes the menu, and the focus stays on its button. `$edges()` and `$overflow()` are empty, and the fit check has no finding.
+- The script cannot read the clipboard. The entry **Copy** ran with no error, and the clipboard content is not checked.
+- The address row of a wallet in People shows its line, "Default", the feed count and the menu with **Edit** and **Copy**, as before.
+- One step changed the split and opened the menu. The two changes stayed.
+- Observation, not from this task: a step that changes the split and the check box "Fee, paid first" in the same event cycle keeps only the last change. The function `change` of `Recipients` reads the list of the last render. A person cannot make two changes in one event cycle.
+- Observation, not from this task: for some seconds after **Read Again**, the recipient rows open and close with no input. This task does not change the code of that state. This is an inference from the diff, not from a run of the code before the change.
 
 Source: [walk notes of 2026-11-15](../reviews/2026-11-15-walk-notes.md), Note 15.
 

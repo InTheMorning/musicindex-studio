@@ -1,11 +1,12 @@
 // The model of the People area (ADR 0099, task 065a).
 import { test } from 'node:test';
+import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import {
   changeSetView, peopleSections, PEOPLE_EMPTY, PEOPLE_SERVER_NOTE, suggestionRow, personRow, displayName, makePersonStart, makePersonBody, sheetFeeds,
   checkedIds, toggledRow, reviewLabel, operationBody, addResultLine,
   lookupAddress, showFindEmpty,
-  addressMenu,
+  addressMenu, recipientAddressMenu,
   nicknameBody, afterNicknameSave,
 } from '../ui/people.js';
 import { pageSequence, tierError } from '../ui/pages.js';
@@ -24,6 +25,32 @@ test('wallet address menus follow ADR 0207 items 53 and 54', () => {
     { action: 'make-default', label: 'Make Default' },
     { action: 'edit', label: 'Edit' },
   ], 'ADR 0207 item 54: omit Copy when the address is absent. Fix addressMenu in crates/api/ui/people.js.');
+});
+
+test('recipient address menus follow ADR 0207 item 60', () => {
+  assert.deepEqual(recipientAddressMenu({ address: 'a@x.example', inPeople: false }), [
+    { action: 'change', label: 'Change…' }, { action: 'copy', label: 'Copy' }, { action: 'save', label: 'Add to People' },
+  ], 'ADR 0207 item 60: show Change, Copy and Add to People. Fix recipientAddressMenu in crates/api/ui/people.js.');
+  assert.deepEqual(recipientAddressMenu({ address: 'a@x.example', inPeople: true }), [
+    { action: 'change', label: 'Change…' }, { action: 'copy', label: 'Copy' },
+  ], 'ADR 0207 item 60: omit Add to People when People holds the address. Fix recipientAddressMenu in crates/api/ui/people.js.');
+  assert.deepEqual(recipientAddressMenu({ address: null, inPeople: false }), [
+    { action: 'change', label: 'Change…' },
+  ], 'ADR 0207 item 60: omit Copy and Add to People when no address exists. Fix recipientAddressMenu in crates/api/ui/people.js.');
+  assert.equal(recipientAddressMenu({ address: 'a@x.example', inPeople: false }).some((item) => item.label === 'Make Default'), false,
+    'ADR 0207 item 60: omit Make Default for a recipient address. Fix recipientAddressMenu in crates/api/ui/people.js.');
+});
+
+test('the value editor and People extend the shared address row', async () => {
+  const [values, peoplepages] = await Promise.all([
+    readFile(new URL('../ui/values.js', import.meta.url), 'utf8'),
+    readFile(new URL('../ui/peoplepages.js', import.meta.url), 'utf8'),
+  ]);
+  const message = 'ADR 0207 item 60: extend the component, do not copy it. Import the shared AddressRow in both files and remove any local address row from values.js.';
+  const shared = values.match(/import\s*\{\s*AddressRow\s*\}\s*from\s*['"]([^'"]+)['"]/);
+  assert.ok(shared, message);
+  assert.match(peoplepages, new RegExp(`import\\s*\\{\\s*AddressRow\\s*\\}\\s*from\\s*['"]${shared[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}['"]`), message);
+  assert.doesNotMatch(values, /(?:function|const|class)\s+AddressRow\b|className=["']link-row static address-row/, message);
 });
 
 const SUGGESTION = {

@@ -12,10 +12,11 @@ const test4 = { folder: 'test', name: 'Test', feeds: 1, main: false, open: true 
 test('wallet and collection rows use the row menu control (ADR 0207 items 53 to 56, ADR 0183 item 1)', () => {
   const app = readFileSync(new URL('../ui/app.js', import.meta.url), 'utf8');
   const people = readFileSync(new URL('../ui/peoplepages.js', import.meta.url), 'utf8');
+  const addressRow = readFileSync(new URL('../ui/addressrow.js', import.meta.url), 'utf8');
   assert.match(app, /<\$\{MenuControl\} row=\$\{true\} Icon=\$\{Icon\} buttonLabel="Actions" accessibleName=\$\{`Actions for \$\{collection\.name\}`\}/,
     'ADR 0183 item 1: pass row to MenuControl in the collection rows of crates/api/ui/app.js.');
-  assert.match(people, /<\$\{MenuControl\} row=\$\{true\} Icon=\$\{Icon\}/,
-    'ADR 0207 item 53: pass row to MenuControl in wallet rows of crates/api/ui/peoplepages.js.');
+  assert.match(addressRow, /<\$\{MenuControl\} row=\$\{true\} Icon=\$\{Icon\}/,
+    'ADR 0207 item 53: pass row to MenuControl in the shared address row of crates/api/ui/addressrow.js.');
   const ui = new URL('../ui/', import.meta.url);
   for (const name of readdirSync(ui).filter((file) => file.endsWith('.js'))) {
     const source = readFileSync(new URL(name, ui), 'utf8');

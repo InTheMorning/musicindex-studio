@@ -1199,6 +1199,13 @@ select option { background: var(--level-3); color: var(--text); }
 .recipient > summary .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recipient > summary .share { color: var(--muted); font-variant-numeric: tabular-nums; }
 .recipient > summary .address { color: var(--muted); font-size: var(--text-callout); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* At a narrow width, the fixed columns leave no width for the address. The
+   address goes on a second line below the name, as the status of a file row
+   (ADR 0105 item 18). The meter and the percentage stay on the first line. */
+@media (max-width: 760px) {
+  .recipient > summary { grid-template-columns: auto minmax(0, 1fr) 64px auto; row-gap: 2px; }
+  .recipient > summary .address { grid-column: 2 / -1; grid-row: 2; }
+}
 .recipient > .form { background: var(--level-3); margin: 0 8px 8px; border-radius: 10px; padding: 14px; }
 
 /* Share bars (task 012). A meter for one recipient, and a stack of all
@@ -1231,7 +1238,9 @@ select option { background: var(--level-3); color: var(--text); }
   height: 8px;
 }
 .share-legend { color: var(--muted); font-size: var(--text-callout); font-weight: 400; font-variant-numeric: tabular-nums; }
-.share-legend .part { white-space: nowrap; }
+/* A part moves to the next line as one unit. Only a part that is wider than
+   the line breaks, so that a long name does not make the page wider. */
+.share-legend .part { display: inline-block; max-width: 100%; overflow-wrap: anywhere; }
 .share-stack > span { position: relative; }
 .share-stack > span.other { background: var(--muted); }
 /* A styled label on hover or focus, at once (the browser title waits about 1 s). */

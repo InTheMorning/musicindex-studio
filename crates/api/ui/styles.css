@@ -2007,7 +2007,7 @@ button.outline-feed {
 .host-op-row .kind { flex: none; width: 5.5rem; font-weight: 600; }
 .host-op-row .kind.warning { color: var(--error); }
 .host-op-row.warning { color: var(--warning); }
-.host-op-row.warning .kind { color: var(--warning); }
+.host-op-row.warning .kind { color: var(--warning); width: auto; white-space: nowrap; }
 .host-op-row.warning .kind svg { width: 16px; height: 16px; vertical-align: -3px; margin-inline-end: 4px; }
 .host-op-row .text { flex: 1; min-width: 0; display: grid; overflow-wrap: anywhere; }
 .host-op-row .title { font-weight: 600; }

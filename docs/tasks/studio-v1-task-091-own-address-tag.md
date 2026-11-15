@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Feed Moves".
 Decision: [ADR 0128](../adr/0128-a-moved-feed-names-its-own-address.md).
 
-Status: Complete, with its screenshot visual check. The human test is open.
+Status: Complete, with its screenshot visual check. The human test passed on 2026-11-14 (check 4 of the [human check walk](../reviews/2026-11-14-human-check-walk.md)).
 
 ## Goal
 

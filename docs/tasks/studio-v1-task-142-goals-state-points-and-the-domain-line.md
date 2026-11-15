@@ -15,8 +15,9 @@ Status: Complete on 2026-11-14, with its screenshot visual check. The human gate
 - Criterion 7: the existing test `the_delete_draft_gives_the_summary_and_the_names_and_the_write_deletes_the_file` proves the restore.
 - Walk: `setup-137.py` with `steps-142-{light,dark}.json`, and `setup-142-move.py` with `steps-142-move.json`. The walk ran at 1280 px light and at 390 px dark. It showed the choice sheet with three rows, the last sheet and the Retire block of a deleted feed. It also showed Review after **Put the File Back**. After the write, the file was on the test host again. The move sheet showed the line with `music.example`. Each view gave no edge and no overflow finding.
 - The 390 px fit check gave one overlap of "Versions" with "Move Artist X up". The walk ended with the page scrolled down, as in task 139. This change does not cause it.
-- The walk did not show the choice sheet with two rows. The Node test proves the two rows.
-- Open defect, not corrected: after the write of the restore, step 1 of the Retire block says "Hide from apps is on in the draft." The bar says "No changes". The expected text is "Hide from apps is on in the last write." The cause is not known.
+- The walk `steps-142-held.json` with `setup-131.py` showed the choice sheet with two rows at 1280 px light and 390 px dark, with no finding.
+- After the write of the restore, a walk showed "Hide from apps is on in the draft." in step 1 of the Retire block. This comes from the walk data, which has no release folders. The API test `after_a_restore_write_the_retire_state_names_the_last_write` proves that the state is "written" after a restore write.
+- The walk `steps-texts.json` showed the texts of d2fb0aa in the UI. They are the line of a hidden draft on the tab **Check**, the notice of the review and the confirm of a discard. The walk `steps-texts2.json` showed "＋ Add a Release" on the page of an artist.
 
 ## Goal
 

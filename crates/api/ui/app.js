@@ -2381,7 +2381,7 @@ function LibraryPanel({ draft, draftState, changed, causes }) {
   if (!library) return null;
   return html`<section class="page-section settings-section">
     <h2>Library</h2><div class="group settings-group">
-    ${!serverMode && html`<dl class="facts"><dt>Folder</dt><dd class="mono">${library.root}</dd></dl>`}
+    ${!serverMode && html`<dl class="facts"><dt>Folder</dt><dd class="mono" data-fit-allow-break>${library.root}</dd></dl>`}
     <div class="form">
         <${Field} id="limit-max" label=${html`Largest download, in MB<${SettingsPencil} pending=${changed('libraryMax')} />`} inputmode="numeric" required
           error=${causes.libraryMax} value=${maxMb} onInput=${(e) => updateMax(e.target.value)} />

@@ -1,6 +1,6 @@
 # Studio V1 Task 097: Collections
 
-Status: Complete, with its screenshot visual check and one restart on Xvfb. Its human test is open.
+Status: Complete, with its screenshot visual check and one restart on Xvfb. Its human test passed on 2026-11-10 (steps 1 to 4 of the [human test of 0.1.0-rc.21](../reviews/2026-11-10-rc21-human-test-findings.md)).
 
 Owner of the rules: [ADR 0149](../adr/0149-the-desktop-app-has-many-collections.md).
 

@@ -8,6 +8,7 @@
 - Changes: [ADR 0150](0150-studio-shows-a-change-from-outside-when-a-page-opens.md) items 2 to 4: the color of each result, and the notice of a move.
 - Changes: [ADR 0165](0165-the-left-panel-marks-the-state-of-each-feed.md) item 2: the color of the mark of an outside change.
 - Uses: [ADR 0021](0021-public-address-of-a-feed.md) for the sources of a feed address. [ADR 0067](0067-a-read-only-feed-opens-in-the-editor.md) for a read-only feed. [ADR 0129](0129-a-draft-takes-a-change-of-the-hosted-file.md) for the comparison. [ADR 0128](0128-a-moved-feed-names-its-own-address.md) and [ADR 0190](0190-review-gives-the-return-wait-of-music-index.md) for a return. [ADR 0191](0191-a-return-warning-has-the-warning-color-and-a-sent-podping-can-go-again.md) item 1 and musicindex ADR 0068 R-STATUS-1 for the style of a warning.
+- Changed: 2026-11-14 by the planning model, after the build. Items 7, 17 and 18: **Move It Back…** is not built, because Review refuses that write. Item 16 has its own text.
 - Source: defects 3 and 4, missing function 1 and design item 8 of the [human check walk of 2026-11-14](../reviews/2026-11-14-human-check-walk.md).
 
 ## Context
@@ -37,7 +38,7 @@ The tile of the feed said "Changed outside Studio" in blue. The left panel showe
 ### The Warning On The Feed Page
 
 6. One warning replaces the notices: "A different Studio moved this feed." It shows the label "New address", the address, and the name of the connected file host that gives it, when one does. It says "The old address has a pointer file."
-7. The warning has **Follow the Move**, **Move It Back…** and **Show the Difference**. **Show the Difference** shows in the conditions of ADR 0150 item 4.
+7. The warning has **Follow the Move** and **Show the Difference**. **Show the Difference** shows in the conditions of ADR 0150 item 4. The operator also selected **Move It Back…**. Items 17 and 18 say why it is not in the warning.
 8. **Keep This File Host** of ADR 0150 item 4 stays in the warning, after the other buttons.
 
 ### Follow The Move
@@ -52,12 +53,12 @@ The tile of the feed said "Changed outside Studio" in blue. The left panel showe
 
 14. When no connected file host gives the new address, the feed follows the new address as a read-only feed (ADR 0067). It keeps its draft, its versions and its release folder.
 15. The feed page then shows a plain notice: "This Studio is not connected to the file host of this address. Connect it to edit the feed here." It has the button **Connect a File Host…**, which opens **File hosts**.
-16. When a file host that gives the address is connected later, the notice has **Use This File Host**. It gives the feed that file host and that path, as item 11.
+16. The user can connect a file host that gives the address at a subsequent time. The notice then says "A connected file host gives the address of this feed. Use it to edit the feed here." It has **Use This File Host**. That button gives the feed that file host and that path, as item 11.
 
 ### Move It Back
 
-17. **Move It Back…** opens the review sheet. The write puts the feed file at the old address again.
-18. The write is a return in Music Index. The warning and the wait of ADR 0128 and ADR 0190 apply.
+17. **Move It Back…** is not built. The draft of a moved feed comes from the pointer file, so it names the new address in `itunes:new-feed-url`. A write of that draft writes a pointer file again, and Review refuses it in some conditions. It does not put the feed back.
+18. A return needs its own function. That function makes a draft from the feed at the new address, with the old address as its own address. The return rules of ADR 0128 and ADR 0190 apply. The function needs a decision of the operator.
 
 ### The Colors
 

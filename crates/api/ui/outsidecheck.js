@@ -16,8 +16,8 @@ export const OUTSIDE_SETTING_HINT = 'When a page opens, Studio reads the public 
 export function outsideMark(check) {
   if (!check || !check.state) return null;
   return check.state === 'moved'
-    ? { text: 'Moved outside Studio', tone: 'error' }
-    : { text: 'Changed outside Studio', tone: 'accent' };
+    ? { text: 'Moved outside Studio', tone: 'warning' }
+    : { text: 'Changed outside Studio', tone: 'warning' };
 }
 
 // The notice of the hosted file on a feed page, or null. A draft with edits
@@ -26,18 +26,20 @@ export function outsideNotice(check) {
   if (!check || !check.state) return null;
   if (check.state === 'moved') {
     return {
-      tone: 'error',
-      strong: 'This feed moved outside Studio.',
-      text: 'The hosted file names a new address:',
+      tone: 'warning',
+      strong: 'A different Studio moved this feed.',
+      text: 'New address',
       address: check.new_url,
-      after: 'A write from here can put the feed back on the old file host.',
+      host: check.new_host,
+      after: 'The old address has a pointer file.',
       difference: check.connected === true,
+      follow: true,
       keep: true,
-      again: check.connected !== true,
+      again: false,
     };
   }
   return {
-    tone: 'plain',
+    tone: 'warning',
     strong: 'The hosted file changed outside Studio.',
     text: 'Read Again takes the new file, and it keeps a draft with edits.',
     address: null,
@@ -45,6 +47,25 @@ export function outsideNotice(check) {
     difference: false,
     keep: false,
     again: true,
+  };
+}
+
+// The notice of a read-only feed that followed a move (ADR 0211 items 15
+// and 16), or null. The API gives `followed_move` and `host_for_address`.
+export function readOnlyHostNotice(feed) {
+  if (!feed || feed.connector_id) return null;
+  if (feed.host_for_address === true) {
+    return {
+      text: 'A connected file host gives the address of this feed. Use it to edit the feed here.',
+      button: 'Use This File Host',
+      use: true,
+    };
+  }
+  if (feed.followed_move !== true) return null;
+  return {
+    text: 'This Studio is not connected to the file host of this address. Connect it to edit the feed here.',
+    button: 'Connect a File Host…',
+    use: false,
   };
 }
 
@@ -139,7 +160,7 @@ export function panelSet(feeds, group) {
 
 // The marks of the left panel, from the most urgent (ADR 0165 item 2).
 const STATE_MARKS = {
-  outside: { icon: 'cloud-alert', tone: 'error' },
+  outside: { icon: 'cloud-alert', tone: 'warning' },
   pending: { icon: 'pencil', tone: 'accent', text: 'Changes not written' },
   unchecked: { icon: 'circle-dashed', tone: 'muted', text: 'Not checked' },
 };

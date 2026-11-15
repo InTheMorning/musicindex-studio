@@ -1420,6 +1420,11 @@ pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
             let mut value =
                 serde_json::to_value(row).map_err(|e| ApiError::internal(e.to_string()))?;
             value["draft_state"] = json!(state);
+            // A read-only feed with a pointer record followed a move
+            // (ADR 0211 item 15).
+            value["followed_move"] = json!(
+                row.connector_id.is_none() && !w.collection.pointers_of_feed(row.id)?.is_empty()
+            );
             value["host_for_address"] = json!(
                 row.connector_id.is_none()
                     && row

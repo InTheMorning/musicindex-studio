@@ -28,7 +28,7 @@ import { CONFIRMS, confirmButtons } from './confirms.js';
 import { changeTitle, afterDiscard, changeLine } from './people.js';
 import { makeSettingsDraft, changeSetting, settingsDraftView, discardSettings, saveSettings, asksSettingsLeave } from './settingsdraft.js';
 import { PeoplePage, PersonPage, CheckPage, WalletPage } from './peoplepages.js';
-import { OUTSIDE_LIMIT, OUTSIDE_SETTING_LABEL, OUTSIDE_SETTING_HINT, outsideMark, outsideNotice, indexNotice, moveNotice, nextNoticeLoad, eachLimited, panelSet, stateMark } from './outsidecheck.js';
+import { OUTSIDE_LIMIT, OUTSIDE_SETTING_LABEL, OUTSIDE_SETTING_HINT, outsideMark, outsideNotice, readOnlyHostNotice, indexNotice, moveNotice, nextNoticeLoad, eachLimited, panelSet, stateMark } from './outsidecheck.js';
 import { collectionMark, collectionRow, collectionSectionActions, collectionSheet, collectionAction, CLOSED_EXPORT_HINT, COLLECTIONS_HINT, OPENING_TEXT } from './collectionlist.js';
 import { localInputToIso, isoToLocalInput, zoneHint, nowInput, unreadDateHint } from './datetime.js';
 import { durationText, readDuration, DURATION_ERROR, unreadDurationHint } from './duration.js';
@@ -647,6 +647,8 @@ export function addressSource(source) {
 // Each address that is different from the public address. Studio shows
 // them and does not select silently (ADR 0021).
 function AddressDifferences({ feed }) {
+  const { results } = useContext(OutsideContext);
+  if (results[feed.id]?.state === 'moved') return null;
   const differences = feed.address_differences || [];
   if (differences.length === 0) return null;
   return html`<div class="notice" role="status">
@@ -1990,7 +1992,7 @@ function ReadOnlyFeed({ feed, onChanged, onRemoved }) {
         <h1>${feed.title || 'Untitled feed'}</h1>
         <p class="summary">${feed.public_url || 'This feed has no public address yet.'}</p>
         <p class="hint">${otherFeedText(feed)}</p>
-        <${OutsideNotices} feed=${feed} busy=${busy} refresh=${refresh} />
+        <${OutsideNotices} feed=${feed} busy=${busy} refresh=${refresh} onChanged=${onChanged} />
         <div class="actions">
           <button class="button destructive" type="button" disabled=${busy} onClick=${remove}>Remove from Collection</button>
           <button class="button primary" type="button" disabled=${busy || !(feed.connector_id || feed.public_url)} onClick=${refresh}>
@@ -2265,7 +2267,7 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
         Open Review and write the draft to make the file.
       </div>`}
       <${AddressDifferences} feed=${feed} />
-      <${OutsideNotices} feed=${feed} busy=${busy} refresh=${refresh} />
+      <${OutsideNotices} feed=${feed} busy=${busy} refresh=${refresh} onChanged=${onChanged} />
     </div>
     <${PageTabs} feed=${feed} view=${view} go=${go} checkCount=${check.count} />
     <${AlbumEditor} key=${feed.id} feed=${feed} feeds=${feeds} draft=${draft} view=${view} go=${go}
@@ -3433,7 +3435,7 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
                   <span class="title">${row.title}${changedFeeds.has(row.id) && html`<span class="change-mark"><span class="visually-hidden"> Changes in the library folder</span></span>`}</span>
                   <span class="sub">${row.typeLabel}${row.hidden ? ' · Hidden from apps' : ''}${releases.view === 'rows' ? ` · ${row.host}` : ''}</span>
                   ${row.note && html`<span class="sub">${row.note}</span>`}
-                  ${outsideMark(outside[row.id]) && html`<span class=${`sub outside-mark ${outsideMark(outside[row.id]).tone}`}>${outsideMark(outside[row.id]).text}</span>`}
+                  ${outsideMark(outside[row.id]) && html`<span class=${`sub outside-mark ${outsideMark(outside[row.id]).tone}`}><${Icon} name="alert" />${outsideMark(outside[row.id]).text}</span>`}
                   ${releases.view === 'rows' && html`<span class="sub">${row.draftLabel}</span>`}
                 </span>
               </button>
@@ -3463,7 +3465,7 @@ function LevelFeedTile({ tile, view, outside, onOpen }) {
     <span class="releases-text">
       <span class="title">${tile.title}</span>
       <span class="sub">${tile.typeLabel}</span>
-      ${changed && html`<span class=${`sub outside-mark ${changed.tone}`}>${changed.text}</span>`}
+      ${changed && html`<span class=${`sub outside-mark ${changed.tone}`}><${Icon} name="alert" />${changed.text}</span>`}
       <span class="sub">${tile.draftLabel}</span>
     </span>
   </button></li></ul>`;
@@ -4775,9 +4777,10 @@ function useOutsideChecks(feeds, key) {
 
 // The notices of the check on a feed page (ADR 0150 items 2 to 5). Each new
 // read of the feed checks again.
-function OutsideNotices({ feed, busy, refresh }) {
+function OutsideNotices({ feed, busy, refresh, onChanged }) {
   const [check, setCheck] = useState(null);
   const { busy: sending, error, run } = useAction();
+  const nav = useContext(NavContext);
   const load = () => api(`/feeds/${feed.id}/outside?index=true`).then(setCheck, () => {});
   useEffect(() => { setCheck(null); load(); }, [feed.id, feed.last_version]);
   useEffect(() => {
@@ -4804,15 +4807,30 @@ function OutsideNotices({ feed, busy, refresh }) {
     await api(`/feeds/${feed.id}/announcements`, { method: 'POST' });
     await load();
   });
-  return html`${notice && html`<div class=${notice.tone === 'error' ? 'notice error' : 'notice'} role=${notice.tone === 'error' ? 'alert' : 'status'}>
-      <strong>${notice.strong}</strong> ${notice.text}${notice.address && html` <span class="mono">${notice.address}</span>.`}${notice.after && ` ${notice.after}`}
+  const follow = () => run(async () => {
+    await api(`/feeds/${feed.id}/outside/follow`, { method: 'POST' });
+    await onChanged();
+    await load();
+  });
+  const readOnly = readOnlyHostNotice(feed);
+  const useHost = () => run(async () => { await api(`/feeds/${feed.id}/outside/use-host`, { method: 'POST' }); await onChanged(); });
+  return html`${notice && html`<div class=${notice.tone === 'warning' ? 'notice warning' : notice.tone === 'error' ? 'notice error' : 'notice'} role=${notice.tone === 'error' ? 'alert' : 'status'}>
+      ${notice.tone === 'warning' ? html`<strong><${Icon} name="alert" />${notice.strong}</strong>` : html`<strong>${notice.strong}</strong>`}
+      ${notice.address
+        ? html`<p class="notice-fact"><span class="notice-label">${notice.text}</span>
+            <span class="mono" data-fit-allow-break>${notice.address}</span>
+            ${notice.host && html`<span>${notice.host}</span>`}</p>
+          <p class="notice-fact">${notice.after}</p>`
+        : html` ${notice.text}`}
       <div class="actions">
+        ${notice.follow && html`<button class="button action" type="button" disabled=${busy || sending} onClick=${follow}>Follow the Move</button>`}
         ${notice.again && html`<button class="button action" type="button" disabled=${busy} onClick=${refresh}>Read Again</button>`}
         ${notice.difference && html`<button class="button action" type="button" onClick=${() => window.dispatchEvent(new Event(OPEN_MERGE))}>Show the Difference</button>`}
         ${notice.keep && html`<button class="button" type="button" onClick=${keep}>Keep This File Host</button>`}
       </div>
       <${ErrorNotice} error=${error} />
     </div>`}
+    ${readOnly && html`<div class="notice" role="status">${readOnly.text}<div class="actions"><button class="button action" type="button" disabled=${busy || sending} onClick=${readOnly.use ? useHost : () => nav && nav.go({ name: 'hosts' })}>${readOnly.button}</button></div><${ErrorNotice} error=${error} /></div>`}
     ${index && html`<div class="notice" role="status"><strong>${index.strong}</strong> <span class="mono">${index.index}</span>. Your feed is at <span class="mono">${index.own}</span>. ${index.after}</div>`}
     ${move && html`<div class="notice" role="status"><strong>${move.strong}</strong>
       ${move.lines.map((line) => html`<p class="podping-line"><span class=${'status-tag ' + line.state}>${line.state === 'waiting' && html`<span class="player-wait" aria-hidden="true"></span>`}${line.state === 'sent' && html`<${Icon} name="check" />`}${line.tag}${line.time ? ` · ${line.time}` : ''}</span> <span class="mono">${line.url}</span>${line.text && ` ${line.text}`}

@@ -691,6 +691,7 @@ input[type="checkbox"]:disabled { opacity: .5; cursor: default; }
 .state-mark { display: inline-flex; flex: none; align-items: center; }
 .state-mark .icon { width: 16px; height: 16px; }
 .state-mark.error .icon { color: var(--error); }
+.state-mark.warning .icon { color: var(--warning); }
 .state-mark.accent .icon { color: var(--accent); }
 .state-mark.muted .icon { color: var(--muted); }
 /* The art of a publisher feed in the left panel, with the type dot on its
@@ -2411,8 +2412,10 @@ button.outline-feed {
 
 /* The mark of a change from outside on a row of Releases (ADR 0150 items 2
    and 3). */
-.releases-text .outside-mark.accent { color: var(--accent); }
-.releases-text .outside-mark.error { color: var(--error); }
+.releases-text .outside-mark.warning { color: var(--warning); }
+.outside-mark .icon { width: 14px; height: 14px; vertical-align: -2px; margin-inline-end: 4px; }
+.notice-fact { display: grid; gap: 2px; margin: 6px 0 0; }
+.notice-label { color: var(--muted); font-size: var(--text-callout); }
 
 /* A row of the section "Collections" (ADR 0183). */
 .collection-row { flex-wrap: wrap; }

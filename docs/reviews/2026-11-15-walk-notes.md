@@ -114,6 +114,20 @@ Facts:
 
 Open: no task. The move changes ADR 0213 item 13. The task must say how a field that saves at once shows between fields of the draft.
 
+### Note 8: The Domain Line After A Delete
+
+Comment: the domain of the feed address assures only one thing, that the artist controls the `podcast:guid` of the feed. After the removal of the entry and the delete of the file, one danger stays. A different person can collect the payments that a music podcast sends to that GUID.
+
+Facts:
+
+- [ADR 0208](../adr/0208-the-delete-and-move-sheets-give-goals-state-points-and-the-domain-line.md) item 1 gives the words: "Keep the domain {host}. If it expires, its new owner can take over this feed and its payments." Item 4 gives the same words in four places.
+- After a done delete, the line shows in the Retire block, with **Put the File Back** (ADR 0208 items 12 and 13).
+- The context of ADR 0208 gives the same cause: the next owner of the domain can publish a feed with the same GUID and different payment recipients. It says that no test has shown this.
+- `podcast_guid_for_url` in `crates/core/src/guid.rs` makes the GUID of a new feed from its address. A feed keeps its GUID when its address changes.
+- After a delete, the user has no feed at the address and gets no payments there. The words "take over this feed and its payments" then do not give the danger of the comment.
+
+Open: no decision. Different words after a done delete change ADR 0208 items 1 and 4. The orchestrator said on 2026-11-15 that ADR 0208 is not decided, so this session changed nothing.
+
 ## Results Of The Steps
 
 The step numbers are those of the section "What to test" of the [notes of `0.1.0-rc.23`](../releases/0.1.0-rc.23.md).

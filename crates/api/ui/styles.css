@@ -1186,8 +1186,10 @@ select option { background: var(--level-3); color: var(--text); }
 .recipient > summary {
   display: grid;
   /* The marker, the name, the meter, the percentage and the address. Fixed
-     columns let the meters line up from row to row. */
-  grid-template-columns: auto minmax(0, 13rem) 64px 6.5rem minmax(0, 1fr);
+     columns let the meters line up from row to row. The address column has
+     the width of the short form of a node address (musicindex ADR 0076
+     R-ADDRESS-1). */
+  grid-template-columns: auto minmax(0, 1fr) 64px 6.5rem minmax(0, 9.5rem);
   align-items: center;
   gap: 10px;
   min-height: var(--row);

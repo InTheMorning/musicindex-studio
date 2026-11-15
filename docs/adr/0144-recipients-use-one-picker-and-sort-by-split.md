@@ -8,6 +8,7 @@
 - Changes: [ADR 0137](0137-the-people-list-fills-nostr-keys-and-open-entries.md) items 4 and 6 for a recipient.
 - Changed by: [ADR 0145](0145-each-sheet-that-adds-a-value-has-one-layout.md), Each Sheet That Adds A Value Has One Layout.
 - Changed: 2026-11-15 by the operator, through musicindex ADR 0075 (musicindex `bf58554`). Item 1 has the check box "Fee", one split label and the fee line.
+- Changed: 2026-11-15 by the operator, through musicindex ADR 0076 (musicindex `a08dc01`). Item 8 gives the address of a row the short form of R-ADDRESS-1.
 - Uses: [ADR 0123](0123-one-type-of-value-has-one-picker.md) and [ADR 0141](0141-the-form-of-add-a-wallet-comes-first.md) for the layout of the sheet. [ADR 0065](0065-the-core-applies-each-feed-rule.md) for the sort at the draft save. [ADR 0012](0012-lossless-tree-with-a-typed-model.md) for a block that does not change.
 - Source: [findings of local use, finding 27](../reviews/2026-11-06-local-use-findings.md)
 
@@ -24,6 +25,7 @@ An open recipient had three rows of buttons. "Add a recipient", "Pick from your 
 5. The core sorts a value block that a save changes: the biggest split first, each fee after the others, and equal splits in their sequence.
 6. A value block that a save does not change keeps its sequence in the feed, so a feed can differ from the sequence on the screen until the user changes that block.
 7. The field view of Review matches the recipients of a block by address, custom key and custom value. A recipient at a new place shows the changes of its values, and no row tells of the new place. The detailed view shows each moved line.
+8. A row of a recipient, a fee included, shows a node address in the short form of musicindex ADR 0076 R-ADDRESS-1, in the monospace font. An LNURL address and an address with "@" show in full, and the end ellipsis cuts them when the row is too narrow. The hover text, the Copy action and the edit field give the full address. Below 760 px, the address is on a second line below the name.
 
 ## Alternatives Considered
 

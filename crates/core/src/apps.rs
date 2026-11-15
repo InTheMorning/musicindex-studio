@@ -408,9 +408,9 @@ pub fn pair_at(
     })
 }
 
-/// The short form of an app key for the user: the first 9 and the last 4
-/// characters of the `npub`, with an ellipsis between them (ADR 0110
-/// item 18). Gives an empty text when `pubkey` is not a public key.
+/// The short form of an app key for the user: the `npub` in the short form of
+/// musicindex ADR 0076 R-ADDRESS-1 (ADR 0110 item 18). Gives an empty text
+/// when `pubkey` is not a public key.
 #[must_use]
 pub fn short_key(pubkey: &str) -> String {
     let Some(npub) = PublicKey::from_hex(pubkey)
@@ -419,7 +419,7 @@ pub fn short_key(pubkey: &str) -> String {
     else {
         return String::new();
     };
-    format!("{}\u{2026}{}", &npub[..9], &npub[npub.len() - 4..])
+    musicindex_value::short_address(&npub)
 }
 
 /// Remove an app, and end its grants at once (ADR 0110 item 21). The draft
@@ -1057,13 +1057,14 @@ mod tests {
     }
 
     #[test]
-    fn the_short_key_has_9_and_4_characters_of_the_npub() {
+    fn the_short_key_has_10_and_8_characters_of_the_npub() {
         let key = keys().public_key();
         let npub = key.to_bech32().unwrap();
         let short = short_key(&key.to_hex());
         assert_eq!(
             short,
-            format!("{}\u{2026}{}", &npub[..9], &npub[npub.len() - 4..])
+            format!("{}\u{2026}{}", &npub[..10], &npub[npub.len() - 8..]),
+            "musicindex ADR 0076 R-ADDRESS-1: short_key gives 10 characters, \"\u{2026}\" and 8 characters of the npub. Call musicindex_value::short_address."
         );
         assert!(short.starts_with("npub1"));
         assert_eq!(short_key("nope"), "");

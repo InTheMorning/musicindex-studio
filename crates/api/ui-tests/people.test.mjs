@@ -486,8 +486,8 @@ test('the lines of an address follow ADR 0099 item 15', () => {
     { label: 'LNURL address', address: 'a@x.example', account: null });
   assert.equal(memberText({ address: '02ab', recipient_type: 'node', provider: 'fountain.fm', custom_value: 'acct1' }), 'fountain.fm node · account acct1');
   assert.equal(memberText({ address: 'a@x.example' }), 'LNURL address a@x.example');
-  assert.equal(memberText({ address: '03d55f4d0000aa67', recipient_type: 'node' }), 'Node address 03d55f4d…aa67');
-  assert.equal(memberText({ address: '03d55f4d0000aa67', recipient_type: 'node', custom_value: 'acct1' }), 'Node address 03d55f4d…aa67 · account acct1');
+  assert.equal(memberText({ address: `03d55f4d${'0'.repeat(54)}aa67`, recipient_type: 'node' }), 'Node address 03d55f4d00…0000aa67');
+  assert.equal(memberText({ address: `03d55f4d${'0'.repeat(54)}aa67`, recipient_type: 'node', custom_value: 'acct1' }), 'Node address 03d55f4d00…0000aa67 · account acct1');
   assert.equal(usedText(0), 'Not used');
   assert.equal(usedText(1), '1 feed');
 });
@@ -799,11 +799,11 @@ test('supportPickRows gives each support link and marks an address in the list',
 test('a fee payee gets the fee mark, and a picked fee payee starts as a fee', async () => {
   const { withFee, memberText } = await import('../ui/people.js');
   const { rowLines } = await import('../ui/recipients.js');
-  const fee = { address: '03ae9f910000005e33', recipient_type: 'node', fee: true };
-  assert.equal(withFee(memberText(fee), fee), 'Node address 03ae9f91…5e33 · fee');
-  assert.deepEqual(rowLines({ addresses: [fee] }), ['Node address 03ae9f91…5e33 · fee']);
+  const fee = { address: `03ae9f91${'0'.repeat(54)}5e33`, recipient_type: 'node', fee: true };
+  assert.equal(withFee(memberText(fee), fee), 'Node address 03ae9f9100…00005e33 · fee');
+  assert.deepEqual(rowLines({ addresses: [fee] }), ['Node address 03ae9f9100…00005e33 · fee']);
   const rows = recipientPickRows([], [{ saved_id: null, name: 'Podcast Index', addresses: [{ ...fee, name: 'Podcast Index' }] }]);
-  assert.equal(rows.payees[0].line, 'Node address 03ae9f91…5e33 · fee');
+  assert.equal(rows.payees[0].line, 'Node address 03ae9f9100…00005e33 · fee');
   assert.equal(rows.payees[0].recipient.fee, 'true');
 });
 
@@ -1777,7 +1777,7 @@ test('a row of the copy sheet names a shared node and its account, and the foote
   const { memberText, addRecipientsLabel, trackHeading } = await import('../ui/people.js');
   const WHY = 'ADR 0145 items 9, 12 and 13';
   assert.equal(memberText({ address: '03b6f6', recipient_type: 'node', provider: 'fountain.fm', custom_value: 'abc' }), 'fountain.fm node · account abc', WHY);
-  assert.equal(memberText({ address: 'a'.repeat(66), recipient_type: 'node', provider: null, custom_value: '5' }), `Node address ${'a'.repeat(8)}…aaaa · account 5`, WHY);
+  assert.equal(memberText({ address: 'a'.repeat(66), recipient_type: 'node', provider: null, custom_value: '5' }), `Node address ${'a'.repeat(10)}…${'a'.repeat(8)} · account 5`, WHY);
   assert.equal(addRecipientsLabel(0), 'Add Recipients', WHY);
   assert.equal(addRecipientsLabel(1), 'Add 1 Recipient', WHY);
   assert.equal(addRecipientsLabel(2), 'Add 2 Recipients', WHY);

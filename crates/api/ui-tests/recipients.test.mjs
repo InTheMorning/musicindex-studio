@@ -74,10 +74,10 @@ test('the row of a used recipient gives the title, the count and the lines', () 
 });
 
 test('the count of a saved recipient that no feed uses says so', () => {
-  const row = recipientRow({ name: 'Cara', recipient_type: 'node', address: '02ab12cd34ef5678', feeds: 0, saved_id: 4 });
+  const row = recipientRow({ name: 'Cara', recipient_type: 'node', address: `02ab12cd${'0'.repeat(54)}5678`, feeds: 0, saved_id: 4 });
   assert.equal(row.count, 'Saved, not used');
-  assert.deepEqual(row.lines, ['Node address 02ab12cd…5678'],
-    'ADR 0095 item 7: a node key with no provider shows its first 8 and its last 4 characters.');
+  assert.deepEqual(row.lines, ['Node address 02ab12cd00…00005678'],
+    'musicindex ADR 0076 R-ADDRESS-1: a node key with no provider shows its first 10 and its last 8 characters. Use shortKey.');
   assert.equal(recipientRow({ name: 'Dan', address: '03cd', feeds: 0, saved_id: null }).count, '0 feeds',
     'ADR 0091 item 2: only a saved recipient shows "Saved, not used". Give the number of feeds for each other recipient.');
 });
@@ -166,7 +166,8 @@ test('a wallet of two addresses gives its title, row and lines', () => {
   assert.equal(nodeOf(wallet), '02ab12cd34ef5678');
   const row = recipientRow({ ...wallet, name: 'TJ Doerfel' });
   assert.equal(row.count, '7 feeds');
-  assert.deepEqual(row.lines, ['LNURL address tj@getalby.com', 'Node address 02ab12cd…5678 · account 01abc']);
+  assert.deepEqual(row.lines, ['LNURL address tj@getalby.com', 'Node address 02ab12cd34ef5678 · account 01abc'],
+    'musicindex ADR 0076 R-ADDRESS-1 item 2: a text of 20 characters or fewer shows in full.');
   const keyFirst = { ...wallet, addresses: [wallet.addresses[1], wallet.addresses[0]] };
   assert.equal(recipientRow(keyFirst).lines[0], 'LNURL address tj@getalby.com',
     'ADR 0095 item 7: the LNURL address is first in the row.');
@@ -187,12 +188,12 @@ test('rowLines gives a provider node with its domain and its account', () => {
 });
 
 test('rowLines gives a node with no provider and no account', () => {
-  assert.deepEqual(rowLines({ address: keyA, recipient_type: 'node' }), ['Node address 03d55f4d…aa67'],
-    'ADR 0095 item 7: a node with no provider shows its short key.');
+  assert.deepEqual(rowLines({ address: keyA, recipient_type: 'node' }), ['Node address 03d55f4d00…0000aa67'],
+    'ADR 0095 item 7 and musicindex ADR 0076 R-ADDRESS-1: a node with no provider shows its short key. Use shortKey.');
 });
 
 test('rowLines gives a node with no provider and an account', () => {
-  assert.deepEqual(rowLines({ address: keyA, recipient_type: 'node', custom_value: 'abc' }), ['Node address 03d55f4d…aa67 · account abc']);
+  assert.deepEqual(rowLines({ address: keyA, recipient_type: 'node', custom_value: 'abc' }), ['Node address 03d55f4d00…0000aa67 · account abc']);
 });
 
 test('the operation form starts at the member of the wallet with the type of the menu', () => {

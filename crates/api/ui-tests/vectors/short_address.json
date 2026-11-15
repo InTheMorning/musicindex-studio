@@ -1,0 +1,38 @@
+[
+  {
+    "input": "035ad2c954e264004986da2d9499e1732e5175e1dcef2453c921c6cdcc85054b79",
+    "expected": "035ad2c954…85054b79"
+  },
+  {
+    "input": "npub1qz8xevh3c9tl0wq7fr2jx5ymd6sa8gpu4nke3zr9wqt0cl7v6fk4m7y2sd",
+    "expected": "npub1qz8xe…k4m7y2sd"
+  },
+  {
+    "input": "abcdefghij0123456789",
+    "expected": "abcdefghij0123456789"
+  },
+  {
+    "input": "abcdefghij0123456789x",
+    "expected": "abcdefghij…3456789x"
+  },
+  {
+    "input": "lnurl1dp68gurn8ghj7um9wfmxjcm99e3k7mf0v9cxj0m385ekvcenxc6r2c35xvukxefcv5mkvv34x5ekzd3ev56nyd3hxqurzepexejxxepnxscrvwfnv9nxzcn9xq6xyefhvgcxxcmyxymnserxfq5fns",
+    "expected": "lnurl1dp68gurn8ghj7um9wfmxjcm99e3k7mf0v9cxj0m385ekvcenxc6r2c35xvukxefcv5mkvv34x5ekzd3ev56nyd3hxqurzepexejxxepnxscrvwfnv9nxzcn9xq6xyefhvgcxxcmyxymnserxfq5fns"
+  },
+  {
+    "input": "LNURL1DP68GURN8GHJ7UM9WFMXJCM99E3K7MF0V9CXJ0M385EKVCENXC6R2C35XVUKXEFCV5MKVV34X5EKZD3EV56NYD3HXQURZEPEXEJXXEPNXSCRVWFNV9NXZCN9XQ6XYEFHVGCXXCMYXYMNSERXFQ5FNS",
+    "expected": "LNURL1DP68GURN8GHJ7UM9WFMXJCM99E3K7MF0V9CXJ0M385EKVCENXC6R2C35XVUKXEFCV5MKVV34X5EKZD3EV56NYD3HXQURZEPEXEJXXEPNXSCRVWFNV9NXZCN9XQ6XYEFHVGCXXCMYXYMNSERXFQ5FNS"
+  },
+  {
+    "input": "a-very-long-lightning-name@getalby.com",
+    "expected": "a-very-long-lightning-name@getalby.com"
+  },
+  {
+    "input": "αβγδεζηθικλμνξοπρστυ",
+    "expected": "αβγδεζηθικλμνξοπρστυ"
+  },
+  {
+    "input": "αβγδεζηθικλμνξοπρστυφ",
+    "expected": "αβγδεζηθικ…ξοπρστυφ"
+  }
+]

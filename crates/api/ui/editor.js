@@ -14,7 +14,7 @@ import { creditPickRows, supportPickRows, creditChoices, creditFillRows, creditF
 import { withCids, STATUS } from './draft.js';
 import { roleSummary } from './roles.js';
 import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName } from './shell.js';
-import { isLiveItem, liveKey, liveDot, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner, OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning, hasBadAddress, problemGroup, setLiveStreamType } from './live.js';
+import { isLiveItem, liveKey, liveDot, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner, OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning, hasBadAddress, problemGroup, setLiveStreamType, viewAfterLiveGone } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
 import { checkRows, unreadableRows, hasShowGrant, checkTexts, COPY_SHEET_TEXT, WAYS_SHEET_TEXT } from './feedcheck.js';
 import { addressParts } from './breaks.js';
@@ -4873,6 +4873,10 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
   useEffect(() => {
     if (currentKey && currentKey !== view.track) go({ ...view, track: currentKey }, { replace: true });
   }, [currentKey, view.track]);
+  // A live show that the model does not have gives the tab Live Shows, so
+  // that the bar, the tabs and the body agree.
+  const liveGone = viewAfterLiveGone(view, model);
+  useEffect(() => { if (liveGone) go(liveGone, { replace: true }); }, [Boolean(liveGone), view.track]);
   // The track of an open track sheet. A key that no track has closes the
   // sheet (ADR 0070).
   const artworkTrack = model && artwork && artwork.kind === 'track'

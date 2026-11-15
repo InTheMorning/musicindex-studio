@@ -171,6 +171,32 @@ Facts:
 
 Open: no decision. A confirmation after each write needs a request to Music Index after the write. That changes ADR 0175 item 1 and replaces the alternative that the operator did not select.
 
+### Note 12: An Added Live Item Shows Its Times In Review
+
+Comment: the row of an added live item in Review shows only its title and "Added". The times of the show are also new, so the row must show them in a form that a user can read.
+
+Facts:
+
+- The comment came in step 10, from the simplified view of a write that adds the show "test show".
+- The row function in `crates/api/ui/review.js` gives an added entry or a removed entry only the word "Added" or "Removed". It shows the fields of an entry only for a change.
+- [ADR 0114](../adr/0114-the-review-shows-the-changes-in-words-and-marks-the-changed-part-of-a-line.md) owns the field view. Its revision of 2026-11-05 says that each time shows in local time.
+- The row "Build date" of the same review shows its two times in local time.
+
+Open: no task. The task must say which fields of an added live item the row shows, and if a removed live item shows the same fields.
+
+### Note 13: The View Of Review Is A Segmented Control
+
+Comment: the select menu "View" of Review, with "Simplified" and "Detailed", needs two clicks for a change. A segmented control needs one click.
+
+Facts:
+
+- The view bar in `crates/api/ui/editor.js` makes a `select` element from `VIEWS` and `VIEW_LABELS` of `crates/api/ui/review.js`. The button **Show the Whole File** is at its right side in the detailed view.
+- musicindex ADR 0051 R-SEG-1 says that a segmented control selects one of two or more views of the same content. The two views of Review are such views.
+- `styles.css` has the class `segmented` for R-SEG-1. The tabs of a feed page and the tabs of Settings use it ([ADR 0157](../adr/0157-the-page-tabs-are-a-segmented-control.md)).
+- A select menu is the form for one setting with a small number of values, from the operator choice of 2026-11-06. The view of Review is a view, not a setting, so that choice does not apply.
+
+Open: no task. The change is in one component. The hint below the label names the selected view, and it must stay.
+
 ## Results Of The Steps
 
 The step numbers are those of the section "What to test" of the [notes of `0.1.0-rc.23`](../releases/0.1.0-rc.23.md).
@@ -182,3 +208,4 @@ The step numbers are those of the section "What to test" of the [notes of `0.1.0
 - Step 7: pass, from the report of the operator.
 - Step 8: pass. The check box "Send a podping" stays in view in a long review.
 - Step 9: pass. After a move, the group of the move shows **Delete Now…**, and the delete review has the red button with the count as its first button.
+- Step 10: pass. The operator removed a test live show and wrote the feed.

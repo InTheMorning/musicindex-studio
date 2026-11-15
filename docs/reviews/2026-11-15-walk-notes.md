@@ -197,6 +197,19 @@ Facts:
 
 Open: no task. The change is in one component. The hint below the label names the selected view, and it must stay.
 
+### Note 14: The Cloud Mark On The Release Row Above The Tracks
+
+Comment: a release with the orange cloud mark in the left panel loses the mark when the user opens it. The row of the release above the track list must show the mark too, so that the user finds the way to **Read Again**.
+
+Facts:
+
+- [ADR 0165](../adr/0165-the-left-panel-marks-the-state-of-each-feed.md) items 1 and 2 give the state marks of a row of the left panel. `STATE_MARKS` in `crates/api/ui/outsidecheck.js` gives the state `outside` the icon `cloud-alert` and the warning tone.
+- The outline of an open feed in `crates/api/ui/app.js` has the row of the feed above its tracks. That row shows the cover, the title, the kind and the mark of a change in the library folder. It shows no state mark of ADR 0165.
+- The notice "The hosted file changed outside Studio." with **Read Again** is on the feed page ([ADR 0150](../adr/0150-studio-shows-a-change-from-outside-when-a-page-opens.md) item 2).
+- ADR 0165 item 6 says that one store in the shell keeps the results. The left panel and the tiles read that store, so the row of the outline can read it too.
+
+Open: no task. The task must say if the row of the outline shows only the cloud mark, or each state mark of ADR 0165 item 2.
+
 ## Results Of The Steps
 
 The step numbers are those of the section "What to test" of the [notes of `0.1.0-rc.23`](../releases/0.1.0-rc.23.md).

@@ -34,6 +34,13 @@ pub enum IndexLine {
     LastWriteNotRead,
 }
 
+/// Tell if Music Index read the last write, from the two build dates (ADR
+/// 0175 item 10). A missing date gives `None`.
+#[must_use]
+pub fn index_read(index_date: Option<i64>, written_date: Option<i64>) -> Option<bool> {
+    Some(index_date? >= written_date?)
+}
+
 impl IndexLine {
     /// The text for the user.
     #[must_use]
@@ -64,9 +71,9 @@ pub fn index_line(
             IndexLine::NotHeld
         });
     }
-    let read = index.last_build_date?;
-    let written = datetime::parse_rfc2822(base_build_date?)?.seconds;
-    (read < written).then_some(IndexLine::LastWriteNotRead)
+    let written = datetime::parse_rfc2822(base_build_date?).map(|date| date.seconds);
+    (index_read(index.last_build_date, written) == Some(false))
+        .then_some(IndexLine::LastWriteNotRead)
 }
 
 /// The report of ADR 0175 item 8. The user gives it to the operator of
@@ -125,6 +132,15 @@ pub(super) fn check_index(facts: &Facts, found: &mut Vec<Finding>) {
 mod tests {
     use super::*;
     use crate::feed::Feed;
+
+    #[test]
+    fn index_read_compares_build_dates_and_reports_missing_dates() {
+        assert_eq!(index_read(Some(9), Some(10)), Some(false));
+        assert_eq!(index_read(Some(10), Some(10)), Some(true));
+        assert_eq!(index_read(Some(11), Some(10)), Some(true));
+        assert_eq!(index_read(None, Some(10)), None);
+        assert_eq!(index_read(Some(10), None), None);
+    }
 
     const PUBLIC: &str = "https://music.example/feed.xml";
 

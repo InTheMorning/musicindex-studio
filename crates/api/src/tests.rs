@@ -16518,6 +16518,107 @@ async fn the_outside_check_gives_the_last_move_and_its_announcement_states() {
     );
 }
 
+/// Record a write of the feed at `now` with the build date `build_date`, and
+/// put its podping into the queue.
+fn record_write_with_podping(app: &App, id: i64, now: u64, build_date: i64) {
+    let collection =
+        studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+            .unwrap();
+    let feed = studio_core::collection::FeedId(id);
+    collection
+        .record_feed_write(feed, i64::try_from(now).unwrap(), Some(build_date))
+        .unwrap();
+    studio_core::announce::queue(
+        &collection,
+        feed,
+        &[studio_core::announce::PlannedAnnouncement {
+            url: "https://r2.example/album.xml".to_owned(),
+            podping: true,
+        }],
+        &studio_core::announce::Timing::DEFAULT,
+        now,
+    )
+    .unwrap();
+}
+
+fn index_record(build_date: i64) -> Vec<u8> {
+    serde_json::to_vec(&json!({ "data": {
+        "feed_url": "https://r2.example/album.xml",
+        "title": "A",
+        "last_build_date": build_date
+    }}))
+    .unwrap()
+}
+
+#[tokio::test]
+async fn the_outside_check_tells_if_the_index_read_the_last_write() {
+    let (app, server, id) = outside_app().await;
+    // The build date of the write is earlier than the time of the write.
+    record_write_with_podping(&app, id, 100, 90);
+    server.set("/index/v1/feeds/-1", 200, index_record(89));
+    let path = format!("/api/v1/feeds/{id}/outside?index=true");
+    let (_, before) = call(&app, "GET", &path, None).await;
+    assert_eq!(before["last_write"]["written_at"], 100);
+    assert_eq!(before["last_write"]["announcements"][0]["state"], "waiting");
+    assert_eq!(
+        before["last_write"]["index_read"], false,
+        "ADR 0175 item 10: an earlier date in the index is not a read. Fix: compare the build dates."
+    );
+
+    server.set("/index/v1/feeds/-1", 200, index_record(90));
+    let (_, equal) = call(&app, "GET", &path, None).await;
+    assert_eq!(
+        equal["last_write"]["index_read"], true,
+        "ADR 0175 item 10: compare the index with the build date of the write, not with the time of the write."
+    );
+}
+
+#[tokio::test]
+async fn the_outside_check_asks_the_index_one_time_and_only_on_request() {
+    let (app, server, id) = outside_app().await;
+    record_write_with_podping(&app, id, 100, 90);
+    server.set("/index/v1/feeds/-1", 200, index_record(90));
+    let (_, no_index) = call(&app, "GET", &format!("/api/v1/feeds/{id}/outside"), None).await;
+    assert_eq!(no_index["last_write"]["index_read"], Value::Null);
+    assert_eq!(
+        server.requests("/index/v1/feeds/-1"),
+        0,
+        "ADR 0175 item 1: a call with no index=true sends no request to Music Index."
+    );
+    let path = format!("/api/v1/feeds/{id}/outside?index=true");
+    let (_, asked) = call(&app, "GET", &path, None).await;
+    assert_eq!(asked["last_write"]["index_read"], true);
+    assert_eq!(
+        server.requests("/index/v1/feeds/-1"),
+        1,
+        "ADR 0175 item 1: one call sends one request to Music Index. Fix: use the one feed_presence result."
+    );
+}
+
+#[tokio::test]
+async fn the_outside_check_gives_no_last_write_for_a_move() {
+    let (app, _, id) = outside_app().await;
+    let collection =
+        studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+            .unwrap();
+    collection
+        .record_written_feed_move(
+            studio_core::collection::FeedId(id),
+            Some("https://old.example/album.xml"),
+            100,
+        )
+        .unwrap();
+    drop(collection);
+    record_write_with_podping(&app, id, 100, 90);
+    let (_, body) = call(&app, "GET", &format!("/api/v1/feeds/{id}/outside"), None).await;
+    assert_eq!(body["last_move"]["moved_at"], 100);
+    assert_eq!(
+        body["last_write"],
+        Value::Null,
+        "ADR 0184: a write with a move has only the notice of the move. Fix: outside::last_write gives None."
+    );
+}
+
 #[tokio::test]
 async fn the_cleared_check_box_stops_each_request_of_the_outside_check() {
     let (app, server, id) = outside_app().await;

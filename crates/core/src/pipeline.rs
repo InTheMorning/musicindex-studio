@@ -4997,6 +4997,16 @@ fn write_draft_signed_inner(
             i64::try_from(now).unwrap_or(i64::MAX),
         )?;
     }
+    // The record of the write links a podping to its write (ADR 0175
+    // item 10).
+    collection.record_feed_write(
+        id,
+        i64::try_from(now).unwrap_or(i64::MAX),
+        feed.last_build_date
+            .as_deref()
+            .and_then(crate::datetime::parse_rfc2822)
+            .map(|moment| moment.seconds),
+    )?;
     announce::queue(collection, id, &announcements, &Timing::DEFAULT, now)?;
 
     // The feed is written, so each open change set row of the feed is done.

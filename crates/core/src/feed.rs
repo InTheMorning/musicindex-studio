@@ -492,21 +492,6 @@ fn item_place(item: &Item, number: usize) -> CreditPlace {
     }
 }
 
-/// The number of shares of a recipient, as `shares` of `recipients.js`: a
-/// split of empty text is no number, and a split of only spaces is 0.
-fn share(recipient: &Recipient) -> Option<f64> {
-    let text = recipient.split.as_deref()?;
-    if text.is_empty() {
-        return None;
-    }
-    let n = if text.trim().is_empty() {
-        0.0
-    } else {
-        text.trim().parse::<f64>().ok()?
-    };
-    (n.is_finite() && n >= 0.0).then_some(n)
-}
-
 fn is_fee(recipient: &Recipient) -> bool {
     recipient
         .fee
@@ -514,37 +499,19 @@ fn is_fee(recipient: &Recipient) -> bool {
         .is_some_and(|fee| fee.eq_ignore_ascii_case("true"))
 }
 
-/// The split of each recipient of one value block in percent. This is the
-/// rule of `percentages` in `recipients.js` and of the share bar (ADR 0133).
-///
-/// A fee recipient keeps its share as its percent. Each other recipient
-/// gets its part of the rest, which is 100 less the shares of the fees.
-/// A share that is not a number gives `None`.
+/// The split of each recipient of one value block in percent. The crate
+/// `musicindex-value` gives the rule (musicindex ADR 0074 R-VALUE-4). Studio
+/// gives the share and the fee flag of each recipient. A recipient with no
+/// `split` attribute has a share that is not a number.
 fn percentages(recipients: &[&Recipient]) -> Vec<Option<f64>> {
-    let fees: f64 = recipients
-        .iter()
-        .filter(|r| is_fee(r))
-        .map(|r| share(r).unwrap_or(0.0))
-        .sum();
-    let total: f64 = recipients
-        .iter()
-        .filter(|r| !is_fee(r))
-        .map(|r| share(r).unwrap_or(0.0))
-        .sum();
-    let rest = (100.0 - fees).max(0.0);
-    recipients
+    let split: Vec<musicindex_value::Recipient> = recipients
         .iter()
         .map(|r| {
-            let n = share(r)?;
-            if is_fee(r) {
-                Some(n)
-            } else if total > 0.0 {
-                Some(n / total * rest)
-            } else {
-                None
-            }
+            let share = r.split.as_deref().and_then(musicindex_value::parse_share);
+            musicindex_value::Recipient::new(share, is_fee(r))
         })
-        .collect()
+        .collect();
+    musicindex_value::percentages(&split)
 }
 
 /// Add each recipient of `values` with its place and its split (ADR 0143,

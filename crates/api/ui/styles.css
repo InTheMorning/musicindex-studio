@@ -1696,6 +1696,9 @@ button.outline-feed {
 .outline-feed .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .outline-feed .sub { color: var(--muted); font-size: var(--text-callout); }
 .outline-feed .change-mark { display: inline-block; margin-left: 6px; vertical-align: middle; }
+/* The state mark is at the right side of the row, as in a level row
+   (ADR 0165 item 2). */
+.outline-feed .state-mark { margin-left: auto; }
 .outline-cover {
   width: 40px;
   height: 40px;

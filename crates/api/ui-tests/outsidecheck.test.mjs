@@ -149,6 +149,24 @@ test('The mark of a set ranks outside, pending and unchecked (ADR 0165 item 2)',
   assert.equal(stateMark([], {}), null);
 });
 
+test('A single-feed mark shows outside changes and hides an up-to-date feed (ADR 0165 item 2)', () => {
+  assert.deepEqual(
+    stateMark([feedOf(1)], { 1: read('changed') }),
+    { kind: 'outside', text: 'Changed outside Studio', icon: 'cloud-alert', tone: 'warning' },
+  );
+  assert.equal(stateMark([feedOf(1)], { 1: read() }), null);
+});
+
+test('The open feed outline uses its single-feed state mark (ADR 0165 items 2 and 6)', () => {
+  const source = readFileSync(new URL('../ui/app.js', import.meta.url), 'utf8');
+  const start = source.indexOf('function Outline');
+  const end = source.indexOf('function LevelPage', start);
+  const outline = source.slice(start, end);
+  const fix = 'ADR 0165 items 2 and 6: the open feed outline shows its state mark. Fix Outline in crates/api/ui/app.js.';
+  assert.match(outline, /useStateMark\(feeds\.filter\(\(item\) => item\.id === feed\.id\)\)/, fix);
+  assert.match(outline, /<\$\{StateMark\} mark=\$\{feedMark\} \/>/, fix);
+});
+
 test('A row covers the feed and each release, and a group covers its feeds (ADR 0165 item 3)', () => {
   const feeds = [
     feedOf(1, { release_ids: [2, 3], roles: ['artist'] }),

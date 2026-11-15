@@ -3244,7 +3244,9 @@ function LevelPage({ panel, go }) {
 // given at a wide width only, where the item "Releases" is in the panel.
 function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImporting }) {
   const [current, setCurrent] = useState(null);
+  const { feeds } = useContext(OutsideContext);
   const feed = panel.feed;
+  const feedMark = useStateMark(feeds.filter((item) => item.id === feed.id));
   const releases = panel.items.find((item) => item.id === 'releases');
   const rest = panel.items.filter((item) => item.id !== 'releases');
   const childRows = rest.filter((item) => !item.heading);
@@ -3266,13 +3268,14 @@ function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImp
   return html`<div role="tree" aria-label=${feed.label} onKeyDown=${(event) => onTreeKey(event, currentIndex, setCurrent)}>
     ${releases && html`<button class="row" type="button" ...${rowAttrs(0, null)} onClick=${up}><${Chevron} direction="back" />${releases.label}</button>`}
     <button class="outline-feed" type="button" ...${rowAttrs(feedIndex, null, 'tree')} aria-expanded="true" aria-current=${currentAttr(feed)}
-      aria-label=${changedFeeds.has(feed.id) ? `${feed.label}, changes in the library folder` : feed.label}
+      aria-label=${`${feed.label}${changedFeeds.has(feed.id) ? ', changes in the library folder' : ''}${feedMark ? `, ${feedMark.text}` : ''}`}
       onClick=${() => { if (!feed.first) go({ name: 'feed', id: feed.id, page: feed.page }); }}>
       <${ArtWithDot} dot=${feed.dot}><${ImageThumb} url=${feed.image} glow=${feed.glow} className="outline-cover" always /><//>
       <div class="text">
         <span class="title">${feed.title}${changedFeeds.has(feed.id) && html`<span class="change-mark"></span>`}</span>
         <span class="sub">${feed.typeLabel}</span>
       </div>
+      <${StateMark} mark=${feedMark} />
     </button>
     <ul class="tree" role="group">
       ${rest.map((item) => {

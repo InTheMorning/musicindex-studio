@@ -2,7 +2,13 @@
 
 Decision: none. This is Note 2 of the walk. [ADR 0003](../adr/0003-user-unlocked-secret-vault.md) item 2 owns the rule of today: the passphrase of the artist opens the vault. This task changes no rule and no code. Its result gives the options for a decision of the operator.
 
-Status: Not started. The packet is ready for a delegate.
+Status: Complete on 2026-11-15. The [research note](../research/2026-11-15-vault-unlock-at-the-start-of-the-desktop-app.md) is ready for the operator decision.
+
+## Result
+
+- The delegate was `gpt-6-luna`. The first run, with medium effort, did one web read and left question 3 open. The second run, with high effort, gave the note.
+- Gate of the main session: met. The main session compared each cited code location with the code. It read the version, the license, the Rust version and the default feature of `keyring` 4.2.0 from crates.io.
+- The main session did not read the other web sources. The note names each item that no source gave.
 
 Source: [walk notes of 2026-11-15](../reviews/2026-11-15-walk-notes.md), Note 2.
 

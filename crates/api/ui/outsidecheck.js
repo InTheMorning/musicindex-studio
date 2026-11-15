@@ -1,4 +1,5 @@
 import { unlinkedReleases, otherFeeds } from './shell.js';
+import { INDEX_READ_AGAIN_MS, INDEX_READ_AGAIN_MAX } from './releasemove.js';
 
 // The check for a change from outside Studio (ADR 0150). This module has no
 // Preact and no browser state. The core makes the comparison and gives the
@@ -90,9 +91,8 @@ export const localTime = (seconds) => new Date(seconds * 1000).toLocaleString();
 // The notice after a move by Studio (ADR 0184 items 3 to 7). A sent line can
 // send again (ADR 0191 item 4). A feed with no public address has no send
 // button (ADR 0184 item 11).
-export function moveNotice(check) {
-  if (!check || check.index_is_move_source !== true || !check.last_move) return null;
-  const lines = (check.last_move.announcements || []).map((announcement) => {
+function podpingLines(announcements, ownUrl) {
+  return (announcements || []).map((announcement) => {
     const line = { url: announcement.url, state: announcement.state, tag: '', time: null, text: '' };
     if (announcement.state === 'waiting') {
       line.tag = 'Waiting';
@@ -100,18 +100,23 @@ export function moveNotice(check) {
     } else if (announcement.state === 'sent') {
       line.tag = 'Sent';
       line.time = localTime(announcement.finished_at);
-      if (check.own_url) line.action = 'Send the Podping Again';
+      if (ownUrl) line.action = 'Send the Podping Again';
     } else if (announcement.state === 'failed') {
       line.tag = 'Failed';
       line.time = localTime(announcement.finished_at);
       line.text = announcement.error || '';
-      if (check.own_url) line.action = 'Send the Podping Again';
+      if (ownUrl) line.action = 'Send the Podping Again';
     } else if (announcement.state === 'not_sent') {
       line.tag = 'Not sent';
-      if (check.own_url) line.action = 'Send the Podping';
+      if (ownUrl) line.action = 'Send the Podping';
     }
     return line;
   });
+}
+
+export function moveNotice(check) {
+  if (!check || check.index_is_move_source !== true || !check.last_move) return null;
+  const lines = podpingLines(check.last_move.announcements, check.own_url);
   return {
     tone: 'plain',
     strong: `You moved this feed at ${localTime(check.last_move.moved_at)}. Music Index reads the new address after it gets the podping.`,
@@ -119,18 +124,55 @@ export function moveNotice(check) {
   };
 }
 
+// The age of a write, in seconds, after which the notice asks Music Index
+// only one time for each load of the page (task 155b). The age starts at the
+// write, or at the last Check Again (`since`) when that time is later.
+export const WRITE_NOTICE_AGE = 300;
+const writeAge = (write, nowSeconds, since = 0) => nowSeconds - Math.max(write.written_at, since);
+
+// The notice after a write with a podping (ADR 0175 item 1). `kind` is
+// 'waiting', 'confirmed' or 'no_reply'. The confirmation shows only when the
+// page showed a different kind before (`confirmedHere`).
+export function writeNotice(check, { reads, nowSeconds, confirmedHere, since = 0 }) {
+  const write = check && check.last_write;
+  if (!write || moveNotice(check)) return null;
+  const waiting = (write.announcements || []).some((announcement) => announcement.state === 'waiting');
+  if (write.index_read === null && !waiting) return null;
+  const time = localTime(write.written_at);
+  if (write.index_read === true) {
+    return confirmedHere ? { kind: 'confirmed', tone: 'plain', strong: `Music Index has your write of ${time}.`, lines: [] } : null;
+  }
+  const lines = podpingLines(write.announcements, check.own_url);
+  if (write.index_read === false && (reads >= INDEX_READ_AGAIN_MAX || writeAge(write, nowSeconds, since) > WRITE_NOTICE_AGE)) {
+    return { kind: 'no_reply', tone: 'plain', strong: `Music Index has not read your write of ${time} yet.`, lines, action: 'Check Again' };
+  }
+  return {
+    kind: 'waiting',
+    tone: 'plain',
+    strong: `You wrote this feed at ${time}. Music Index reads it after it gets the podping.`,
+    lines,
+  };
+}
+
 // The delay before the notice reads a waiting podping again (ADR 0189 item 6).
 // A podping that is late, for example with no network, gets a load each 30
-// seconds, not each second.
+// seconds, not each second. After the podping, a write that Music Index did
+// not read gets a load each 20 seconds, until the limit of the reads or the
+// age limit of the write (ADR 0175 item 1).
 export const LATE_NOTICE_LOAD = 30000;
-export function nextNoticeLoad(check, nowSeconds) {
-  if (!check || !check.last_move) return null;
-  const waiting = (check.last_move.announcements || [])
+export function nextNoticeLoad(check, nowSeconds, reads = 0, since = 0) {
+  if (!check) return null;
+  const waiting = [...(check.last_move?.announcements || []), ...(check.last_write?.announcements || [])]
     .filter((announcement) => announcement.state === 'waiting')
     .map((announcement) => announcement.send_at);
-  if (waiting.length === 0) return null;
-  const delay = (Math.min(...waiting) + 5 - nowSeconds) * 1000;
-  return delay < 1000 ? LATE_NOTICE_LOAD : delay;
+  if (waiting.length > 0) {
+    const delay = (Math.min(...waiting) + 5 - nowSeconds) * 1000;
+    return delay < 1000 ? LATE_NOTICE_LOAD : delay;
+  }
+  if (check.last_write?.index_read === false && reads < INDEX_READ_AGAIN_MAX) {
+    return writeAge(check.last_write, nowSeconds, since) > WRITE_NOTICE_AGE ? null : INDEX_READ_AGAIN_MS;
+  }
+  return null;
 }
 
 // Call `work` for each item, with at most `limit` calls at one time. A failed

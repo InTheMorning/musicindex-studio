@@ -28,7 +28,7 @@ import { CONFIRMS, confirmButtons } from './confirms.js';
 import { changeTitle, afterDiscard, changeLine } from './people.js';
 import { makeSettingsDraft, changeSetting, settingsDraftView, discardSettings, saveSettings, asksSettingsLeave } from './settingsdraft.js';
 import { PeoplePage, PersonPage, CheckPage, WalletPage } from './peoplepages.js';
-import { OUTSIDE_LIMIT, OUTSIDE_SETTING_LABEL, OUTSIDE_SETTING_HINT, outsideMark, outsideNotice, readOnlyHostNotice, indexNotice, moveNotice, nextNoticeLoad, eachLimited, panelSet, stateMark } from './outsidecheck.js';
+import { OUTSIDE_LIMIT, OUTSIDE_SETTING_LABEL, OUTSIDE_SETTING_HINT, outsideMark, outsideNotice, readOnlyHostNotice, indexNotice, moveNotice, writeNotice, nextNoticeLoad, eachLimited, panelSet, stateMark } from './outsidecheck.js';
 import { collectionMark, collectionRow, collectionSectionActions, collectionSheet, collectionAction, CLOSED_EXPORT_HINT, COLLECTIONS_HINT, OPENING_TEXT } from './collectionlist.js';
 import { localInputToIso, isoToLocalInput, zoneHint, nowInput, unreadDateHint } from './datetime.js';
 import { durationText, readDuration, DURATION_ERROR, unreadDurationHint } from './duration.js';
@@ -4788,16 +4788,30 @@ function useOutsideChecks(feeds, key) {
 // read of the feed checks again.
 function OutsideNotices({ feed, busy, refresh, onChanged }) {
   const [check, setCheck] = useState(null);
+  const [reads, setReads] = useState(0);
+  const confirmedHere = useRef(false);
+  const readsRef = useRef(0);
+  // The time of the last Check Again, in seconds. The age limit of the write
+  // starts again at that time (ADR 0175 item 1).
+  const since = useRef(0);
   const { busy: sending, error, run } = useAction();
   const nav = useContext(NavContext);
-  const load = () => api(`/feeds/${feed.id}/outside?index=true`).then(setCheck, () => {});
-  useEffect(() => { setCheck(null); load(); }, [feed.id, feed.last_version]);
+  const load = () => {
+    readsRef.current += 1;
+    setReads(readsRef.current);
+    return api(`/feeds/${feed.id}/outside?index=true`).then(setCheck, () => {});
+  };
+  useEffect(() => { setCheck(null); setReads(0); readsRef.current = 0; since.current = 0; confirmedHere.current = false; load(); }, [feed.id, feed.last_version]);
   useEffect(() => {
-    const delay = nextNoticeLoad(check, Date.now() / 1000);
+    window.addEventListener(ANNOUNCE_RELOAD, load);
+    return () => window.removeEventListener(ANNOUNCE_RELOAD, load);
+  }, [feed.id]);
+  useEffect(() => {
+    const delay = nextNoticeLoad(check, Date.now() / 1000, reads, since.current);
     if (delay === null) return undefined;
     const timer = setTimeout(load, delay);
     return () => clearTimeout(timer);
-  }, [check, feed.id]);
+  }, [check, feed.id, reads]);
   // A Read Again of the page ends when `busy` changes to false. Then the
   // notice loads again, because a podping can be sent (ADR 0189 item 6).
   const wasBusy = useRef(busy);
@@ -4807,6 +4821,10 @@ function OutsideNotices({ feed, busy, refresh, onChanged }) {
   }, [busy]);
   const notice = outsideNotice(check);
   const move = moveNotice(check);
+  const written = writeNotice(check, { reads, nowSeconds: Date.now() / 1000, confirmedHere: confirmedHere.current, since: since.current });
+  // The confirmation shows only after the page showed that Music Index had
+  // not read the write.
+  if (written && written.kind !== 'confirmed') confirmedHere.current = true;
   const index = move ? null : indexNotice(check);
   const keep = () => run(async () => {
     await api(`/feeds/${feed.id}/outside/keep`, { method: 'POST' });
@@ -4816,6 +4834,12 @@ function OutsideNotices({ feed, busy, refresh, onChanged }) {
     await api(`/feeds/${feed.id}/announcements`, { method: 'POST' });
     await load();
   });
+  const checkWriteAgain = () => {
+    since.current = Date.now() / 1000;
+    readsRef.current = 0;
+    setReads(0);
+    load();
+  };
   const follow = () => run(async () => {
     await api(`/feeds/${feed.id}/outside/follow`, { method: 'POST' });
     await onChanged();
@@ -4853,10 +4877,21 @@ function OutsideNotices({ feed, busy, refresh, onChanged }) {
     ${readOnly && html`<div class="notice" role="status">${readOnly.text}<div class="actions"><button class="button action" type="button" disabled=${busy || sending} onClick=${readOnly.use ? useHost : () => nav && nav.go({ name: 'hosts' })}>${readOnly.button}</button></div><${ErrorNotice} error=${error} /></div>`}
     ${index && html`<div class="notice" role="status"><strong>${index.strong}</strong> <span class="mono">${index.index}</span>. Your feed is at <span class="mono">${index.own}</span>. ${index.after}</div>`}
     ${move && html`<div class="notice" role="status"><strong>${move.strong}</strong>
-      ${move.lines.map((line) => html`<p class="podping-line"><span class=${'status-tag ' + line.state}>${line.state === 'waiting' && html`<span class="player-wait" aria-hidden="true"></span>`}${line.state === 'sent' && html`<${Icon} name="check" />`}${line.tag}${line.time ? ` · ${line.time}` : ''}</span> <span class="mono">${line.url}</span>${line.text && ` ${line.text}`}
-        ${line.action && html`<button class="button action" type="button" disabled=${busy || sending} onClick=${sendPodping}>${line.action}</button>`}</p>`)}
+      <${PodpingLines} lines=${move.lines} disabled=${busy || sending} send=${sendPodping} />
+      <${ErrorNotice} error=${error} />
+    </div>`}
+    ${written && !move && html`<div class="notice" role="status"><strong>${written.strong}</strong>
+      <${PodpingLines} lines=${written.lines} disabled=${busy || sending} send=${sendPodping} />
+      ${written.action && html`<div class="actions"><button class="button action" type="button" disabled=${busy || sending} onClick=${checkWriteAgain}>${written.action}</button></div>`}
       <${ErrorNotice} error=${error} />
     </div>`}`;
+}
+
+// The podping lines of the notice after a move (ADR 0184) and of the notice
+// after a write (ADR 0175 item 1).
+function PodpingLines({ lines, disabled, send }) {
+  return lines.map((line) => html`<p class="podping-line"><span class=${'status-tag ' + line.state}>${line.state === 'waiting' && html`<span class="player-wait" aria-hidden="true"></span>`}${line.state === 'sent' && html`<${Icon} name="check" />`}${line.tag}${line.time ? ` · ${line.time}` : ''}</span> <span class="mono">${line.url}</span>${line.text && ` ${line.text}`}
+        ${line.action && html`<button class="button action" type="button" disabled=${disabled} onClick=${send}>${line.action}</button>`}</p>`);
 }
 
 // The check box of the check for a change from outside (ADR 0150 item 10).

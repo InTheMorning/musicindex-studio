@@ -7,6 +7,7 @@
 - Technical choices: items 2, 4, 7, 9 and 11 are choices of the planning model.
 - Accepted: 2026-11-13 by the operator, at the mockup of packet 110c. The operator selected **Show the Ways** for each different address (item 5) through the questionnaire, from a drawing.
 - Changed: 2026-11-14 by the operator, at the human check walk. Item 4 gives a hidden feed the line with no "yet".
+- Revised: 2026-11-15 by operator decision, from the [walk notes of 2026-11-15](../reviews/2026-11-15-walk-notes.md), Note 11. Item 1 permits the requests of the notice after a write with a podping.
 - Source: [research request on a feed check with repairs](../plans/research-feed-check-request.md), item F3.
 - Uses: [ADR 0007](0007-draft-diff-write-and-announce.md), [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md), [ADR 0045](0045-phase-9-crates-test-servers-and-host-forms.md), [ADR 0065](0065-the-core-applies-each-feed-rule.md), [ADR 0126](0126-studio-refuses-a-bad-move-link.md), [ADR 0127](0127-a-changed-feed-gets-a-new-build-date.md), [ADR 0174](0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md). Stophammer ADR 0052 and ADR 0058 own the rules of the index. This record cites them and does not restate them as rules of Studio.
 
@@ -30,7 +31,9 @@ These facts of the Stophammer API on 2026-11-11 apply:
 
 ### The Reads
 
-1. The reads of ADR 0174 item 16 also send `GET /v1/feeds/{guid}` and `GET /v1/feeds/{guid}/copies` to the Music Index API of Studio. They go out only when the user opens the check and when the user selects **Check Again**. A failed read gives the line of ADR 0174 item 16 with the address of the request.
+1. The reads of ADR 0174 item 16 also send `GET /v1/feeds/{guid}` and `GET /v1/feeds/{guid}/copies` to the Music Index API of Studio. For the check, they go out only when the user opens the check and when the user selects **Check Again**. A failed read gives the line of ADR 0174 item 16 with the address of the request.
+
+   After a write with a podping, the feed page shows a notice with the state of the podping. For that notice, Studio also sends `GET /v1/feeds/{guid}` at intervals, until Music Index has read the write. A limit stops the requests, and **Check Again** on the notice starts them again. A write with a move shows only the notice of ADR 0184.
 2. The facts of the index stay in memory with the other facts of ADR 0174 item 18. A feed with no `podcast:guid` gives no request.
 
 ### The Different Address

@@ -589,6 +589,7 @@ Each release candidate after 0.1.0-rc.8 has one notes file ([ADR 0100](adr/0100-
 - [People module design note, 2026-11-01](research/2026-11-01-people-module-design-note.md)
 - [Tauri desktop shell research, 2026-11-03](research/2026-11-03-tauri-desktop-shell-research.md)
 - [Examples of a default among many addresses, 2026-11-06](research/2026-11-06-default-address-examples.md)
+- [Vault unlock at the start of the desktop app, 2026-11-15](research/2026-11-15-vault-unlock-at-the-start-of-the-desktop-app.md)
 
 ## Notes
 

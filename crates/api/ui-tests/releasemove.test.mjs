@@ -157,3 +157,15 @@ test('the Files page reads the moves again while Music Index gives a different a
   assert.equal(indexNeedsRead(null, 0), false);
   assert.equal(indexNeedsRead([{ index: 'different' }], INDEX_READ_AGAIN_MAX), false, 'The reads stop at the limit.');
 });
+
+test('planRows says that no old file stays when the move copies no file', () => {
+  const onlyFeed = { ...plan, audio: empty, images: empty, download: empty, on_target: 4, from_connector_ids: [], stays: [] };
+  const rows = planRows(onlyFeed, hosts);
+  assert.deepEqual(rows.at(-1), { label: 'Old files', value: 'None. No waiting time.' },
+    'The plan gives the reason for no menu "Keep the old files for". Fix planRows in crates/api/ui/releasemove.js.');
+  assert.ok(rows.some((r) => r.value === 'Already on New Host'), JSON.stringify(rows));
+  const none = (changed) => !planRows({ ...onlyFeed, ...changed }, hosts).some((r) => r.label === 'Old files');
+  assert.ok(none({ from_connector_ids: [1] }), 'An old file stays on a file host.');
+  assert.ok(none({ audio: { count: 1, bytes: 5 } }), 'A file moves from an address.');
+  assert.ok(none({ nothing_to_move: true }), 'Nothing moves.');
+});

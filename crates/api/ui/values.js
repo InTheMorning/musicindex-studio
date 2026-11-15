@@ -3,7 +3,7 @@
 import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
 import { TextField, set, setAt, withCids, startOpen, openOnce, useSheet } from './editor.js';
 import { CONFIRMS } from './confirms.js';
-import { percentText, lookupHint, WALLET_TYPES, CUSTOM_KEY_HINT, percentages, isFee, shares, shareParts, splitOrder, recipientFields, recipientFromFields } from './recipients.js';
+import { percentText, lookupHint, WALLET_TYPES, CUSTOM_KEY_HINT, percentages, feeLine, isFee, shares, shareParts, splitOrder, recipientFields, recipientFromFields } from './recipients.js';
 import { recipientPickRows, recipientChoices, recipientIdentity, personKeys, memberText, addRecipientsLabel, trackHeading, recipientAddressMenu } from './people.js';
 import { PickerLayout, PickFillRow, FindOneSheet, PickFold, SearchResults, TakenTag, useFieldList } from './pickers.js';
 import { PersonArt, useLookup } from './peoplepages.js';
@@ -187,10 +187,10 @@ function Recipients({ id, recipients, defaultType, onChange }) {
           <span class="mono address">${r.address || 'No address'}</span>
         </summary>
         <div class="form">
-        <${TextField} id=${`${rid}-split`} label=${isFee(r) ? 'Split (percent)' : 'Split (shares)'} inputmode="numeric" value=${r.split} onChange=${change('split')} />
+        <${TextField} id=${`${rid}-split`} label='Split (shares)' inputmode="numeric" value=${r.split} onChange=${change('split')} />
         <label class="check"><input type="checkbox" checked=${isFee(r)}
           onChange=${(e) => change('fee')(e.target.checked ? 'true' : null)} />
-          Fee, paid first</label>
+          Fee</label>
         <${RecipientAddressActions} recipient=${r} onChange=${() => setSheet({ cid: r._cid })} />
         <div class="actions"><button class="button destructive" type="button"
           aria-label=${`Remove ${r.name || r.address || 'this recipient'}`} onClick=${() => onChange(recipients.filter((_, k) => k !== i))}>Remove</button></div>
@@ -209,6 +209,7 @@ function Recipients({ id, recipients, defaultType, onChange }) {
     <h3 class="value-group">Fees</h3>
     ${ofGroup(true)}
     ${!recipients.some(isFee) && html`<p class="hint">No fees.</p>`}
+    ${feeLine(recipients) && html`<p class="hint">${feeLine(recipients)}</p>`}
     <${RecipientSheet} open=${sheet !== null} recipient=${changing || null} defaultType=${defaultType} recipients=${recipients}
       onSave=${save} onCopy=${() => { setSheet(null); setCopying(true); }} onClose=${() => setSheet(null)} />
     <${PickerSheet} open=${copying} recipients=${recipients} onAdd=${addCopied} onClose=${() => setCopying(false)} />`;

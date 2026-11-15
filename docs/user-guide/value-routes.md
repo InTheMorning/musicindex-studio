@@ -40,8 +40,10 @@ To copy many recipients of a different feed, select **Copy from a Feed** below t
 Each line shows the name, a bar, the percent and the address.
 The percent comes from the shares of all recipients.
 
-To make a recipient a fee, select the check box "Fee, paid first".
-The recipient then moves to the group **Fees**, and the field is **Split (percent)**.
+The percent of a fee also comes from the shares of all recipients.
+To make a recipient a fee, select the check box "Fee".
+The recipient then moves to the group **Fees**. Its split is a number of shares, as for each other recipient.
+A line below the fees names each fee. The fee comes out of the payment, not on top of it.
 
 The rows sort by split, the biggest first. They sort when you leave the row. When you change a list of recipients, the feed gets the same sequence. A list that you do not change stays as it is in the feed.
 

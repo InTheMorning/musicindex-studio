@@ -161,11 +161,11 @@ export function moreLabel(count) {
 // One word for each key of the serialized model, in the words of the editor.
 export const KEY_WORDS = {
   alternate_enclosures: 'Alternate files', atom_links: 'Atom links', author: 'Author', bitrate: 'Bitrate',
-  blocks: 'Blocks', content_links: 'Content links', default: 'Default', description: 'Description',
+  blocks: 'podcast:block tags', content_links: 'Content links', default: 'Default', description: 'Description',
   duration: 'Duration', duration_seconds: 'Duration', email: 'Email', enclosure: 'Audio file', end: 'End',
   episode: 'Episode', explicit: 'Explicit', field: 'Field', fundings: 'Support links', guid: 'GUID',
-  image: 'Image', images: 'Images', item: 'Live item', items: 'Tracks', itunes_block: 'Block in Apple Podcasts',
-  itunes_episode: 'Apple Podcasts episode', keywords: 'Keywords', language: 'Language', length: 'Size',
+  hidden: 'Hide from apps', image: 'Image', images: 'Images', item: 'Live item', items: 'Tracks', itunes_block: 'itunes:block tag',
+  itunes_episode: 'itunes:episode tag', keywords: 'Keywords', language: 'Language', length: 'Size',
   license: 'License', link: 'Link', live_items: 'Live items', live_value: 'Live payments', locked: 'Locked',
   managing_editor: 'Managing editor', media_type: 'File type', medium: 'Medium', method: 'Method',
   name: 'Name', new_feed_url: 'New feed address', op3: 'OP3', owner: 'Owner', persons: 'Credits',

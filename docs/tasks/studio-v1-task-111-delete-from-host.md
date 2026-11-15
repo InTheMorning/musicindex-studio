@@ -82,9 +82,9 @@ Visual, by the planning model:
 
 - The visual criteria of ADR 0131.
 
-Human, by the operator. This gate stays open until it runs:
+Human, by the operator. On 2026-11-13 the retire and the delete passed. The restore did not run:
 
-- The human criteria of ADR 0131.
+- The human criteria of ADR 0131. The human gate of [ADR 0208](../adr/0208-the-delete-and-move-sheets-give-goals-state-points-and-the-domain-line.md) has the restore, with its button **Put the File Back**.
 
 ## Stop And Ask When
 

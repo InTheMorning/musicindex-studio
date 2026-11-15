@@ -391,6 +391,40 @@ async fn the_delete_draft_gives_the_summary_and_the_names_and_the_write_deletes_
     assert_eq!(state(&app, id).await["delete"], "not_done");
 }
 
+// After the write of a restore, the file on the host hides the feed again.
+// Step 1 of the Retire block then names the last write, not the draft
+// (ADR 0208 item 15).
+#[tokio::test]
+async fn after_a_restore_write_the_retire_state_names_the_last_write() {
+    let index = CountingIndex::start(404, "{}");
+    let (app, id) = app_with(&index.url(), &feed_xml("Album", &guid_tag())).await;
+    let base = format!("/api/v1/feeds/{id}");
+    let (status, _) = call(&app, "POST", &format!("{base}/retire"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, diff) = call(&app, "GET", &format!("{base}/diff"), None).await;
+    approve_and_write(&app, id, &diff).await;
+    assert_eq!(state(&app, id).await["ask"], "written");
+
+    let (status, draft) = call(
+        &app,
+        "POST",
+        &format!("{base}/delete/draft"),
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{draft}");
+    approve_and_write(&app, id, &draft).await;
+    assert_eq!(state(&app, id).await["delete"], "done");
+
+    let (status, restore) = call(&app, "POST", &format!("{base}/delete/restore"), None).await;
+    assert_eq!(status, StatusCode::OK, "{restore}");
+    approve_and_write(&app, id, &restore).await;
+    assert!(app.feeds.path().join("a.xml").exists());
+    let restored = state(&app, id).await;
+    assert_eq!(restored["delete"], "not_done");
+    assert_eq!(restored["ask"], "written", "{restored}");
+}
+
 #[tokio::test]
 async fn a_feed_with_no_title_gives_its_file_name_to_confirm() {
     let index = CountingIndex::start(404, "{}");

@@ -2,7 +2,7 @@
 
 Decision: [ADR 0209](../adr/0209-the-review-sheet-keeps-the-podping-box-in-view-and-names-each-delete.md).
 
-Status: Complete on 2026-11-14, with its screenshot visual check. One visual item and the human gate of ADR 0209 are open.
+Status: Complete on 2026-11-14, with its screenshot visual check. The human gate of ADR 0209 is open.
 
 ## Result
 
@@ -17,7 +17,7 @@ Status: Complete on 2026-11-14, with its screenshot visual check. One visual ite
 - The diff does not give the file host of the address before the move. The row uses the file host of the feed row, which the review sheet already has. A feed with no file host shows no name there.
 - Walk: `steps-143-usual.json` with `setup-none.py`, `steps-143-move.json` with `setup-142-move.py`, and `steps-143-deletes.json` with `setup-index-follows-later.py`. Each view at 1280 px light and 390 px dark gave no edge, overflow or fit finding.
 - At 390 px the footer has three rows: the check box, **Discard the Draft** and **Write to the File Host**. Each control is fully in view.
-- Open: no walk showed a refused deletion (visual item 3). Two Node tests prove its view and its markup.
+- The walk `steps-143-refused.json` with `setup-143-refused.py` showed a refused deletion of a pointer file at 1280 px light and 390 px dark, with no finding. The kind "Not deleted" is on one line.
 
 ## Goal
 

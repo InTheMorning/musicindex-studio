@@ -1,6 +1,6 @@
 # Studio V1 Task 096: Release Moves
 
-Status: Complete, with its screenshot visual check. Its human test is open.
+Status: Complete, with its screenshot visual check. On 2026-11-14 the move between two real file hosts and the reviewed deletion passed (check 4 of the [human check walk](../reviews/2026-11-14-human-check-walk.md)). The check of a waiting move on the next day is open.
 
 Owner of the rules: [ADR 0148](../adr/0148-a-move-keeps-the-old-files-until-the-user-reviews-the-deletion.md).
 

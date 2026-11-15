@@ -4390,6 +4390,21 @@ impl Collection {
         Ok(rows)
     }
 
+    /// True when an open change set has a row of the feed that is not
+    /// written (ADR 0213 item 22).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn has_open_change_set_row(&self, feed: FeedId) -> Result<bool, CollectionError> {
+        Ok(self.db.query_row(
+            "SELECT EXISTS (SELECT 1 FROM change_set_feeds
+             WHERE feed_id = ?1 AND written_at IS NULL)",
+            [feed.0],
+            |r| r.get(0),
+        )?)
+    }
+
     /// Mark each feed row of an open change set as written. A row that is
     /// marked already does not change. Gives the number of rows.
     ///

@@ -6,6 +6,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::collection::{PublisherRole, roles_from_rel};
 use crate::feed::Feed;
 
 mod index;
@@ -43,6 +44,10 @@ pub enum FindingKind {
     /// An open copy of the feed has other payment recipients (ADR 0175
     /// item 6).
     CopyOtherRecipients,
+    /// The release has no artist page (ADR 0213 item 18).
+    NoArtistPage,
+    /// The playlist or show has no publisher page (ADR 0213 item 18).
+    NoPublisherPage,
 }
 
 /// How a finding asks for action (ADR 0174 item 3, ADR 0175 item 6).
@@ -73,6 +78,64 @@ pub enum RepairKind {
     OpenTheTrack,
     /// **Select a Language**.
     SelectALanguage,
+    /// **Link a Page** (ADR 0213 item 19).
+    LinkAPage,
+}
+
+/// The reason why a feed cannot be written under ADR 0213 item 21.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PageRefusal {
+    /// A release has no artist page.
+    NoArtistPage,
+    /// A playlist or show has no publisher page.
+    NoPublisherPage,
+}
+
+impl PageRefusal {
+    /// The API code for this refusal.
+    #[must_use]
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::NoArtistPage => "no_artist_page",
+            Self::NoPublisherPage => "no_publisher_page",
+        }
+    }
+}
+
+/// Give the page-rule refusal for `feed`, or none when its links obey
+/// ADR 0213 item 17.
+#[must_use]
+pub fn page_refusal(feed: &Feed) -> Option<PageRefusal> {
+    if feed.medium.as_deref() == Some("publisher") {
+        return None;
+    }
+    let publisher_links = feed
+        .publisher
+        .as_ref()
+        .map_or(&[][..], |publisher| publisher.remote_items.as_slice());
+    let has_publisher = publisher_links
+        .iter()
+        .any(|link| link.value.medium.as_deref() == Some("publisher"));
+    if feed.medium.as_deref() == Some("musicL") {
+        return (!has_publisher).then_some(PageRefusal::NoPublisherPage);
+    }
+    if feed.medium.as_deref() != Some("music") {
+        return None;
+    }
+    if !feed.items.is_empty() || feed.live_items.is_empty() {
+        let has_artist = publisher_links.iter().any(|link| {
+            link.value.medium.as_deref() == Some("publisher")
+                && link
+                    .value
+                    .rel
+                    .as_deref()
+                    .is_some_and(|rel| roles_from_rel(rel).contains(&PublisherRole::Artist))
+        });
+        (!has_artist).then_some(PageRefusal::NoArtistPage)
+    } else {
+        (!has_publisher).then_some(PageRefusal::NoPublisherPage)
+    }
 }
 
 /// One finding of the check.
@@ -135,6 +198,27 @@ pub struct Facts {
 #[must_use]
 pub fn check(feed: &Feed, facts: &Facts) -> Vec<Finding> {
     let mut found = Vec::new();
+    if let Some(refusal) = page_refusal(feed) {
+        let (kind, reason) = match refusal {
+            PageRefusal::NoArtistPage => (
+                FindingKind::NoArtistPage,
+                "This release has no artist page.",
+            ),
+            PageRefusal::NoPublisherPage => (
+                FindingKind::NoPublisherPage,
+                "This feed has no artist, label or hosting page.",
+            ),
+        };
+        found.push(Finding {
+            kind,
+            level: FindingLevel::Notice,
+            title: reason.to_owned(),
+            reason: reason.to_owned(),
+            entry: None,
+            repair: Some(RepairKind::LinkAPage),
+            url: None,
+        });
+    }
     check_links(feed, facts, &mut found);
     check_move(feed, facts, &mut found);
     for entry in &feed.items {
@@ -383,7 +467,10 @@ fn normalize(url: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::feed::{AtomLink, Enclosure, Entry, Item, Recipient, RssImage, ValueBlock};
+    use crate::feed::{
+        AtomLink, Enclosure, Entry, Item, LiveItem, Publisher, Recipient, RemoteItem, RssImage,
+        ValueBlock,
+    };
 
     const PUBLIC: &str = "https://music.example/feed.xml";
 
@@ -424,6 +511,106 @@ mod tests {
 
     fn kinds(found: &[Finding]) -> Vec<FindingKind> {
         found.iter().map(|f| f.kind).collect()
+    }
+
+    fn publisher_link(rel: &str) -> Entry<RemoteItem> {
+        Entry::new(RemoteItem {
+            medium: Some("publisher".to_owned()),
+            rel: Some(rel.to_owned()),
+            ..RemoteItem::default()
+        })
+    }
+
+    #[test]
+    fn page_findings_follow_adr_0213_for_releases_playlists_shows_and_publishers() {
+        let mut release = clean();
+        release.medium = Some("music".to_owned());
+        release.items.push(track("One", Some("1"), Some("1")));
+        let found = check(&release, &Facts::default());
+        assert!(
+            kinds(&found).contains(&FindingKind::NoArtistPage),
+            "ADR 0213 item 18: add an artist page link to this release"
+        );
+        let finding = found
+            .iter()
+            .find(|f| f.kind == FindingKind::NoArtistPage)
+            .unwrap();
+        assert_eq!(
+            finding.level,
+            FindingLevel::Notice,
+            "ADR 0213 item 19: show Link a Page as a repair"
+        );
+        assert_eq!(
+            finding.repair,
+            Some(RepairKind::LinkAPage),
+            "ADR 0213 item 19: show Link a Page as a repair"
+        );
+
+        let mut empty_release = clean();
+        empty_release.medium = Some("music".to_owned());
+        assert_eq!(
+            page_refusal(&empty_release),
+            Some(PageRefusal::NoArtistPage),
+            "ADR 0213 item 17: a music feed with no live show needs an artist page"
+        );
+
+        release.publisher = Some(Publisher {
+            remote_items: vec![publisher_link("artist")],
+        });
+        assert_eq!(
+            page_refusal(&release),
+            None,
+            "ADR 0213 item 17: a release with an artist link has no page refusal"
+        );
+        release.publisher = Some(Publisher {
+            remote_items: vec![publisher_link("label")],
+        });
+        assert_eq!(
+            page_refusal(&release),
+            Some(PageRefusal::NoArtistPage),
+            "ADR 0213 item 17: a label link does not satisfy the artist page rule"
+        );
+
+        let mut show = clean();
+        show.medium = Some("music".to_owned());
+        show.live_items.push(Entry::new(LiveItem::default()));
+        assert_eq!(
+            page_refusal(&show),
+            Some(PageRefusal::NoPublisherPage),
+            "ADR 0213 item 17: a show without a publisher link needs one"
+        );
+        show.publisher = Some(Publisher {
+            remote_items: vec![publisher_link("label")],
+        });
+        assert_eq!(
+            page_refusal(&show),
+            None,
+            "ADR 0213 item 17: a show with a publisher link has no page refusal"
+        );
+
+        let mut playlist = clean();
+        playlist.medium = Some("musicL".to_owned());
+        assert_eq!(
+            page_refusal(&playlist),
+            Some(PageRefusal::NoPublisherPage),
+            "ADR 0213 item 17: musicL without a publisher link needs one"
+        );
+        playlist.publisher = Some(Publisher {
+            remote_items: vec![publisher_link("hosting")],
+        });
+        assert_eq!(
+            page_refusal(&playlist),
+            None,
+            "ADR 0213 item 17: musicL with a publisher link has no page refusal"
+        );
+
+        let mut publisher_feed = clean();
+        publisher_feed.medium = Some("publisher".to_owned());
+        assert_eq!(
+            page_refusal(&publisher_feed),
+            None,
+            "ADR 0213 item 17: publisher feeds get no page finding"
+        );
     }
 
     #[test]

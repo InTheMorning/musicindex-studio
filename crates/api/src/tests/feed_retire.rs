@@ -59,6 +59,7 @@ fn feed_xml(title: &str, guid: &str) -> String {
          xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\"><channel>\
          <title>{title}</title><language>en</language>{guid}\
          <podcast:medium>music</podcast:medium>\
+         <podcast:publisher><podcast:remoteItem medium=\"publisher\" rel=\"artist\" feedGuid=\"artist-1\" feedUrl=\"https://music.example/artist.xml\"/></podcast:publisher>\
          <item><guid>t-1</guid><title>One</title><itunes:duration>180</itunes:duration>\
          <enclosure url=\"https://music.example/one.mp3\" length=\"5\" type=\"audio/mpeg\"/></item>\
          </channel></rss>"
@@ -483,6 +484,22 @@ async fn feed_rows_report_a_completed_host_delete() {
         status,
         StatusCode::OK,
         "ADR 0198 item 7: start the feed delete. Fix the delete draft route. {draft}"
+    );
+    let (status, diff) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{deleted_id}/diff"),
+        None,
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0213 item 22: make a diff for a feed-file deletion; fix the diff route. {diff}"
+    );
+    assert!(
+        diff["page_refusal"].is_null(),
+        "ADR 0213 item 22: give no refusal for a feed-file deletion; fix the diff route. {diff}"
     );
     let (status, written) = call(
         &app,

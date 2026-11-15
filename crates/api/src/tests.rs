@@ -18,6 +18,7 @@ const HOST: &str = "127.0.0.1:4100";
 const PASSPHRASE: &str = "correct horse battery";
 const FEED: &str = "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel>\
     <title>Album</title><podcast:guid>g-1</podcast:guid><podcast:medium>music</podcast:medium>\
+    <podcast:publisher><podcast:remoteItem medium=\"publisher\" rel=\"artist\" feedGuid=\"artist-1\" feedUrl=\"https://music.example/artist.xml\"/></podcast:publisher>\
     <item><guid>t-1</guid></item></channel></rss>";
 /// A feed with a channel `podcast:value` block, for the recipient list test.
 const FEED_WITH_RECIPIENTS: &str = "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel>\
@@ -654,6 +655,17 @@ async fn a_new_release_is_made_as_a_draft_with_no_hosted_file_and_then_written()
     )
     .await;
     set_library_root(&app);
+    let artist = make_feed(
+        &app,
+        new_feed_body(
+            connector["id"].as_i64().unwrap(),
+            "artist.xml",
+            "New Artist",
+            Some("publisher"),
+            Some("artist"),
+        ),
+    )
+    .await;
     let (status, feed) = call(
         &app,
         "POST",
@@ -663,6 +675,7 @@ async fn a_new_release_is_made_as_a_draft_with_no_hosted_file_and_then_written()
             "path": "my-album.xml",
             "title": "New Album",
             "author": "New Artist",
+            "publisher_id": artist["id"],
         })),
     )
     .await;
@@ -938,6 +951,56 @@ async fn make_feed(app: &App, body: Value) -> Value {
     let (status, feed) = call(app, "POST", "/api/v1/feeds/new", Some(body)).await;
     assert_eq!(status, StatusCode::CREATED, "{feed}");
     feed
+}
+
+async fn make_artist_page(app: &App, connector: i64, path: &str, title: &str) -> Value {
+    make_feed(
+        app,
+        new_feed_body(connector, path, title, Some("publisher"), Some("artist")),
+    )
+    .await
+}
+
+async fn make_release(
+    app: &App,
+    connector: i64,
+    path: &str,
+    title: &str,
+    author: &str,
+    artist_id: i64,
+) -> Value {
+    make_feed(
+        app,
+        json!({
+            "connector_id": connector,
+            "path": path,
+            "title": title,
+            "author": author,
+            "publisher_id": artist_id,
+        }),
+    )
+    .await
+}
+
+async fn make_release_with_artist(
+    app: &App,
+    connector: i64,
+    path: &str,
+    title: &str,
+    author: &str,
+    artist_path: &str,
+    artist_title: &str,
+) -> Value {
+    let artist = make_artist_page(app, connector, artist_path, artist_title).await;
+    make_release(
+        app,
+        connector,
+        path,
+        title,
+        author,
+        artist["id"].as_i64().unwrap(),
+    )
+    .await
 }
 
 /// The model of the draft of a feed. The route starts the draft when the
@@ -1387,9 +1450,12 @@ async fn a_link_starts_the_draft_of_a_written_release_with_no_draft() {
         "{body}"
     );
     let release_model = draft_model(&app, release_id).await;
-    assert_eq!(
-        release_model["publisher"]["remote_items"][0]["rel"],
-        "label"
+    assert!(
+        release_model["publisher"]["remote_items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|item| item["rel"] == "label")
     );
     assert_eq!(
         std::fs::read(app.feeds.path().join("album.xml")).unwrap(),
@@ -2420,7 +2486,6 @@ async fn the_feed_list_gives_the_draft_state_and_the_cover_image() {
     .await;
     assert_eq!(status, StatusCode::CREATED);
     set_library_root(&app);
-
     // A feed with no draft. Its draft starts only when Studio asks for it.
     let (status, read_only) = call(
         &app,
@@ -2438,14 +2503,14 @@ async fn the_feed_list_gives_the_draft_state_and_the_cover_image() {
     assert!(row["added_at"].as_i64().unwrap() > 0);
 
     // A new release has a draft and no hosted file.
-    let feed = make_feed(
+    let feed = make_release_with_artist(
         &app,
-        json!({
-            "connector_id": connector["id"],
-            "path": "my-album.xml",
-            "title": "New Album",
-            "author": "New Artist",
-        }),
+        connector["id"].as_i64().unwrap(),
+        "my-album.xml",
+        "New Album",
+        "New Artist",
+        "artist.xml",
+        "New Artist",
     )
     .await;
     let id = feed["id"].as_i64().unwrap();
@@ -3852,6 +3917,17 @@ async fn the_held_list_gives_a_placeholder_file_before_and_after_the_write() {
         Some(json!({ "kind": "local", "name": "No address", "root": root })),
     )
     .await;
+    let artist = make_feed(
+        &app,
+        new_feed_body(
+            connector["id"].as_i64().unwrap(),
+            "artist.xml",
+            "New Artist",
+            Some("publisher"),
+            Some("artist"),
+        ),
+    )
+    .await;
     let (status, feed) = call(
         &app,
         "POST",
@@ -3861,6 +3937,7 @@ async fn the_held_list_gives_a_placeholder_file_before_and_after_the_write() {
             "path": "my-album.xml",
             "title": "New Album",
             "author": "New Artist",
+            "publisher_id": artist["id"],
         })),
     )
     .await;
@@ -4623,7 +4700,9 @@ fn feed_with_enclosures(title: &str, second: bool) -> String {
     format!(
         "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel>\
          <title>{title}</title><podcast:guid>g-9</podcast:guid>\
-         <podcast:medium>music</podcast:medium>{}{second}</channel></rss>",
+         <podcast:medium>music</podcast:medium>\
+         <podcast:publisher><podcast:remoteItem medium=\"publisher\" rel=\"artist\" feedGuid=\"artist-1\" feedUrl=\"https://music.example/artist.xml\"/></podcast:publisher>\
+         {}{second}</channel></rss>",
         item("t-1", "a", 100)
     )
 }
@@ -4898,6 +4977,7 @@ fn feed_with_one_enclosure(url: &str, length: usize) -> String {
         "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel>\
          <title>Album D</title><podcast:guid>g-8</podcast:guid>\
          <podcast:medium>music</podcast:medium>\
+         <podcast:publisher><podcast:remoteItem medium=\"publisher\" rel=\"artist\" feedGuid=\"artist-1\" feedUrl=\"https://music.example/artist.xml\"/></podcast:publisher>\
          <item><guid>t-1</guid><enclosure url=\"{url}\" length=\"{length}\" \
          type=\"audio/mpeg\"/></item></channel></rss>"
     )
@@ -7681,6 +7761,13 @@ async fn a_playlist_with_two_remote_items_is_written_with_no_item() {
     let draft_path = format!("/api/v1/feeds/{id}/draft");
     let (_, draft) = call(&app, "GET", &draft_path, None).await;
     let mut model = draft["model"].clone();
+    model["publisher"] = json!({ "remote_items": [{
+        "feed_guid": "artist-guid",
+        "feed_url": "https://music.example/artist.xml",
+        "medium": "publisher",
+        "rel": "artist",
+        "title": "Artist",
+    }] });
     model["remote_items"] = json!([
         { "feed_guid": "f-1", "feed_url": "https://a.example/a.xml", "item_guid": "i-1",
           "medium": "music", "title": "First" },
@@ -7706,7 +7793,7 @@ async fn a_playlist_with_two_remote_items_is_written_with_no_item() {
     assert_eq!(status, StatusCode::OK, "{body}");
     let xml = std::fs::read_to_string(app.feeds.path().join("list.xml")).unwrap();
     assert!(!xml.contains("<item>"), "{xml}");
-    assert_eq!(xml.matches("<podcast:remoteItem").count(), 2, "{xml}");
+    assert_eq!(xml.matches("<podcast:remoteItem").count(), 3, "{xml}");
     let first = xml.find("itemGuid=\"i-1\"").unwrap();
     let second = xml.find("itemGuid=\"i-2\"").unwrap();
     assert!(first < second);
@@ -9702,6 +9789,7 @@ async fn a_replaced_track_image_that_a_second_feed_uses_in_its_draft_gets_no_del
 /// not offer, for the test of the artwork list.
 const FEED_WITH_ARTWORK: &str = "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel>\
     <title>Album</title><podcast:guid>g-1</podcast:guid><podcast:medium>music</podcast:medium>\
+    <podcast:publisher><podcast:remoteItem medium=\"publisher\" rel=\"artist\" feedGuid=\"artist-1\" feedUrl=\"https://music.example/artist.xml\"/></podcast:publisher>\
     <podcast:image href=\"https://music.example/banner.png\" alt=\"Old text\" purpose=\"artwork hero banner\" width=\"3000\" height=\"1000\"/>\
     <item><guid>t-1</guid></item></channel></rss>";
 
@@ -10591,7 +10679,9 @@ fn paid_feed(
     format!(
         "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel>\
          <title>{title}</title><podcast:guid>{guid}</podcast:guid>\
-         <podcast:medium>music</podcast:medium>{channel_value}{extra}\
+         <podcast:medium>music</podcast:medium>\
+         <podcast:publisher><podcast:remoteItem medium=\"publisher\" rel=\"artist\" feedGuid=\"artist-1\" feedUrl=\"https://music.example/artist.xml\"/></podcast:publisher>\
+         {channel_value}{extra}\
          <item><guid>{guid}-t1</guid><title>Track</title>{item_value}</item>\
          </channel></rss>",
         channel_value = recipients(channel),
@@ -10602,6 +10692,25 @@ fn paid_feed(
 /// Add a feed file to the connected folder and to the collection. Gives
 /// the feed ID.
 async fn add_paid_feed(app: &App, connector: i64, path: &str, xml: &str) -> i64 {
+    let with_page = if xml.contains("<podcast:medium>musicL</podcast:medium>")
+        || xml.contains("<podcast:medium>music</podcast:medium>")
+    {
+        if xml.contains("<podcast:publisher>") {
+            xml.to_owned()
+        } else {
+            xml.replace(
+                "</channel>",
+                "<podcast:publisher><podcast:remoteItem medium=\"publisher\" rel=\"artist\" feedGuid=\"artist-1\" feedUrl=\"https://music.example/artist.xml\"/></podcast:publisher></channel>",
+            )
+        }
+    } else {
+        xml.to_owned()
+    };
+    add_paid_feed_raw(app, connector, path, &with_page).await
+}
+
+/// Add the feed XML as given, with no page link added to the fixture.
+async fn add_paid_feed_raw(app: &App, connector: i64, path: &str, xml: &str) -> i64 {
     std::fs::write(app.feeds.path().join(path), xml).unwrap();
     let (status, feed) = call(
         app,
@@ -14354,11 +14463,20 @@ async fn the_temporary_area_is_refused_on_the_desktop() {
 async fn a_new_album_on_the_temporary_area_has_a_placeholder_and_writes_its_file() {
     let app = app_with_rules(1 << 30);
     let connector = make_temporary_area(&app).await;
-    let feed = make_feed(
+    let artist = make_feed(
         &app,
-        new_feed_body(connector, "album.xml", "Album", None, None),
+        new_feed_body(
+            connector,
+            "artist.xml",
+            "Artist",
+            Some("publisher"),
+            Some("artist"),
+        ),
     )
     .await;
+    let mut body = new_feed_body(connector, "album.xml", "Album", None, None);
+    body["publisher_id"] = artist["id"].clone();
+    let feed = make_feed(&app, body).await;
     let id = feed["id"].as_i64().unwrap();
     let guid = draft_model(&app, id).await["podcast_guid"].clone();
     assert!(guid.as_str().unwrap().starts_with("pending-"), "{guid}");
@@ -14371,11 +14489,20 @@ async fn a_new_album_on_the_temporary_area_has_a_placeholder_and_writes_its_file
 async fn the_sweep_keeps_the_drafts_and_expires_the_area_after_7_days() {
     let (app, handle) = server_app_with_handle();
     let connector = make_temporary_area(&app).await;
-    let feed = make_feed(
+    let artist = make_feed(
         &app,
-        new_feed_body(connector, "album.xml", "Album", None, None),
+        new_feed_body(
+            connector,
+            "artist.xml",
+            "Artist",
+            Some("publisher"),
+            Some("artist"),
+        ),
     )
     .await;
+    let mut body = new_feed_body(connector, "album.xml", "Album", None, None);
+    body["publisher_id"] = artist["id"].clone();
+    let feed = make_feed(&app, body).await;
     let id = feed["id"].as_i64().unwrap();
     let (status, body) = write_with_own_diff(&app, id).await;
     assert_eq!(status, StatusCode::OK, "{body}");
@@ -14449,7 +14576,20 @@ async fn a_feed_of_an_expired_area_moves_to_a_public_host_and_gets_its_real_guid
         })
         .await;
     let area = make_temporary_area(&app).await;
-    let feed = make_feed(&app, new_feed_body(area, "album.xml", "Album", None, None)).await;
+    let artist = make_feed(
+        &app,
+        new_feed_body(
+            area,
+            "artist.xml",
+            "Artist",
+            Some("publisher"),
+            Some("artist"),
+        ),
+    )
+    .await;
+    let mut body = new_feed_body(area, "album.xml", "Album", None, None);
+    body["publisher_id"] = artist["id"].clone();
+    let feed = make_feed(&app, body).await;
     let id = feed["id"].as_i64().unwrap();
     let (status, body) = write_with_own_diff(&app, id).await;
     assert_eq!(status, StatusCode::OK, "{body}");
@@ -14919,6 +15059,52 @@ async fn a_change_set_writes_the_other_feeds_when_one_feed_is_refused() {
             .draft(studio_core::collection::FeedId(a))
             .unwrap()
             .is_some()
+    );
+}
+
+#[tokio::test]
+async fn a_change_set_writes_a_release_with_no_artist_page() {
+    let (app, connector) =
+        app_with_link_reader(studio_core::move_link::ScriptedReader::empty()).await;
+    // The fixture with no link to a publisher feed.
+    let xml = paid_feed("A", "ga", &[ANN, BOB], &[], "");
+    let start = xml.find("<podcast:publisher>").unwrap();
+    let end = xml.find("</podcast:publisher>").unwrap() + "</podcast:publisher>".len();
+    let xml = format!("{}{}", &xml[..start], &xml[end..]);
+    let id = add_paid_feed_raw(&app, connector, "a.xml", &xml).await;
+    let (status, set) = call(
+        &app,
+        "POST",
+        "/api/v1/change-sets",
+        Some(json!({
+            "recipient": ann_key(),
+            "operation": { "kind": "rename", "name": "Anna" },
+            "feed_ids": [id],
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{set}");
+    let (status, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    assert!(
+        diff["page_refusal"].is_null(),
+        "ADR 0213 item 22: give no refusal for a feed of an open change set; fix feed_page_refusal. {diff}"
+    );
+    let (status, body) = write_through_routes(&app, id).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0213 item 22: a write of a change set has no stop; fix feed_page_refusal. {body}"
+    );
+
+    // The change set is closed. The next write of the feed has the stop.
+    let model = draft_model(&app, id).await;
+    assert!(model["publisher"].is_null(), "{model}");
+    let (status, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    assert_eq!(
+        diff["page_refusal"], "no_artist_page",
+        "ADR 0213 item 21: the stop comes back after the change set is written. {diff}"
     );
 }
 

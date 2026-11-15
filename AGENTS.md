@@ -49,7 +49,7 @@ The UI starts on Releases and shows the outline of an open feed. Below Releases,
 
 ## Commands
 
-`tools/gate.sh` is the commit gate. It must pass before each commit. It runs `cargo fmt`, `cargo clippy`, the Rust tests, the Node tests of the UI models ([ADR 0042](docs/adr/0042-ui-models-with-node-tests.md)) and the ADR link guard of the `project-baseline` skill. CI runs the first four checks, because the guard script is not in this repository. `rust-toolchain.toml` pins the Rust version, and CI uses the same version ([ADR 0049](docs/adr/0049-the-rust-toolchain-is-pinned.md)).
+`tools/gate.sh` is the commit gate. It must pass before each commit. It runs `cargo fmt`, `cargo clippy`, the Rust tests, the Node tests of the UI models ([ADR 0042](docs/adr/0042-ui-models-with-node-tests.md)) and the ADR link guard of the `project-baseline` skill. The guard runs its bar check from ADR 0214 (`--bar-from 0214`). CI runs the first four checks, because the guard script is not in this repository. `rust-toolchain.toml` pins the Rust version, and CI uses the same version ([ADR 0049](docs/adr/0049-the-rust-toolchain-is-pinned.md)).
 
 ```sh
 tools/gate.sh

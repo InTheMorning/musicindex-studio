@@ -9,6 +9,7 @@
 - Uses: [ADR 0193](0193-a-destructive-button-is-the-first-button-of-its-row.md) items 1 and 4, and musicindex ADR 0069 R-ACT-3 items 1 and 3.
 - Source: finding 5 and finding 6 of the [human test findings of 0.1.0-rc.22](../reviews/2026-11-13-rc22-human-test-findings.md).
 - Changed by: [ADR 0208](0208-the-delete-and-move-sheets-give-goals-state-points-and-the-domain-line.md) item 13: a deleted feed also shows **Put the File Back**.
+- Changed by: [ADR 0209](0209-the-review-sheet-keeps-the-podping-box-in-view-and-names-each-delete.md) items 13 to 16: a write of only deletions also has the destructive write button.
 
 ## Context
 

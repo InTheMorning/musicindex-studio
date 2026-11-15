@@ -61,6 +61,6 @@ Facts:
 - ADR 0071 says that the pill is not a control. "Grip" tells a reader that a person can hold the pill.
 - Studio has the CSS class `edge-grip` and the function `showsEdgeGrip` in `crates/api/ui`.
 
-Operator choice: the name is "edge indicator". The operator did not select "back indicator", because Studio already has a Back button. "Home indicator" is the Apple term for the bar at the bottom edge of an iPhone, so it is not available.
+Operator choice: the name is "edge indicator". The operator did not select "back indicator", because Studio has a Back button. "Home indicator" is the Apple term for the bar at the bottom edge of an iPhone, so it is not available.
 
-Open: the change of the term in musicindex ADR 0071 is a request to the orchestrator. Studio changes its text after the owner changes. The recommendation is to change the code names in the same change. The owner decides on the rule names `R-GRIP-1` and `R-GRIP-2`.
+Open: the orchestrator has the proposal to change the term in musicindex ADR 0071. Studio changes its text after the owner changes. The recommendation is to change the code names in the same change. The owner decides on the rule names `R-GRIP-1` and `R-GRIP-2`.

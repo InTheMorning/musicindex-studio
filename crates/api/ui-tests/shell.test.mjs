@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  pageTabs, tabsFit, mediumKind, feedKind, roleChoice, toggleRole, isEditable, isReadOnly, reviewHost, moveNote, isPublisher, isPlaylist, trackKey, isTrack,
+  pageTabs, tabsFit, mediumKind, feedKind, trackCountText, roleChoice, toggleRole, isEditable, isReadOnly, reviewHost, moveNote, isPublisher, isPlaylist, trackKey, isTrack,
   leftPanel, releasesList, listQuery, queryText, sortLabel, sortEntries, compareNames, byName, segmentKey, levelFeedSet,
   startNav, pushNav, backNav, forwardNav, canBack, canForward, setScroll, releasesView,
   narrowStack, openFeedView, navAtWidth, widthNav, wideView, publisherArt, mosaicCells, otherFeedText,
@@ -34,6 +34,13 @@ test('feedKind gives the release kind and defaults to Album', () => {
   assert.equal(feedKind({ medium: 'music', kind_shown: 'ep' }).label, 'EP', owner);
   assert.equal(feedKind({ medium: 'music', kind_shown: 'single' }).label, 'Single', owner);
   assert.equal(feedKind({ medium: 'music' }).label, 'Album', owner);
+});
+
+test('trackCountText gives a singular or plural track count', () => {
+  assert.equal(trackCountText(1), '1 track');
+  assert.equal(trackCountText(7), '7 tracks');
+  assert.equal(trackCountText(0), '0 tracks');
+  assert.equal(trackCountText(null), null);
 });
 
 test('an album or a publisher feed with a connector is editable', () => {
@@ -170,6 +177,12 @@ test('the Releases list gives the newest feed first, with the greater ID first o
   assert.deepEqual(list.rows.map((r) => r.id), [9, 1, 3]);
   assert.equal(list.rows[1].host, 'Local');
   assert.equal(list.rows[2].host, 'Read-only');
+});
+
+test('the Releases list gives each release its track count text', () => {
+  const list = releasesList({ feeds: [{ ...album, track_count: 2 }, { ...album, id: 4 }], connectors: [], sort: 'newest', view: 'rows' });
+  assert.equal(list.rows.find((row) => row.id === 1).countText, '2 tracks');
+  assert.equal(list.rows.find((row) => row.id === 4).countText, null);
 });
 
 test('the Releases list gives the draft label of each draft state', () => {

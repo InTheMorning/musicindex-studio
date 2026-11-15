@@ -3438,7 +3438,7 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
                 <${ArtWithDot} dot=${row.dot}><${ImageThumb} url=${row.image} glow=${row.glow} className="releases-cover" always /><//>
                 <span class="releases-text">
                   <span class="title">${row.title}${changedFeeds.has(row.id) && html`<span class="change-mark"><span class="visually-hidden"> Changes in the library folder</span></span>`}</span>
-                  <span class="sub">${row.typeLabel}${row.hidden ? ' · Hidden from apps' : ''}${releases.view === 'rows' ? ` · ${row.host}` : ''}</span>
+                  <span class="sub">${[row.typeLabel, row.countText, row.hidden ? 'Hidden from apps' : null, releases.view === 'rows' ? row.host : null].filter(Boolean).join(' · ')}</span>
                   ${row.note && html`<span class="sub">${row.note}</span>`}
                   ${outsideMark(outside[row.id]) && html`<span class=${`sub outside-mark ${outsideMark(outside[row.id]).tone}`}><${Icon} name="alert" />${outsideMark(outside[row.id]).text}</span>`}
                   ${releases.view === 'rows' && html`<span class="sub">${row.draftLabel}</span>`}

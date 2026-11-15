@@ -1422,12 +1422,18 @@ pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
             value["draft_state"] = json!(state);
             if row.medium.as_deref() == Some("music") {
                 let track_count = feed.as_ref().map_or(0, |model| model.items.len());
+                value["track_count"] = json!(track_count);
                 value["release_kind"] = json!(row.release_kind);
                 value["kind_shown"] = json!(studio_core::feed::release_kind_shown(
                     row.release_kind.as_deref(),
                     track_count,
                 ));
             } else {
+                value["track_count"] = if row.medium.as_deref() == Some("musicL") {
+                    json!(feed.as_ref().map_or(0, |model| model.remote_items.len()))
+                } else {
+                    Value::Null
+                };
                 value["release_kind"] = Value::Null;
                 value["kind_shown"] = Value::Null;
             }

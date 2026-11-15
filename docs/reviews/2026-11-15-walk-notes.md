@@ -86,3 +86,17 @@ Operator choice: none. This is a defect correction.
 Correction: `measureWindowUnits` in `crates/api/ui/uiscale.js` measures a box of `100dvh` and a box that fills the window. When the two heights agree, it sets `--window-unit-zoom` to 1. The app calls it before the first render and after each change of the level. `crates/api/ui-tests/uiscale.test.mjs` examines the selection of the factor.
 
 Open: the visual check on the AppImage of the next candidate, at the levels "Extra small", "Large" and "Extra large".
+
+### Note 6: The Track Count In The Rows Of The Releases List
+
+Comment: each row of the releases list must show the number of tracks of the release.
+
+Facts:
+
+- The comment came in step 3 of the walk. That step asks the operator to compare the kind of each release with its track count, and the list does not show the count.
+- `ReleasesPage` in `crates/api/ui/app.js` makes each row and each tile. The line below the title shows the kind, then "Hidden from apps", then the file host in the rows view.
+- The feed list handler in `crates/api/src/routes.rs` calculates `track_count` for each music feed. It uses the count only for `kind_shown`, and the reply does not contain the count.
+- The line gets its kind from `feedKind` in `crates/api/ui/shell.js`.
+- [ADR 0213](../adr/0213-a-release-starts-on-the-page-of-its-artist.md) has the rules of the release kind.
+
+Open: no task. The reply needs a `track_count` field, and the row needs a position for the count. A playlist has no tracks of its own, so the task must say what its row shows.

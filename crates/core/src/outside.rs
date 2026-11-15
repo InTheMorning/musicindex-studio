@@ -167,6 +167,9 @@ pub fn address_of(row: &FeedRow) -> Option<String> {
 /// Give the folder address when it differs from the public feed address.
 #[must_use]
 pub fn folder_address(row: &FeedRow) -> Option<String> {
+    // A feed with no file host has no folder. The collection can keep the
+    // folder address of an earlier file host (ADR 0211 item 14).
+    row.connector_id?;
     let url = row
         .address_differences
         .iter()
@@ -634,6 +637,11 @@ mod tests {
             followed.public_url.as_deref(),
             Some(new_url.as_str()),
             "ADR 0211 item 15. Fix: set the public address to the read address."
+        );
+        assert_eq!(
+            folder_address(&followed),
+            None,
+            "ADR 0211 item 14. Fix: a feed with no file host has no folder address, or the result moved comes back after the follow."
         );
         let draft = collection.draft(id).unwrap().unwrap();
         assert_eq!(

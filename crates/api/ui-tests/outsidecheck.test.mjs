@@ -2,13 +2,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { outsideMark, outsideNotice, indexNotice, moveNotice, nextNoticeLoad, LATE_NOTICE_LOAD, eachLimited, OUTSIDE_LIMIT, panelSet, stateMark } from '../ui/outsidecheck.js';
+import { outsideMark, outsideNotice, readOnlyHostNotice, indexNotice, moveNotice, nextNoticeLoad, LATE_NOTICE_LOAD, eachLimited, OUTSIDE_LIMIT, panelSet, stateMark } from '../ui/outsidecheck.js';
 import { pageSequence, tierError } from '../ui/pages.js';
 
 test('A tile has a mark for a change and a move, and none for an index difference (ADR 0150 items 2, 3 and 5)', () => {
   assert.equal(outsideMark({ state: 'changed' }).text, 'Changed outside Studio');
   assert.equal(outsideMark({ state: 'moved' }).text, 'Moved outside Studio');
-  assert.equal(outsideMark({ state: 'moved' }).tone, 'error');
+  assert.equal(outsideMark({ state: 'moved' }).tone, 'warning');
   assert.equal(outsideMark({ state: null, index_url: 'https://x/a.xml' }), null);
   assert.equal(outsideMark(null), null);
 });
@@ -137,7 +137,7 @@ test('The mark of a set ranks outside, pending and unchecked (ADR 0165 item 2)',
   assert.equal(stateMark(feeds, results).kind, 'outside');
   assert.equal(stateMark(feeds, results).text, 'Changed outside Studio');
   assert.equal(stateMark(feeds, results).icon, 'cloud-alert');
-  assert.equal(stateMark(feeds, results).tone, 'error');
+  assert.equal(stateMark(feeds, results).tone, 'warning');
   assert.equal(stateMark(feeds, { ...results, 1: read('moved') }).text, 'Moved outside Studio');
   const pending = stateMark(feeds, { 1: read(), 2: read(), 3: read() });
   assert.deepEqual([pending.kind, pending.icon, pending.tone, pending.text], ['pending', 'pencil', 'accent', 'Changes not written']);
@@ -167,4 +167,34 @@ test('The style of a mark sets the color of the icon, not only of the row (ADR 0
   for (const [tone, token] of [['error', '--error'], ['accent', '--accent'], ['muted', '--muted']]) {
     assert.ok(css.includes(`.state-mark.${tone} .icon { color: var(${token}); }`), tone);
   }
+});
+
+test('ADR 0211: outside warnings use the Warning tone and the move actions', () => {
+  assert.equal(outsideMark({ state: 'changed' }).tone, 'warning', 'ADR 0211 item 19: outside changes use Warning. Fix outsideMark in crates/api/ui/outsidecheck.js.');
+  assert.equal(outsideMark({ state: 'moved' }).tone, 'warning', 'ADR 0211 item 19: outside moves use Warning. Fix outsideMark in crates/api/ui/outsidecheck.js.');
+  const notice = outsideNotice({ state: 'moved', new_url: 'https://new.example/a.xml', new_host: 'New host', connected: true });
+  assert.deepEqual([notice.strong, notice.text, notice.host, notice.after], ['A different Studio moved this feed.', 'New address', 'New host', 'The old address has a pointer file.'], 'ADR 0211 item 6: give the warning text and new host. Fix outsideNotice in crates/api/ui/outsidecheck.js.');
+  assert.deepEqual([notice.follow, notice.difference, notice.keep], [true, true, true], 'ADR 0211 items 7 and 8: give each button in order. Fix outsideNotice in crates/api/ui/outsidecheck.js.');
+  assert.equal('back' in notice, false, 'ADR 0211 items 17 and 18: Move It Back is not built. Do not show a button that Review refuses.');
+  assert.equal(outsideNotice({ state: 'changed' }).tone, 'warning', 'ADR 0211 item 21: a change notice uses Warning. Fix outsideNotice in crates/api/ui/outsidecheck.js.');
+  assert.equal(stateMark([feedOf(1)], { 1: read('changed') }).tone, 'warning', 'ADR 0211 item 20: the panel mark uses Warning. Fix STATE_MARKS in crates/api/ui/outsidecheck.js.');
+});
+
+test('ADR 0211: read-only host notice gives its text and action', () => {
+  const fix = 'Fix readOnlyHostNotice in crates/api/ui/outsidecheck.js.';
+  assert.deepEqual(readOnlyHostNotice(feedOf(1, { followed_move: true })),
+    { text: 'This Studio is not connected to the file host of this address. Connect it to edit the feed here.', button: 'Connect a File Host…', use: false },
+    `ADR 0211 item 15: a read-only feed that followed a move has the notice. ${fix}`);
+  assert.deepEqual(readOnlyHostNotice(feedOf(1, { host_for_address: true })),
+    { text: 'A connected file host gives the address of this feed. Use it to edit the feed here.', button: 'Use This File Host', use: true },
+    `ADR 0211 item 16: a connected file host for the address gives Use This File Host. ${fix}`);
+  assert.equal(readOnlyHostNotice(feedOf(1)), null,
+    `ADR 0211 item 15: a different read-only feed has no notice. ${fix}`);
+  assert.equal(readOnlyHostNotice(feedOf(1, { connector_id: 3 })), null);
+});
+
+test('ADR 0211: the feed notice follows a move and removes retired wording', () => {
+  const source = readFileSync(new URL('../ui/app.js', import.meta.url), 'utf8');
+  assert.match(source, /outside\/follow/);
+  assert.doesNotMatch(source, /moved outside Studio/i);
 });

@@ -2,7 +2,7 @@
 
 Decision: [ADR 0211](../adr/0211-studio-follows-a-move-that-a-different-studio-made.md).
 
-Status: In progress. Packet 145a is complete on 2026-11-14. Packet 145b is open.
+Status: Complete on 2026-11-14, with its screenshot visual check, except **Move It Back…**, which is not built. The human gate of ADR 0211 is open.
 
 ## Result Of Packet 145a
 
@@ -16,6 +16,24 @@ Status: In progress. Packet 145a is complete on 2026-11-14. Packet 145b is open.
 - The route `use-host` needs only that the feed exists, as `outside_keep`. It changes the collection and writes nothing to a host.
 - Tests: `a_folder_pointer_is_a_move_when_the_public_address_already_moved`, `follow_move_read_uses_a_connected_host_and_records_the_old_pointer`, `follow_move_read_without_a_host_keeps_an_edited_draft_and_snapshots`, `follow_move_read_refuses_a_different_guid_without_changing_the_feed_row`, `the_outside_follow_route_uses_a_connected_file_host`, `the_outside_follow_route_gives_a_read_only_feed_without_a_host`, `the_outside_follow_route_returns_both_move_conflicts`, `the_outside_use_host_route_connects_a_read_only_feed`, `the_outside_use_host_route_refuses_an_unknown_host` and `the_outside_check_finds_a_folder_pointer_when_the_public_address_already_moved`.
 - No test proves the correction for **Keep This File Host**.
+
+## Result Of Packet 145b
+
+- ChatGPT did the build. The main session read the diff, ran the five checks and took the screenshots.
+- `outsideMark`, `outsideNotice` and `STATE_MARKS` give the tone `warning`. The warning of a move shows the label "New address", the address, the file host and the line about the pointer file. `readOnlyHostNotice` gives the notice of a read-only feed.
+- The main session made these corrections:
+    - The read-only notice showed on each read-only feed. Now the feed row has `followed_move`. The notice shows only for a feed that followed a move, or when a connected file host gives its address.
+    - **Follow the Move** was a filled button, and the bar already has one. It is now an action button (musicindex ADR 0069 R-ACT-1).
+    - The facts of the warning were one line of text. They are now labeled lines. The mark of a tile has the triangle icon.
+    - After a follow with no connected file host, the result "moved" came back, because the collection keeps the folder address of the old file host. `folder_address` now gives none for a feed with no file host. The core test `follow_move_read_without_a_host_keeps_an_edited_draft_and_snapshots` proves it.
+- **Move It Back…** is not built. In the walk, Review refused the write: the draft of a moved feed names the new address in `itunes:new-feed-url`. ADR 0211 items 17 and 18 give the reason.
+- Walk: `setup-145.py` with `steps-145-host.json`, and `setup-145-nohost.py` with `steps-145-nohost.json`. The setup starts two local HTTP servers for the old and the new address. Stop `data/http.pid` and `data/http2.pid` after a run.
+- The walk showed these results with no edge, overflow or fit finding, at 1280 px light and 390 px dark:
+    - The mark of the tile and the cloud of the left panel have the Warning color.
+    - The warning names the new address, and the file host "New Host" when it is connected.
+    - With a connected file host, the feed has the new address after the follow, it is editable, and no notice shows.
+    - With no connected file host, the feed is read-only after the follow, and the notice has **Connect a File Host…**.
+- No walk showed **Use This File Host** or **Show the Difference**. Two API tests prove the route of **Use This File Host**.
 
 ## Goal
 

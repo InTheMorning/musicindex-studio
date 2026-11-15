@@ -24,3 +24,15 @@ Facts:
     - The cause of no announcement, when the feed has no public address or the write deletes the feed file. The sheet shows no check box in these two conditions.
 
 Open: no decision. A removal of the row changes ADR 0209 items 2 and 3. Each of the four things then needs a new position, or a decision removes it.
+
+### Note 2: The Desktop App Asks For The Passphrase At Each Start
+
+Comment: a task must find the options that let the desktop app unlock the vault at its start, with no passphrase from the user.
+
+Facts:
+
+- [ADR 0003](../adr/0003-user-unlocked-secret-vault.md) item 2 owns the rule. The desktop shell keeps the vault as one encrypted local file, and the passphrase of the artist opens it.
+- ADR 0003 names the keychain of the operating system as an alternative. The operator rejected it, because the encrypted file can move between computers.
+- [ADR 0142](../adr/0142-a-user-selects-the-time-before-the-vault-locks.md) item 2 gives the desktop the lock time "Never" as the start value. That time applies only after an unlock.
+
+Open: the task did not start. An unlock at the start must keep the vault key or the passphrase in a location that is not the vault file. That changes ADR 0003 item 2.

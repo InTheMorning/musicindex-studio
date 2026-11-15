@@ -58,10 +58,13 @@
   --target-min: 20px;
   /* A group row, and the line height of the body text of R-TYPE-1. */
   --row: calc(var(--target) + 16px);
-  /* The window, in the units of the page. A zoom also scales dvh and vw (ADR 0134). */
+  /* The window, in the units of the page (ADR 0134). Some engines also scale
+     dvh and vw by the zoom, and WebKitGTK 2.50 does not. `uiscale.js` measures
+     the engine and sets --window-unit-zoom to 1 when the units have no zoom. */
   --ui-zoom: 1;
-  --window-height: calc(100dvh / var(--ui-zoom));
-  --window-width: calc(100vw / var(--ui-zoom));
+  --window-unit-zoom: var(--ui-zoom);
+  --window-height: calc(100dvh / var(--window-unit-zoom));
+  --window-width: calc(100vw / var(--window-unit-zoom));
   --leading: 1.23;
   /* musicindex ADR 0041 R-SCALE-4 and ADR 0024 R-TYPE-1: the macOS text styles.
      With Touch, the block below gives the iOS sizes of ADR 0024 R-TYPE-1. */

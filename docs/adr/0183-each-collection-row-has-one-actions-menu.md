@@ -9,6 +9,7 @@
 - Changes: [ADR 0149](0149-the-desktop-app-has-many-collections.md) item 6.
 - Uses: [ADR 0176](0176-the-user-controls-each-collection.md) items 6 and 7 for the sheets and the export. [ADR 0153](0153-the-people-list-has-a-sort-and-names-sort-with-numbers.md) for the menu control.
 - Source: finding 19 of the [human checks of 2026-11-11](../reviews/2026-11-11-local-human-test-findings.md).
+- Changed by: [ADR 0210](0210-a-row-has-one-menu-and-a-live-show-can-be-removed.md) items 3 to 6: the menu button has an icon form in the narrow layout.
 
 ## Context
 

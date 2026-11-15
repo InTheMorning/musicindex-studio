@@ -192,6 +192,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0207: Recipients, change sets and wallets](adr/0207-recipients-change-sets-and-wallets.md)
 - [ADR 0208: The delete and move sheets give goals, state points and the domain line](adr/0208-the-delete-and-move-sheets-give-goals-state-points-and-the-domain-line.md)
 - [ADR 0209: The review sheet keeps the podping box in view and names each delete](adr/0209-the-review-sheet-keeps-the-podping-box-in-view-and-names-each-delete.md)
+- [ADR 0210: A row has one menu, and a live show can be removed](adr/0210-a-row-has-one-menu-and-a-live-show-can-be-removed.md)
 
 ## Plans
 
@@ -475,6 +476,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 141: An http image shows from its https address](tasks/studio-v1-task-141-http-image-from-https.md)
 - [Studio v1 task 142: Goals, state points and the domain line](tasks/studio-v1-task-142-goals-state-points-and-the-domain-line.md)
 - [Studio v1 task 143: The review sheet keeps the podping box in view and names each delete](tasks/studio-v1-task-143-review-sheet-podping-box-and-deletes.md)
+- [Studio v1 task 144: A row has one menu, and a live show can be removed](tasks/studio-v1-task-144-row-menus-and-remove-a-live-show.md)
 - [Studio v1 task 055: The date and time fields](tasks/studio-v1-task-055-date-time-fields.md)
 - [Studio v1 task 055a: The times in the core](tasks/studio-v1-task-055a-times-in-the-core.md)
 - [Studio v1 task 055b: The date and time field](tasks/studio-v1-task-055b-date-time-field.md)

@@ -64,3 +64,21 @@ Facts:
 Operator choice: the name is "edge indicator". The operator did not select "back indicator", because Studio has a Back button. "Home indicator" is the Apple term for the bar at the bottom edge of an iPhone, so it is not available.
 
 Open: the orchestrator has the proposal to change the term in musicindex ADR 0071. Studio changes its text after the owner changes. The recommendation is to change the code names in the same change. The owner decides on the rule names `R-GRIP-1` and `R-GRIP-2`.
+
+### Note 5: The Shell Does Not Reach The Bottom Of The Window
+
+Comment: in step 2 of the walk, the page of a release stops above the bottom edge of the window of the AppImage.
+
+Facts:
+
+- The screenshot shows a window of 1440 by 860 px. The shell stops at 766 px, and 860 / 1.12 is 768. The factor 1.12 is the UI scale "Large" of [ADR 0134](../adr/0134-a-ui-scale-and-larger-release-tiles.md) item 2.
+- `styles.css` divided `100dvh` and `100vw` by the factor of the level. That division is correct only when the engine scales these units by the CSS zoom.
+- Chromium 157 and WebKitGTK 2.54.2 scale the units. A box of `100dvh` there is 963.2 px in a window of 860 px, and the shell filled the window before the change.
+- The release workflow builds the AppImage on Ubuntu 22.04, which publishes WebKitGTK 2.50.4.
+- Inference: WebKitGTK 2.50 does not scale the units, so the division made the shell too short. A run of WebKitGTK 2.50.4 in the sandbox was not possible, so no measurement proves this.
+
+Operator choice: none. This is a defect correction.
+
+Correction: `measureWindowUnits` in `crates/api/ui/uiscale.js` measures a box of `100dvh` and a box that fills the window. When the two heights agree, it sets `--window-unit-zoom` to 1. The app calls it before the first render and after each change of the level. `crates/api/ui-tests/uiscale.test.mjs` examines the selection of the factor.
+
+Open: the visual check on the AppImage of the next candidate, at the level "Large" and at one level below "Medium".

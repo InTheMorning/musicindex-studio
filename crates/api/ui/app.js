@@ -3,7 +3,7 @@ import { html, render, useState, useEffect, useLayoutEffect, useCallback, useRef
 import { checkCount } from './feedcheck.js';
 import { pageSequence, settingsTabs } from './pages.js';
 import { useFieldList, RowList } from './pickers.js';
-import { UI_SCALES, SCALE_KEY, normalizeScale } from './uiscale.js';
+import { UI_SCALES, SCALE_KEY, normalizeScale, measureWindowUnits } from './uiscale.js';
 import { LOCK_HINT, lockChoiceText } from './vaultlock.js';
 import { serverFilesRows, sizeText, SERVER_FILES_NOTE } from './assets.js';
 import { failedLine } from './failures.js';
@@ -2818,7 +2818,7 @@ function SettingsPage({ view, go }) {
     const tabOnly = target && target.name === 'settings' && view.name === 'settings' && target.tab !== view.tab;
     if (!asksSettingsLeave(draft, tabOnly ? 'tab' : 'page')) return true;
     const allowed = await askConfirm(CONFIRMS.leavePerson('Your Settings changes are not saved.'));
-    if (allowed && Object.hasOwn(draft.saved, 'scale')) document.documentElement.dataset.uiScale = draft.saved.scale;
+    if (allowed && Object.hasOwn(draft.saved, 'scale')) { document.documentElement.dataset.uiScale = draft.saved.scale; measureWindowUnits(); }
     return allowed;
   };
   useLeaveGuard(draftView.count > 0, leave);
@@ -2834,6 +2834,7 @@ function SettingsPage({ view, go }) {
     setSaveErrors({});
     if (Object.hasOwn(next.saved, 'scale')) {
       document.documentElement.dataset.uiScale = next.saved.scale;
+      measureWindowUnits();
     }
     setRevision((value) => value + 1);
   };
@@ -4697,6 +4698,7 @@ function ScalePanel({ draft, changed }) {
   if (matchMedia('(pointer: coarse)').matches) return null;
   const change = (next) => {
     document.documentElement.dataset.uiScale = next;
+    measureWindowUnits();
     draft('scale', normalizeScale(localStorage.getItem(SCALE_KEY)), next);
     setLevel(next);
   };
@@ -5420,4 +5422,6 @@ function App() {
 }
 
 watchFileDrags(window, document.documentElement);
+// The stored UI scale is on the page before the first render (ADR 0134).
+measureWindowUnits();
 render(html`<${App} />`, document.getElementById('app'));

@@ -847,6 +847,17 @@ export function widthNav(view, narrow) {
   return { entries, index: entries.length - 1 };
 }
 
+// The edge grip of musicindex ADR 0071 R-GRIP-2 shows only with the Touch
+// profile, in the narrow layout, when an entry of Studio is below the
+// current entry, and not on the root page. `mirrored` is true while the
+// browser history has one entry for each entry of the state. Only then
+// does Back in the browser open a page of Studio (R-GRIP-2 item 3).
+export function showsEdgeGrip(nav, narrow, coarse, mirrored) {
+  if (!narrow || !coarse || !mirrored || !nav || nav.index <= 0) return false;
+  const view = nav.entries[nav.index];
+  return Boolean(view) && view.name !== 'root';
+}
+
 // The navigation state that fits a width. A state that already has the form
 // of the width is kept, so that a reload keeps its history. Any other state
 // becomes `widthNav` of its current view.

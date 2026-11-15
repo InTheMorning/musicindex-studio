@@ -2,7 +2,15 @@
 
 Decision: none. This is Note 12 of the walk. [ADR 0114](../adr/0114-the-review-shows-the-changes-in-words-and-marks-the-changed-part-of-a-line.md) owns the field view and the local time, and it does not change.
 
-Status: Not started. The packet is ready for a delegate.
+Status: Complete on 2026-11-15, with the screenshot visual check. The visual gate for the operator is open.
+
+## Result
+
+- The delegate was `gpt-6-luna` with medium effort.
+- The main session read the diff and compared it with `entry_label` and `match_changes` of `crates/core/src/review.rs`. A whole live item has no `entry` and an empty `path`, and the row uses those two facts.
+- Screenshots of the main session: Review of a draft that adds a live show, simplified view, at 1280 px in the light theme and at 390 px in the dark theme. The row shows "Added: pending, Nov 15, 2026, 2:29:00 PM to Nov 15, 2026, 2:29:00 PM". At 390 px the text is on two lines and is not cut. `$edges()` and `$overflow()` are empty, and the fit check has no finding.
+- A show with no end shows only the start, with no "to".
+- The row uses the local zone of the computer. No caller gives a zone.
 
 Source: [walk notes of 2026-11-15](../reviews/2026-11-15-walk-notes.md).
 

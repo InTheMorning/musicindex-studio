@@ -50,3 +50,17 @@ Facts:
 - The search found no keyboard shortcut for a move between pages in `crates/api/ui`. The key handlers there move the focus in a list, a tree, a menu or a tab row.
 
 Open: the task did not start. The shell has no panel to open at that width, so the task must first say what the shortcut shows. A panel that opens above the page changes ADR 0088 item 7, and musicindex ADR 0069 can also apply.
+
+### Note 4: The Name "Edge Grip" Becomes "Edge Indicator"
+
+Comment: the word "grip" is not a good name for the pill at the screen edge.
+
+Facts:
+
+- musicindex ADR 0071 owns the term "edge grip", its title and the rule names `R-GRIP-1` and `R-GRIP-2`. The term is in 10 files of `musicindex` and in 9 files of `musicindex-studio`.
+- ADR 0071 says that the pill is not a control. "Grip" tells a reader that a person can hold the pill.
+- Studio has the CSS class `edge-grip` and the function `showsEdgeGrip` in `crates/api/ui`.
+
+Operator choice: the name is "edge indicator". The operator did not select "back indicator", because Studio already has a Back button. "Home indicator" is the Apple term for the bar at the bottom edge of an iPhone, so it is not available.
+
+Open: the change of the term in musicindex ADR 0071 is a request to the orchestrator. Studio changes its text after the owner changes. The recommendation is to change the code names in the same change. The owner decides on the rule names `R-GRIP-1` and `R-GRIP-2`.

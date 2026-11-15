@@ -8,6 +8,7 @@
 - Changed: 2026-11-14 by the operator, at the human check walk. Item 2 gives **＋ Add a Release** to each role.
 - Changes: [ADR 0119](0119-a-new-user-starts-as-a-musician-or-a-label.md) item 9.
 - Uses: [ADR 0041](../archive/adr/0041-publisher-feeds-and-two-way-links.md) for the two-way link and its notices. [ADR 0119](0119-a-new-user-starts-as-a-musician-or-a-label.md) item 8 for the first-step rows. [ADR 0007](0007-draft-diff-write-and-announce.md) for the write.
+- Changed by: [ADR 0213](0213-a-release-starts-on-the-page-of-its-artist.md) items 1, 4 and 6 to 8: only the page of an artist has the add row, and the form of a release has its own fields.
 
 ## Context
 

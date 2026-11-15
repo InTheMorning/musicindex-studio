@@ -2444,7 +2444,7 @@ async fn the_feed_row_gives_the_host_of_a_public_address_and_none_for_a_placehol
     )
     .await;
     assert_eq!(status, StatusCode::CREATED);
-    // ADR 0208 item 3: the host is lowercase and has no port or path.
+    // ADR 0131 item 18: the host is lowercase and has no port or path.
     assert_eq!(
         listed(&app, feed["id"].as_i64().unwrap()).await["address_host"],
         "music.example"

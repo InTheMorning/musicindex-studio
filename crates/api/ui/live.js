@@ -18,7 +18,7 @@ export function isLiveItem(live, key) {
   return liveKey(live) === key || `cid-${live._cid}` === key;
 }
 
-// Remove one live item from the draft model (ADR 0210 items 9 to 14).
+// Remove one live item from the draft model (ADR 0205 item 38).
 export function withoutLive(model, key) {
   return { ...model, live_items: (model.live_items || []).filter((live) => !isLiveItem(live, key)) };
 }

@@ -15,26 +15,18 @@ export function announceHint(enabled, wait) {
   return 'Studio sends it 30 seconds after the write.';
 }
 
-// The lines of the review sheet for the announcements of a write. `diff` is
-// the diff of the API. An entry of `diff.announcements` gives one line. When
-// `diff.announce_skip` is set, one line gives the reason for no announcement.
+// The label of the check box in the footer of the review sheet (ADR 0205
+// item 19).
 export const ANNOUNCE_FOOTER_LABEL = 'Send a podping';
 
-export function announceLines(diff, enabled = true, wait = null) {
-  const lines = [];
-  const entries = diff && Array.isArray(diff.announcements) ? diff.announcements : [];
-  for (const entry of entries) {
-    lines.push({ text: `Tell Podcast Index and send a podping: ${entry.url}`, hint: announceHint(true, wait) });
-  }
+// The cause of no podping, or null. The footer of the review sheet shows it
+// in the position of the check box (ADR 0205 item 19). `diff` is the diff of
+// the API.
+export function announceSkipLine(diff) {
   const skip = diff ? diff.announce_skip : null;
-  if (skip === 'no_address') {
-    lines.push({ text: 'No announcement: this feed has no public address.' });
-  } else if (skip === 'feed_deleted') {
-    lines.push({ text: 'No announcement: this write deletes the feed file.' });
-  } else if (!enabled && entries.length === 0) {
-    lines.push({ text: 'No announcement. No index learns about this write until it reads the feed by itself.' });
-  }
-  return lines;
+  if (skip === 'no_address') return 'No podping: this feed has no public address.';
+  if (skip === 'feed_deleted') return 'No podping: this write deletes the feed file.';
+  return null;
 }
 
 // The text of one announcement. `timeText` turns seconds after the Unix

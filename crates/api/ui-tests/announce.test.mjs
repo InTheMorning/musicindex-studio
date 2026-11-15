@@ -1,7 +1,7 @@
 // The announcement models (ADR 0042). Each test checks one text of task 031d.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { announceLines, announceStatus, announceHint, isWaiting, ANNOUNCE_FOOTER_LABEL } from '../ui/announce.js';
+import { announceSkipLine, announceStatus, announceHint, isWaiting, ANNOUNCE_FOOTER_LABEL } from '../ui/announce.js';
 import { localTime } from '../ui/outsidecheck.js';
 
 test('the hint of the announcement choice gives the send time after a wait of Music Index (ADR 0190 items 6 and 7)', () => {
@@ -22,36 +22,14 @@ const entry = (fields) => ({
   attempts: 0, created_at: 100, next_at: 130, finished_at: null, last_error: null, ...fields,
 });
 
-test('ADR 0209 announceLines gives each address and its hint', () => {
-  const diff = {
-    announcements: [
-      { url: 'https://a.example/f.xml', podping: true },
-      { url: 'https://b.example/f.xml', podping: true },
-    ],
-    announce_skip: null,
-  };
-  assert.deepEqual(announceLines(diff, true), [
-    { text: 'Tell Podcast Index and send a podping: https://a.example/f.xml', hint: 'Studio sends it 30 seconds after the write.' },
-    { text: 'Tell Podcast Index and send a podping: https://b.example/f.xml', hint: 'Studio sends it 30 seconds after the write.' },
-  ]);
-  assert.deepEqual(announceLines(diff, true, { state: 'waits', until: 1_800_000_000, too_far: false })[0].hint,
-    `Studio sends it at ${localTime(1_800_000_030)}, after the wait of Music Index.`, 'ADR 0209 item 3: show the wait in AnnounceLines.');
-  assert.equal(ANNOUNCE_FOOTER_LABEL, 'Send a podping', 'ADR 0209 item 2: use the footer label.');
-});
-
-test('announceLines gives the reason for no announcement', () => {
-  // ADR 0136 item 1: the check box shows the choice, so no line repeats it.
-  assert.deepEqual(announceLines({ announcements: [], announce_skip: 'off' }, false),
-    [{ text: 'No announcement. No index learns about this write until it reads the feed by itself.' }]);
-  assert.deepEqual(announceLines({ announcements: [], announce_skip: 'no_address' }),
-    [{ text: 'No announcement: this feed has no public address.' }]);
-  assert.deepEqual(announceLines({ announcements: [], announce_skip: 'feed_deleted' }),
-    [{ text: 'No announcement: this write deletes the feed file.' }]);
-  assert.deepEqual(announceLines({ announcements: [], announce_skip: null }, false),
-    [{ text: 'No announcement. No index learns about this write until it reads the feed by itself.' }],
-  'ADR 0209 item 3: show the off choice in Announce. Fix announceLines in crates/api/ui/announce.js.');
-  assert.deepEqual(announceLines({ announcements: [], announce_skip: null }, true), []);
-  assert.deepEqual(announceLines({}), []);
+test('the footer of the review sheet gives the label and the cause of no podping (ADR 0205 item 19)', () => {
+  const fix = 'ADR 0205 item 19. Fix announceSkipLine in crates/api/ui/announce.js.';
+  assert.equal(ANNOUNCE_FOOTER_LABEL, 'Send a podping', 'ADR 0205 item 19: use the footer label.');
+  assert.equal(announceSkipLine({ announcements: [], announce_skip: 'no_address' }), 'No podping: this feed has no public address.', fix);
+  assert.equal(announceSkipLine({ announcements: [], announce_skip: 'feed_deleted' }), 'No podping: this write deletes the feed file.', fix);
+  for (const diff of [{ announcements: [], announce_skip: 'off' }, { announcements: [], announce_skip: null }, {}, null]) {
+    assert.equal(announceSkipLine(diff), null, `The check box gives the choice, so no line repeats it. ${fix}`);
+  }
 });
 
 test('announceStatus with no entry', () => {

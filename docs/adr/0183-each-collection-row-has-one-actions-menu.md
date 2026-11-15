@@ -9,7 +9,7 @@
 - Changes: [ADR 0149](0149-the-desktop-app-has-many-collections.md) item 6.
 - Uses: [ADR 0176](0176-the-user-controls-each-collection.md) items 6 and 7 for the sheets and the export. [ADR 0153](0153-the-people-list-has-a-sort-and-names-sort-with-numbers.md) for the menu control.
 - Source: finding 19 of the [human checks of 2026-11-11](../reviews/2026-11-11-local-human-test-findings.md).
-- Changed by: [ADR 0210](0210-a-row-has-one-menu-and-a-live-show-can-be-removed.md) items 3 to 6: the menu button has an icon form in the narrow layout.
+- Revised: 2026-11-15 by operator decision. Item 1 gives the two forms of the menu button, which the operator selected on 2026-11-14. This rule was in ADR 0210, which is deleted.
 
 ## Context
 
@@ -19,7 +19,7 @@ The tag "Open now" of the open collection was blue text. It looked like an actio
 
 ## Decision
 
-1. Each row of the section "Collections" has one menu button, **Actions**. The menu has the actions of that collection only.
+1. Each row of the section "Collections" has one menu button. The menu has the actions of that collection only. The button is the row menu control of [ADR 0207](0207-recipients-change-sets-and-wallets.md) items 55 to 57: the ellipsis icon button in the narrow layout, and the text button **Actions** in the wide layout.
 2. The menu of the open collection has **Rename…**, **Copy…** and **Export…**.
 3. The menu of a collection that is not open has **Open**, **Rename…**, **Export…** and **Replace with a File…**. A separator then comes before **Delete…**, which has the destructive role.
 4. **Export…** of a collection that is not open makes the account file of ADR 0176 item 7. It does not open the collection.

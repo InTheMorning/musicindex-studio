@@ -1464,7 +1464,7 @@ pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
             // The release list marks a feed that apps do not list (ADR 0063).
             value["hidden"] = json!(feed.as_ref().is_some_and(Feed::hidden));
             // The host of the public address, for the domain line of the
-            // delete and move sheets (ADR 0208 item 3). A feed with no public
+            // delete and move sheets (ADR 0131 item 18). A feed with no public
             // address, or with a placeholder address, has none.
             value["address_host"] =
                 json!(outside::address_of(row).and_then(|address| web::host_of(&address)));

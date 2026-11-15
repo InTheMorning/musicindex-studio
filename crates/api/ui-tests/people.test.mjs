@@ -10,20 +10,20 @@ import {
 } from '../ui/people.js';
 import { pageSequence, tierError } from '../ui/pages.js';
 
-test('wallet address menus follow ADR 0210 items 1 and 2', () => {
+test('wallet address menus follow ADR 0207 items 53 and 54', () => {
   assert.deepEqual(addressMenu(false, true), [
     { action: 'make-default', label: 'Make Default' },
     { action: 'edit', label: 'Edit' },
     { action: 'copy', label: 'Copy' },
-  ], 'ADR 0210: show Make Default, Edit and Copy in order. Fix addressMenu in crates/api/ui/people.js.');
+  ], 'ADR 0207 item 54: show Make Default, Edit and Copy in order. Fix addressMenu in crates/api/ui/people.js.');
   assert.deepEqual(addressMenu(true, true), [
     { action: 'edit', label: 'Edit' },
     { action: 'copy', label: 'Copy' },
-  ], 'ADR 0210: omit Make Default for the default address. Fix addressMenu in crates/api/ui/people.js.');
+  ], 'ADR 0207 item 54: omit Make Default for the default address. Fix addressMenu in crates/api/ui/people.js.');
   assert.deepEqual(addressMenu(false, false), [
     { action: 'make-default', label: 'Make Default' },
     { action: 'edit', label: 'Edit' },
-  ], 'ADR 0210: omit Copy when the address is absent. Fix addressMenu in crates/api/ui/people.js.');
+  ], 'ADR 0207 item 54: omit Copy when the address is absent. Fix addressMenu in crates/api/ui/people.js.');
 });
 
 const SUGGESTION = {

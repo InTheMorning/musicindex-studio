@@ -5,7 +5,7 @@
 - Owner: operator
 - Changes: [ADR 0052](../archive/adr/0052-announcements-through-the-podcast-index-hub.md) items 5, 6, 11 and 12, and [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) item 14
 - Changes: [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md), Settings Is A Destination, And Each Page Orders Its Sections By Tier. ADR 0071 names the changed items.
-- Changed by: [ADR 0209](0209-the-review-sheet-keeps-the-podping-box-in-view-and-names-each-delete.md) items 1 to 3: in the review sheet, the check box is in the footer.
+- Revised: 2026-11-15 by operator decision. Item 1 does not give the position or the label of the check box. [ADR 0205](0205-publisher-feeds-announcements-and-show-grants.md) item 19 owns them, so that only one record states them.
 - Source: [findings of local use, finding 7](../reviews/2026-11-06-local-use-findings.md)
 
 ## Context
@@ -14,7 +14,7 @@ A user who saves frequently also sends many podpings. Studio had two settings on
 
 ## Decision
 
-1. One check box, "Tell Podcast Index and send a podping", replaces the two settings. It is directly above the Write button of the review sheet, and on the review page of a change set.
+1. One check box replaces the two settings. It is in the review sheet, and on the review page of a change set. ADR 0205 item 19, in the section "The Announcement Choice", owns its position and its label.
 2. Studio remembers the last choice for the next write. It starts on. The Settings page has no announcement section.
 3. A request always has `podping=1`.
 4. A change of the check box saves the choice and gets the diff again, so the user does not approve a second time. The planned announcements stay a part of the diff ID.

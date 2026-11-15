@@ -23,7 +23,7 @@ import { versionLabel, LOCK_HELP, hasSpace, spaceNotice, ROW_SPACE_NOTE, newFeed
 import { refusalView, refusalOfError, noticeViews, blocksWrite, repairRoute, returnWarning, REPLACES_POINTER_NOTE } from './movelink.js';
 import { pickFromIndex, remoteItemFromPick, addTrack, hasTrack, removeTrack, trackRow, tracksSummary } from './playlist.js';
 import { moveTo, moveAmong } from './order.js';
-import { announceLines, announceStatus, announceHint, isWaiting, ANNOUNCE_FOOTER_LABEL } from './announce.js';
+import { announceSkipLine, announceStatus, announceHint, isWaiting, ANNOUNCE_FOOTER_LABEL } from './announce.js';
 import { npubOf, eventsToSign, signAll, signErrorText, signSummary, signProgressLabel, SignError, remoteSigner, signerChoice } from './signing.js';
 import { SignerConnect } from './signer.js';
 import { progressPercent } from './upload.js';
@@ -1703,7 +1703,7 @@ function HostOperationRow({ op, connectors, onRemove, busy }) {
 // is the first row of the operations. "Undo" puts the feed XML back on the
 // host of the feed.
 function FeedMoveRow({ move, connectors, onUndo, busy, fromConnectorId = null }) {
-  // A label and its values (ADR 0209 items 6 and 7). The file host of the
+  // A label and its values (ADR 0036 item 14). The file host of the
   // address before the move is the file host of the feed row.
   const pair = (label, address, connectorId) => html`<span class="review-pair">
     <span class="review-label">${label}</span>
@@ -1776,10 +1776,10 @@ function ReturnWarning({ move, wait }) {
     : html`<div class="notice" role="status"><strong>${view.title}</strong>${view.text}</div>`);
 }
 
-// The domain line (ADR 0208 items 1 to 4). It has the style of a warning
+// The domain line (ADR 0131 items 15 to 19). It has the style of a warning
 // (ADR 0191 item 1). With no host, it shows nothing.
-function DomainLine({ domain }) {
-  const line = domainLine(domain);
+function DomainLine({ domain, deleted = false }) {
+  const line = domainLine(domain, deleted);
   return line && html`<div class="notice warning" role="status"><strong><${Icon} name="alert" />${line.title}</strong>${line.text}</div>`;
 }
 
@@ -1797,7 +1797,7 @@ function BuildDateNotices({ state }) {
     ${view.value && html`${' '}<span class="mono">${view.value}</span>`}</div>`);
 }
 
-// A refused deletion uses the Warning color and kind (ADR 0209 item 9).
+// A refused deletion uses the Warning color and kind (ADR 0036 item 13).
 function BlockedDeleteRow({ blocked, connectors, onRemove, busy }) {
   const view = refusedDelete(blocked);
   return html`<div class="host-op-row warning" role="status">
@@ -1839,7 +1839,7 @@ function useAnnounceChoice(onChange) {
   return { enabled, busy, error, change };
 }
 
-// The check box of the review page of a change set (ADR 0209 item 5).
+// The check box of the review page of a change set (ADR 0205 item 19).
 export function AnnounceChoice({ onChange, wait = null }) {
   const { enabled, busy, error, change } = useAnnounceChoice(onChange);
   if (enabled === null) return null;
@@ -1851,27 +1851,15 @@ export function AnnounceChoice({ onChange, wait = null }) {
   </div>`;
 }
 
-// The check box in the footer of the review sheet (ADR 0209 items 1 and 2).
-// The row Announce of the sheet has the address, the hint and the error.
-function AnnounceFooterChoice({ choice }) {
+// The check box in the footer of the review sheet, at the right side above
+// the write button (ADR 0205 item 19). With no possible podping, a line gives
+// the cause in the same position.
+function AnnounceFooterChoice({ choice, skip }) {
+  if (skip) return html`<div class="announce-footer-row"><span class="hint">${skip}</span></div>`;
   if (choice.enabled === null) return null;
   return html`<div class="announce-footer-row">
     <label class="check"><input type="checkbox" checked=${choice.enabled} disabled=${choice.busy} onChange=${(e) => choice.change(e.target.checked)} />
       <span>${ANNOUNCE_FOOTER_LABEL}</span></label>
-  </div>`;
-}
-
-// The announcements of a write (ADR 0052 item 11). The lines show when the
-// sheet can write, also when the feed text did not change. Each line has the
-// form of a host operation row, with no button.
-function AnnounceLines({ diff, enabled, wait }) {
-  const lines = announceLines(diff, enabled, wait);
-  if (lines.length === 0) return null;
-  return html`<div class="group announce-lines">
-    ${lines.map((line) => html`<div class="host-op-row" key=${line.text}>
-      <span class="kind">Announce</span>
-      <span class="text"><span class="review-value">${breakableText(line.text)}</span>${line.hint && html`<span class="review-note">${line.hint}</span>`}</span>
-    </div>`)}
   </div>`;
 }
 
@@ -1990,8 +1978,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
     await checkLinks();
   });
   const refreshDiff = async () => setDiff(await api(`/feeds/${feedId}/diff`));
-  // The announcement choice. The row Announce and the footer use one value
-  // (ADR 0209 items 1 to 3).
+  // The announcement choice of the footer (ADR 0205 item 19).
   const announce = useAnnounceChoice(refreshDiff);
   // The sheet examines the draft each time that it opens.
   useEffect(() => { if (open) examine(); }, [open]);
@@ -2217,7 +2204,6 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
         The file at the address before the move stays and does not change. Apps that read that address continue to get the version from before the move.</div>`}
       ${hasWork && draft.model && draft.hidden && html`<div class="notice" role="status">
         <strong>This feed will be hidden from apps.</strong> Apps and directories do not list it after the write.</div>`}
-      ${hasWork && html`<${AnnounceLines} diff=${diff} enabled=${announce.enabled !== false} wait=${returnWait} />`}
       <${ErrorNotice} error=${announce.error} />
       ${diff && html`<${GrantChecks} feedId=${feedId} model=${draft.model} diff=${diff} busy=${busy} signerHost=${signerHost} onDiff=${setDiff} run=${run} />`}
       ${diff && (diff.changed
@@ -2236,7 +2222,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
       </div>`}
     </div>
     <footer>
-      ${diff && hasWork && !addressesBlocked && !choosing && diff.announce_skip !== 'no_address' && diff.announce_skip !== 'feed_deleted' && html`<${AnnounceFooterChoice} choice=${announce} />`}
+      ${diff && hasWork && !addressesBlocked && !choosing && html`<${AnnounceFooterChoice} choice=${announce} skip=${announceSkipLine(diff)} />`}
       ${deletion && diff && hasWork && !addressesBlocked && !choosing && html`<button class="button destructive" type="button" disabled=${busy || waiting || needsSigner || streamRefusal || blocksWrite(links)} onClick=${write}>
         ${progress ? signProgressLabel(progress) : busy ? 'Writing…' : deletion.label}</button>`}
       <button class=${`button${deletion ? '' : ' destructive'}`} type="button" disabled=${busy || (!deletion && !draft.changed)} onClick=${discard}>${deletion && deletion.cancel ? deletion.cancel : 'Discard the Draft'}</button>
@@ -2459,8 +2445,8 @@ function FeedDelete({ feed, draft, onListChanged }) {
     if (draft) draft.show(answer);
     setRetireOpen(false);
   });
-  // The restore draft brings the file back through a usual write (ADR 0208
-  // item 14). The route gives the feed its file host again, so the feed
+  // The restore draft brings the file back through a usual write (ADR 0198
+  // item 10). The route gives the feed its file host again, so the feed
   // list loads before Review opens. Review then shows a usual write, not
   // a move of a read-only feed. `OPEN_DELETE_REVIEW` loads the draft.
   const restoreFile = () => action.run(async () => {
@@ -2491,7 +2477,7 @@ function FeedDelete({ feed, draft, onListChanged }) {
   const activeRetire = retire && retire.ask !== 'no';
   return html`
     ${activeRetire && html`<div class="retire-head"><span class="label">Retire</span><span class="summary">Studio cannot check Podcast Index.</span></div>
-      <div class="retire-domain"><${DomainLine} domain=${feed.address_host} /></div>
+      <div class="retire-domain"><${DomainLine} domain=${feed.address_host} deleted=${Boolean(feed.host_deleted)} /></div>
       ${steps.map((row) => html`<div class=${`delete-step${row.done ? ' done' : ''}`} key=${row.number}>
           <span class="num">${row.done ? '✓' : row.number}</span><span class="text"><span class="label">${row.title}</span><span class="summary">${row.text}</span></span>
           ${row.button && html`<button class="button destructive" type="button" disabled=${action.busy} onClick=${openFinal}>${row.button}</button>`}

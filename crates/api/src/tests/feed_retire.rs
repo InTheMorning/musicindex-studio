@@ -394,7 +394,7 @@ async fn the_delete_draft_gives_the_summary_and_the_names_and_the_write_deletes_
 
 // After the write of a restore, the file on the host hides the feed again.
 // Step 1 of the Retire block then names the last write, not the draft
-// (ADR 0208 item 15).
+// (ADR 0198 item 11).
 #[tokio::test]
 async fn after_a_restore_write_the_retire_state_names_the_last_write() {
     let index = CountingIndex::start(404, "{}");

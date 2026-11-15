@@ -37,7 +37,8 @@ Status: Complete on 2026-11-15, in three packets, with the screenshot visual che
 
 Visual check, with `.studio-dev/walk/steps-147-make.json`, `steps-147-check.json`, `steps-147-390.json` and `steps-147-label.json`:
 
-- Passed at 1280 px light: the page "Add feeds", the release form from an artist page, the new release with the label "EP", the menu "Kind" on the tab **Settings**, and the change to "Single" in the head and the left panel with no write.
+- Passed at 1280 px light: the page "Add feeds", the release form from an artist page, and the new release with the label "EP".
+- Passed at 1280 px light: the menu "Kind" on the tab **Settings**. A change to "Single" shows in the head and the left panel with no write.
 - Passed at 1280 px light: the finding on the tab **Check**, the refusal in Review with **Link a Page** and no write button, and the jump to the section.
 - Passed at 1280 px light: the first-step row of a label page opens the menu of the artist pages, and a selection opens the form.
 - Passed at 390 px dark: the release form. `$edges()` and `$overflow()` gave no finding in each step.

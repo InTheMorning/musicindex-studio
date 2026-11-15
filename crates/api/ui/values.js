@@ -4,10 +4,11 @@ import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalon
 import { TextField, set, setAt, withCids, startOpen, openOnce, useSheet } from './editor.js';
 import { CONFIRMS } from './confirms.js';
 import { percentText, lookupHint, WALLET_TYPES, CUSTOM_KEY_HINT, percentages, isFee, shares, shareParts, splitOrder, recipientFields, recipientFromFields } from './recipients.js';
-import { recipientPickRows, recipientChoices, recipientIdentity, personKeys, memberLine, memberText, addRecipientsLabel, trackHeading } from './people.js';
+import { recipientPickRows, recipientChoices, recipientIdentity, personKeys, memberText, addRecipientsLabel, trackHeading, recipientAddressMenu } from './people.js';
 import { PickerLayout, PickFillRow, FindOneSheet, PickFold, SearchResults, TakenTag, useFieldList } from './pickers.js';
 import { PersonArt, useLookup } from './peoplepages.js';
-import { api, askConfirm, Field, ErrorNotice, useAction } from './app.js';
+import { AddressRow } from './addressrow.js';
+import { api, askConfirm, Field, ErrorNotice, useAction, CopyButton, Icon } from './app.js';
 import { onListKey } from './listkeys.js';
 
 
@@ -98,6 +99,33 @@ function Choice({ id, label, value, options, onChange }) {
   </div>`;
 }
 
+// The address row of one recipient, with its menu (ADR 0207 item 60).
+function RecipientAddressActions({ recipient, onChange }) {
+  const [inPeople, setInPeople] = useState(null);
+  const { error, run } = useAction();
+  useEffect(() => {
+    let live = true;
+    loadRecipients().then((list) => { if (live) setInPeople(personKeys(list).has(recipientIdentity(recipient))); });
+    return () => { live = false; };
+  }, [recipient.address, recipient.custom_key, recipient.custom_value]);
+  const menuRecipient = { ...recipient, inPeople };
+  const items = recipientAddressMenu(menuRecipient);
+  const select = (entry) => {
+    if (entry.action === 'change') onChange();
+    else if (entry.action === 'copy' && navigator.clipboard) navigator.clipboard.writeText(recipient.address).catch(() => {});
+    else if (entry.action === 'save') run(async () => {
+      await api('/recipients/saved', { method: 'POST', body: {
+        name: recipient.name, recipient_type: recipient.recipient_type, address: recipient.address,
+        custom_key: recipient.custom_key, custom_value: recipient.custom_value,
+      } });
+      recipientsPromise = null;
+      setInPeople(true);
+    });
+  };
+  return html`<${ErrorNotice} error=${error} /><${AddressRow} member=${recipient}
+    menuItems=${items} Icon=${Icon} CopyButtonComponent=${CopyButton} menuLabel=${`Actions for ${recipient.address || recipient.name || 'recipient'}`} onSelect=${select} />`;
+}
+
 // Recipients returns its rows with no wrapper div, so that each recipient
 // and the add row sit as direct rows of the group, each with the group's
 // own inset separator (review of task 014c, defect 3). The rows form two
@@ -141,7 +169,6 @@ function Recipients({ id, recipients, defaultType, onChange }) {
       const currentIndex = Math.min(current, Math.max(0, recipients.length - 1));
       const change = (name) => (value) => onChange(setAt(recipients, i, set(r, name, value)));
       const rid = `${id}-r-${r._cid}`;
-      const line = r.address ? memberLine(r, true) : { label: 'No address', address: null, account: null };
       const open = Boolean(expandedRows[r._cid]);
       const openRef = openOnce(r._cid);
       const setOpenRow = (element) => {
@@ -164,12 +191,7 @@ function Recipients({ id, recipients, defaultType, onChange }) {
         <label class="check"><input type="checkbox" checked=${isFee(r)}
           onChange=${(e) => change('fee')(e.target.checked ? 'true' : null)} />
           Fee, paid first</label>
-        <div class="link-row static address-row"><span class="text"><span class="label">${line.label}</span>
-            ${line.address && html`<span class="summary mono address-text" data-fit-allow-break>${line.address}</span>`}
-            ${line.account && html`<span class="summary">Account ${line.account}</span>`}</span>
-          <${SaveRecipientButton} recipient=${r} />
-          <button class="button" type="button" aria-label=${`Change the address of ${r.name || r.address || 'this recipient'}`} onClick=${() => setSheet({ cid: r._cid })}>Change…</button>
-        </div>
+        <${RecipientAddressActions} recipient=${r} onChange=${() => setSheet({ cid: r._cid })} />
         <div class="actions"><button class="button destructive" type="button"
           aria-label=${`Remove ${r.name || r.address || 'this recipient'}`} onClick=${() => onChange(recipients.filter((_, k) => k !== i))}>Remove</button></div>
         </div>

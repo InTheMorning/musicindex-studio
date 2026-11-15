@@ -17,6 +17,14 @@ export function addressMenu(isDefault, hasAddress) {
   return items;
 }
 
+// The menu of one recipient address in the value editor (ADR 0207 item 60).
+export function recipientAddressMenu(recipient) {
+  const items = [{ action: 'change', label: 'Change…' }];
+  if (recipient.address) items.push({ action: 'copy', label: 'Copy' });
+  if (recipient.address && recipient.inPeople === false) items.push({ action: 'save', label: 'Add to People' });
+  return items;
+}
+
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const feedCount = (n) => plural(n, 'feed', 'feeds');
 

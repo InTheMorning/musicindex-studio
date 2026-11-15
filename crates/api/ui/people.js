@@ -8,6 +8,15 @@ import { titleCase } from './casing.js';
 import { feedKind, isPublisher, isReadOnly, roleWord, compareNames, letterGroups } from './shell.js';
 import { placesText, recipientTitle, percentText } from './recipients.js';
 
+// The actions of one saved wallet address (ADR 0210 items 1 and 2).
+export function addressMenu(isDefault, hasAddress) {
+  const items = [];
+  if (!isDefault) items.push({ action: 'make-default', label: 'Make Default' });
+  items.push({ action: 'edit', label: 'Edit' });
+  if (hasAddress) items.push({ action: 'copy', label: 'Copy' });
+  return items;
+}
+
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const feedCount = (n) => plural(n, 'feed', 'feeds');
 

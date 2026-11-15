@@ -2,7 +2,18 @@
 
 Decision: [ADR 0210](../adr/0210-a-row-has-one-menu-and-a-live-show-can-be-removed.md).
 
-Status: Open. The code is not built.
+Status: Complete on 2026-11-14, with its screenshot visual check. One visual item and the human gate of ADR 0210 are open.
+
+## Result
+
+- ChatGPT did the build. The main session read the diff, ran the five checks and took the screenshots.
+- `MenuControl` is now in `crates/api/ui/menu.js`, because `peoplepages.js` and `app.js` cannot import each other. It gets the icon component as a prop. `crates/api/src/ui.rs` serves the new file.
+- With `row`, the button holds the ellipsis icon and the text "Actions ⌄". The styles show the icon at 760 px or less, and the text above that width.
+- The main session made these corrections. The delegate removed the comment of `ReleasesPage`, and it is back at its function. The wide button had no chevron. On the phone, the menu button was on its own line below the address. At 1280 px the group clipped the open menu.
+- **Copy** writes the address to the clipboard and shows no "copied" text.
+- Walk: `setup-144.py` with `steps-144-people.json`, and `setup-none.py` with `steps-144-live.json`. The wallet rows at 1280 px light and 390 px dark showed the two forms and the open menu. **Make Default** from the menu moved the tag. The live show walk showed the button, the confirm, and the tab **Live Shows** with no show after the removal. Each view gave no edge, overflow or fit finding with the page at its top.
+- Open: the walk binary shows no collection rows, so no walk showed them (visual item 2). They use the same control and styles. A Node scan test proves the markup.
+- Open: no walk showed Review after the removal of a show that the feed file has.
 
 ## Goal
 

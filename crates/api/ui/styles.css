@@ -1797,7 +1797,13 @@ button.outline-feed {
 .sort-menu .sort-mark { width: 1.2em; color: var(--accent); }
 .sort-menu .menu-separator { height: 1px; margin: 4px 6px; background: var(--sep); }
 .sort-menu button.menu-destructive { color: var(--error); }
+.row-menu { display: inline-flex; align-items: center; gap: 6px; }
+.row-menu-icon { display: none; }
+.row-menu-icon .icon { display: block; width: 18px; height: 18px; }
+.address-status { display: flex; align-items: center; gap: 8px; }
 .collections-group, .collection-rows { overflow: visible; }
+/* A group with an address row does not clip the open menu of the row (ADR 0210 item 1). */
+.group:has(> .address-row .row-menu-wrap) { overflow: visible; }
 .letters {
   position: sticky;
   top: var(--bar-h);
@@ -2367,6 +2373,12 @@ button.outline-feed {
   .more-actions { flex: 1 0 100%; }
   .address-row { flex-wrap: wrap; }
   .address-row > .text { flex: 1 1 100%; }
+  .address-row:has(> .row-menu-wrap) { flex-wrap: nowrap; align-items: flex-start; }
+  .address-row:has(> .row-menu-wrap) > .text { flex: 1 1 0; }
+  .address-row > .row-menu-wrap { flex: none; margin-left: auto; }
+  .row-menu { width: var(--target); height: var(--target); justify-content: center; padding: 0; border-radius: 50%; }
+  .row-menu-icon { display: block; }
+  .row-menu-text { display: none; }
 }
 .copy-button { flex: none; color: var(--muted); }
 .copy-button .icon { display: block; width: 16px; height: 16px; }

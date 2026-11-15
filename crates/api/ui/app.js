@@ -53,6 +53,8 @@ import {
   npubOf, addressLines, linesText, invalidConfigField, blossomDefaultName, siteAddress, siteNameFromGuid, isNsec,
 } from './signing.js';
 import { onTreeKey } from './listkeys.js';
+import { MenuControl } from './menu.js';
+export { MenuControl } from './menu.js';
 
 // ---- Access token (ADR 0017) ----
 // The API gives the UI address with the token in the fragment. The UI keeps
@@ -1877,6 +1879,7 @@ const ICONS = {
   'circle-dashed': () => html`<path d="M10.1 2.182a10 10 0 0 1 3.8 0" /><path d="M13.9 21.818a10 10 0 0 1-3.8 0" /><path d="M17.609 3.721a10 10 0 0 1 2.69 2.7" /><path d="M2.182 13.9a10 10 0 0 1 0-3.8" /><path d="M20.279 17.609a10 10 0 0 1-2.7 2.69" /><path d="M21.818 10.1a10 10 0 0 1 0 3.8" /><path d="M3.721 6.391a10 10 0 0 1 2.7-2.69" /><path d="M6.391 20.279a10 10 0 0 1-2.69-2.7" />`,
   'cloud-alert': () => html`<path d="M12 12v4" /><path d="M12 20h.01" /><path d="M17 18h.5a1 1 0 0 0 0-9h-1.79A7 7 0 1 0 7 17.708" />`,
   alert: () => html`<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" /><path d="M12 9v4" /><path d="M12 17h.01" />`,
+  ellipsis: () => html`<circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" />`,
 };
 
 export function Icon({ name }) {
@@ -3335,41 +3338,6 @@ function OutlinePage({ feed, panel, draft, changedFeeds, go, onAdding, onImporti
   </div>`;
 }
 
-// The Releases page, the start page (ADR 0039 items 2, 2a and 3, musicindex
-// ADR 0027 R-LIST-1). `list` is the sort and the view from the address.
-// `marked` is the feed that the last Back selection left marked. With a
-// `group`, the page shows the releases of one destination below Releases,
-// and the sort of that page is `groupSort` (ADR 0085 items 4 to 6).
-// A menu button and its menu use the sort menu styles and Escape behavior.
-function MenuControl({ buttonLabel, accessibleName, menuLabel, items, onSelect }) {
-  const [open, setOpen] = useState(false);
-  const button = useRef(null);
-  const pick = (entry) => {
-    setOpen(false);
-    onSelect(entry);
-    if (button.current) button.current.focus();
-  };
-  // Escape closes the menu and keeps the focus on its button.
-  const onKey = (event) => {
-    if (event.key === 'Escape' && open) {
-      event.stopPropagation();
-      setOpen(false);
-      if (button.current) button.current.focus();
-    }
-  };
-  return html`<div class="sort" onKeyDown=${onKey}>
-    <button class="button" type="button" ref=${button} aria-haspopup="menu"
-      aria-label=${accessibleName} aria-expanded=${open ? 'true' : 'false'} onClick=${() => setOpen(!open)}>
-      ${buttonLabel} ⌄</button>
-    ${open && html`<ul class="sort-menu" role="menu" aria-label=${menuLabel}>
-      ${items.map((entry) => html`${entry.separatorBefore && html`<li class="menu-separator" role="separator"></li>`}
-        <li><button class=${entry.destructive ? 'menu-destructive' : ''} type="button" role=${entry.role || 'menuitem'}
-          aria-checked=${entry.checked === undefined ? undefined : (entry.checked ? 'true' : 'false')}
-          onClick=${() => pick(entry)}>${entry.mark !== undefined && html`<span class="sort-mark" aria-hidden="true">${entry.mark}</span>`}${entry.label}</button></li>`)}
-    </ul>`}
-  </div>`;
-}
-
 // The sort menu of a list (musicindex ADR 0027 R-LIST-1, ADR 0043 R-LIST-6).
 // Each sort has two entries: its usual direction, then its reversed direction
 // (musicindex ADR 0054 R-LIST-13, ADR 0155). `onSort` gets the sort and direction.
@@ -3396,6 +3364,11 @@ export function LetterBar({ letters, idOf }) {
   </nav>`;
 }
 
+// The Releases page, the start page (ADR 0039 items 2, 2a and 3, musicindex
+// ADR 0027 R-LIST-1). `list` is the sort and the view from the address.
+// `marked` is the feed that the last Back selection left marked. With a
+// `group`, the page shows the releases of one destination below Releases,
+// and the sort of that page is `groupSort` (ADR 0085 items 4 to 6).
 function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, groupReversed, changedFeeds, onQuery, onGroupSort, onOpen, onAddFeed, onAddedFeed }) {
   const inGroup = group !== undefined;
   const releases = releasesList({ feeds, connectors, sort: inGroup ? groupSort : list.sort, reversed: inGroup ? groupReversed : list.reversed, view: list.view, marked, group });
@@ -5002,7 +4975,7 @@ function CollectionsPanel() {
         const choose = (kind) => setAction({ kind, collection });
         return html`<div class="link-row static collection-row" key=${collection.folder}>
           <span class="text"><span class="label">${row.name}${row.badge && html` <span class="default-tag"><${Icon} name="check" />${row.badge}</span>`}</span><span class="summary">${row.line}</span></span>
-          <${MenuControl} buttonLabel="Actions" accessibleName=${`Actions for ${collection.name}`}
+          <${MenuControl} row=${true} Icon=${Icon} buttonLabel="Actions" accessibleName=${`Actions for ${collection.name}`}
             menuLabel=${`Actions for ${collection.name}`} items=${row.actions.map((entry) => ({
               ...entry,
               role: 'menuitem',

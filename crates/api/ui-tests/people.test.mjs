@@ -5,9 +5,26 @@ import {
   changeSetView, peopleSections, PEOPLE_EMPTY, PEOPLE_SERVER_NOTE, suggestionRow, personRow, displayName, makePersonStart, makePersonBody, sheetFeeds,
   checkedIds, toggledRow, reviewLabel, operationBody, addResultLine,
   lookupAddress, showFindEmpty,
+  addressMenu,
   nicknameBody, afterNicknameSave,
 } from '../ui/people.js';
 import { pageSequence, tierError } from '../ui/pages.js';
+
+test('wallet address menus follow ADR 0210 items 1 and 2', () => {
+  assert.deepEqual(addressMenu(false, true), [
+    { action: 'make-default', label: 'Make Default' },
+    { action: 'edit', label: 'Edit' },
+    { action: 'copy', label: 'Copy' },
+  ], 'ADR 0210: show Make Default, Edit and Copy in order. Fix addressMenu in crates/api/ui/people.js.');
+  assert.deepEqual(addressMenu(true, true), [
+    { action: 'edit', label: 'Edit' },
+    { action: 'copy', label: 'Copy' },
+  ], 'ADR 0210: omit Make Default for the default address. Fix addressMenu in crates/api/ui/people.js.');
+  assert.deepEqual(addressMenu(false, false), [
+    { action: 'make-default', label: 'Make Default' },
+    { action: 'edit', label: 'Edit' },
+  ], 'ADR 0210: omit Copy when the address is absent. Fix addressMenu in crates/api/ui/people.js.');
+});
 
 const SUGGESTION = {
   name: 'Mary Kate Ultra',

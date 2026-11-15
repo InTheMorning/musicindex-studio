@@ -75,6 +75,12 @@ export function planRows(plan, connectors) {
   if (plan.new_files > 0) {
     rows.push({ label: counted(plan.new_files, 'new file', 'new files'), value: `Studio uploads them to ${to} at the write` });
   }
+  // A move that copies no file leaves no old file, so the sheet has no
+  // menu "Keep the old files for". This row gives the reason.
+  const copies = plan.audio.count + plan.images.count + plan.other.count;
+  if (!plan.nothing_to_move && plan.from_connector_ids.length === 0 && copies === 0) {
+    rows.push({ label: 'Old files', value: 'None. No waiting time.' });
+  }
   return rows;
 }
 

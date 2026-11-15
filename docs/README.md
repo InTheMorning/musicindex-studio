@@ -537,6 +537,11 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Visual checks of 2026-11-08](reviews/2026-11-08-visual-checks.md)
 - [Human test findings of 0.1.0-rc.21](reviews/2026-11-10-rc21-human-test-findings.md)
 - [Human test findings of local main on 2026-11-11](reviews/2026-11-11-local-human-test-findings.md)
+- [Findings of local use on 2026-11-13](reviews/2026-11-13-local-use-findings.md)
+- [Human test findings of 0.1.0-rc.22](reviews/2026-11-13-rc22-human-test-findings.md)
+- [ADR overuse audit, 2026-11-14](reviews/2026-11-14-adr-overuse-audit.md)
+- [Human check walk of 2026-11-14](reviews/2026-11-14-human-check-walk.md)
+- [The open older human tests, for one walk on rc.23](reviews/2026-11-14-open-older-human-tests.md)
 
 ## Runbooks
 
@@ -562,6 +567,8 @@ Each release candidate after 0.1.0-rc.8 has one notes file ([ADR 0100](adr/0100-
 - [0.1.0-rc.19](releases/0.1.0-rc.19.md)
 - [0.1.0-rc.20](releases/0.1.0-rc.20.md)
 - [0.1.0-rc.21](releases/0.1.0-rc.21.md)
+- [0.1.0-rc.22](releases/0.1.0-rc.22.md)
+- [0.1.0-rc.23](releases/0.1.0-rc.23.md)
 
 ## Research
 

@@ -1,28 +1,58 @@
 // The view data for deleting a feed from its file host (ADR 0131).
 // The API gives each state and each count. This module adds no feed rule.
 
+// The goals of the choice sheet (ADR 0208 items 5 to 7). `action` is the
+// stable key of a row, so the sheet does not compare titles.
 const DELETE_CHOICES = [
   {
-    title: 'Move It to a Different File Host',
-    text: 'You keep control. The index follows the new address. An app can stay at the earlier address.',
+    action: 'move',
+    title: 'Put the feed on a different file host',
+    text: 'Apps and Music Index follow. Nothing is lost.',
     destructive: false,
   },
   {
-    title: 'Retire It',
-    text: 'The feed asks the indexes to remove it. After Music Index removes the entry, you can delete the file.',
+    action: 'retire',
+    title: 'Take the feed out of the apps',
+    text: 'The file stays. You can stop this later.',
     destructive: false,
-    recommended: true,
   },
   {
-    title: 'Delete the File Only',
-    text: 'You lose control of the entry in the index.',
+    action: 'delete',
+    title: 'Remove the file',
+    text: 'Music Index removed the entry.',
     destructive: true,
   },
 ];
 
+// The row "Remove the file" shows only after Music Index removed the entry
+// (ADR 0200 item 4).
 export function deleteChoices(state) {
   if (state?.removal_done === true) return DELETE_CHOICES;
-  return DELETE_CHOICES.slice(0, 2).map(({ recommended, ...choice }) => choice);
+  return DELETE_CHOICES.slice(0, 2);
+}
+
+// The domain line (ADR 0208 item 1): the title, then the text. The core
+// gives the host as `address_host`, so this function does not read an
+// address.
+export function domainLine(host) {
+  if (typeof host !== 'string' || host.length === 0) return null;
+  return {
+    title: `Keep the domain ${host}.`,
+    text: 'If it expires, its new owner can take over this feed and its payments.',
+  };
+}
+
+// The state points of the last sheet (ADR 0208 item 10). The third point
+// gives the button name apart, so that the sheet shows it in bold.
+export const DELETE_POINTS = [
+  { mark: '✓', text: 'Music Index removed the entry' },
+  { mark: '✓', text: 'Studio keeps a copy of the feed' },
+  { mark: '↺', text: 'You can put the file back later with', button: 'Put the File Back', after: 'on this feed' },
+];
+
+// The buttons of the Retire block, in their sequence (ADR 0208 item 13).
+export function retireActions(state) {
+  return state?.delete === 'done' ? ['restore', 'check'] : ['check', 'stop'];
 }
 
 const step = (number, title, text, done, button = null) => ({ number, title, text, done, button });

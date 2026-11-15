@@ -1,24 +1,72 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { deleteChoices, deleteButtonEnabled, deleteWrite, retireSteps, operationNote } from '../ui/feeddelete.js';
+import { deleteChoices, deleteButtonEnabled, deleteWrite, retireSteps, operationNote, domainLine, DELETE_POINTS, retireActions } from '../ui/feeddelete.js';
 import { readFileSync } from 'node:fs';
 
-test('the first sheet adds delete only after Music Index removes the entry', () => {
+test('the choice sheet gives the goals of ADR 0208 item 6 and the third row only after removal', () => {
+  const fix = 'Fix DELETE_CHOICES and deleteChoices in crates/api/ui/feeddelete.js.';
   const all = deleteChoices({ removal_done: true });
-  assert.deepEqual(all.map(({ title, destructive }) => [title, destructive]), [
-    ['Move It to a Different File Host', false],
-    ['Retire It', false],
-    ['Delete the File Only', true],
-  ], 'ADR 0200 item 4: with removal_done, the sheet has three rows and only the last is destructive. Fix deleteChoices in crates/api/ui/feeddelete.js.');
-  assert.equal(all[1].recommended, true, 'ADR 0200 item 4: Retire It keeps its tag with three rows. Fix deleteChoices in crates/api/ui/feeddelete.js.');
+  assert.deepEqual(all.map(({ action, title, text, destructive }) => [action, title, text, destructive]), [
+    ['move', 'Put the feed on a different file host', 'Apps and Music Index follow. Nothing is lost.', false],
+    ['retire', 'Take the feed out of the apps', 'The file stays. You can stop this later.', false],
+    ['delete', 'Remove the file', 'Music Index removed the entry.', true],
+  ], `ADR 0208 item 6: with removal_done, the sheet has three goal rows. ${fix}`);
+  assert.ok(all.every((choice) => !('recommended' in choice)),
+    `ADR 0208 item 7: no row has a tag. ${fix}`);
   for (const value of [null, { removal_done: false }, ...[
     'not_yet', 'held_with_other_guid', 'not_known_failed', 'not_known_no_guid', 'not_read',
   ].map((answer) => ({ removal_done: false, removal: { answer } }))]) {
-    const choices = deleteChoices(value);
-    assert.deepEqual(choices.map(({ title }) => title), ['Move It to a Different File Host', 'Retire It'],
-      'ADR 0200 items 2 and 3: a feed that Music Index may hold has no delete row. Fix deleteChoices in crates/api/ui/feeddelete.js.');
-    assert.ok(choices.every((choice) => !('recommended' in choice)),
-      'ADR 0200 item 2: two rows have no tag. Fix deleteChoices in crates/api/ui/feeddelete.js.');
+    assert.deepEqual(deleteChoices(value).map(({ action }) => action), ['move', 'retire'],
+      `ADR 0208 item 6 and ADR 0200 items 2 and 3: a feed that Music Index may hold has no delete row. ${fix}`);
+  }
+});
+
+test('the domain line gives the words of ADR 0208 item 1 or null', () => {
+  assert.deepEqual(domainLine('music.example'), {
+    title: 'Keep the domain music.example.',
+    text: 'If it expires, its new owner can take over this feed and its payments.',
+  }, 'ADR 0208 item 1: the domain line has these words. Fix domainLine in crates/api/ui/feeddelete.js.');
+  for (const value of [null, undefined, '']) {
+    assert.equal(domainLine(value), null,
+      'ADR 0208 item 3: a feed with no host has no domain line. Fix domainLine in crates/api/ui/feeddelete.js.');
+  }
+});
+
+test('the last sheet gives the three state points of ADR 0208 item 10', () => {
+  assert.deepEqual(DELETE_POINTS, [
+    { mark: '✓', text: 'Music Index removed the entry' },
+    { mark: '✓', text: 'Studio keeps a copy of the feed' },
+    { mark: '↺', text: 'You can put the file back later with', button: 'Put the File Back', after: 'on this feed' },
+  ], 'ADR 0208 item 10: three state points. Fix DELETE_POINTS in crates/api/ui/feeddelete.js.');
+});
+
+test('the Retire block gives Put the File Back only for a done delete', () => {
+  assert.deepEqual(retireActions({ delete: 'done' }), ['restore', 'check'],
+    'ADR 0208 item 13: a done delete shows restore before check. Fix retireActions in crates/api/ui/feeddelete.js.');
+  for (const value of ['not_done', 'pending', undefined]) {
+    assert.deepEqual(retireActions({ delete: value }), ['check', 'stop'],
+      'ADR 0208 item 13: only a done delete shows restore. Fix retireActions in crates/api/ui/feeddelete.js.');
+  }
+});
+
+test('editor.js has no loss list and uses DomainLine in the four places', () => {
+  const editor = readFileSync(new URL('../ui/editor.js', import.meta.url), 'utf8');
+  assert.ok(!editor.includes('You lose these things'),
+    'ADR 0208 item 10: the list of losses is gone. Remove it from FeedDelete in crates/api/ui/editor.js.');
+  const place = (from, to) => {
+    const start = editor.indexOf(from);
+    assert.ok(start >= 0, `${from} is not in editor.js`);
+    return editor.slice(start, editor.indexOf(to, start));
+  };
+  const where = {
+    'the choice sheet': place('aria-labelledby="delete-host-title"', 'aria-labelledby="delete-feed-title"'),
+    'the last sheet': place('aria-labelledby="delete-feed-title"', '</dialog>'),
+    'the Retire block': place('<div class="retire-head">', '<dialog ref=${firstRef}'),
+    'the move sheet': place('aria-labelledby="move-release-title"', '</dialog>'),
+  };
+  for (const [name, text] of Object.entries(where)) {
+    assert.ok(text.includes('<${DomainLine} domain=${feed.address_host}'),
+      `ADR 0208 item 4: ${name} shows DomainLine. Add it in crates/api/ui/editor.js.`);
   }
 });
 
@@ -95,8 +143,10 @@ test('ADR 0198 keeps the destructive review button first and guards the write', 
 
 test('ADR 0198 hides actions that a deleted feed cannot use', () => {
   const editor = readFileSync(new URL('../ui/editor.js', import.meta.url), 'utf8');
-  assert.ok(editor.includes("retire.delete !== 'done' && html`<button class=\"button\" type=\"button\" disabled=${action.busy} onClick=${stopRetire}>Stop Retiring</button>"),
-    'ADR 0198 item 6: hide Stop Retiring after the delete.');
+  assert.ok(editor.includes('retireActions(retire).map(') && editor.includes('onClick=${stopRetire}>Stop Retiring</button>'),
+    'ADR 0198 item 6: the Retire block takes its buttons from retireActions, which hides Stop Retiring after the delete. Fix FeedDelete in crates/api/ui/editor.js.');
+  assert.ok(!retireActions({ delete: 'done' }).includes('stop'),
+    'ADR 0198 item 6: hide Stop Retiring after the delete. Fix retireActions in crates/api/ui/feeddelete.js.');
   assert.ok(editor.includes('!feed.host_deleted && candidates.length > 0'),
     'ADR 0198 item 7: hide the linked page picker after the delete.');
   assert.ok(editor.includes('!feed.host_deleted && candidates.length === 0'),

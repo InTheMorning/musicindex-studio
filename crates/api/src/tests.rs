@@ -2194,6 +2194,56 @@ async fn listed(app: &App, id: i64) -> Value {
 }
 
 #[tokio::test]
+async fn the_feed_row_gives_the_host_of_a_public_address_and_none_for_a_placeholder() {
+    let app = app();
+    let root = app.feeds.path().to_str().unwrap().to_owned();
+    let (status, public) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({ "kind": "local", "name": "Home", "root": root, "base_url": "https://Music.example" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    set_library_root(&app);
+    let (status, feed) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds",
+        Some(json!({ "connector_id": public["id"], "path": "album.xml" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    // ADR 0208 item 3: the host is lowercase and has no port or path.
+    assert_eq!(
+        listed(&app, feed["id"].as_i64().unwrap()).await["address_host"],
+        "music.example"
+    );
+
+    // A folder with no public address gives a placeholder address.
+    let other = tempfile::tempdir().unwrap();
+    let (_, folder) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({ "kind": "local", "name": "Folder", "root": other.path().to_str().unwrap() })),
+    )
+    .await;
+    let (status, feed) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds/new",
+        Some(json!({ "connector_id": folder["id"], "path": "b.xml", "title": "B", "author": "C" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(
+        listed(&app, feed["id"].as_i64().unwrap()).await["address_host"],
+        Value::Null
+    );
+}
+
+#[tokio::test]
 async fn the_feed_list_gives_the_draft_state_and_the_cover_image() {
     let app = app();
     let root = app.feeds.path().to_str().unwrap();

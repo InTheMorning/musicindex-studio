@@ -8,6 +8,7 @@
 - Changed by: [ADR 0165](0165-the-left-panel-marks-the-state-of-each-feed.md) item 5: the check runs for each feed after the feed list loads and at each open of Releases.
 - Source: [open items after `0.1.0-rc.19`, the request to detect a feed move, and the feed that two collections hold](../reviews/2026-11-06-local-use-findings.md)
 - Changed by: [ADR 0184](0184-after-a-move-studio-shows-the-podping-of-the-move.md). Item 5: after a move by Studio, the notice gives the podping of the move.
+- Changed by: [ADR 0211](0211-studio-follows-a-move-that-a-different-studio-made.md) items 1 to 8 and 19 to 21: the result "moved", its warning and the Warning color.
 
 ## Context
 

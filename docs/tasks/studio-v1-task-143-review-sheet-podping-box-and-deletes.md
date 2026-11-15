@@ -2,7 +2,22 @@
 
 Decision: [ADR 0209](../adr/0209-the-review-sheet-keeps-the-podping-box-in-view-and-names-each-delete.md).
 
-Status: Open. The code is not built.
+Status: Complete on 2026-11-14, with its screenshot visual check. One visual item and the human gate of ADR 0209 are open.
+
+## Result
+
+- ChatGPT did the build. The main session read the diff, ran the five checks and took the screenshots.
+- `announceLines(diff, enabled, wait)` gives each row with `text` and `hint`. `deleteWrite` gives **Delete 1 File** or **Delete N Files** for a write of only deletions. `refusedDelete` gives the warning row.
+- The main session made these corrections:
+    - The delegate changed `AnnounceChoice` for each use. The review page of a change set then had the short label, no hint and a call of a function that it did not give. Now `useAnnounceChoice` holds the state, `AnnounceChoice` keeps its form, and `AnnounceFooterChoice` is the footer form.
+    - The delegate removed the styles `.host-op-row .title`, `.host-op-row .sub` and `.host-op-row .kind.warning`. The page **Check** uses them. They are back.
+    - The delegate removed one assertion of ADR 0198 and changed one comment of ADR 0126. Both are back.
+    - The row of a move had each label on its own line, and the file host after the notes. Now a label and its values are one pair.
+    - The addresses of the new rows broke inside a word at 390 px. They now have the mark of musicindex ADR 0065 R-FIT-3 item 3.
+- The diff does not give the file host of the address before the move. The row uses the file host of the feed row, which the review sheet already has. A feed with no file host shows no name there.
+- Walk: `steps-143-usual.json` with `setup-none.py`, `steps-143-move.json` with `setup-142-move.py`, and `steps-143-deletes.json` with `setup-index-follows-later.py`. Each view at 1280 px light and 390 px dark gave no edge, overflow or fit finding.
+- At 390 px the footer has three rows: the check box, **Discard the Draft** and **Write to the File Host**. Each control is fully in view.
+- Open: no walk showed a refused deletion (visual item 3). Two Node tests prove its view and its markup.
 
 ## Goal
 
@@ -51,14 +66,16 @@ These come from a read on 2026-11-14. Make sure that each one is correct before 
 ## Changes
 
 1. `crates/api/ui/announce.js`:
-    - `announceLines(diff, enabled, wait)` gives one entry for each row, with `text` and an optional `hint`. An announcement row has the hint of `announceHint(true, wait)`. When `enabled` is false and the diff has no skip reason, it gives one row with the text of ADR 0209 item 3. The skip rows do not change.
+    - `announceLines(diff, enabled, wait)` gives one entry for each row, with `text` and an optional `hint`. An announcement row has the hint of `announceHint(true, wait)`.
+    - When `enabled` is false and the diff has no skip reason, it gives one row with the text of ADR 0209 item 3. The skip rows do not change.
     - Add `export const ANNOUNCE_FOOTER_LABEL = 'Send a podping'`.
 2. `crates/api/ui/editor.js`, the announcement:
     - The review sheet owns the state of the choice (the read and the write of `/settings/announcements`), so that the row at the top and the footer use one value. `AnnounceChoice` keeps its current form for the review page of a change set.
     - `AnnounceLines` shows `text`, and `hint` as a second line in the muted color.
     - The footer of the review sheet has the check box in its own row above the buttons, with `ANNOUNCE_FOOTER_LABEL`. It shows in the same conditions as the check box of today. An error of the save shows in the body of the sheet.
 3. `crates/api/ui/feeddelete.js`:
-    - `deleteWrite(diff)` keeps its result for a feed delete. For a diff with one or more operations, each of the kind `delete`, with `changed` false, no `feed_move` and no `deletes_feed_file`, it gives `{ label, destructive: true, cancel: null }`. The label is `Delete 1 File` or `Delete N Files`. In each other case it gives null.
+    - `deleteWrite(diff)` keeps its result for a feed delete.
+    - A diff of only deletions has one or more operations, each of the kind `delete`. It has `changed` false, no `feed_move` and no `deletes_feed_file`. For it, the function gives `{ label, destructive: true, cancel: null }`. The label is `Delete 1 File` or `Delete N Files`. In each other case it gives null.
     - Add `export function refusedDelete(blocked)`. It gives `{ kind: 'Not deleted', tone: 'warning', text }` with the text of ADR 0209 item 10 or item 11.
 4. `crates/api/ui/editor.js`, the footer: a view with `cancel: null` keeps the label **Discard the Draft** in the normal style and its usual disabled rule. The destructive write button is the first button.
 5. `crates/api/ui/editor.js`, the rows:

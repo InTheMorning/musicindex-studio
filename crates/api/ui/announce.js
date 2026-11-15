@@ -18,17 +18,21 @@ export function announceHint(enabled, wait) {
 // The lines of the review sheet for the announcements of a write. `diff` is
 // the diff of the API. An entry of `diff.announcements` gives one line. When
 // `diff.announce_skip` is set, one line gives the reason for no announcement.
-export function announceLines(diff) {
+export const ANNOUNCE_FOOTER_LABEL = 'Send a podping';
+
+export function announceLines(diff, enabled = true, wait = null) {
   const lines = [];
   const entries = diff && Array.isArray(diff.announcements) ? diff.announcements : [];
   for (const entry of entries) {
-    lines.push(`Tell Podcast Index and send a podping: ${entry.url}`);
+    lines.push({ text: `Tell Podcast Index and send a podping: ${entry.url}`, hint: announceHint(true, wait) });
   }
   const skip = diff ? diff.announce_skip : null;
   if (skip === 'no_address') {
-    lines.push('No announcement: this feed has no public address.');
+    lines.push({ text: 'No announcement: this feed has no public address.' });
   } else if (skip === 'feed_deleted') {
-    lines.push('No announcement: this write deletes the feed file.');
+    lines.push({ text: 'No announcement: this write deletes the feed file.' });
+  } else if (!enabled && entries.length === 0) {
+    lines.push({ text: 'No announcement. No index learns about this write until it reads the feed by itself.' });
   }
   return lines;
 }

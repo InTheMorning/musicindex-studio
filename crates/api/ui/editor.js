@@ -23,7 +23,7 @@ import { versionLabel, LOCK_HELP, hasSpace, spaceNotice, ROW_SPACE_NOTE, newFeed
 import { refusalView, refusalOfError, noticeViews, blocksWrite, repairRoute, returnWarning, REPLACES_POINTER_NOTE } from './movelink.js';
 import { pickFromIndex, remoteItemFromPick, addTrack, hasTrack, removeTrack, trackRow, tracksSummary } from './playlist.js';
 import { moveTo, moveAmong } from './order.js';
-import { announceLines, announceStatus, announceHint, isWaiting } from './announce.js';
+import { announceLines, announceStatus, announceHint, isWaiting, ANNOUNCE_FOOTER_LABEL } from './announce.js';
 import { npubOf, eventsToSign, signAll, signErrorText, signSummary, signProgressLabel, SignError, remoteSigner, signerChoice } from './signing.js';
 import { SignerConnect } from './signer.js';
 import { progressPercent } from './upload.js';
@@ -47,7 +47,7 @@ import { shortType as formatLabel, propertiesSummary, propertiesOpen, propertyRo
 import { MOVE_SCOPES, fileHostRows, planRows, stayRows, deleteLabel, deleteAllLabel, DELETE_NOTE_ON, DELETE_NOTE_OFF, waitLabel, waitingView, readyNotice, partMoveNotice, existsRefusalView, addDisabled, replacesCopyNote, replaceWarning, indexNeedsRead, INDEX_READ_AGAIN_MS } from './releasemove.js';
 import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary, artworkPreview } from './artwork.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, addsAsTrackFile, refusedText, wrongKindText, replacedAddresses, selectedFacts } from './picker.js';
-import { deleteChoices, deleteButtonEnabled, retireSteps, retireActions, domainLine, DELETE_POINTS, operationNote } from './feeddelete.js';
+import { deleteChoices, deleteButtonEnabled, retireSteps, retireActions, domainLine, DELETE_POINTS, operationNote, refusedDelete } from './feeddelete.js';
 
 // A text where only each web address can break inside a word (musicindex ADR
 // 0065 R-FIT-3 item 3).
@@ -1687,10 +1687,10 @@ function HostOperationRow({ op, connectors, onRemove, busy }) {
   return html`<div class="host-op-row">
     <span class="kind">${operationKindLabel(op.kind)}</span>
     <span class="text">
-      <span class="title">${connectorName(connectors, op.connector_id)}</span>
-      <span class="sub mono">${op.path}</span>
-      <span class="sub">${operationNote(op)}</span>
-      ${op.waiting && html`<span class="sub waiting">Waiting for the download. Studio writes it after the download.</span>`}
+      <span class="review-value">${connectorName(connectors, op.connector_id)}</span>
+      <span class="review-value mono">${op.path}</span>
+      <span class="review-note">${operationNote(op)}</span>
+      ${op.waiting && html`<span class="review-note waiting">Waiting for the download. Studio writes it after the download.</span>`}
     </span>
     <span class="size">${fileSize(op.size)}</span>
     ${op.operation_id !== null && html`<button class="button" type="button" disabled=${busy}
@@ -1701,17 +1701,22 @@ function HostOperationRow({ op, connectors, onRemove, busy }) {
 // The move of the feed XML to a different host (ADR 0038 item 16). It
 // is the first row of the operations. "Undo" puts the feed XML back on the
 // host of the feed.
-function FeedMoveRow({ move, connectors, onUndo, busy }) {
+function FeedMoveRow({ move, connectors, onUndo, busy, fromConnectorId = null }) {
+  // A label and its values (ADR 0209 items 6 and 7). The file host of the
+  // address before the move is the file host of the feed row.
+  const pair = (label, address, connectorId) => html`<span class="review-pair">
+    <span class="review-label">${label}</span>
+    <span class="review-values"><span class="review-value mono" data-fit-allow-break>${address}</span>
+      ${connectorId != null && html`<span class="review-value">${connectorName(connectors, connectorId)}</span>`}</span>
+  </span>`;
   return html`<div class="host-op-row">
     <span class="kind">Move</span>
     <span class="text">
-      <span class="title">Move the feed</span>
-      ${move.from_url && html`<span class="sub">From <span class="mono">${move.from_url}</span></span>`}
-      <span class="sub">To <span class="mono">${move.url}</span></span>
-      <span class="sub">${moveNote(move.method)}</span>
-      ${move.replaces_pointer && html`<span class="sub">${REPLACES_POINTER_NOTE}</span>`}
-      ${replacesCopyNote(move) && html`<span class="sub">${replacesCopyNote(move)}</span>`}
-      <span class="sub">${connectorName(connectors, move.connector_id)}</span>
+      ${move.from_url && pair('From', move.from_url, fromConnectorId)}
+      ${pair('To', move.url, move.connector_id)}
+      <span class="review-note">${moveNote(move.method)}</span>
+      ${move.replaces_pointer && html`<span class="review-note">${REPLACES_POINTER_NOTE}</span>`}
+      ${replacesCopyNote(move) && html`<span class="review-note">${replacesCopyNote(move)}</span>`}
     </span>
     <button class="button" type="button" disabled=${busy} onClick=${onUndo}>Undo</button>
   </div>`;
@@ -1791,18 +1796,15 @@ function BuildDateNotices({ state }) {
     ${view.value && html`${' '}<span class="mono">${view.value}</span>`}</div>`);
 }
 
-// A deletion that Studio refuses because a feed of the library refers to
-// the file (ADR 0036 item 13). The row uses the error color, not an
-// entity color (ADR 0018).
+// A refused deletion uses the Warning color and kind (ADR 0209 item 9).
 function BlockedDeleteRow({ blocked, connectors, onRemove, busy }) {
-  return html`<div class="host-op-row error" role="alert">
-    <span class="kind">Delete</span>
+  const view = refusedDelete(blocked);
+  return html`<div class="host-op-row warning" role="status">
+    <span class="kind"><${Icon} name="alert" />${view.kind}</span>
     <span class="text">
-      <span class="title">${connectorName(connectors, blocked.connector_id)}</span>
-      <span class="sub mono">${blocked.path}</span>
-      <span class="sub">${blocked.pointer
-        ? 'Studio keeps this file. It tells the apps the new address of the feed.'
-        : `Studio cannot delete this file. These feeds refer to it: ${blocked.feed_titles.join(', ')}`}</span>
+      <span class="review-value">${connectorName(connectors, blocked.connector_id)}</span>
+      <span class="review-value mono">${blocked.path}</span>
+      <span class="review-note">${view.text}</span>
     </span>
     <button class="button" type="button" disabled=${busy}
       onClick=${() => onRemove(blocked.operation_id)}>Undo</button>
@@ -1810,10 +1812,10 @@ function BlockedDeleteRow({ blocked, connectors, onRemove, busy }) {
 }
 
 // Each host operation of the diff, above the XML diff (ADR 0036 item 14).
-function HostOperations({ diff, connectors, onRemove, onUndoMove, busy }) {
+function HostOperations({ diff, connectors, onRemove, onUndoMove, busy, fromConnectorId }) {
   if (diff.operations.length === 0 && diff.blocked.length === 0 && !diff.feed_move) return null;
   return html`<div class="group host-ops">
-    ${diff.feed_move && html`<${FeedMoveRow} move=${diff.feed_move} connectors=${connectors} onUndo=${onUndoMove} busy=${busy} />`}
+    ${diff.feed_move && html`<${FeedMoveRow} move=${diff.feed_move} connectors=${connectors} onUndo=${onUndoMove} busy=${busy} fromConnectorId=${fromConnectorId} />`}
     ${diff.operations.map((op) => html`<${HostOperationRow}
       key=${`${op.kind}-${op.connector_id}-${op.path}`} op=${op} connectors=${connectors} onRemove=${onRemove} busy=${busy} />`)}
     ${diff.blocked.map((b) => html`<${BlockedDeleteRow}
@@ -1822,17 +1824,24 @@ function HostOperations({ diff, connectors, onRemove, onUndoMove, busy }) {
 }
 
 // The one announcement choice of a write (ADR 0136). Studio remembers it for
-// the next write. `onChange` gets the diff again after a change.
-export function AnnounceChoice({ onChange, wait = null }) {
+// the next write. `onChange` gets the diff again after a change. `enabled`
+// is null until the first read.
+function useAnnounceChoice(onChange) {
   const [enabled, setEnabled] = useState(null);
   const { busy, error, run } = useAction();
   useEffect(() => { api('/settings/announcements').then((result) => setEnabled(result.enabled), () => {}); }, []);
-  if (enabled === null) return null;
   const change = (next) => run(async () => {
     const result = await api('/settings/announcements', { method: 'PUT', body: { enabled: next } });
     setEnabled(result.enabled);
     if (onChange) await onChange();
   });
+  return { enabled, busy, error, change };
+}
+
+// The check box of the review page of a change set (ADR 0209 item 5).
+export function AnnounceChoice({ onChange, wait = null }) {
+  const { enabled, busy, error, change } = useAnnounceChoice(onChange);
+  if (enabled === null) return null;
   return html`<div class="announce-choice">
     <label class="check"><input type="checkbox" checked=${enabled} disabled=${busy} onChange=${(e) => change(e.target.checked)} />
       <span>Tell Podcast Index and send a podping</span></label>
@@ -1841,16 +1850,26 @@ export function AnnounceChoice({ onChange, wait = null }) {
   </div>`;
 }
 
+// The check box in the footer of the review sheet (ADR 0209 items 1 and 2).
+// The row Announce of the sheet has the address, the hint and the error.
+function AnnounceFooterChoice({ choice }) {
+  if (choice.enabled === null) return null;
+  return html`<div class="announce-footer-row">
+    <label class="check"><input type="checkbox" checked=${choice.enabled} disabled=${choice.busy} onChange=${(e) => choice.change(e.target.checked)} />
+      <span>${ANNOUNCE_FOOTER_LABEL}</span></label>
+  </div>`;
+}
+
 // The announcements of a write (ADR 0052 item 11). The lines show when the
 // sheet can write, also when the feed text did not change. Each line has the
 // form of a host operation row, with no button.
-function AnnounceLines({ diff }) {
-  const lines = announceLines(diff);
+function AnnounceLines({ diff, enabled, wait }) {
+  const lines = announceLines(diff, enabled, wait);
   if (lines.length === 0) return null;
   return html`<div class="group announce-lines">
-    ${lines.map((line) => html`<div class="host-op-row" key=${line}>
+    ${lines.map((line) => html`<div class="host-op-row" key=${line.text}>
       <span class="kind">Announce</span>
-      <span class="text">${line}</span>
+      <span class="text"><span class="review-value">${breakableText(line.text)}</span>${line.hint && html`<span class="review-note">${line.hint}</span>`}</span>
     </div>`)}
   </div>`;
 }
@@ -1970,6 +1989,9 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
     await checkLinks();
   });
   const refreshDiff = async () => setDiff(await api(`/feeds/${feedId}/diff`));
+  // The announcement choice. The row Announce and the footer use one value
+  // (ADR 0209 items 1 to 3).
+  const announce = useAnnounceChoice(refreshDiff);
   // The sheet examines the draft each time that it opens.
   useEffect(() => { if (open) examine(); }, [open]);
   const removeOperation = (operationId) => run(async () => {
@@ -2160,7 +2182,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
             ${problem.button && html`<div class="actions"><button class="button" type="button" disabled=${busy} onClick=${() => useStreamType(problem)}>${problem.button}</button></div>`}
           </div>`
         : html`<p class="field-warning" role="status" key=${problem.guid + problem.text}><strong>${problem.title}:</strong> ${problem.text}</p>`)}
-      ${diff && html`<${HostOperations} diff=${diff} connectors=${connectors} onRemove=${removeOperation} onUndoMove=${undoMove} busy=${busy} />`}
+      ${diff && html`<${HostOperations} diff=${diff} connectors=${connectors} onRemove=${removeOperation} onUndoMove=${undoMove} busy=${busy} fromConnectorId=${feedConnectorId} />`}
       ${diff && html`<${ReplaceWarning} move=${diff.feed_move} />`}
       ${diff && html`<${LinkNotices} report=${links} busy=${busy} onRepair=${repair} />`}
       ${diff && html`<${BuildDateNotices} state=${diff.build_date} />`}
@@ -2185,7 +2207,8 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
         The file at the address before the move stays and does not change. Apps that read that address continue to get the version from before the move.</div>`}
       ${hasWork && draft.model && draft.hidden && html`<div class="notice" role="status">
         <strong>This feed will be hidden from apps.</strong> Apps and directories do not list it after the write.</div>`}
-      ${hasWork && html`<${AnnounceLines} diff=${diff} />`}
+      ${hasWork && html`<${AnnounceLines} diff=${diff} enabled=${announce.enabled !== false} wait=${returnWait} />`}
+      <${ErrorNotice} error=${announce.error} />
       ${diff && html`<${GrantChecks} feedId=${feedId} model=${draft.model} diff=${diff} busy=${busy} signerHost=${signerHost} onDiff=${setDiff} run=${run} />`}
       ${diff && (diff.changed
         ? html`<${DiffView} diff=${diff} />`
@@ -2201,12 +2224,12 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
       ${showsExamine({ merge, diff, stale }) && html`<div class="actions">
         <button class="button" type="button" disabled=${busy || draft.status === 'loading'} onClick=${examine}>Examine the Changes</button>
       </div>`}
-      ${diff && hasWork && !addressesBlocked && !choosing && diff.announce_skip !== 'no_address' && diff.announce_skip !== 'feed_deleted' && html`<${AnnounceChoice} onChange=${refreshDiff} wait=${returnWait} />`}
     </div>
     <footer>
+      ${diff && hasWork && !addressesBlocked && !choosing && diff.announce_skip !== 'no_address' && diff.announce_skip !== 'feed_deleted' && html`<${AnnounceFooterChoice} choice=${announce} />`}
       ${deletion && diff && hasWork && !addressesBlocked && !choosing && html`<button class="button destructive" type="button" disabled=${busy || waiting || needsSigner || streamRefusal || blocksWrite(links)} onClick=${write}>
         ${progress ? signProgressLabel(progress) : busy ? 'Writing…' : deletion.label}</button>`}
-      <button class=${`button${deletion ? '' : ' destructive'}`} type="button" disabled=${busy || (!deletion && !draft.changed)} onClick=${discard}>${deletion ? deletion.cancel : 'Discard the Draft'}</button>
+      <button class=${`button${deletion ? '' : ' destructive'}`} type="button" disabled=${busy || (!deletion && !draft.changed)} onClick=${discard}>${deletion && deletion.cancel ? deletion.cancel : 'Discard the Draft'}</button>
       ${!deletion && diff && hasWork && !addressesBlocked && !choosing && html`<button class="button primary" type="button" disabled=${busy || waiting || needsSigner || streamRefusal || blocksWrite(links)} onClick=${write}>
         ${progress ? signProgressLabel(progress) : busy ? 'Writing…' : 'Write to the File Host'}</button>`}
     </footer>

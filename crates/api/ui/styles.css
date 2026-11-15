@@ -2000,12 +2000,19 @@ button.outline-feed {
 .host-op-row { display: flex; align-items: center; gap: 12px; min-height: var(--row); padding: 10px 16px; flex-wrap: wrap; }
 .host-op-row .kind { flex: none; width: 5.5rem; font-weight: 600; }
 .host-op-row .kind.warning { color: var(--error); }
+.host-op-row.warning { color: var(--warning); }
+.host-op-row.warning .kind { color: var(--warning); }
+.host-op-row.warning .kind svg { width: 16px; height: 16px; vertical-align: -3px; margin-inline-end: 4px; }
 .host-op-row .text { flex: 1; min-width: 0; display: grid; overflow-wrap: anywhere; }
 .host-op-row .title { font-weight: 600; }
 .host-op-row .sub { color: var(--muted); font-size: var(--text-callout); overflow-wrap: anywhere; }
+.host-op-row .review-value { display: block; color: var(--text); overflow-wrap: anywhere; }
+.host-op-row .review-value:not(.mono) { font-weight: 600; }
+.host-op-row .review-label, .host-op-row .review-note { color: var(--muted); font-size: var(--text-callout); overflow-wrap: anywhere; }
+.host-op-row .review-note { font-weight: 400; }
+.host-op-row .review-pair { display: grid; grid-template-columns: 3rem minmax(0, 1fr); gap: 0 8px; align-items: baseline; margin-bottom: 4px; }
+.host-op-row .review-values { display: grid; min-width: 0; }
 .host-op-row .size { flex: none; color: var(--muted); font-size: var(--text-callout); font-variant-numeric: tabular-nums; }
-.host-op-row.error { color: var(--error); }
-.host-op-row.error .sub { color: var(--error); }
 .report { margin: 0; background: var(--level-3); border-radius: 12px; padding: 12px 16px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--text-callout); }
 .way { display: grid; gap: 2px; padding: 12px 16px; }
 .way + .way { border-top: 1px solid var(--sep); }
@@ -2040,7 +2047,7 @@ button.outline-feed {
 .download-bar { height: 6px; border-radius: 3px; background: var(--fill); overflow: hidden; }
 .download-bar span { display: block; height: 100%; background: var(--accent); }
 .hint.error-text { color: var(--error); }
-.host-op-row .sub.waiting { color: var(--text); font-weight: 600; }
+.host-op-row .review-note.waiting { color: var(--text); font-weight: 600; }
 /* In a group narrower than 560 px, the kind word and the text keep the first
    line and the button goes below the text (ADR 0126, ADR 0197 item 7). */
 @container (max-width: 559px) {
@@ -2139,6 +2146,8 @@ button.outline-feed {
 .announce-choice { display: grid; gap: 4px; }
 .announce-choice .hint { margin: 0; }
 .section > .announce-choice { padding: 0 4px; }
+.announce-footer-row { flex: 1 0 100%; min-width: 0; }
+.announce-footer-row .check { display: flex; align-items: center; gap: 8px; min-height: var(--target); }
 .player-time { flex: none; min-width: 11ch; color: var(--muted); font-variant-numeric: tabular-nums; text-align: end; }
 /* A drop target (ADR 0125). During a file drag, each target has a light
    outline, and the target below the pointer has the strong state. */

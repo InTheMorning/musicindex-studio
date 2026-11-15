@@ -89,14 +89,30 @@ export function deleteButtonEnabled(confirmText, typedText) {
 
 export function deleteWrite(diff) {
   const operations = diff?.operations || [];
-  if (!operations.some((op) => op.deletes_feed_file)) return null;
-  const deletes = operations.filter((op) => op.kind === 'delete');
+  if (operations.some((op) => op.deletes_feed_file)) {
+    const deletes = operations.filter((op) => op.kind === 'delete');
+    return {
+      label: deletes.length === 1 ? 'Delete the Feed File' : `Delete ${deletes.length} Files`,
+      destructive: true,
+      cancel: 'Cancel the Delete',
+    };
+  }
+  if (operations.length === 0 || diff.changed !== false || diff.feed_move || operations.some((op) => op.kind !== 'delete' || op.deletes_feed_file)) return null;
+  const deletes = operations;
   return {
-    label: deletes.length === 1
-      ? 'Delete the Feed File'
-      : `Delete ${deletes.length} Files`,
+    label: `Delete ${deletes.length} ${deletes.length === 1 ? 'File' : 'Files'}`,
     destructive: true,
-    cancel: 'Cancel the Delete',
+    cancel: null,
+  };
+}
+
+export function refusedDelete(blocked) {
+  return {
+    kind: 'Not deleted',
+    tone: 'warning',
+    text: blocked.pointer
+      ? 'Studio does not delete this file. It tells the apps the new address of the feed.'
+      : `Studio does not delete this file. These feeds use it: ${blocked.feed_titles.join(', ')}`,
   };
 }
 

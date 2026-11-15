@@ -112,7 +112,9 @@ Facts:
 - The other fields of the first tab are parts of the draft. "Title" and "Artist" change the feed file through Review and a write.
 - The menu also has the value "From the tracks" (ADR 0213 item 12), and its hint says that the feed file has no tag for the kind (item 16).
 
-Open: no task. The move changes ADR 0213 item 13. The task must say how a field that saves at once shows between fields of the draft.
+Operator choice, from the questionnaire of 2026-11-15, from drawings: a change of the menu saves at once, as before. A hint below the menu says "Saves at once. The feed file has no tag for the kind."
+
+Open: no task. The move changes ADR 0213 item 13.
 
 ### Note 8: The Domain Line After A Delete
 
@@ -139,7 +141,9 @@ Facts:
 
 Operator choice: remove the row **Announce**, and put the check box at the right side above **Write to the File Host**.
 
-Open: the choice changes ADR 0209 items 1 to 3. Each of the four things of Note 1 needs a new position, or a decision removes it. The orchestrator said on 2026-11-15 that ADR 0209 is not decided, so this session changed nothing.
+Operator choice, from the questionnaire of 2026-11-15, from drawings: "Box only". The footer shows only the check box. The address and the time of the send go. When no podping is possible, a line with the cause shows in the position of the check box.
+
+Open: the choice changes ADR 0209 items 1 to 3. The orchestrator said on 2026-11-15 that ADR 0209 is not decided, so this session changed nothing.
 
 ### Note 10: One Row In Review For "Hide From Apps"
 
@@ -169,7 +173,9 @@ Facts:
 - ADR 0175 lists two alternatives that the operator did not select on that date: a request some minutes after each write, and a row for a last write that the index has not read.
 - [ADR 0184](../adr/0184-after-a-move-studio-shows-the-podping-of-the-move.md) gives a notice with the podping state after a move only. The notice goes when Music Index gives the new address.
 
-Open: no decision. A confirmation after each write needs a request to Music Index after the write. That changes ADR 0175 item 1 and replaces the alternative that the operator did not select.
+Operator choice, from the questionnaire of 2026-11-15, from drawings: "Notice on the feed page". After a write with a podping, the feed page shows a notice with the state of the podping. Studio asks Music Index at intervals for some minutes. The notice changes to a confirmation, then goes. With no reply, the notice says so and has **Check Again**. The notice has the form of the notice of ADR 0184.
+
+Open: no ADR and no task. The requests after the write change ADR 0175 item 1.
 
 ### Note 12: An Added Live Item Shows Its Times In Review
 
@@ -222,7 +228,9 @@ Facts:
 - `Recipients` in `crates/api/ui/values.js` makes the rows of the tab **Value Routes** and of the payments of a track. The address row there has the text button **Change…**, and the recipient has the button **Remove**. It has no menu button.
 - The two rows use the same CSS class `address-row`.
 
-Open: no task. A recipient of a feed has no default address, so the menu of ADR 0210 item 2 does not fit as it is. The task must say which entries the menu of a recipient row has. The operator has not decided on ADR 0210, from the message of the orchestrator on 2026-11-15.
+Operator choice, from the questionnaire of 2026-11-15, from drawings: "Menu, Remove stays a button". The address row of a recipient gets the menu button of the People row, with **Change…**, **Copy** and **Save to People**. The destructive button **Remove** stays below the row. The operator asked that the row uses the People code again and is not a copy.
+
+Open: no task. A recipient of a feed has no default address, so the menu has no **Make Default**. The choice adds the recipient rows to ADR 0210 item 6. The operator has not decided on ADR 0210, from the message of the orchestrator on 2026-11-15.
 
 ## Results Of The Steps
 

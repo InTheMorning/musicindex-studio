@@ -181,7 +181,7 @@ Facts:
 
 Operator choice, from the questionnaire of 2026-11-15, from drawings: "Notice on the feed page". After a write with a podping, the feed page shows a notice with the state of the podping. Studio asks Music Index at intervals for some minutes. The notice changes to a confirmation, then goes. With no reply, the notice says so and has **Check Again**. The notice has the form of the notice of ADR 0184.
 
-Open: [task 155a](../tasks/studio-v1-task-155a-last-write-facts-in-the-outside-check.md) and [task 155b](../tasks/studio-v1-task-155b-notice-after-a-write-with-a-podping.md) are not started. The requests after the write change ADR 0175 item 1, in the commit of task 155b. Task 155b uses three recommended values that the operator has not selected: the interval, the time that the confirmation stays, and the age limit of a write.
+Open: [task 155a](../tasks/studio-v1-task-155a-last-write-facts-in-the-outside-check.md) and [task 155b](../tasks/studio-v1-task-155b-notice-after-a-write-with-a-podping.md) are complete. The screenshot visual check of task 155b passed. ADR 0175 item 1 permits the requests after the write. The operator has not selected three recommended values of task 155b. They are the interval, the time that the confirmation stays, and the age limit of a write.
 
 ### Note 12: An Added Live Item Shows Its Times In Review
 

@@ -2,7 +2,19 @@
 
 Decision: [ADR 0175](../adr/0175-the-check-shows-what-music-index-holds.md) item 1. The main session changes item 1 in the commit of this task, with a `- Revised:` line. Item 1 then permits the requests of this notice. [ADR 0184](../adr/0184-after-a-move-studio-shows-the-podping-of-the-move.md) gives the form of the notice.
 
-Status: Not started. The packet is ready for a delegate after task 155a.
+Status: Complete on 2026-11-15. The main session recorded the visual gate.
+
+## Result
+
+- The delegate was `gpt-6-luna` with medium effort.
+- Correction of the main session: **Check Again** could not start the requests again. The limit of 15 requests at 20 seconds is equal to the age limit of 5 minutes. Thus the write was always too old after the last request. `writeNotice` and `nextNoticeLoad` now get `since`, the time of the last **Check Again**. The age of the write starts at that time.
+- Correction of the main session: the limit of 15 requests also stopped the next load of a podping that waits. The limit now applies only to the requests at 20 seconds.
+- Step 7: the page uses `ANNOUNCE_RELOAD`. A write of a change set sends that event and does not call `onWritten`. A write from Review gives two requests at the same time, one from the new `last_version` and one from the event.
+- The gate passed on the tree with this change (815 Node tests).
+- Visual 1: the notice shows at 1280 px and at 390 px, in Light and in Dark. No finding from `$edges()` or `$overflow()`.
+- Visual 2: the notice became the confirmation at 1280 px Light and at 390 px Dark. After the confirmation, the responder got no more requests.
+- Visual 3: with no read, the responder got requests at 44 s and then each 20 s until 304 s. Then the requests stopped, and the notice showed the state with no reply and **Check Again**. After **Check Again**, the notice showed the waiting state again, and the requests started again at 20 second intervals.
+- Visual 4: a write with the check box off showed no notice. A move is proved by tests: the server gives `last_write: null` for a move, and a Node test proves that `writeNotice` gives `null` when `moveNotice` gives a notice.
 
 Source: [walk notes of 2026-11-15](../reviews/2026-11-15-walk-notes.md), Note 11.
 

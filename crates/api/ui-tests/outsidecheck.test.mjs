@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { outsideMark, outsideNotice, readOnlyHostNotice, indexNotice, moveNotice, nextNoticeLoad, LATE_NOTICE_LOAD, eachLimited, OUTSIDE_LIMIT, panelSet, stateMark } from '../ui/outsidecheck.js';
+import { outsideMark, outsideNotice, readOnlyHostNotice, indexNotice, moveNotice, writeNotice, nextNoticeLoad, LATE_NOTICE_LOAD, eachLimited, OUTSIDE_LIMIT, panelSet, stateMark } from '../ui/outsidecheck.js';
 import { pageSequence, tierError } from '../ui/pages.js';
 
 test('A tile has a mark for a change and a move, and none for an index difference (ADR 0150 items 2, 3 and 5)', () => {
@@ -80,6 +80,28 @@ test('A Studio move notice has no send button with no public address (ADR 0184 i
   assert.equal(notice.lines[1].action, undefined);
 });
 
+test('ADR 0175 item 1: a write notice gives its states and suppresses inapplicable notices', () => {
+  const check = { own_url: 'https://x/feed.xml', last_write: {
+    written_at: 100, index_read: false,
+    announcements: [{ url: 'https://x/feed.xml', state: 'waiting', send_at: 110 }],
+  } };
+  const waiting = writeNotice(check, { reads: 1, nowSeconds: 120, confirmedHere: false });
+  assert.match(waiting.strong, /^You wrote this feed at /, 'ADR 0175 item 1: show the waiting write text. Fix: use the required local-time text.');
+  assert.equal(waiting.lines[0].state, 'waiting', 'ADR 0175 item 1: show the podping line. Fix: reuse the announcement state.');
+  const confirmed = writeNotice({ ...check, last_write: { ...check.last_write, index_read: true } }, { reads: 2, nowSeconds: 120, confirmedHere: true });
+  assert.match(confirmed.strong, /^Music Index has your write of /, 'ADR 0175 item 1: confirm a read after waiting. Fix: return the confirmation text.');
+  const noReply = writeNotice(check, { reads: 15, nowSeconds: 120, confirmedHere: false });
+  assert.match(noReply.strong, /^Music Index has not read your write of /, 'ADR 0175 item 1: show no reply at the read limit. Fix: return the no-reply state.');
+  assert.deepEqual([waiting.kind, confirmed.kind, noReply.kind], ['waiting', 'confirmed', 'no_reply'], 'ADR 0175 item 1: each state has its kind. Fix: set kind in writeNotice.');
+  assert.equal(noReply.action, 'Check Again', 'ADR 0175 item 1: offer Check Again. Fix: set the notice action.');
+  assert.equal(writeNotice(null, { reads: 0, nowSeconds: 120, confirmedHere: false }), null, 'ADR 0175 item 1: no check gives no notice. Fix: return null.');
+  assert.equal(writeNotice({ last_write: null }, { reads: 0, nowSeconds: 120, confirmedHere: false }), null, 'ADR 0175 item 1: no write gives no notice. Fix: return null.');
+  assert.equal(writeNotice({ last_write: { ...check.last_write, index_read: null, announcements: [] } }, { reads: 0, nowSeconds: 120, confirmedHere: false }), null, 'ADR 0175 item 1: no answer and no waiting podping gives no notice. Fix: return null.');
+  assert.equal(writeNotice({ index_is_move_source: true, last_move: {}, last_write: check.last_write }, { reads: 1, nowSeconds: 120, confirmedHere: false }), null, 'ADR 0175 item 1: a move suppresses the write notice. Fix: return null.');
+  assert.equal(writeNotice({ ...check, last_write: { ...check.last_write, index_read: true } }, { reads: 2, nowSeconds: 120, confirmedHere: false }), null, 'ADR 0175 item 1: a first-load confirmation stays hidden. Fix: require confirmedHere.');
+  assert.match(writeNotice(check, { reads: 1, nowSeconds: 401, confirmedHere: false }).strong, /^Music Index has not read/, 'ADR 0175 item 1: an old write shows no reply. Fix: use the five-minute limit.');
+});
+
 test('ADR 0189 item 6: a waiting podping loads again five seconds after its send time', () => {
   const check = { last_move: { announcements: [
     { state: 'waiting', send_at: 110 },
@@ -97,6 +119,25 @@ test('ADR 0189 item 6: sent, failed, not-sent, and absent notices have no next l
   assert.equal(nextNoticeLoad({ last_move: { announcements: [] } }, 100), null);
   assert.equal(nextNoticeLoad(null, 100), null);
   assert.equal(nextNoticeLoad({ announcements: [{ state: 'waiting', send_at: 110 }] }, 100), null);
+});
+
+test('ADR 0175 item 1: a write check uses the move read limit and delay', () => {
+  assert.equal(nextNoticeLoad({ last_write: { index_read: false } }, 100, 0), 20000, 'ADR 0175 item 1: read again after 20 seconds. Fix: use INDEX_READ_AGAIN_MS.');
+  assert.equal(nextNoticeLoad({ last_write: { index_read: false } }, 100, 15), null, 'ADR 0175 item 1: stop after 15 reads. Fix: use INDEX_READ_AGAIN_MAX.');
+  assert.equal(nextNoticeLoad({ last_write: { index_read: false, written_at: 100 } }, 401, 1), null, 'ADR 0175 item 1: an old write gets one request on page load. Fix: do not schedule another read after five minutes.');
+  assert.equal(nextNoticeLoad({ last_write: { index_read: true } }, 100, 0), null, 'ADR 0175 item 1: a read write needs no poll. Fix: return null.');
+  const old = { last_write: { index_read: false, written_at: 100, announcements: [] } };
+  assert.equal(nextNoticeLoad(old, 401, 0, 400), 20000, 'ADR 0175 item 1: Check Again starts the reads again for an old write. Fix: count the age from the later of written_at and since.');
+  assert.equal(writeNotice(old, { reads: 1, nowSeconds: 401, confirmedHere: false, since: 400 }).kind, 'waiting', 'ADR 0175 item 1: after Check Again an old write waits again. Fix: count the age from the later of written_at and since.');
+  const writeWaits = { last_write: { index_read: false, written_at: 100, announcements: [{ state: 'waiting', send_at: 110 }] } };
+  assert.equal(nextNoticeLoad(writeWaits, 100, 15), 15000, 'ADR 0175 item 1: a waiting podping loads again after the read limit. Fix: apply the read limit only to the 20-second reads.');
+  const source = readFileSync(new URL('../ui/releasemove.js', import.meta.url), 'utf8');
+  const both = { last_move: { announcements: [{ state: 'not_sent' }] }, last_write: { index_read: null, written_at: 100, announcements: [{ state: 'waiting', send_at: 110 }] } };
+  assert.equal(nextNoticeLoad(both, 100, 1), 15000, 'ADR 0175 item 1: a waiting podping of a write loads again when the feed has an older move. Fix: read the announcements of last_move and of last_write.');
+  const own = readFileSync(new URL('../ui/outsidecheck.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(own, /reads >= \d/, 'ADR 0175 item 1: one read-limit definition. Fix: use INDEX_READ_AGAIN_MAX from releasemove.js.');
+  assert.equal((source.match(/export const INDEX_READ_AGAIN_MS\s*=/g) || []).length, 1, 'ADR 0175 item 1: one delay definition. Fix: keep the shared constant in releasemove.js.');
+  assert.equal((source.match(/export const INDEX_READ_AGAIN_MAX\s*=/g) || []).length, 1, 'ADR 0175 item 1: one read-limit definition. Fix: keep the shared constant in releasemove.js.');
 });
 
 test('eachLimited runs at most the limit and continues after a failure (ADR 0150 item 11)', async () => {

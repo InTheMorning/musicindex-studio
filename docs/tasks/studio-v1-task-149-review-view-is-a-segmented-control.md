@@ -2,7 +2,14 @@
 
 Decision: none. This is Note 13 of the walk. musicindex ADR 0051 R-SEG-1 owns the segmented control, and [ADR 0157](../adr/0157-the-page-tabs-are-a-segmented-control.md) gives its use in Studio. The task adds no rule.
 
-Status: Not started. The packet is ready for a delegate.
+Status: Complete on 2026-11-15, with the screenshot visual check. The visual gate for the operator is open.
+
+## Result
+
+- The delegate was `gpt-6-luna` with medium effort.
+- Screenshots of the main session: Review of a draft at 1280 px and at 390 px, in the light theme and the dark theme. The two segments, the hint and the button fit. `$edges()` and `$overflow()` are empty. One click changes the view.
+- The Left Arrow key moves the focus from "Detailed" to "Simplified". The focus ring comes from the rule `:focus-visible` of the style sheet. A script cannot make that ring show, so this part of the visual gate is open.
+- The fit check at 390 px reports word breaks in the XML lines of the detailed view. This task does not change those lines.
 
 Source: [walk notes of 2026-11-15](../reviews/2026-11-15-walk-notes.md).
 

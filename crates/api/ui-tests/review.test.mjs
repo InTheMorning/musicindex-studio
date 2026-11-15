@@ -204,3 +204,14 @@ test('Examine the Changes shows only with no result or with a result that is not
   assert.equal(showsExamine({ merge: null, diff, stale: true }), true);
   assert.equal(showsExamine({ merge: {}, diff: null, stale: true }), false);
 });
+
+test('Review uses the shared segmented control for its view', () => {
+  const source = readFileSync(new URL('../ui/editor.js', import.meta.url), 'utf8');
+  const viewbar = source.match(/<div class="viewbar">([\s\S]*?)<\/div>\s*\$\{view === 'simplified'/)?.[1];
+  assert.ok(viewbar, 'musicindex ADR 0051 R-SEG-1: keep the Review view bar.');
+  assert.doesNotMatch(viewbar, /<select\b/, 'musicindex ADR 0051 R-SEG-1: replace the select with a segmented control.');
+  assert.match(viewbar, /class="segmented"/, 'musicindex ADR 0051 R-SEG-1: use the segmented control class.');
+  assert.match(viewbar, /VIEWS\.map/, 'musicindex ADR 0051 R-SEG-1: make each view a segment from VIEWS.');
+  assert.match(viewbar, /onKeyDown=\$\{onSegmentKey\}/, 'musicindex ADR 0051 R-SEG-1: use onSegmentKey for keyboard focus.');
+  assert.match(viewbar, /VIEW_HINTS\[view\]/, 'musicindex ADR 0051 R-SEG-1: keep the hint for the selected view.');
+});

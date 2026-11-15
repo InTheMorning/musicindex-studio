@@ -1607,14 +1607,11 @@ export function DiffView({ diff }) {
   return html`<div class="review-lines">
     <div class="viewbar">
       <div class="field">
-        <label for=${idRef.current}>View</label>
-        <div class="field-body">
-          <span class="hint" id=${`${idRef.current}-hint`}>${VIEW_HINTS[view]}</span>
-          <select id=${idRef.current} value=${view} aria-describedby=${`${idRef.current}-hint`}
-            onChange=${(e) => chooseView(normalizeView(e.target.value))}>
-            ${VIEWS.map((v) => html`<option value=${v}>${VIEW_LABELS[v]}</option>`)}
-          </select>
+        <div class="segmented" role="group" aria-label="View" aria-describedby=${`${idRef.current}-hint`} onKeyDown=${onSegmentKey}>
+          ${VIEWS.map((v) => html`<button class="segment" type="button" aria-pressed=${view === v} tabIndex=${view === v ? 0 : -1}
+            onClick=${() => chooseView(v)}>${VIEW_LABELS[v]}</button>`)}
         </div>
+        <span class="hint" id=${`${idRef.current}-hint`}>${VIEW_HINTS[view]}</span>
       </div>
       ${view === 'detailed' && html`<button class="button" type="button" onClick=${() => setWhole(!whole)}>${whole ? 'Show Only the Changes' : 'Show the Whole File'}</button>`}
     </div>

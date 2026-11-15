@@ -312,6 +312,24 @@ Design:
 8. The notices of a different address and of an outside change must follow the warning rules, and "Changed outside Studio" must not be blue (server).
 9. The sequence of the buttons in the wallet rows on the phone (iPhone, step 1).
 
+## Operator Choices Of 2026-11-14
+
+The operator answered a questionnaire about the list above. These lines record the answers.
+
+- Operator choice: the texts and the small defects come first. The small defects are defects 1, 3, 4 and 5. A new candidate comes after them.
+- Operator choice: texts 1, 2, 4 and 6 need no ADR. Their new words are:
+    - Text 1: "This feed will be hidden from apps."
+    - Text 2: "Music Index does not hold this feed." for a draft that is hidden from apps. ADR 0175 item 4 has the change.
+    - Text 4: "Studio discards any change that you did not write."
+    - Text 6: "＋ Add a Release" for each role, also on the first-step row of an artist. ADR 0164 item 2 and ADR 0119 items 8 and 9 have the change.
+- Operator choice: the older open human tests become one short walk on the next candidate. The walk leaves out each step that a later walk or an agent check proved.
+- Operator choice: each of these four groups gets mockups before a decision:
+    - The review sheet: design 1, 2, 3 and 5.
+    - The flow to make a feed: design 7.
+    - The moves by a different Studio: missing function 1 and design 8.
+    - The phone and the live shows: missing function 3 and design 9.
+- Open: texts 3, 5 and 7 have no new words. Defect 2 needs a measurement in WebKitGTK.
+
 Runbook text that is out of date: `docs/runbooks/operator-human-checks.md` says 7 days for a move, the button **Use** for a suggestion, and the return warning below the move row.
 
 These checks stay open after this walk: check 6, items 1 and 3 of Check E, and step 9 of the notes of 0.1.0-rc.22. Step 9 needs the next candidate on the server.

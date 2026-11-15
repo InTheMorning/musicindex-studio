@@ -6,6 +6,7 @@
 - Proposed: 2026-11-11 by the planning model, on the operator answers of 2026-11-11 in the questionnaire. The operator selected F3 as the next item. The operator selected items 1, 3, 5, 6, 8 and 10. The operator selected the rows in the tab **Check**, the level Warning, and no mark outside the tab.
 - Technical choices: items 2, 4, 7, 9 and 11 are choices of the planning model.
 - Accepted: 2026-11-13 by the operator, at the mockup of packet 110c. The operator selected **Show the Ways** for each different address (item 5) through the questionnaire, from a drawing.
+- Changed: 2026-11-14 by the operator, at the human check walk. Item 4 gives a hidden feed the line with no "yet".
 - Source: [research request on a feed check with repairs](../plans/research-feed-check-request.md), item F3.
 - Uses: [ADR 0007](0007-draft-diff-write-and-announce.md), [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md), [ADR 0045](0045-phase-9-crates-test-servers-and-host-forms.md), [ADR 0065](0065-the-core-applies-each-feed-rule.md), [ADR 0126](0126-studio-refuses-a-bad-move-link.md), [ADR 0127](0127-a-changed-feed-gets-a-new-build-date.md), [ADR 0174](0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md). Stophammer ADR 0052 and ADR 0058 own the rules of the index. This record cites them and does not restate them as rules of Studio.
 
@@ -35,7 +36,7 @@ These facts of the Stophammer API on 2026-11-11 apply:
 ### The Different Address
 
 3. The finding `index_address_differs` has the level Notice. It shows when the `feed_url` of the index is not the public address of the feed.
-4. A difference of spelling only (ADR 0174 item 12) gives no finding. When the index does not hold the feed, the check gives no finding and the line of item 10 says "Music Index does not hold this feed yet."
+4. A difference of spelling only (ADR 0174 item 12) gives no finding. When the index does not hold the feed, the check gives no finding and the line of item 10 says "Music Index does not hold this feed yet." For a draft that is hidden from apps, the line says "Music Index does not hold this feed.", because Music Index does not take a hidden feed.
 5. The button of the finding is **Show the Ways**. Its sheet gives two ways: an HTTP 301 redirect at the old host, and a request to the operator of the index. This finding changes no feed, so a read-only feed shows the button too. Studio puts no pointer file at the address of the index.
 
 ### The Copy That Pays Other People

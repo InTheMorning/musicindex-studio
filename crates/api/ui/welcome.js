@@ -124,13 +124,13 @@ export function nextStep(feed) {
 }
 
 // The add action of the releases of a publisher feed (ADR 0164 items 1, 2
-// and 6). It needs a file host. An artist gets "Add an Album" with the
-// artist name as the author. Any other role gets "Add a Release" with no
+// and 6). It needs a file host. Each role gets "Add a Release". An
+// artist gets the artist name as the author. Any other role gets no
 // start value. The page of the feed shows it only with no first-step row.
 export function releaseAdd(feed, name) {
   if (!feed || !isPublisher(feed) || !feed.connector_id) return null;
   if ((feed.publisher_roles || [])[0] === 'artist') {
-    return { label: 'Add an Album', start: { author: name || '' } };
+    return { label: 'Add a Release', start: { author: name || '' } };
   }
   return { label: 'Add a Release', start: {} };
 }
@@ -142,7 +142,7 @@ export const FIRST_STEPS = {
     icon: 'disc',
     title: 'Add your first album',
     line: 'Drop the songs in. Studio reads their names and order, and makes the album page.',
-    action: 'Add an Album',
+    action: 'Add a Release',
     open: 'album',
   },
   label: [

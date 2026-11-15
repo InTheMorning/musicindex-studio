@@ -30,7 +30,7 @@ export const CONFIRMS = {
     'Discard the Changes'),
   discardDraft: () => destructive(
     'Discard the draft?',
-    'Studio deletes each change that you did not write. The feed file on its file host does not change.',
+    'Studio discards any change that you did not write. The feed file on its file host does not change.',
     'Discard the Draft'),
   editAudioValues: () => destructive(
     'Edit these values by hand?',

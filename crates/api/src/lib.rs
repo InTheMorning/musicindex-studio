@@ -384,6 +384,11 @@ fn workspace_router_with_shared(workspace: Workspace) -> (Router, WorkspaceHandl
         .route("/feeds/{id}/refresh", post(routes::refresh_feed))
         .route("/feeds/{id}/outside", get(routes::outside_check))
         .route("/feeds/{id}/outside/keep", post(routes::outside_keep))
+        .route("/feeds/{id}/outside/follow", post(routes::outside_follow))
+        .route(
+            "/feeds/{id}/outside/use-host",
+            post(routes::outside_use_host),
+        )
         .route(
             "/settings/outside-check",
             get(routes::get_outside_setting).put(routes::put_outside_setting),

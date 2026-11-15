@@ -2,7 +2,20 @@
 
 Decision: [ADR 0211](../adr/0211-studio-follows-a-move-that-a-different-studio-made.md).
 
-Status: Open. The code is not built.
+Status: In progress. Packet 145a is complete on 2026-11-14. Packet 145b is open.
+
+## Result Of Packet 145a
+
+- ChatGPT did the build in two runs. The second run had a higher effort, because the first run had no test for four criteria. The main session read each diff and ran the five checks.
+- `outside::folder_address` gives the folder address from the address differences of the feed row. `compare_folder` gives `Moved` for a pointer file there. `outside_check` reads that address as a public address, and the answer has `new_host`.
+- `outside::follow_move_read` follows a move after the public read. `POST /feeds/{id}/outside/follow` and `POST /feeds/{id}/outside/use-host` are the routes. The feed row has `host_for_address`.
+- The main session made these corrections:
+    - The first run opened the file host of the feed in the outside check. That can need the vault. The check now uses the stored folder address (ADR 0211 item 2).
+    - The second run found a file host for an address through the open file hosts. A file host with a secret is not open while the vault is locked, and the feed list touched the vault. `host_for_address` now uses `address::folder_url` of each connector row, with no open file host.
+    - **Keep This File Host** did not hide the result of a pointer file at the folder address. `apply_result` now follows the kept file, as `apply_read` does.
+- The route `use-host` needs only that the feed exists, as `outside_keep`. It changes the collection and writes nothing to a host.
+- Tests: `a_folder_pointer_is_a_move_when_the_public_address_already_moved`, `follow_move_read_uses_a_connected_host_and_records_the_old_pointer`, `follow_move_read_without_a_host_keeps_an_edited_draft_and_snapshots`, `follow_move_read_refuses_a_different_guid_without_changing_the_feed_row`, `the_outside_follow_route_uses_a_connected_file_host`, `the_outside_follow_route_gives_a_read_only_feed_without_a_host`, `the_outside_follow_route_returns_both_move_conflicts`, `the_outside_use_host_route_connects_a_read_only_feed`, `the_outside_use_host_route_refuses_an_unknown_host` and `the_outside_check_finds_a_folder_pointer_when_the_public_address_already_moved`.
+- No test proves the correction for **Keep This File Host**.
 
 ## Goal
 

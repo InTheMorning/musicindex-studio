@@ -15636,6 +15636,334 @@ async fn outside_app() -> (App, studio_core::testing::TestServer, i64) {
     (app, server, id)
 }
 
+fn outside_move_xml(guid: &str, url: &str) -> Vec<u8> {
+    format!(
+        "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\" xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\"><channel><title>Album</title><podcast:guid>{guid}</podcast:guid><itunes:new-feed-url>{url}</itunes:new-feed-url></channel></rss>"
+    )
+    .into_bytes()
+}
+
+async fn outside_set_move(
+    app: &App,
+    server: &studio_core::testing::TestServer,
+    id: i64,
+    url: &str,
+    target_status: u16,
+    target: Vec<u8>,
+) {
+    let collection =
+        studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+            .unwrap();
+    let row = collection
+        .feed(studio_core::collection::FeedId(id))
+        .unwrap();
+    let connector = collection.connector(row.connector_id.unwrap()).unwrap();
+    let mut config: Value = serde_json::from_str(&connector.config).unwrap();
+    config["base_url"] = json!(server.url("/home"));
+    collection
+        .set_connector_config(connector.id, &config.to_string())
+        .unwrap();
+    server.set("/album.xml", 200, outside_move_xml("g-1", url));
+    server.set("/new/album.xml", target_status, target);
+    let (status, body) = call(app, "GET", &format!("/api/v1/feeds/{id}/outside"), None).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0211 item 2. Fix: check the moved feed address."
+    );
+    assert_eq!(
+        body["state"], "moved",
+        "ADR 0211 item 2. Fix: compare the folder and public reads."
+    );
+}
+
+#[tokio::test]
+async fn the_outside_follow_route_uses_a_connected_file_host() {
+    let (app, server, id) = outside_app().await;
+    let new_url = server.url("/new/album.xml");
+    let new_root = tempfile::tempdir().unwrap();
+    let (_, connector) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({
+            "kind": "local",
+            "name": "New host",
+            "root": new_root.path(),
+            "base_url": server.url("/new")
+        })),
+    )
+    .await;
+    outside_set_move(
+        &app,
+        &server,
+        id,
+        &new_url,
+        200,
+        outside_move_xml("g-1", &new_url),
+    )
+    .await;
+    let (status, followed) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/outside/follow"),
+        None,
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0211 item 12. Fix: follow the matching podcast:guid."
+    );
+    assert_eq!(
+        followed["read_only"], false,
+        "ADR 0211 item 13. Fix: use the connected file host."
+    );
+    let collection =
+        studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+            .unwrap();
+    assert_eq!(
+        collection
+            .feed(studio_core::collection::FeedId(id))
+            .unwrap()
+            .connector_id,
+        Some(studio_core::collection::ConnectorId(
+            connector["id"].as_i64().unwrap()
+        )),
+        "ADR 0211 item 13. Fix: set the feed to the connected host."
+    );
+}
+
+#[tokio::test]
+async fn the_outside_follow_route_gives_a_read_only_feed_without_a_host() {
+    let (app, server, id) = outside_app().await;
+    let new_url = server.url("/new/album.xml");
+    outside_set_move(
+        &app,
+        &server,
+        id,
+        &new_url,
+        200,
+        outside_move_xml("g-1", &new_url),
+    )
+    .await;
+    let (status, followed) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/outside/follow"),
+        None,
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0211 item 13. Fix: follow a valid public feed."
+    );
+    assert_eq!(
+        followed["read_only"], true,
+        "ADR 0211 item 15. Fix: mark the feed read-only without a connected host."
+    );
+}
+
+#[tokio::test]
+async fn the_outside_follow_route_returns_both_move_conflicts() {
+    let (app, server, id) = outside_app().await;
+    let new_url = server.url("/new/album.xml");
+    outside_set_move(&app, &server, id, &new_url, 500, Vec::new()).await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/outside/follow"),
+        None,
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::CONFLICT,
+        "ADR 0211 item 12. Fix: report a failed public read."
+    );
+    assert_eq!(
+        body["error"]["code"], "move_read_failed",
+        "ADR 0211 item 12. Fix: return move_read_failed."
+    );
+
+    let (app, server, id) = outside_app().await;
+    let new_url = server.url("/new/album.xml");
+    outside_set_move(
+        &app,
+        &server,
+        id,
+        &new_url,
+        200,
+        outside_move_xml("different", &new_url),
+    )
+    .await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/outside/follow"),
+        None,
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::CONFLICT,
+        "ADR 0211 item 12. Fix: refuse a different podcast:guid."
+    );
+    assert_eq!(
+        body["error"]["code"], "move_other_guid",
+        "ADR 0211 item 12. Fix: return move_other_guid."
+    );
+}
+
+#[tokio::test]
+async fn the_outside_use_host_route_connects_a_read_only_feed() {
+    let (app, server, id) = outside_app().await;
+    let new_url = server.url("/new/album.xml");
+    outside_set_move(
+        &app,
+        &server,
+        id,
+        &new_url,
+        200,
+        outside_move_xml("g-1", &new_url),
+    )
+    .await;
+    call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/outside/follow"),
+        None,
+    )
+    .await;
+    let root = tempfile::tempdir().unwrap();
+    call(&app, "POST", "/api/v1/connectors", Some(json!({ "kind": "local", "name": "New host", "root": root.path(), "base_url": server.url("/new") }))).await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/outside/use-host"),
+        None,
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0211 item 16. Fix: connect the host that gives the public address."
+    );
+    assert_eq!(
+        body,
+        json!({}),
+        "ADR 0211 item 16. Fix: return an empty success response."
+    );
+}
+
+#[tokio::test]
+async fn the_outside_use_host_route_refuses_an_unknown_host() {
+    let (app, server, id) = outside_app().await;
+    let new_url = server.url("/new/album.xml");
+    outside_set_move(
+        &app,
+        &server,
+        id,
+        &new_url,
+        200,
+        outside_move_xml("g-1", &new_url),
+    )
+    .await;
+    call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/outside/follow"),
+        None,
+    )
+    .await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/outside/use-host"),
+        None,
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::CONFLICT,
+        "ADR 0211 item 16. Fix: report that no connected host gives the address."
+    );
+    assert_eq!(
+        body["error"]["code"], "no_host_for_address",
+        "ADR 0211 item 16. Fix: return no_host_for_address."
+    );
+}
+
+#[tokio::test]
+async fn the_outside_check_finds_a_folder_pointer_when_the_public_address_already_moved() {
+    let (app, server, id) = outside_app().await;
+    let new_url = server.url("/new/album.xml");
+    let pointer = outside_move_xml("g-1", &new_url);
+    server.set("/new/album.xml", 200, FEED.as_bytes().to_vec());
+    server.set("/folder/album.xml", 200, pointer);
+    let mut collection =
+        studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+            .unwrap();
+    let feed_id = studio_core::collection::FeedId(id);
+    let row = collection.feed(feed_id).unwrap();
+    let connector_id = row.connector_id.unwrap();
+    collection
+        .set_address(
+            feed_id,
+            studio_core::address::AddressSource::Read,
+            Some(&new_url),
+        )
+        .unwrap();
+    let connector = collection.connector(connector_id).unwrap();
+    let mut config: Value = serde_json::from_str(&connector.config).unwrap();
+    config["base_url"] = json!(server.url("/folder"));
+    collection
+        .set_connector_config(connector_id, &config.to_string())
+        .unwrap();
+    studio_core::address::apply_folder_address(
+        &mut collection,
+        connector_id,
+        None,
+        &studio_core::net::NetPolicy::Open,
+    )
+    .unwrap();
+    let new_root = tempfile::tempdir().unwrap();
+    let (host_status, host) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({
+            "kind": "local",
+            "name": "New host",
+            "root": new_root.path(),
+            "base_url": server.url("/new")
+        })),
+    )
+    .await;
+    assert_eq!(
+        host_status,
+        StatusCode::CREATED,
+        "ADR 0211 item 3. Fix: connect the host that gives the new address."
+    );
+
+    let (status, body) = call(&app, "GET", &format!("/api/v1/feeds/{id}/outside"), None).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0211 item 3. Fix: read the folder address without opening its connector."
+    );
+    assert_eq!(
+        body["state"], "moved",
+        "ADR 0211 item 3. Fix: compare the folder pointer even when public_url already changed."
+    );
+    assert_eq!(body["new_url"], new_url);
+    assert_eq!(
+        body["new_host"], host["name"],
+        "ADR 0211 item 3. Fix: name the connected host for the new address."
+    );
+}
+
 #[tokio::test]
 async fn the_outside_check_finds_a_change_and_a_move_and_keeps_a_result_after_a_failed_read() {
     let (app, server, id) = outside_app().await;

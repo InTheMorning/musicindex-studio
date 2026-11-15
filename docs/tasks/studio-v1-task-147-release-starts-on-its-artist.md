@@ -2,7 +2,16 @@
 
 Decision: [ADR 0213](../adr/0213-a-release-starts-on-the-page-of-its-artist.md).
 
-Status: Open. The code is not built.
+Status: In progress. Packet 147a is complete on 2026-11-14. Packets 147b and 147c are open.
+
+## Result Of Packet 147a
+
+- ChatGPT did the build. The main session read the diff and ran the five checks.
+- One migration adds `release_kind` to `feeds`. `Collection::set_release_kind` sets it. `feed::release_kind_shown` gives the kind to show.
+- The feed row of the API has `release_kind` and `kind_shown` for a feed with the medium `music`. `POST /feeds/new` gets `kind` and `publisher_id`. `PUT /feeds/{id}/kind` saves the kind and changes no draft.
+- A new release with `publisher_id` gets the link to the artist page. Then it gets each hosting page and each label page of the release of that artist that the collection got last.
+- Two older migration tests now name their own version, because the last migration is no longer theirs.
+- Tests: `release_kind_comes_from_kept_value_or_track_count`, `new_and_previous_collections_have_the_release_kind_column`, `a_new_release_keeps_its_kind_and_inherits_the_newest_artists_pages`, `a_first_release_links_only_its_artist_page` and `release_kind_updates_at_once_without_changing_the_draft`.
 
 ## Goal
 

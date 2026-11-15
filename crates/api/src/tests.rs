@@ -1067,6 +1067,170 @@ async fn the_feed_list_gives_the_link_of_each_feed() {
 }
 
 #[tokio::test]
+async fn a_new_release_keeps_its_kind_and_inherits_the_newest_artists_pages() {
+    let (app, connector) = publisher_app().await;
+    let make_publisher = |path: &str, name: &str, role: &str| {
+        new_feed_body(connector, path, name, Some("publisher"), Some(role))
+    };
+    let artist = make_feed(&app, make_publisher("artist.xml", "Artist", "artist")).await;
+    let label = make_feed(&app, make_publisher("label.xml", "Label", "label")).await;
+    let old_label = make_feed(&app, make_publisher("old-label.xml", "Old label", "label")).await;
+    let hosting = make_feed(&app, make_publisher("hosting.xml", "Hosting", "hosting")).await;
+    let old = make_feed(
+        &app,
+        new_feed_body(connector, "old.xml", "Old release", None, None),
+    )
+    .await;
+    let newest = make_feed(
+        &app,
+        new_feed_body(connector, "newest.xml", "Newest release", None, None),
+    )
+    .await;
+    let artist_id = artist["id"].as_i64().unwrap();
+    let old_id = old["id"].as_i64().unwrap();
+    let newest_id = newest["id"].as_i64().unwrap();
+    for publisher_id in [artist_id, old_label["id"].as_i64().unwrap()] {
+        let (status, body) = call(
+            &app,
+            "POST",
+            &format!("/api/v1/feeds/{publisher_id}/links"),
+            Some(json!({ "release": old_id })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+    }
+    for publisher_id in [
+        artist_id,
+        label["id"].as_i64().unwrap(),
+        hosting["id"].as_i64().unwrap(),
+    ] {
+        let (status, body) = call(
+            &app,
+            "POST",
+            &format!("/api/v1/feeds/{publisher_id}/links"),
+            Some(json!({ "release": newest_id })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+    }
+    let db = rusqlite::Connection::open(app.data.path().join("collection.sqlite")).unwrap();
+    db.execute("UPDATE feeds SET created_at = 10 WHERE id = ?1", [old_id])
+        .unwrap();
+    db.execute(
+        "UPDATE feeds SET created_at = 20 WHERE id = ?1",
+        [newest_id],
+    )
+    .unwrap();
+
+    let mut body = new_feed_body(connector, "new-release.xml", "New release", None, None);
+    body["kind"] = json!("single");
+    body["publisher_id"] = json!(artist_id);
+    let created = make_feed(&app, body).await;
+    let new_id = created["id"].as_i64().unwrap();
+    assert_eq!(created["release_kind"], "single");
+
+    let new_model = draft_model(&app, new_id).await;
+    let links = new_model["publisher"]["remote_items"].as_array().unwrap();
+    let linked_guids: Vec<_> = links
+        .iter()
+        .filter_map(|item| item["feed_guid"].as_str())
+        .collect();
+    for (page, expected_role) in [
+        (&artist, "artist"),
+        (&label, "label"),
+        (&hosting, "hosting"),
+    ] {
+        let page_guid = draft_model(&app, page["id"].as_i64().unwrap()).await["podcast_guid"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let link = links
+            .iter()
+            .find(|item| item["feed_guid"] == page_guid)
+            .unwrap_or_else(|| panic!("{new_model}"));
+        assert_eq!(link["rel"], expected_role, "{new_model}");
+        assert!(linked_guids.contains(&page_guid.as_str()), "{new_model}");
+    }
+    let old_label_guid = draft_model(&app, old_label["id"].as_i64().unwrap()).await["podcast_guid"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(
+        !linked_guids.contains(&old_label_guid.as_str()),
+        "{new_model}"
+    );
+    for page in [&artist, &label, &hosting] {
+        let page_model = draft_model(&app, page["id"].as_i64().unwrap()).await;
+        let page_links = page_model["remote_items"].as_array().unwrap();
+        assert!(
+            page_links
+                .iter()
+                .any(|item| item["feed_guid"] == new_model["podcast_guid"]),
+            "{page_model}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_first_release_links_only_its_artist_page() {
+    let (app, connector) = publisher_app().await;
+    let artist = make_feed(
+        &app,
+        new_feed_body(
+            connector,
+            "artist.xml",
+            "Artist",
+            Some("publisher"),
+            Some("artist"),
+        ),
+    )
+    .await;
+    let mut body = new_feed_body(connector, "release.xml", "Release", None, None);
+    body["publisher_id"] = artist["id"].clone();
+    let release = make_feed(&app, body).await;
+    let model = draft_model(&app, release["id"].as_i64().unwrap()).await;
+    let links = model["publisher"]["remote_items"].as_array().unwrap();
+    assert_eq!(links.len(), 1, "{model}");
+    assert_eq!(
+        links[0]["feed_guid"],
+        draft_model(&app, artist["id"].as_i64().unwrap()).await["podcast_guid"]
+    );
+}
+
+#[tokio::test]
+async fn release_kind_updates_at_once_without_changing_the_draft() {
+    let (app, connector) = publisher_app().await;
+    let release = make_feed(
+        &app,
+        new_feed_body(connector, "release-kind.xml", "Release", None, None),
+    )
+    .await;
+    let id = release["id"].as_i64().unwrap();
+    let before = draft_model(&app, id).await;
+    let (status, response) = call(
+        &app,
+        "PUT",
+        &format!("/api/v1/feeds/{id}/kind"),
+        Some(json!({ "kind": "ep" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{response}");
+    assert_eq!(response["release_kind"], "ep");
+    assert_eq!(listed(&app, id).await["kind_shown"], "ep");
+    assert_eq!(draft_model(&app, id).await, before);
+
+    let (status, response) = call(
+        &app,
+        "PUT",
+        &format!("/api/v1/feeds/{id}/kind"),
+        Some(json!({ "kind": "longplay" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{response}");
+    assert_eq!(response["error"]["code"], "invalid_kind");
+}
+
+#[tokio::test]
 async fn a_link_changes_both_drafts_and_a_role_change_and_a_removal_follow_it() {
     let (app, connector) = publisher_app().await;
     let label = make_feed(

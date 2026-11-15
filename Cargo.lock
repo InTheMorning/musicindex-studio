@@ -2984,6 +2984,11 @@ dependencies = [
 ]
 
 [[package]]
+name = "musicindex-value"
+version = "0.1.0"
+source = "git+https://github.com/InTheMorning/musicindex-lib?rev=0fadde6c993fe5aec87a7627c6149c1cc9ccc9a0#0fadde6c993fe5aec87a7627c6149c1cc9ccc9a0"
+
+[[package]]
 name = "ndk"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4727,6 +4732,7 @@ dependencies = [
  "lofty",
  "mp3lame-encoder",
  "musicindex-search",
+ "musicindex-value",
  "nostr",
  "quick-xml",
  "rusqlite",

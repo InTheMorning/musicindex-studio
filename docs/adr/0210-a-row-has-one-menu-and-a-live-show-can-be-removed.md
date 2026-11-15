@@ -4,10 +4,11 @@
 - Date: 2026-11-14
 - Owner: operator, with the technical choices of the planning model
 - Accepted: 2026-11-14 by the operator, through the questionnaire, from drawings. The operator selected "One Actions menu for each row" for the wallet rows. The operator selected "Ellipsis on the phone, 'Actions' on the desktop" for the button of a row menu. The operator selected "Button on the page of the show" for the removal of a live show.
-- Technical choices: the planning model selected items 2, 4 to 8, 11, 12 and 14 to 16.
+- Technical choices: the planning model selected items 2, 4 to 8, 11, 12 and 14.
 - Changes: [ADR 0183](0183-each-collection-row-has-one-actions-menu.md) item 1: the menu button of a collection row has two forms.
 - Changes: [ADR 0205](0205-publisher-feeds-announcements-and-show-grants.md) item 38: the page of a live show also removes the show.
 - Uses: [ADR 0203](0203-people.md) item 10 for the default address. [ADR 0153](0153-the-people-list-has-a-sort-and-names-sort-with-numbers.md) for the menu control. The icon button follows musicindex ADR 0069 R-ACT-2 item 2, ADR 0068 R-ICON-1 item 2 and R-TARGET-1, and ADR 0026 R-ELLIPSIS-1. [ADR 0193](0193-a-destructive-button-is-the-first-button-of-its-row.md) for the confirm. [ADR 0007](0007-draft-diff-write-and-announce.md) for the draft and the review.
+- Changed: 2026-11-14. Items 15 and 16 give the decision of the operator on the phone menu, which the orchestrator session relayed.
 - Source: design item 9 of the [human check walk of 2026-11-14](../reviews/2026-11-14-human-check-walk.md), and finding 1 of the [local use findings of 2026-11-10](../reviews/2026-11-10-local-use-findings.md).
 
 ## Context
@@ -42,10 +43,10 @@ The operator asked if "…" is permitted as the button of a menu. The shared rul
 13. The tab **Live Shows** has no remove control on its rows.
 14. The removal adds no rule to the UI. A rule of the core about a live item with a grant stays in the core.
 
-### The Phone Menu Stays Open
+### The Phone Has No Menu Button
 
-15. The operator selected a menu button in the bar for a quick way to the left panel on the phone. musicindex ADR 0069 R-SHELL-2 item 1 gives Studio no menu button and no drawer in a narrow window.
-16. This ADR does not decide the phone menu. A change of the shared rule goes to the orchestrator first.
+15. In the questionnaire, the operator selected a menu button in the bar for a quick way to the left panel on the phone. On the same day the operator decided, through the orchestrator session, that the narrow layout of Studio does not change. A swipe from the screen edge is the Back gesture of the browser, and it opens the pages below the current page.
+16. musicindex ADR 0070 records that decision: the website gets the stack of Studio, with no menu button. Studio keeps [ADR 0206](0206-the-shell-and-the-editor-pages.md) items 11 to 14 and the history entries of its stack. A visual cue for the swipe is not decided.
 
 ## Alternatives Considered
 

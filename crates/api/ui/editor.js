@@ -14,7 +14,7 @@ import { creditPickRows, supportPickRows, creditChoices, creditFillRows, creditF
 import { withCids, STATUS } from './draft.js';
 import { roleSummary } from './roles.js';
 import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName } from './shell.js';
-import { isLiveItem, liveKey, liveDot, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner, OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning, hasBadAddress, problemGroup, setLiveStreamType, viewAfterLiveGone } from './live.js';
+import { isLiveItem, liveKey, liveDot, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner, OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning, hasBadAddress, problemGroup, setLiveStreamType, viewAfterLiveGone, withoutLive } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
 import { checkRows, unreadableRows, hasShowGrant, checkTexts, COPY_SHEET_TEXT, WAYS_SHEET_TEXT } from './feedcheck.js';
 import { addressParts } from './breaks.js';
@@ -3471,7 +3471,7 @@ function LiveShowsPage({ feed, model, go, onAdding }) {
   </section>`;
 }
 
-function LivePage({ feed, model, update, bad, liveIndex, draft }) {
+function LivePage({ feed, model, update, bad, liveIndex, draft, go }) {
   const lives = model.live_items;
   const live = lives[liveIndex];
   const id = `live-${live._cid}`;
@@ -3606,6 +3606,11 @@ function LivePage({ feed, model, update, bad, liveIndex, draft }) {
     draft.show(response);
     window.dispatchEvent(new Event(OPEN_REVIEW));
   });
+  const removeShow = async () => {
+    if (!await askConfirm(CONFIRMS.removeLiveShow(live.item.title, live))) return;
+    update((current) => withoutLive(current, liveKey(live)));
+    go({ name: 'feed', id: feed.id, page: 'lives' });
+  };
   return html`<header class="head">
       <${ImageThumb} url=${live.item.image || coverOf(model)} glow="var(--c-track)" className="cover" always />
       <div class="text"><span class="eyebrow"><span class=${`dot ${liveDot(live.status)}`}></span>Live show</span>
@@ -3724,7 +3729,11 @@ function LivePage({ feed, model, update, bad, liveIndex, draft }) {
           </div>
         </details>
       </div>
-    </section>`;
+    </section>
+
+    <section class="page-section"><div class="group"><div class="actions">
+      <button class="button destructive" type="button" onClick=${removeShow}>Remove the Show</button>
+    </div></div></section>`;
 }
 
 // ---- The publisher feed page (task 025c, ADR 0041) ----
@@ -4967,7 +4976,7 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
     // state of the one before it, for example an open "Properties".
     body = html`<${TrackPage} key=${model.items[trackIndex]._cid} feed=${feed} model=${model} update=${update} bad=${draft.bad} trackIndex=${trackIndex} go=${go} onArtwork=${onArtwork} />`;
   } else if (page === 'live' && liveIndex !== -1 && !publisher && !playlist) {
-    body = html`<${LivePage} key=${model.live_items[liveIndex]._cid} feed=${feed} model=${model} update=${update} bad=${draft.bad} liveIndex=${liveIndex} draft=${draft} />`;
+    body = html`<${LivePage} key=${model.live_items[liveIndex]._cid} feed=${feed} model=${model} update=${update} bad=${draft.bad} liveIndex=${liveIndex} draft=${draft} go=${go} />`;
   } else if (page === 'lives' && !publisher && !playlist) {
     body = html`<${LiveShowsPage} feed=${feed} model=${model} go=${go} onAdding=${onAdding} />`;
   } else if (page === 'credits') {

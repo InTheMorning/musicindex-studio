@@ -5,6 +5,7 @@ import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalon
 import { useSheet, NostrKeyRow, NostrSheet } from './editor.js';
 import { PickerLayout, FindOneSheet, PickFold, RowList, TakenTag, useFieldList } from './pickers.js';
 import { api, assetMode, askConfirm, Bar, SortMenu, LetterBar, useLeaveGuard, ChoiceSelect, CopyButton, Icon, RoleMenu, ErrorNotice, FeedCheckRow, Field, useAction, useImage } from './app.js';
+import { MenuControl } from './menu.js';
 import { CONFIRMS } from './confirms.js';
 import { pageSequence } from './pages.js';
 import { shortKey } from './nostrkey.js';
@@ -30,7 +31,7 @@ import {
   correctKeyChoices, correctBody, correctAnySelected, correctRows, CORRECT_OMITTED, CORRECT_EMPTY,
   moreRows, NO_OTHER_TEXT, mergeTitle, mergeHint, mergeLinks, mergeResult, mergeBody, afterMissing,
   detailList, LINK_HINT, LINK_EMPTY, linkChoices, linkRows, pickLink, pageSuggestions, addAllPageSuggestions, hasPageSuggestions, hasLinkedPages, linkedPageChanges, linkedPageSelection, linkedPageChangeLines, linkedPageBody, creditPosition, afterCredits, savedValues, pendingKeys, pendingStatus, isPending, saveBody, nicknameBody, afterNicknameSave, leaveText, checkGroups, checkFeedLines, checkKeys, checkIntro, CHANGE_ROWS, CHANGE_NOTE,
-  addPersonValue, removePersonValue, personValueLine,
+  addPersonValue, removePersonValue, personValueLine, addressMenu,
   CHECK_TITLE, checkSummary, differenceBlocks, openLabel, useValuesLabel,
   recipientChoices, creditChoices, fundingChoices, ALREADY_VALUE, FIND_HINT, FIND_EMPTY, FIND_WAIT, FILL_NOTE, lookupGroups, lookupKind, hasLine, fillRows, splitFillRows, linkName, linkRow, linkFillButton, VALUES_WAIT, ALREADY_LINKED, fillPatch, fillSource, musicindexFeedUrl,
   creditOffers, creditAddTitle, creditRemoveTitle, creditAddNote, creditPublicNote, creditRemoveNote, creditOperation, REMOVE_CREDIT_OPERATION,
@@ -406,14 +407,16 @@ function AddPersonForm({ fields, setFields, view, pendingLink, setPendingLink, o
 // ---- The page of a person (ADR 0099 items 4 to 12) ----
 
 // One address row of a wallet: its line, its feeds and an optional note.
-function AddressRow({ member, count, note, tag, mark, pending, action }) {
+function AddressRow({ member, count, note, tag, mark, pending, action, menu }) {
   const { label, address, account } = memberLine(member, true);
-  return html`<div class=${`link-row static address-row${pending ? ' pending' : ''}`}><span class="text"><span class="label">${label}${tag}</span>
+  return html`<div class=${`link-row static address-row${pending ? ' pending' : ''}`}><span class="text"><span class="label">${label}${!menu && tag}</span>
       ${address && html`<span class="summary mono address-text" data-fit-allow-break>${address}</span>`}
       ${account && html`<span class="summary">Account ${account}</span>`}
-      ${note && html`<span class="summary">${note}</span>`}</span>
-    ${count && html`<span class="count">${count}</span>`}${mark}
-    ${member.address && html`<${CopyButton} text=${member.address} label="the address" />`}${action}</div>`;
+      ${note && html`<span class="summary">${note}</span>`}
+      ${menu && html`<span class="summary address-status">${tag}${count}</span>`}</span>
+    ${!menu && count && html`<span class="count">${count}</span>`}${!menu && mark}
+    ${!menu && member.address && html`<${CopyButton} text=${member.address} label="the address" />`}${!menu && action}
+    ${menu}</div>`;
 }
 
 // A row that adds something: a plus sign and a title.
@@ -1059,11 +1062,14 @@ export function PersonPage({ id, feeds, go }) {
         const isDefault = isDefaultAddress(m.key, shown.default_address);
         return html`<${AddressRow} key=${JSON.stringify(m.key)} member=${m.member} count=${usedText(m.count)}
           pending=${isDefault && isPending(saved, shown, 'default_address')}
-          tag=${isDefault && html` <span class="default-tag"><${Icon} name="check" />Default</span>`}
-          mark=${!isDefault && html`<button class="button action" type="button" aria-label=${`Make Default: ${m.member.address}`}
-            onClick=${() => update({ default_address: keyValue(m.key) })}>Make Default</button>`}
-          action=${html`<button class="button" type="button" aria-label=${`Edit ${m.member.address}`}
-            onClick=${() => withLeave(() => setEditing(walletEdit(g, m)))}>Edit</button>`} />`;
+          tag=${isDefault && html`<span class="default-tag"><${Icon} name="check" />Default</span>`}
+          menu=${html`<${MenuControl} row=${true} Icon=${Icon} buttonLabel="Actions" accessibleName=${`Actions for ${m.member.address}`}
+            menuLabel=${`Actions for ${m.member.address}`} items=${addressMenu(isDefault, Boolean(m.member.address))}
+            onSelect=${(entry) => {
+              if (entry.action === 'make-default') update({ default_address: keyValue(m.key) });
+              else if (entry.action === 'edit') withLeave(() => setEditing(walletEdit(g, m)));
+              else if (entry.action === 'copy' && navigator.clipboard) navigator.clipboard.writeText(m.member.address).catch(() => {});
+            }} />`} />`;
       })}
         <div class="actions"><button class="button destructive" type="button" onClick=${() => remove('wallets', g.id)}>Remove Wallet</button></div></div>`)}
       ${shown.wallets.length > 0 && html`<div class="group">${shown.wallets.map((w) => html`<div class="link-row static" key=${`p${keyValue(w.key)}`}>

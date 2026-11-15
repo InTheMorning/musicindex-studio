@@ -48,6 +48,10 @@ export const CONFIRMS = {
     'Stop the grant?',
     'Connected apps can no longer change this show.',
     'Stop the Grant'),
+  removeLiveShow: (title, live) => destructive(
+    `Remove “${title || 'Untitled show'}”?`,
+    `Studio removes the show from the draft. The feed changes at the next write.${live && live.status === 'live' ? ' Apps lose the stream of this show at that write.' : ''}`,
+    'Remove the Show'),
   // `size` is the text of the file size, or null when the row has no size.
   downloadFirst: (size) => ({
     title: 'Download this file first?',

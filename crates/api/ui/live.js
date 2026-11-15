@@ -18,6 +18,11 @@ export function isLiveItem(live, key) {
   return liveKey(live) === key || `cid-${live._cid}` === key;
 }
 
+// Remove one live item from the draft model (ADR 0210 items 9 to 14).
+export function withoutLive(model, key) {
+  return { ...model, live_items: (model.live_items || []).filter((live) => !isLiveItem(live, key)) };
+}
+
 // The view to show when the live show of the view is not in the model, for
 // example after a discard of the draft that added it. The tab Live Shows
 // replaces the page of the show. Gives null when the view needs no change.

@@ -2,7 +2,14 @@
 
 Decision: none. This is Note 14 of the walk. [ADR 0165](../adr/0165-the-left-panel-marks-the-state-of-each-feed.md) items 1, 2 and 6 own the state marks and their store, and they do not change. The outline is a part of the left panel.
 
-Status: Not started. The packet is ready for a delegate.
+Status: Complete on 2026-11-15, with the screenshot visual check. The visual gate for the operator is open.
+
+## Result
+
+- The delegate was `gpt-6-luna` with medium effort.
+- The main session added one CSS rule. It puts the mark at the right side of the row, as in a level row.
+- Screenshots of the main session: a feed with an outside change, at 1280 px and at 390 px, in the light theme and the dark theme. The level row and the release row show the cloud mark in the Warning color. The title is not cut, and `$overflow()` is empty.
+- The accessible name of the row has the text of the mark, for example "Album 2, Album, Changed outside Studio".
 
 Source: [walk notes of 2026-11-15](../reviews/2026-11-15-walk-notes.md).
 

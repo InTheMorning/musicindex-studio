@@ -210,6 +210,20 @@ Facts:
 
 Open: no task. The task must say if the row of the outline shows only the cloud mark, or each state mark of ADR 0165 item 2.
 
+### Note 15: The Wallet Rows Of A Release And A Track Differ From People
+
+Comment: the wallet address rows of a release and of a track do not look like the wallet address rows of People.
+
+Facts:
+
+- The comment came in step 15, on the iPhone.
+- [ADR 0210](../adr/0210-a-row-has-one-menu-and-a-live-show-can-be-removed.md) items 1 to 7 give the address row of a wallet in People. The row has one menu button with **Make Default**, **Edit** and **Copy**. In the narrow layout the button is the round ellipsis button.
+- ADR 0210 item 6 gives the same control to the collection rows of ADR 0183. It does not name the recipient rows of a feed.
+- `Recipients` in `crates/api/ui/values.js` makes the rows of the tab **Value Routes** and of the payments of a track. The address row there has the text button **Change…**, and the recipient has the button **Remove**. It has no menu button.
+- The two rows use the same CSS class `address-row`.
+
+Open: no task. A recipient of a feed has no default address, so the menu of ADR 0210 item 2 does not fit as it is. The task must say which entries the menu of a recipient row has. The operator has not decided on ADR 0210, from the message of the orchestrator on 2026-11-15.
+
 ## Results Of The Steps
 
 The step numbers are those of the section "What to test" of the [notes of `0.1.0-rc.23`](../releases/0.1.0-rc.23.md).
@@ -226,3 +240,4 @@ The step numbers are those of the section "What to test" of the [notes of `0.1.0
 - Step 12: pass. The server follows the move of the desktop app, and it edits the feed after **Use This File Host**.
 - Step 13: open. The operator did not do this step.
 - Step 14: open. The operator did not do this step.
+- Step 15: pass. On the iPhone, the ellipsis button and the menu of each wallet address row fit in the screen.

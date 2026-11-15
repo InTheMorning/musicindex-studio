@@ -633,7 +633,7 @@ pub fn refresh(
 /// show grant keeps its base, and the conflict check stops its write. A
 /// signing plan is not an edit: each diff makes one, and the next diff makes
 /// it again.
-fn move_unedited_draft(
+pub(crate) fn move_unedited_draft(
     collection: &Collection,
     id: FeedId,
     bytes: &[u8],

@@ -1391,8 +1391,18 @@ pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
         let expired = crate::temporary::expired_areas(w)?;
         // The cover image comes from the same source as the file list. A
         // feed with no readable source has no image and no link.
+        let feed_rows = w.collection.feeds()?;
+        let needs_hosts = feed_rows
+            .iter()
+            .any(|row| row.connector_id.is_none() && row.public_url.as_deref().is_some());
+        // The folder address of each file host needs no vault.
+        let connectors = if needs_hosts {
+            w.collection.connectors()?
+        } else {
+            Vec::new()
+        };
         let mut feeds = Vec::new();
-        for row in w.collection.feeds()? {
+        for row in feed_rows {
             let feed = files_feed(w, row.id).ok().flatten();
             feeds.push((row, feed));
         }
@@ -1410,6 +1420,13 @@ pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
             let mut value =
                 serde_json::to_value(row).map_err(|e| ApiError::internal(e.to_string()))?;
             value["draft_state"] = json!(state);
+            value["host_for_address"] = json!(
+                row.connector_id.is_none()
+                    && row
+                        .public_url
+                        .as_deref()
+                        .is_some_and(|url| outside::host_for_address(&connectors, url).is_some())
+            );
             // A feed with a placeholder GUID has no public address yet
             // (ADR 0122 item 5). The GUID of a feed with a draft is in its
             // draft: a new feed has no GUID in its row before its first
@@ -1693,33 +1710,49 @@ pub(crate) async fn outside_check(
     };
     let ask_index = query.index;
     let (read_row, found) = (row.clone(), address.clone());
-    let (hosted, index_url) = blocking_unlocked(move || {
-        let hosted = outside::read_hosted(&web, &found);
-        let index_url = ask_index
-            .then(|| outside::index_difference(&index, &read_row))
-            .flatten();
-        Ok((hosted, index_url))
+    let folder_url = outside::folder_address(&read_row);
+    let read_folder_url = folder_url.clone();
+    let reads = blocking_unlocked(move || {
+        Ok(outside_check_reads(
+            &web,
+            &index,
+            &read_row,
+            &found,
+            read_folder_url.as_deref(),
+            ask_index,
+        ))
     })
     .await?;
+    let OutsideCheckReads {
+        hosted,
+        folder_hosted,
+        index_url,
+    } = reads;
     blocking(shared, move |w| {
         // True only when this request read the hosted file (ADR 0165 item 7).
         let read = hosted.is_some();
-        let result = match &hosted {
-            Some(bytes) => outside::apply_read(&w.collection, &row, bytes)?,
-            None => outside::stored_result(&w.collection, id)?,
-        };
+        let result = outside_apply_result(
+            &w.collection,
+            id,
+            &row,
+            hosted.as_deref(),
+            folder_hosted.as_deref(),
+            folder_url.as_deref(),
+        )?;
         let (state, new_url) = match result {
             outside::OutsideResult::Same => (None, None),
             outside::OutsideResult::Changed => (Some("changed"), None),
-            outside::OutsideResult::Moved { url } => (Some("moved"), Some(url)),
+            outside::OutsideResult::Moved { ref url } => (Some("moved"), Some(url.clone())),
         };
         let index_is_move_source =
             outside::index_is_move_source(index_url.as_deref(), last_move.as_ref());
+        let new_host = result_new_host(w, &result);
         Ok(Json(json!({
             "enabled": true,
             "state": state,
             "read": read,
             "new_url": new_url,
+            "new_host": new_host,
             "index_url": index_url,
             "index_is_move_source": index_is_move_source,
             "own_url": address,
@@ -1730,10 +1763,140 @@ pub(crate) async fn outside_check(
     .await
 }
 
+struct OutsideCheckReads {
+    hosted: Option<Vec<u8>>,
+    folder_hosted: Option<Vec<u8>>,
+    index_url: Option<String>,
+}
+
+fn outside_check_reads(
+    web: &web::Web,
+    index: &MusicIndex,
+    row: &FeedRow,
+    address: &str,
+    folder_address: Option<&str>,
+    ask_index: bool,
+) -> OutsideCheckReads {
+    let hosted = outside::read_hosted(web, address);
+    let folder_hosted = folder_address.and_then(|url| outside::read_hosted(web, url));
+    let index_url = ask_index
+        .then(|| outside::index_difference(index, row))
+        .flatten();
+    OutsideCheckReads {
+        hosted,
+        folder_hosted,
+        index_url,
+    }
+}
+
+fn outside_apply_result(
+    collection: &Collection,
+    id: FeedId,
+    row: &FeedRow,
+    hosted: Option<&[u8]>,
+    folder_hosted: Option<&[u8]>,
+    folder_url: Option<&str>,
+) -> Result<outside::OutsideResult, ApiError> {
+    let folder_result = folder_hosted
+        .zip(folder_url)
+        .map(|(bytes, url)| outside::compare_folder(row, bytes, url));
+    if let Some(result @ outside::OutsideResult::Moved { .. }) = folder_result {
+        let bytes = folder_hosted.unwrap_or_default();
+        return Ok(outside::apply_result(collection, id, bytes, result)?);
+    }
+    match hosted {
+        Some(bytes) => Ok(outside::apply_read(collection, row, bytes)?),
+        None => Ok(outside::stored_result(collection, id)?),
+    }
+}
+
+fn result_new_host(w: &Workspace, result: &outside::OutsideResult) -> Option<String> {
+    let outside::OutsideResult::Moved { url } = result else {
+        return None;
+    };
+    let connectors = w.collection.connectors().ok()?;
+    let (connector_id, _) = outside::host_for_address(&connectors, url)?;
+    connectors
+        .into_iter()
+        .find(|row| row.id == connector_id)
+        .map(|row| row.name)
+}
+
 /// `POST /feeds/{id}/outside/keep`: "Keep This File Host" (ADR 0150 item 4).
 pub(crate) async fn outside_keep(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
     blocking(shared, move |w| {
         outside::keep(&w.collection, FeedId(id))?;
+        Ok(Json(json!({})))
+    })
+    .await
+}
+
+pub(crate) async fn outside_follow(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
+    let feed_id = FeedId(id);
+    let (row, web, url) = blocking(Arc::clone(&shared), move |w| {
+        writer_check(w, feed_id)?;
+        Ok((
+            w.collection.feed(feed_id)?,
+            w.web.clone(),
+            outside::stored_move_address(&w.collection, feed_id)?,
+        ))
+    })
+    .await?;
+    let Some(url) = url else {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "move_read_failed",
+            "no moved address is available",
+        ));
+    };
+    let read = blocking_unlocked(move || {
+        studio_core::discover::read_public(&web, &url).map_err(|_| {
+            ApiError::new(
+                StatusCode::CONFLICT,
+                "move_read_failed",
+                "the feed could not be read",
+            )
+        })
+    })
+    .await?;
+    blocking(shared, move |w| {
+        match outside::follow_move_read(&mut w.collection, &row, &read) {
+            Ok(read_only) => Ok(Json(json!({ "read_only": read_only }))),
+            Err(outside::FollowMoveError::OtherGuid) => Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "move_other_guid",
+                "the feed has a different podcast:guid",
+            )),
+            Err(outside::FollowMoveError::Collection(error)) => Err(error.into()),
+            Err(outside::FollowMoveError::Pipeline(error)) => Err(error.into()),
+        }
+    })
+    .await
+}
+
+pub(crate) async fn outside_use_host(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let feed_id = FeedId(id);
+        let row = w.collection.feed(feed_id)?;
+        // As `outside_keep`, the route needs only that the feed exists. It
+        // changes the collection, and it writes nothing to a host.
+        let connectors = w.collection.connectors()?;
+        let found = row
+            .public_url
+            .as_deref()
+            .and_then(|url| outside::host_for_address(&connectors, url));
+        let Some((connector_id, path)) = found else {
+            return Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "no_host_for_address",
+                "no connected file host gives this address",
+            ));
+        };
+        w.collection
+            .set_feed_location(feed_id, connector_id, &path, row.public_url.as_deref())?;
         Ok(Json(json!({})))
     })
     .await

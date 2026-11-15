@@ -2,7 +2,7 @@
 
 Decision: [ADR 0198](../adr/0198-the-review-of-a-delete-names-the-delete-and-a-deleted-feed-shows-only-what-it-can-do.md).
 
-Status: Complete on 2026-11-14. The human check of the deleted feed passed on 2026-11-14. The human check of the delete review is open.
+Status: Complete on 2026-11-14. The human check of the deleted feed passed on 2026-11-14. The human check of the delete review passed on 2026-11-14 ([human check walk of 2026-11-14](../reviews/2026-11-14-human-check-walk.md), check 1).
 
 ## Result
 

@@ -62,7 +62,7 @@ Visual, by the planning model:
 - The review of a delete with the audio and image files, at 1280 px light and 390 px dark. **Delete N Files** is red and first, and **Cancel the Delete** is at the right edge.
 - The page of a deleted feed. Step 1 says "in the last write". **Stop Retiring** and **Link to This Page** are not on the page.
 
-Human, by the operator. This gate stays open until it runs:
+Human, by the operator. This gate passed on 2026-11-14 in the [human check walk of 2026-11-14](../reviews/2026-11-14-human-check-walk.md), check 1:
 
 - In the desktop app, start a delete of a test feed on a file host. The review shows the red **Delete N Files** first. **Cancel the Delete** stops the delete.
 

@@ -101,6 +101,19 @@ Facts:
 
 Open: no task. The reply needs a `track_count` field, and the row needs a position for the count. A playlist has no tracks of its own, so the task must say what its row shows.
 
+### Note 7: The Field "Kind" Moves To The First Tab Of A Release
+
+Comment: the field "Kind" must not be in the tab **Settings**. Its position is the first tab of a release, between "Title" and "Artist". The name of that tab is the kind: "Album", "EP" or "Single".
+
+Facts:
+
+- [ADR 0213](../adr/0213-a-release-starts-on-the-page-of-its-artist.md) item 13 owns the position. It puts the menu in the tab **Settings**. A change saves at once, is not a part of the draft and needs no write.
+- `settings` in `crates/api/ui/pages.js` gives a release the section `kind` as the first section of the tab. The section is in `crates/api/ui/editor.js`, with `saveKind`.
+- The other fields of the first tab are parts of the draft. "Title" and "Artist" change the feed file through Review and a write.
+- The menu also has the value "From the tracks" (ADR 0213 item 12), and its hint says that the feed file has no tag for the kind (item 16).
+
+Open: no task. The move changes ADR 0213 item 13. The task must say how a field that saves at once shows between fields of the draft.
+
 ## Results Of The Steps
 
 The step numbers are those of the section "What to test" of the [notes of `0.1.0-rc.23`](../releases/0.1.0-rc.23.md).

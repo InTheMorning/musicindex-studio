@@ -587,6 +587,21 @@ input[type="checkbox"]:disabled { opacity: .5; cursor: default; }
   :root[data-ui-scale="x-large"] { zoom: 1.25; --ui-zoom: 1.25; }
 }
 
+/* The edge grip (musicindex ADR 0071 R-GRIP-1 and R-GRIP-3). It shows that a
+   swipe from the screen edge goes Back. It is not a control. The values are
+   the entry `shape.edge-grip` of tokens.json. */
+.edge-grip {
+  position: fixed;
+  left: 4px;
+  top: calc(var(--bar-h) + (var(--window-height) - var(--bar-h)) / 2 - 24px);
+  width: 5px;
+  height: 48px;
+  border-radius: 999px;
+  background: var(--muted);
+  opacity: 0.8;
+  pointer-events: none;
+  z-index: 1;
+}
 .shell {
   display: grid;
   grid-template-columns: clamp(280px, calc(var(--window-width) * 0.24), 340px) 1fr;

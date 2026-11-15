@@ -479,6 +479,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 143: The review sheet keeps the podping box in view and names each delete](tasks/studio-v1-task-143-review-sheet-podping-box-and-deletes.md)
 - [Studio v1 task 144: A row has one menu, and a live show can be removed](tasks/studio-v1-task-144-row-menus-and-remove-a-live-show.md)
 - [Studio v1 task 145: Studio follows a move that a different Studio made](tasks/studio-v1-task-145-follow-a-move-by-a-different-studio.md)
+- [Studio v1 task 146: The edge grip of the narrow shell](tasks/studio-v1-task-146-edge-grip.md)
 - [Studio v1 task 055: The date and time fields](tasks/studio-v1-task-055-date-time-fields.md)
 - [Studio v1 task 055a: The times in the core](tasks/studio-v1-task-055a-times-in-the-core.md)
 - [Studio v1 task 055b: The date and time field](tasks/studio-v1-task-055b-date-time-field.md)

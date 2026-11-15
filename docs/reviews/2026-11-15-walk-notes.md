@@ -75,10 +75,14 @@ Facts:
 - `styles.css` divided `100dvh` and `100vw` by the factor of the level. That division is correct only when the engine scales these units by the CSS zoom.
 - Chromium 157 and WebKitGTK 2.54.2 scale the units. A box of `100dvh` there is 963.2 px in a window of 860 px, and the shell filled the window before the change.
 - The release workflow builds the AppImage on Ubuntu 22.04, which publishes WebKitGTK 2.50.4.
-- Inference: WebKitGTK 2.50 does not scale the units, so the division made the shell too short. A run of WebKitGTK 2.50.4 in the sandbox was not possible, so no measurement proves this.
+- Three more screenshots of the AppImage agree with an engine that does not scale the units:
+    - At "Medium", the shell fills the window.
+    - At "Extra large", the shell stops at 673 px in a window of 848 px, and 848 / 1.25 is 678.
+    - At "Extra small", the shell is higher than the window. The lower part of the left panel is out of view, and the page has a scroll bar.
+- A run of WebKitGTK 2.50.4 in the sandbox was not possible, so no agent measurement shows the engine.
 
 Operator choice: none. This is a defect correction.
 
 Correction: `measureWindowUnits` in `crates/api/ui/uiscale.js` measures a box of `100dvh` and a box that fills the window. When the two heights agree, it sets `--window-unit-zoom` to 1. The app calls it before the first render and after each change of the level. `crates/api/ui-tests/uiscale.test.mjs` examines the selection of the factor.
 
-Open: the visual check on the AppImage of the next candidate, at the level "Large" and at one level below "Medium".
+Open: the visual check on the AppImage of the next candidate, at the levels "Extra small", "Large" and "Extra large".

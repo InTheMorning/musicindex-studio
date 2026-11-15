@@ -241,3 +241,4 @@ The step numbers are those of the section "What to test" of the [notes of `0.1.0
 - Step 13: open. The operator did not do this step.
 - Step 14: open. The operator did not do this step.
 - Step 15: pass. On the iPhone, the ellipsis button and the menu of each wallet address row fit in the screen.
+- Step 16: pass. On the iPhone, the bar at the left edge is in view in both themes, and it is gone on the start page.

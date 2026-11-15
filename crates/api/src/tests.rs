@@ -2515,7 +2515,6 @@ async fn the_feed_list_gives_the_draft_state_and_the_cover_image() {
     .await;
     let id = feed["id"].as_i64().unwrap();
     assert_eq!(listed(&app, id).await["draft_state"], "new");
-
     // After its write, the draft is the same as the hosted file.
     let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
     let (status, _) = call(
@@ -2583,6 +2582,41 @@ async fn the_feed_list_gives_the_draft_state_and_the_cover_image() {
     assert_eq!(row["draft_state"], "changed");
     assert_eq!(row["image"], "https://music.example/cover.jpg");
     assert_eq!(row["rss_image_url"], Value::Null);
+}
+
+#[tokio::test]
+async fn the_feed_list_gives_the_track_count_of_a_release_and_none_for_a_publisher_feed() {
+    let app = app();
+    let hosted = set_up(&app).await;
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{hosted}/refresh"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    // The hosted feed has one track.
+    assert_eq!(listed(&app, hosted).await["track_count"], 1);
+    let (_, connectors) = call(&app, "GET", "/api/v1/connectors", None).await;
+    let connector = connectors[0]["id"].as_i64().unwrap();
+    let publisher = make_feed(
+        &app,
+        new_feed_body(
+            connector,
+            "artist.xml",
+            "Artist",
+            Some("publisher"),
+            Some("artist"),
+        ),
+    )
+    .await;
+    let publisher_id = publisher["id"].as_i64().unwrap();
+    assert_eq!(listed(&app, publisher_id).await["track_count"], Value::Null);
+    // A new release has no track.
+    let release = make_feed(&app, new_feed_body(connector, "new.xml", "New", None, None)).await;
+    let release_id = release["id"].as_i64().unwrap();
+    assert_eq!(listed(&app, release_id).await["track_count"], 0);
 }
 
 /// The live file of the feed that `set_up` adds.
@@ -7782,6 +7816,7 @@ async fn a_playlist_with_two_remote_items_is_written_with_no_item() {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(listed(&app, id).await["track_count"], 2);
     let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
     let (status, body) = call(
         &app,

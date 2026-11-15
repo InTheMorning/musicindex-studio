@@ -2,7 +2,15 @@
 
 Decision: none. This is Note 6 of the walk. [ADR 0213](../adr/0213-a-release-starts-on-the-page-of-its-artist.md) items 11 and 14 own the kind and the type label, and they do not change.
 
-Status: Not started. The packet is ready for a delegate.
+Status: Complete on 2026-11-15, with the screenshot visual check. The visual gate for the operator is open.
+
+## Result
+
+- The delegate was `gpt-6-luna` with medium effort. The main session added the Rust test `the_feed_list_gives_the_track_count_of_a_release_and_none_for_a_publisher_feed`.
+- Deviation: that test proves the count 1 for a hosted release with one track and the count 0 for a new release. It proves `null` for a publisher feed. The playlist test proves the count 2.
+- A feed gets its medium from a read. A feed with no read has no medium, and it shows no count.
+- Screenshots of the main session: the rows view and the tiles view at 1280 px and at 390 px, in the light theme and the dark theme. Each line shows the kind and the count. No text is cut, and `$overflow()` is empty. A playlist row shows "Playlist · 0 tracks".
+- The fit check at 390 px reports that "Back" and a tile overlap. The cause is the check method: the list was scrolled, and the tile was below the bar that stays at the top.
 
 Source: [walk notes of 2026-11-15](../reviews/2026-11-15-walk-notes.md).
 

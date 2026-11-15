@@ -55,6 +55,11 @@ export function feedKind(feed) {
   return { ...kind, label: labels[feed.kind_shown] || 'Album' };
 }
 
+export function trackCountText(count) {
+  if (typeof count !== 'number') return null;
+  return `${count} ${count === 1 ? 'track' : 'tracks'}`;
+}
+
 // The choice of the Role menu for a set of roles: "artist", "label",
 // "hosting", "custom", or "" for no role (ADR 0083 item 2).
 export function roleChoice(roles) {
@@ -671,6 +676,7 @@ export function releasesList({ feeds, connectors, sort, view, reversed, marked, 
     id: feed.id,
     title: displayTitle(feed),
     typeLabel: feedKind(feed).label,
+    countText: trackCountText(feed.track_count),
     dot: feedKind(feed).dot,
     glow: kindGlow(feedKind(feed)),
     host: hostOf(feed, connectors),

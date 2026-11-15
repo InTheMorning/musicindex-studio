@@ -47,6 +47,7 @@ use studio_core::playlist;
 use studio_core::profiles;
 use studio_core::publisher;
 use studio_core::remote;
+use studio_core::web;
 use zeroize::Zeroizing;
 
 use crate::error::ApiError;
@@ -1429,6 +1430,11 @@ pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
             value["rss_image_url"] = json!(rss_image_url);
             // The release list marks a feed that apps do not list (ADR 0063).
             value["hidden"] = json!(feed.as_ref().is_some_and(Feed::hidden));
+            // The host of the public address, for the domain line of the
+            // delete and move sheets (ADR 0208 item 3). A feed with no public
+            // address, or with a placeholder address, has none.
+            value["address_host"] =
+                json!(outside::address_of(row).and_then(|address| web::host_of(&address)));
             value["release_ids"] =
                 json!(catalog.releases.iter().map(|id| id.0).collect::<Vec<_>>());
             value["publisher_ids"] =

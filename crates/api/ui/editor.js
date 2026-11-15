@@ -47,7 +47,7 @@ import { shortType as formatLabel, propertiesSummary, propertiesOpen, propertyRo
 import { MOVE_SCOPES, fileHostRows, planRows, stayRows, deleteLabel, deleteAllLabel, DELETE_NOTE_ON, DELETE_NOTE_OFF, waitLabel, waitingView, readyNotice, partMoveNotice, existsRefusalView, addDisabled, replacesCopyNote, replaceWarning, indexNeedsRead, INDEX_READ_AGAIN_MS } from './releasemove.js';
 import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary, artworkPreview } from './artwork.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, addsAsTrackFile, refusedText, wrongKindText, replacedAddresses, selectedFacts } from './picker.js';
-import { deleteChoices, deleteButtonEnabled, retireSteps, operationNote } from './feeddelete.js';
+import { deleteChoices, deleteButtonEnabled, retireSteps, retireActions, domainLine, DELETE_POINTS, operationNote } from './feeddelete.js';
 
 // A text where only each web address can break inside a word (musicindex ADR
 // 0065 R-FIT-3 item 3).
@@ -1770,6 +1770,13 @@ function ReturnWarning({ move, wait }) {
     : html`<div class="notice" role="status"><strong>${view.title}</strong>${view.text}</div>`);
 }
 
+// The domain line (ADR 0208 items 1 to 4). It has the style of a warning
+// (ADR 0191 item 1). With no host, it shows nothing.
+function DomainLine({ domain }) {
+  const line = domainLine(domain);
+  return line && html`<div class="notice warning" role="status"><strong><${Icon} name="alert" />${line.title}</strong>${line.text}</div>`;
+}
+
 // The warning of a move that replaces a different file (ADR 0178 item 6). It
 // does not stop the write.
 function ReplaceWarning({ move }) {
@@ -2286,7 +2293,7 @@ export function DraftToolbar({ feedId, feedConnectorId, draft, onWritten, connec
 
 // The Feed facts row of the album page (task 014c step 5): the facts that
 // the former Facts section showed, and the Remove from collection button.
-function FeedFacts({ feed, draft, onRemoved }) {
+function FeedFacts({ feed, draft, onRemoved, onListChanged }) {
   const { busy, error, run } = useAction();
   // The announcements of the feed, the newest first (ADR 0052 item 20). The
   // list loads when the page opens, after each write, and each 5 seconds
@@ -2319,7 +2326,7 @@ function FeedFacts({ feed, draft, onRemoved }) {
   const tag = newFeedAddress(feed);
   // "Remove from Collection" is a row of its own below the facts, so that it
   // shows with the facts closed.
-  return html`<${FeedDelete} feed=${feed} draft=${draft} />
+  return html`<${FeedDelete} feed=${feed} draft=${draft} onListChanged=${onListChanged} />
   <details class="disclosure">
     <summary class="link-row"><span class="label">Feed facts</span><span class="summary">GUID, file, version and announcement</span></summary>
     <div class="form">
@@ -2345,7 +2352,7 @@ function FeedFacts({ feed, draft, onRemoved }) {
 // (ADR 0131 items 1 to 10). The retire page shows while "Hide from apps" is
 // on in the draft. It reads the state of the steps when it opens and at
 // **Check Again**, so a request to the index goes out only then (item 6).
-function FeedDelete({ feed, draft }) {
+function FeedDelete({ feed, draft, onListChanged }) {
   const [firstOpen, setFirstOpen] = useState(false);
   const [finalOpen, setFinalOpen] = useState(false);
   const [retireOpen, setRetireOpen] = useState(false);
@@ -2419,6 +2426,15 @@ function FeedDelete({ feed, draft }) {
     if (draft) draft.show(answer);
     setRetireOpen(false);
   });
+  // The restore draft brings the file back through a usual write (ADR 0208
+  // item 14). The route gives the feed its file host again, so the feed
+  // list loads before Review opens. Review then shows a usual write, not
+  // a move of a read-only feed. `OPEN_DELETE_REVIEW` loads the draft.
+  const restoreFile = () => action.run(async () => {
+    await api(`/feeds/${feed.id}/delete/restore`, { method: 'POST' });
+    if (onListChanged) await onListChanged();
+    window.dispatchEvent(new Event(OPEN_DELETE_REVIEW));
+  });
   const discardDelete = async () => {
     if (keepDeleteDraft.current) { keepDeleteDraft.current = false; return; }
     if (!deleteDraftStarted.current) { setFinalOpen(false); return; }
@@ -2441,32 +2457,35 @@ function FeedDelete({ feed, draft }) {
   const steps = retire && retireSteps(retire);
   const activeRetire = retire && retire.ask !== 'no';
   return html`
-    ${activeRetire && html`<div class="retire-head"><span class="label">Retire</span><span class="summary">Studio cannot check Podcast Index. Keep this address, also after the delete. A different person who gets the address can publish a feed with this GUID and other payment recipients.</span></div>
+    ${activeRetire && html`<div class="retire-head"><span class="label">Retire</span><span class="summary">Studio cannot check Podcast Index.</span></div>
+      <div class="retire-domain"><${DomainLine} domain=${feed.address_host} /></div>
       ${steps.map((row) => html`<div class=${`delete-step${row.done ? ' done' : ''}`} key=${row.number}>
           <span class="num">${row.done ? '✓' : row.number}</span><span class="text"><span class="label">${row.title}</span><span class="summary">${row.text}</span></span>
           ${row.button && html`<button class="button destructive" type="button" disabled=${action.busy} onClick=${openFinal}>${row.button}</button>`}
         </div>`)}
-      <div class="actions"><button class="button" type="button" disabled=${action.busy} onClick=${loadRetire}>Check Again</button>
-        ${retire.delete !== 'done' && html`<button class="button" type="button" disabled=${action.busy} onClick=${stopRetire}>Stop Retiring</button>`}</div>
+      <div class="actions">${retireActions(retire).map((key) => key === 'restore'
+        ? html`<button class="button" type="button" key=${key} disabled=${action.busy} onClick=${restoreFile}>Put the File Back</button>`
+        : key === 'check'
+          ? html`<button class="button" type="button" key=${key} disabled=${action.busy} onClick=${loadRetire}>Check Again</button>`
+          : html`<button class="button" type="button" key=${key} disabled=${action.busy} onClick=${stopRetire}>Stop Retiring</button>`)}</div>
       <${ErrorNotice} error=${action.error} />`}
     <dialog ref=${firstRef} class="sheet small" aria-labelledby="delete-host-title" onClose=${() => setFirstOpen(false)}>
-      <header><h2 id="delete-host-title">Delete from File Host</h2><button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => firstRef.current.close()}>✕</button></header>
-      <div class="body"><p>The address of the feed is your control of the feed. When the file is gone, Music Index keeps an entry for the feed. Podcast Index can also keep an entry. The entry keeps its last payment recipients.</p>
-        <p>With no file, you cannot correct the entry, retire it or move it.</p><div class="group rows">
-          ${deleteChoices(deleteState).map((choice) => html`<button class=${`delete-choice link-row${choice.destructive ? ' destructive' : ''}`} type="button" key=${choice.title}
-            onClick=${choice.title === 'Retire It' ? startRetire : choice.title === 'Move It to a Different File Host' ? () => {
+      <header><h2 id="delete-host-title">What do you want to do?</h2><button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => firstRef.current.close()}>✕</button></header>
+      <div class="body"><div class="group rows">
+          ${deleteChoices(deleteState).map((choice) => html`<button class=${`delete-choice link-row${choice.destructive ? ' destructive' : ''}`} type="button" key=${choice.action}
+            onClick=${choice.action === 'retire' ? startRetire : choice.action === 'move' ? () => {
               setFirstOpen(false); window.dispatchEvent(new CustomEvent(OPEN_FEED_MOVE, { detail: feed.id }));
             } : () => { setFirstOpen(false); openFinal(); }}>
-            <span class="text"><span class="label">${choice.title}${choice.recommended && html` <span class="tag">Recommended</span>`}</span><span class="summary">${choice.text}</span></span><span class="go">›</span></button>`)}
-        </div><${ErrorNotice} error=${action.error} /></div>
+            <span class="text"><span class="label">${choice.title}</span><span class="summary">${choice.text}</span></span><span class="go">›</span></button>`)}
+        </div><${DomainLine} domain=${feed.address_host} /><${ErrorNotice} error=${action.error} /></div>
       <footer><button class="button" type="button" onClick=${() => firstRef.current.close()}>Cancel</button></footer>
     </dialog>
     <dialog ref=${finalRef} class="sheet small" aria-labelledby="delete-feed-title" onClose=${discardDelete}>
       <header><h2 id="delete-feed-title">Delete the Feed File</h2><button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => finalRef.current.close()}>✕</button></header>
       <div class="body">
         ${preview && html`<div class="group rows"><div class="facts delete-facts"><span class="label">File host</span><span>${preview.names.host_name}</span><span class="label">Path</span><span class="mono">${preview.names.path}</span></div></div>`}
-        <p>You lose these things:</p><ul class="delete-loss"><li>The control of the entry in Music Index and in Podcast Index. The entry keeps its last payment recipients.</li>
-          <li>A different person who gets this address can publish a feed with this GUID.</li><li>A different address does not give the entry back. Only a write to this address brings the file back.</li></ul>
+        <ul class="delete-points">${DELETE_POINTS.map((point) => html`<li key=${point.text}><span class="mark" aria-hidden="true">${point.mark}</span><span>${point.text}${point.button && html` <strong>${point.button}</strong> ${point.after}`}</span></li>`)}</ul>
+        <${DomainLine} domain=${feed.address_host} />
         <div class="group rows"><label class="check delete-files"><input type="checkbox" checked=${withFiles} disabled=${action.busy}
           onChange=${(event) => loadPreview(event.target.checked)} /><span>Also delete the audio and image files<span class="delete-count">${rows && !withFiles ? 'Studio deletes only the feed file.' : rows ? `Studio deletes ${fileNoun(removedFiles, 'file', 'files')}. ${fileNoun(rows.stays.length, 'file stays', 'files stay')}: ${fileNoun(pointerStays, 'pointer file', 'pointer files')}, and ${fileNoun(usedStays, 'file that another feed uses', 'files that another feed uses')}.` : 'Studio is counting the files.'}</span></span></label></div>
         ${preview && preview.names.publishers.map((publisher) => html`<p class="hint" key=${publisher.id}>“${publisher.title || 'Untitled feed'}” links to this feed.</p>`)}
@@ -2770,7 +2789,7 @@ function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImp
     feed: (s) => html`<section class="page-section"><h2>Feed</h2>
       <div class="group">
         ${showEach(s.rows, {
-          facts: () => html`<${FeedFacts} feed=${feed} draft=${draft} onRemoved=${onRemoved} />`,
+          facts: () => html`<${FeedFacts} feed=${feed} draft=${draft} onRemoved=${onRemoved} onListChanged=${onListChanged} />`,
         })}
       </div>
     </section>`,
@@ -2807,7 +2826,7 @@ function PlaylistPage({ feed, feeds, draft, model, update, bad, go, onRemoved, o
     feed: (s) => html`<section class="page-section"><h2>Feed</h2>
       <div class="group">
         ${showEach(s.rows, {
-          facts: () => html`<${FeedFacts} feed=${feed} draft=${draft} onRemoved=${onRemoved} />`,
+          facts: () => html`<${FeedFacts} feed=${feed} draft=${draft} onRemoved=${onRemoved} onListChanged=${onListChanged} />`,
         })}
       </div>
     </section>`,
@@ -3903,7 +3922,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
     feed: (s) => html`<section class="page-section"><h2>Feed</h2>
       <div class="group">
         ${showEach(s.rows, {
-          facts: () => html`<${FeedFacts} feed=${feed} draft=${draft} onRemoved=${onRemoved} />`,
+          facts: () => html`<${FeedFacts} feed=${feed} draft=${draft} onRemoved=${onRemoved} onListChanged=${onListChanged} />`,
         })}
       </div>
     </section>`,
@@ -4267,6 +4286,7 @@ function MoveReleaseSheet({ open, feed, connectors, start, onDone, onClose }) {
         </div>
         ${plan.nothing_to_move && html`<p class="hint">Each file of this release is already on this file host.</p>`}
       </section>`}
+      ${plan && plan.feed.moves && html`<${DomainLine} domain=${feed.address_host} />`}
       ${hasOld && html`<div class="group move-group">
         <div class="move-check"><label class="check"><input type="checkbox" checked=${deleteLater}
             onChange=${(e) => setDeleteLater(e.target.checked)} /> ${deleteLabel(plan, connectors)}</label>

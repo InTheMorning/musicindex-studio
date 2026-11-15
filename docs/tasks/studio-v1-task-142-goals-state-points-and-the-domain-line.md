@@ -2,7 +2,21 @@
 
 Decision: [ADR 0208](../adr/0208-the-delete-and-move-sheets-give-goals-state-points-and-the-domain-line.md).
 
-Status: Open. The code is not built.
+Status: Complete on 2026-11-14, with its screenshot visual check. The human gate of ADR 0208 is open.
+
+## Result
+
+- A subagent did the build, because ChatGPT gave "usage limit". The main session read the diff, ran the five checks and took the screenshots.
+- `list_feeds` gives `address_host` on each feed row. `feeddelete.js` gives the goal rows with an `action` key, `domainLine`, `DELETE_POINTS` and `retireActions`. `DomainLine` in `editor.js` is in the choice sheet, the last sheet, the Retire block and the move sheet.
+- The main session made four corrections. The choice sheet had the old title. The full domain line was bold, and now only its first sentence is the title. The line in the Retire block had no space at its sides. **Put the File Back** did not load the feed list, so Review showed the notice of a move.
+- **Put the File Back** calls the restore route, loads the feed list, and opens Review through `OPEN_DELETE_REVIEW`. It does not call `draft.show`, because that event loads the draft.
+- The prop of `DomainLine` is `domain`, because the words test refuses the attribute `host=`.
+- The test of ADR 0198 for **Stop Retiring** now reads `retireActions`. The markup that it compared is gone.
+- Criterion 7: the existing test `the_delete_draft_gives_the_summary_and_the_names_and_the_write_deletes_the_file` proves the restore.
+- Walk: `setup-137.py` with `steps-142-{light,dark}.json`, and `setup-142-move.py` with `steps-142-move.json`. At 1280 px light and 390 px dark the walk showed the choice sheet with three rows, the last sheet, the Retire block of a deleted feed, Review after **Put the File Back**, and the file on the test host after the write. The move sheet showed the line with `music.example`. Each view gave no edge and no overflow finding.
+- The 390 px fit check gave one overlap of "Versions" with "Move Artist X up". The walk ended with the page scrolled down, as in task 139. This change does not cause it.
+- The walk did not show the choice sheet with two rows. The Node test proves the two rows.
+- Open defect, not corrected: after the write of the restore, step 1 of the Retire block says "Hide from apps is on in the draft." The bar says "No changes". The expected text is "Hide from apps is on in the last write." The cause is not known.
 
 ## Goal
 

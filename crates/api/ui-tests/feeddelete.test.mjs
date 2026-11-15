@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { deleteChoices, deleteButtonEnabled, deleteWrite, retireSteps, operationNote, domainLine, DELETE_POINTS, retireActions } from '../ui/feeddelete.js';
+import { deleteChoices, deleteButtonEnabled, deleteWrite, refusedDelete, retireSteps, operationNote, domainLine, DELETE_POINTS, retireActions } from '../ui/feeddelete.js';
 import { readFileSync } from 'node:fs';
 
 test('the choice sheet gives the goals of ADR 0208 item 6 and the third row only after removal', () => {
@@ -116,18 +116,36 @@ test('operationNote marks only the row of the feed file', () => {
   assert.equal(operationNote({ kind: 'upload', deletes_feed_file: false }), 'The feed uses this file.');
 });
 
-test('ADR 0198 names and counts all delete operations', () => {
+test('ADR 0209 gives a destructive write for only deletions', () => {
+  assert.deepEqual(deleteWrite({ changed: false, operations: [{ kind: 'delete', deletes_feed_file: false }] }), {
+    label: 'Delete 1 File', destructive: true, cancel: null,
+  }, 'ADR 0209 item 13: name one file. Fix deleteWrite in crates/api/ui/feeddelete.js.');
+  assert.equal(deleteWrite({ changed: false, operations: Array.from({ length: 3 }, () => ({ kind: 'delete', deletes_feed_file: false })) }).label,
+    'Delete 3 Files', 'ADR 0209 item 13: count delete operations. Fix deleteWrite in crates/api/ui/feeddelete.js.');
+  for (const diff of [
+    { operations: [{ kind: 'delete' }], changed: true },
+    { changed: false, operations: [{ kind: 'delete' }], feed_move: {} },
+    { changed: false, operations: [{ kind: 'upload' }, { kind: 'delete' }] },
+    { changed: false, operations: [] },
+  ]) assert.equal(deleteWrite(diff), null, 'ADR 0209 item 13: only unchanged feed deletions use this view. Fix deleteWrite in crates/api/ui/feeddelete.js.');
   assert.deepEqual(deleteWrite({ operations: [{ kind: 'delete', deletes_feed_file: true }] }), {
     label: 'Delete the Feed File', destructive: true, cancel: 'Cancel the Delete',
-  }, 'ADR 0198 item 1: name one delete. Count the delete operations.');
+  }, 'ADR 0198 item 1: keep the feed delete review.');
   assert.equal(deleteWrite({ operations: [
     { kind: 'delete', deletes_feed_file: true },
     { kind: 'delete', deletes_feed_file: false },
     { kind: 'delete', deletes_feed_file: false },
   ] }).label, 'Delete 3 Files',
   'ADR 0198 item 1: count every delete operation when one marks the feed file.');
-  assert.equal(deleteWrite({ operations: [{ kind: 'delete', deletes_feed_file: false }] }), null,
-    'ADR 0198 item 4: keep the usual review without a feed-file delete.');
+});
+
+test('ADR 0209 refusedDelete gives warning rows', () => {
+  assert.deepEqual(refusedDelete({ pointer: true }), {
+    kind: 'Not deleted', tone: 'warning', text: 'Studio does not delete this file. It tells the apps the new address of the feed.',
+  }, 'ADR 0209 item 10: name a refused pointer deletion. Fix refusedDelete in crates/api/ui/feeddelete.js.');
+  assert.deepEqual(refusedDelete({ pointer: false, feed_titles: ['A', 'B'] }), {
+    kind: 'Not deleted', tone: 'warning', text: 'Studio does not delete this file. These feeds use it: A, B',
+  }, 'ADR 0209 item 11: name the feeds that use a file. Fix refusedDelete in crates/api/ui/feeddelete.js.');
 });
 
 test('ADR 0198 keeps the destructive review button first and guards the write', () => {
@@ -139,6 +157,19 @@ test('ADR 0198 keeps the destructive review button first and guards the write', 
     'ADR 0198 items 2 and 3: put the guarded destructive delete before Cancel the Delete.');
   assert.ok(usual > cancel && editor.includes("'Write to the File Host'"),
     'ADR 0198 item 4: keep Write to the File Host in the guarded primary path.');
+});
+
+test('ADR 0209 puts the podping choice in the footer and refused deletes are warnings', () => {
+  const editor = readFileSync(new URL('../ui/editor.js', import.meta.url), 'utf8');
+  const body = editor.slice(editor.indexOf('<div class="body">', editor.indexOf('function ReviewSheet')), editor.indexOf('<footer>', editor.indexOf('function ReviewSheet')));
+  const footer = editor.slice(editor.indexOf('<footer>', editor.indexOf('function ReviewSheet')), editor.indexOf('</footer>', editor.indexOf('function ReviewSheet')));
+  assert.ok(!body.includes('<${AnnounceChoice}') && !body.includes('<${AnnounceFooterChoice}'),
+    'ADR 0209 item 1: the body of the review sheet has no check box of the announcement. Fix ReviewSheet in crates/api/ui/editor.js.');
+  assert.ok(footer.includes('<${AnnounceFooterChoice}') && editor.includes('<span>${ANNOUNCE_FOOTER_LABEL}</span>'),
+    'ADR 0209 items 1 and 2: put the labeled choice in the footer. Fix ReviewSheet in crates/api/ui/editor.js.');
+  const blocked = editor.slice(editor.indexOf('function BlockedDeleteRow'), editor.indexOf('// Each host operation', editor.indexOf('function BlockedDeleteRow')));
+  assert.ok(blocked.includes('role="status"') && !blocked.includes('role="alert"') && !blocked.includes('class="host-op-row error"'),
+    'ADR 0209 item 9: refused deletion is a warning status row. Fix BlockedDeleteRow in crates/api/ui/editor.js.');
 });
 
 test('ADR 0198 hides actions that a deleted feed cannot use', () => {

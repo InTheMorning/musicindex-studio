@@ -181,3 +181,4 @@ The step numbers are those of the section "What to test" of the [notes of `0.1.0
 - Step 6: pass. The sheet shows the goals and the domain line with the real domain.
 - Step 7: pass, from the report of the operator.
 - Step 8: pass. The check box "Send a podping" stays in view in a long review.
+- Step 9: pass. After a move, the group of the move shows **Delete Now…**, and the delete review has the red button with the count as its first button.

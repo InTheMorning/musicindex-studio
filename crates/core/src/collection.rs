@@ -664,6 +664,9 @@ SELECT id, 'picture', img, 0, created_at FROM people WHERE img <> '';
 INSERT INTO person_values (person_id, kind, value, position, created_at)
 SELECT id, 'website', href, 0, created_at FROM people WHERE href <> '';
 ",
+    r"
+ALTER TABLE feeds ADD COLUMN release_kind TEXT;
+",
 ];
 
 /// `root` as a relative path under `data_dir`, when it is a folder inside
@@ -1016,6 +1019,8 @@ pub struct FeedRow {
     pub title: Option<String>,
     /// `podcast:medium`, from the last read.
     pub medium: Option<String>,
+    /// The kind kept for a music release (ADR 0213 item 10).
+    pub release_kind: Option<String>,
     /// The version marker from the last read or write.
     pub last_version: Option<Version>,
     /// The release folder of the feed in the library (ADR 0036 item 4).
@@ -1789,6 +1794,19 @@ impl Collection {
         self.db.execute(
             "UPDATE feeds SET publisher_roles = ?2, roles_confirmed = ?3 WHERE id = ?1",
             params![id.0, text, confirmed && !roles.is_empty()],
+        )?;
+        Ok(())
+    }
+
+    /// Keep the kind of a music release without changing its draft.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn set_release_kind(&self, id: FeedId, kind: Option<&str>) -> Result<(), CollectionError> {
+        self.db.execute(
+            "UPDATE feeds SET release_kind = ?2 WHERE id = ?1",
+            params![id.0, kind],
         )?;
         Ok(())
     }
@@ -4499,7 +4517,7 @@ fn non_empty(value: String) -> Option<String> {
     (!value.is_empty()).then_some(value)
 }
 
-const FEED_SELECT: &str = "SELECT id, public_url, connector_id, path, podcast_guid, title, medium, last_version, address_source, folder, files_connector_id, publisher_roles, roles_confirmed, created_at FROM feeds";
+const FEED_SELECT: &str = "SELECT id, public_url, connector_id, path, podcast_guid, title, medium, last_version, address_source, folder, files_connector_id, publisher_roles, roles_confirmed, created_at, release_kind FROM feeds";
 
 /// Keep or remove the address of one source. An empty address is no address.
 fn put_address(
@@ -4798,6 +4816,7 @@ fn feed_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<FeedRow> {
         podcast_guid: r.get(4)?,
         title: r.get(5)?,
         medium: r.get(6)?,
+        release_kind: r.get(14)?,
         last_version: r.get::<_, Option<String>>(7)?.map(Version::new),
         address_source: r
             .get::<_, Option<String>>(8)?
@@ -4884,6 +4903,52 @@ mod tests {
         let collection = Collection::open(&path).unwrap();
         assert_eq!(collection.schema_version().unwrap(), SCHEMA_VERSION);
         assert_eq!(collection.connectors().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn new_and_previous_collections_have_the_release_kind_column() {
+        let dir = tempfile::tempdir().unwrap();
+        let previous_path = dir.path().join("previous.sqlite");
+        let db = Connection::open(&previous_path).unwrap();
+        for migration in &MIGRATIONS[..MIGRATIONS.len() - 1] {
+            db.execute_batch(migration).unwrap();
+        }
+        db.pragma_update(
+            None,
+            "user_version",
+            i64::try_from(SCHEMA_VERSION - 1).unwrap(),
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO feeds (id, title, medium, created_at) VALUES (1, 'Release', 'music', 0)",
+            [],
+        )
+        .unwrap();
+        drop(db);
+
+        let previous = Collection::open(&previous_path).unwrap();
+        assert_eq!(previous.schema_version().unwrap(), SCHEMA_VERSION);
+        assert_eq!(previous.feed(FeedId(1)).unwrap().release_kind, None);
+        let count: i64 = previous
+            .db
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('feeds') WHERE name = 'release_kind'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
+
+        let fresh = Collection::open_in_memory().unwrap();
+        let fresh_count: i64 = fresh
+            .db
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('feeds') WHERE name = 'release_kind'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(fresh_count, 1);
     }
 
     #[test]
@@ -6332,15 +6397,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("collection.sqlite");
         let db = Connection::open(&path).unwrap();
-        for migration in &MIGRATIONS[..MIGRATIONS.len() - 1] {
+        let previous = MIGRATIONS.len() - 3;
+        for migration in &MIGRATIONS[..previous] {
             db.execute_batch(migration).unwrap();
         }
-        db.pragma_update(
-            None,
-            "user_version",
-            i64::try_from(MIGRATIONS.len() - 1).unwrap(),
-        )
-        .unwrap();
+        db.pragma_update(None, "user_version", i64::try_from(previous).unwrap())
+            .unwrap();
         db.execute(
             "INSERT INTO people (name, usual_role, img, href, created_at) VALUES ('Ann', 'Vocalist', '', '', 0)",
             [],
@@ -6362,15 +6424,12 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("collection.sqlite");
         let db = Connection::open(&path).unwrap();
-        for migration in &MIGRATIONS[..MIGRATIONS.len() - 1] {
+        let previous = MIGRATIONS.len() - 2;
+        for migration in &MIGRATIONS[..previous] {
             db.execute_batch(migration).unwrap();
         }
-        db.pragma_update(
-            None,
-            "user_version",
-            i64::try_from(MIGRATIONS.len() - 1).unwrap(),
-        )
-        .unwrap();
+        db.pragma_update(None, "user_version", i64::try_from(previous).unwrap())
+            .unwrap();
         db.execute(
             "INSERT INTO people (name, usual_role, img, href, created_at) VALUES ('Ann', 'Vocalist', 'https://img.example/a.png', 'https://ann.example', 7)",
             [],

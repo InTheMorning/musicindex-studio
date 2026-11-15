@@ -377,6 +377,7 @@ fn workspace_router_with_shared(workspace: Workspace) -> (Router, WorkspaceHandl
         .route("/import/msp", post(routes::import_msp))
         .route("/feeds", get(routes::list_feeds).post(routes::add_feed))
         .route("/feeds/new", post(routes::new_album_feed))
+        .route("/feeds/{id}/kind", put(routes::set_release_kind))
         .route("/feeds/{id}", delete(routes::delete_feed))
         .route("/feeds/{id}/links", post(routes::add_link))
         .route("/feeds/{id}/links/{release}", delete(routes::remove_link))

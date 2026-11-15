@@ -1420,6 +1420,17 @@ pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
             let mut value =
                 serde_json::to_value(row).map_err(|e| ApiError::internal(e.to_string()))?;
             value["draft_state"] = json!(state);
+            if row.medium.as_deref() == Some("music") {
+                let track_count = feed.as_ref().map_or(0, |model| model.items.len());
+                value["release_kind"] = json!(row.release_kind);
+                value["kind_shown"] = json!(studio_core::feed::release_kind_shown(
+                    row.release_kind.as_deref(),
+                    track_count,
+                ));
+            } else {
+                value["release_kind"] = Value::Null;
+                value["kind_shown"] = Value::Null;
+            }
             // A read-only feed with a pointer record followed a move
             // (ADR 0211 item 15).
             value["followed_move"] = json!(
@@ -1540,6 +1551,10 @@ pub(crate) struct NewAlbumFeed {
     /// The ID of the source album. The new feed is a copy of its draft
     /// (ADR 0077 item 4).
     from: Option<i64>,
+    /// The kind kept for the new release (ADR 0213 item 10).
+    kind: Option<String>,
+    /// The artist page that starts the new release (ADR 0213 items 1 and 7).
+    publisher_id: Option<i64>,
 }
 
 /// Make a new feed in a connected folder, as a draft with no hosted file
@@ -1550,6 +1565,7 @@ pub(crate) async fn new_album_feed(
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
     blocking(shared, move |w| {
         let medium = body.medium.as_deref().unwrap_or("music");
+        validate_release_kind(body.kind.as_deref(), medium)?;
         let (publisher, playlist) = match medium {
             "music" => (false, false),
             "publisher" => (true, false),
@@ -1562,6 +1578,8 @@ pub(crate) async fn new_album_feed(
                 ));
             }
         };
+        let kind = body.kind.as_deref();
+        let artist_id = validate_artist_page(w, medium, body.publisher_id)?;
         let title = body.title.trim();
         let author = body.author.trim();
         if title.is_empty() || author.is_empty() {
@@ -1639,10 +1657,151 @@ pub(crate) async fn new_album_feed(
                 medium,
             )?
         };
-        if let Some(role) = role {
-            w.collection.set_publisher_roles(id, &[role], true)?;
-        }
+        finish_new_feed(w, id, medium, kind, role, artist_id)?;
         Ok((StatusCode::CREATED, to_json(w.collection.feed(id)?)?))
+    })
+    .await
+}
+
+fn finish_new_feed(
+    w: &Workspace,
+    id: FeedId,
+    medium: &str,
+    kind: Option<&str>,
+    role: Option<PublisherRole>,
+    artist_id: Option<FeedId>,
+) -> Result<(), ApiError> {
+    if let Some(role) = role {
+        w.collection.set_publisher_roles(id, &[role], true)?;
+    }
+    if medium == "music" {
+        w.collection.set_release_kind(id, kind)?;
+    }
+    if let Some(artist_id) = artist_id {
+        link_new_release_pages(w, artist_id, id)?;
+    }
+    Ok(())
+}
+
+fn validate_release_kind(kind: Option<&str>, medium: &str) -> Result<(), ApiError> {
+    if kind.is_some_and(|kind| !matches!(kind, "album" | "ep" | "single"))
+        || (kind.is_some() && medium != "music")
+    {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "invalid_kind",
+            "kind must be album, ep or single for a release",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_artist_page(
+    w: &Workspace,
+    medium: &str,
+    publisher_id: Option<i64>,
+) -> Result<Option<FeedId>, ApiError> {
+    let Some(artist_id) = publisher_id.map(FeedId) else {
+        return Ok(None);
+    };
+    let artist = w.collection.feed(artist_id)?;
+    if medium != "music"
+        || artist.medium.as_deref() != Some("publisher")
+        || !artist.publisher_roles.contains(&PublisherRole::Artist)
+    {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "invalid_publisher",
+            "publisher_id must name an artist page",
+        ));
+    }
+    Ok(Some(artist_id))
+}
+
+fn link_new_release_pages(
+    w: &Workspace,
+    artist_id: FeedId,
+    release_id: FeedId,
+) -> Result<(), ApiError> {
+    publisher::link(&w.collection, artist_id, release_id)?;
+    let feeds = feed_models(w)?;
+    let catalog_feeds: Vec<_> = feeds
+        .iter()
+        .map(|(row, model)| (row.clone(), Some(model.clone())))
+        .collect();
+    let catalogs = publisher::catalogs(&catalog_feeds);
+    let newest = feeds
+        .iter()
+        .enumerate()
+        .find(|(_, (row, _))| row.id == artist_id)
+        .and_then(|(index, _)| {
+            catalogs[index]
+                .releases
+                .iter()
+                .filter(|id| **id != release_id)
+                .filter_map(|id| {
+                    feeds
+                        .iter()
+                        .find(|(row, _)| row.id == *id)
+                        .map(|(row, _)| (row.added_at, *id))
+                })
+                .max_by_key(|(added_at, _)| *added_at)
+                .map(|(_, id)| id)
+        });
+    let Some(newest) = newest else {
+        return Ok(());
+    };
+    let newest_index = feeds
+        .iter()
+        .position(|(row, _)| row.id == newest)
+        .ok_or_else(|| ApiError::internal("the newest release is missing"))?;
+    for publisher_id in &catalogs[newest_index].publishers {
+        let publisher_row = w.collection.feed(*publisher_id)?;
+        if publisher_row
+            .publisher_roles
+            .iter()
+            .any(|role| matches!(role, PublisherRole::Hosting | PublisherRole::Label))
+        {
+            publisher::link(&w.collection, *publisher_id, release_id)?;
+        }
+    }
+    Ok(())
+}
+
+#[derive(Deserialize)]
+pub(crate) struct UpdateReleaseKind {
+    kind: Option<String>,
+}
+
+/// Keep the release kind without changing its draft (ADR 0213 item 13).
+pub(crate) async fn set_release_kind(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(body): Json<UpdateReleaseKind>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let row = w.collection.feed(FeedId(id))?;
+        if row.medium.as_deref() != Some("music") {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "invalid_feed",
+                "kind applies only to a release",
+            ));
+        }
+        if body
+            .kind
+            .as_deref()
+            .is_some_and(|kind| !matches!(kind, "album" | "ep" | "single"))
+        {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "invalid_kind",
+                "kind must be album, ep or single",
+            ));
+        }
+        w.collection
+            .set_release_kind(row.id, body.kind.as_deref())?;
+        to_json(w.collection.feed(row.id)?)
     })
     .await
 }

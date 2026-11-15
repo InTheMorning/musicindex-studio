@@ -446,6 +446,22 @@ impl Feed {
     }
 }
 
+/// Give the kind to show for a release (ADR 0213 item 11).
+#[must_use]
+pub fn release_kind_shown(kept_kind: Option<&str>, track_count: usize) -> &'static str {
+    match kept_kind {
+        Some("album") => return "album",
+        Some("ep") => return "ep",
+        Some("single") => return "single",
+        _ => {}
+    }
+    match track_count {
+        1..=3 => "single",
+        4..=6 => "ep",
+        _ => "album",
+    }
+}
+
 /// The place of a credit in a feed (ADR 0120 item 2).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -902,6 +918,23 @@ impl Modeled for LiveItem {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn release_kind_comes_from_kept_value_or_track_count() {
+        for (count, expected) in [
+            (0, "album"),
+            (1, "single"),
+            (3, "single"),
+            (4, "ep"),
+            (6, "ep"),
+            (7, "album"),
+        ] {
+            assert_eq!(release_kind_shown(None, count), expected, "{count} tracks");
+        }
+        assert_eq!(release_kind_shown(Some("single"), 4), "single");
+        assert_eq!(release_kind_shown(Some("ep"), 1), "ep");
+        assert_eq!(release_kind_shown(Some("album"), 3), "album");
+    }
 
     fn read_dates(dates: [&str; 2]) -> Feed {
         let xml = format!(

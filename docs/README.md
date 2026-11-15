@@ -542,6 +542,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR overuse audit, 2026-11-14](reviews/2026-11-14-adr-overuse-audit.md)
 - [Human check walk of 2026-11-14](reviews/2026-11-14-human-check-walk.md)
 - [The open older human tests, for one walk on rc.23](reviews/2026-11-14-open-older-human-tests.md)
+- [Walk notes of 2026-11-15](reviews/2026-11-15-walk-notes.md)
 
 ## Runbooks
 

@@ -39,7 +39,7 @@ Open: the task did not start. An unlock at the start must keep the vault key or 
 
 ### Note 3: A Keyboard Shortcut For The Left Panel At A Narrow Width
 
-Comment: a task must find the options for a keyboard shortcut that opens and closes the left panel at a narrow width, on a device with no touch screen.
+Comment: a task must find the options for a keyboard shortcut that opens and closes the left panel at a narrow width. The shortcut is for a device with no touch screen.
 
 Facts:
 

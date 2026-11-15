@@ -66,7 +66,7 @@ async fn app_with_scripted_index(
     .await;
     assert_eq!(status, StatusCode::CREATED);
     set_library_root(&app);
-    let id = add_paid_feed(&app, connector["id"].as_i64().unwrap(), "a.xml", xml).await;
+    let id = add_paid_feed_raw(&app, connector["id"].as_i64().unwrap(), "a.xml", xml).await;
     (app, id)
 }
 
@@ -102,7 +102,10 @@ async fn the_check_route_gives_the_local_findings_and_the_reads_add_the_network_
 
     let (status, check) = call(&app, "GET", &path, None).await;
     assert_eq!(status, StatusCode::OK, "{check}");
-    assert_eq!(kinds(&check), ["no_self_link", "no_file_size"]);
+    assert_eq!(
+        kinds(&check),
+        ["no_artist_page", "no_self_link", "no_file_size"]
+    );
     assert_eq!(check["read"], false);
     assert_eq!(check["read_only"], false);
     let link = finding(&check, "no_self_link", None);
@@ -134,6 +137,102 @@ async fn the_check_route_gives_the_local_findings_and_the_reads_add_the_network_
     assert_eq!(status, StatusCode::OK, "{again}");
     assert_eq!(again["findings"], read["findings"]);
     assert_eq!(again["read"], true);
+}
+
+#[tokio::test]
+async fn page_refusal_is_in_the_diff_and_blocks_release_and_playlist_writes() {
+    for (xml, code, message) in [
+        (
+            feed_xml(""),
+            "no_artist_page",
+            "This release has no artist page.",
+        ),
+        (
+            feed_xml("").replace(
+                "<podcast:medium>music</podcast:medium>",
+                "<podcast:medium>musicL</podcast:medium>",
+            ),
+            "no_publisher_page",
+            "This feed has no artist, label or hosting page.",
+        ),
+    ] {
+        let (app, id) = app_with_scripted_index(
+            ScriptedReader::empty(),
+            ScriptedFileReads::empty(),
+            "http://127.0.0.1:9",
+            &xml,
+        )
+        .await;
+        let (status, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+        assert_eq!(
+            status,
+            StatusCode::OK,
+            "ADR 0213 item 21: expose the page refusal in the diff; fix the diff route. {diff}"
+        );
+        assert_eq!(
+            diff["page_refusal"], code,
+            "ADR 0213 item 21: expose the refusal code; fix the diff route. {diff}"
+        );
+        let (status, refused) = call(
+            &app,
+            "POST",
+            &format!("/api/v1/feeds/{id}/write"),
+            Some(json!({ "diff_id": diff["id"] })),
+        )
+        .await;
+        assert_eq!(
+            status,
+            StatusCode::CONFLICT,
+            "ADR 0213 item 21: stop a feed write with no page; fix the write route. {refused}"
+        );
+        assert_eq!(
+            refused["error"]["code"], code,
+            "ADR 0213 item 21: give the page refusal code; fix the write route. {refused}"
+        );
+        assert_eq!(
+            refused["error"]["message"], message,
+            "ADR 0213 item 18: give the finding text in the refusal. {refused}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn hidden_feed_has_no_page_refusal_and_can_be_written() {
+    let (app, id) = app_with_feed(ScriptedReader::empty(), ScriptedFileReads::empty()).await;
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/listing"),
+        Some(json!({ "hidden": true })),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0213 item 22: hide the draft from apps; fix the listing route."
+    );
+    let (status, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0213 item 22: make a diff for a hidden feed; fix the diff route. {diff}"
+    );
+    assert!(
+        diff["page_refusal"].is_null(),
+        "ADR 0213 item 22: give no refusal for a hidden feed; fix the diff route. {diff}"
+    );
+    let (status, written) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0213 item 22: allow a hidden feed write; fix the write route. {written}"
+    );
 }
 
 #[tokio::test]

@@ -16,6 +16,7 @@ use super::*;
 const LIVE_ORIGIN: &str = "wss://example.com";
 const FEED: &str = "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel>\
     <title>Album</title><podcast:guid>g-1</podcast:guid><podcast:medium>music</podcast:medium>\
+    <podcast:publisher><podcast:remoteItem medium=\"publisher\" rel=\"artist\" feedGuid=\"artist-1\" feedUrl=\"https://music.example/artist.xml\"/></podcast:publisher>\
     <item><guid>t-1</guid></item></channel></rss>";
 
 /// A server on a loopback port. `app` has the router for requests in

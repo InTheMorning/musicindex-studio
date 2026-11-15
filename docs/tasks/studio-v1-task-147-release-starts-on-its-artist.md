@@ -2,7 +2,7 @@
 
 Decision: [ADR 0213](../adr/0213-a-release-starts-on-the-page-of-its-artist.md).
 
-Status: In progress. Packet 147a is complete on 2026-11-14. Packets 147b and 147c are open.
+Status: In progress. Packets 147a and 147b are complete on 2026-11-15. Packet 147c is open.
 
 ## Result Of Packet 147a
 
@@ -12,6 +12,17 @@ Status: In progress. Packet 147a is complete on 2026-11-14. Packets 147b and 147
 - A new release with `publisher_id` gets the link to the artist page. Then it gets each hosting page and each label page of the release of that artist that the collection got last.
 - Two older migration tests now name their own version, because the last migration is no longer theirs.
 - Tests: `release_kind_comes_from_kept_value_or_track_count`, `new_and_previous_collections_have_the_release_kind_column`, `a_new_release_keeps_its_kind_and_inherits_the_newest_artists_pages`, `a_first_release_links_only_its_artist_page` and `release_kind_updates_at_once_without_changing_the_draft`.
+
+## Result Of Packet 147b
+
+- ChatGPT did the build. The main session read the diff, added the change set rule and ran the five checks.
+- `feed_check::page_refusal` gives the reason for a typed feed. `check` gives the findings `NoArtistPage` and `NoPublisherPage` from it, with the level Notice and the repair `LinkAPage`.
+- The diff of a feed has `page_refusal`. `write_feed` refuses with `409` and the code `no_artist_page` or `no_publisher_page`.
+- A change set writes each feed through `write_feed`. Thus the delegate build stopped a change set, which ADR 0213 item 22 does not permit. The main session added `Collection::has_open_change_set_row`. A feed with an open row of a change set has no stop and no `page_refusal`.
+- A granted write of a connected app does not go through `write_feed`, so it has no stop. No test proves it, because the setup of a grant needs one usual write of the feed.
+- The fixtures `paid_feed`, `feed_xml` of the retire tests and `FEED` of the server tests have an artist link.
+- Tests: `page_findings_follow_adr_0213_for_releases_playlists_shows_and_publishers`, `page_refusal_is_in_the_diff_and_blocks_release_and_playlist_writes`, `hidden_feed_has_no_page_refusal_and_can_be_written`, `feed_rows_report_a_completed_host_delete` (the delete of the feed file) and `a_change_set_writes_a_release_with_no_artist_page`.
+- Open: the row of a feed that a change set did not change also removes the stop until the change set closes.
 
 ## Goal
 

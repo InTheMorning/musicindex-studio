@@ -3505,6 +3505,7 @@ fn diff_json_with_streams(
     // the same ID (ADR 0127 items 4 and 5).
     let build_date = pipeline::set_build_date(&w.collection, id, checked)?;
     let diff = pipeline::diff_checked(&w.collection, &hosts, &library, streams, id)?;
+    let page_refusal = feed_page_refusal(w, id)?;
     // The app of each grant of the draft, for the review sheet (ADR 0110
     // item 19).
     let mut grant_apps = serde_json::Map::new();
@@ -3528,6 +3529,7 @@ fn diff_json_with_streams(
         "grants": diff.grants,
         "grant_apps": grant_apps,
         "build_date": build_date,
+        "page_refusal": page_refusal,
         "apps": review_apps(w)?,
         "events": diff
             .events
@@ -3539,6 +3541,23 @@ fn diff_json_with_streams(
             }))
             .collect::<Vec<_>>(),
     })))
+}
+
+/// Give the page-rule refusal for a draft. A feed-file deletion, a feed
+/// that is hidden from apps and a feed of an open change set have no
+/// refusal (ADR 0213 item 22).
+fn feed_page_refusal(w: &Workspace, id: FeedId) -> Result<Option<&'static str>, ApiError> {
+    if w.collection.has_draft_feed_delete(id)? || w.collection.has_open_change_set_row(id)? {
+        return Ok(None);
+    }
+    let (feed, _) = pipeline::draft_model(&w.collection, id)?;
+    if feed.hidden() {
+        return Ok(None);
+    }
+    Ok(
+        studio_core::feed_check::page_refusal(&feed)
+            .map(studio_core::feed_check::PageRefusal::code),
+    )
 }
 
 pub(crate) async fn get_diff(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
@@ -3589,6 +3608,20 @@ pub(crate) async fn write_feed(
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |d| d.as_secs());
         crate::temporary::check_write_target(w, id)?;
+        let row = w.collection.feed(id)?;
+        let can_write_feed =
+            row.connector_id.is_some() || w.collection.draft_feed_move(id)?.is_some();
+        if can_write_feed && let Some(reason) = feed_page_refusal(w, id)? {
+            return Err(ApiError::new(
+                StatusCode::CONFLICT,
+                reason,
+                match reason {
+                    "no_artist_page" => "This release has no artist page.",
+                    "no_publisher_page" => "This feed has no artist, label or hosting page.",
+                    _ => unreachable!("page refusal codes come from PageRefusal"),
+                },
+            ));
+        }
         let plan_time = pipeline::plan_time_for_write(&w.collection, id, &approved, now)?;
         let hosts = w.hosts_with(Signing {
             plan_time,

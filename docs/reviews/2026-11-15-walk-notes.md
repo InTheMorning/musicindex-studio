@@ -119,3 +119,4 @@ Open: no task. The move changes ADR 0213 item 13. The task must say how a field 
 The step numbers are those of the section "What to test" of the [notes of `0.1.0-rc.23`](../releases/0.1.0-rc.23.md).
 
 - Step 3: the kind of each release agrees with its track count. A release of 2 tracks shows "Single" (two releases). A release of 7 tracks and a release of 19 tracks show "Album". The collection has no release of 4 to 6 tracks, so the upgrade to "EP" stays open.
+- Step 4: pass. The operator made a release with the kind "EP" from the page of the artist.

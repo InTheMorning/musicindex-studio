@@ -336,7 +336,8 @@ The operator answered a questionnaire about the list above. These lines record t
     - `compare` gives "moved" only when the new address is not the public address of the feed. Here the public address is already the new address, so the result is "changed".
     - A correction needs the decision of missing function 1, how Studio follows a move by a different Studio. Defects 3 and 4 go into that group of mockups.
 - Correction of the line "Runbook text that is out of date" below: the three texts are in the steps of the notes of 0.1.0-rc.21, which the runbook names. The notes of a released candidate do not change. The notes of the next candidate give the current steps.
-- Open: texts 3, 5 and 7 have no new words. Defect 2 needs a measurement in WebKitGTK.
+- Text 3 has a decision: [ADR 0208](../adr/0208-the-delete-and-move-sheets-give-goals-state-points-and-the-domain-line.md), with task 142. The examination of the text also found that no control of the UI starts the restore of a deleted feed.
+- Open: texts 5 and 7 have no new words. Defect 2 needs a measurement in WebKitGTK.
 
 Runbook text that is out of date: `docs/runbooks/operator-human-checks.md` says 7 days for a move, the button **Use** for a suggestion, and the return warning below the move row.
 

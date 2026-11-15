@@ -190,6 +190,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0205: Publisher feeds, announcements and show grants](adr/0205-publisher-feeds-announcements-and-show-grants.md)
 - [ADR 0206: The shell and the editor pages](adr/0206-the-shell-and-the-editor-pages.md)
 - [ADR 0207: Recipients, change sets and wallets](adr/0207-recipients-change-sets-and-wallets.md)
+- [ADR 0208: The delete and move sheets give goals, state points and the domain line](adr/0208-the-delete-and-move-sheets-give-goals-state-points-and-the-domain-line.md)
 
 ## Plans
 
@@ -471,6 +472,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 140a: The Lightning address lookups get their own route](tasks/studio-v1-task-140a-recipient-lookups-route.md)
 - [Studio v1 task 140b: The People page opens before the recipients and the lookups](tasks/studio-v1-task-140b-people-opens-before-lookups.md)
 - [Studio v1 task 141: An http image shows from its https address](tasks/studio-v1-task-141-http-image-from-https.md)
+- [Studio v1 task 142: Goals, state points and the domain line](tasks/studio-v1-task-142-goals-state-points-and-the-domain-line.md)
 - [Studio v1 task 055: The date and time fields](tasks/studio-v1-task-055-date-time-fields.md)
 - [Studio v1 task 055a: The times in the core](tasks/studio-v1-task-055a-times-in-the-core.md)
 - [Studio v1 task 055b: The date and time field](tasks/studio-v1-task-055b-date-time-field.md)

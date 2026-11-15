@@ -20,7 +20,7 @@ import {
   prfOutputOf, passkeyBrowserCode, defaultPasskeyName,
   nip46State, nip46ErrorText, isBunkerAddress, qrSource, UNLOCK_AGAIN_TEXT, needsRecentUnlock,
 } from './account.js';
-import { addChoices, MAKE_TYPES, makeFields, makeTitle, feedFileStart, startChoices } from './addfeeds.js';
+import { addChoices, MAKE_TYPES, RELEASE_KINDS, makeFields, makeTitle, feedFileStart, startChoices } from './addfeeds.js';
 import { WELCOME, HOST_STEP, showWelcome, welcomeSteps, pathTexts, hostStepModel, welcomeBody, releaseAdd } from './welcome.js';
 import { isLiveItem } from './live.js';
 import { appRowLines, pairingPhase, pairingNotice, doneRemovesApp } from './apps.js';
@@ -1409,13 +1409,14 @@ function AddHostForm({ feeds, onAdded, start, showType = true, startRoot = '', s
 // One form makes each new feed, as a draft with no file on the host yet
 // (ADR 0073 items 5 to 9, ADR 0032 items 6 to 9, ADR 0041 item 2, ADR 0053
 // item 2). "Feed file" starts from the title until the user types in it.
-// `start` gives optional start values: `author` and `role` (ADR 0119 item 8).
+// `start` gives `author`, `role` and `publisher_id` (ADR 0119 item 8, ADR 0213 item 7).
 // `onKind` gets the type and the role, for the title of the sheet.
 function MakeFeedForm({ connectors, feeds, startType, start = {}, onAdded, onKind }) {
   const [type, setType] = useState(startType);
   const [connectorId, setConnectorId] = useState(connectors[0] ? connectors[0].id : null);
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState(start.author || '');
+  const [releaseKind, setReleaseKind] = useState(start.kind || '');
   const [role, setRole] = useState(start.role || null);
   const [typedPath, setTypedPath] = useState(null);
   const [from, setFrom] = useState('');
@@ -1455,6 +1456,10 @@ function MakeFeedForm({ connectors, feeds, startType, start = {}, onAdded, onKin
     run(async () => {
       const body = { connector_id: connectorId, path, title: name, author: fields.authorLabel === null ? name : author, medium: fields.medium };
       if (fields.role) body.role = role;
+      if (type === 'album') {
+        body.kind = releaseKind || null;
+        body.publisher_id = start.publisher_id;
+      }
       if (showFrom && from) body.from = Number(from);
       onAdded(await api('/feeds/new', { method: 'POST', body }));
     });
@@ -1462,18 +1467,25 @@ function MakeFeedForm({ connectors, feeds, startType, start = {}, onAdded, onKin
   const ready = connectorId !== null && path.trim() && title.trim()
     && (fields.authorLabel === null || author.trim()) && (!fields.role || role !== null);
   return html`<form class="form" onSubmit=${submit}>
-    <${ChoiceSelect} id="make-type" label="Type" value=${type} options=${MAKE_TYPES} onChange=${changeType} />
-    ${showFrom && html`<${ChoiceSelect} id="make-from" label="Start from" value=${from} options=${starts.slice(1)}
-      placeholder=${starts[0][1]} onChange=${changeFrom} />`}
-    ${connectors.length > 1 && html`<div class="field"><label for="make-host">File host</label>
+    ${type !== 'album' && html`<${ChoiceSelect} id="make-type" label="Type" value=${type} options=${MAKE_TYPES} onChange=${changeType} />`}
+    ${type !== 'album' && connectors.length > 1 && html`<div class="field"><label for="make-host">File host</label>
       <select id="make-host" class="button" value=${connectorId}
         onChange=${(e) => setConnectorId(Number(e.target.value))}>
         ${connectors.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
       </select></div>`}
+    ${type === 'album' && html`<${ChoiceSelect} id="make-kind" label="Kind" value=${releaseKind} options=${RELEASE_KINDS}
+      hint="Studio shows this kind. The feed file has no tag for it." onChange=${setReleaseKind} />`}
     <${Field} id="make-title" label=${fields.titleLabel} required
       value=${title} onInput=${(e) => setTitle(e.target.value)} />
     ${fields.authorLabel !== null && html`<${Field} id="make-author" label=${fields.authorLabel} required
       value=${author} onInput=${(e) => { setAuthorTyped(true); setAuthor(e.target.value); }} />`}
+    ${showFrom && html`<${ChoiceSelect} id="make-from" label="Start from" value=${from} options=${starts.slice(1)}
+      placeholder=${starts[0][1]} onChange=${changeFrom} />`}
+    ${type === 'album' && connectors.length > 1 && html`<div class="field"><label for="make-host">File host</label>
+      <select id="make-host" class="button" value=${connectorId}
+        onChange=${(e) => setConnectorId(Number(e.target.value))}>
+        ${connectors.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
+      </select></div>`}
     ${fields.role && html`<${ChoiceSelect} id="make-role" label="Role" value=${role ?? ''} placeholder="Select a role"
       options=${FIRST_CLASS_ROLES.map((r) => [r, roleWord(r)])} onChange=${(value) => setRole(value || null)} />`}
     <div class="group"><details class="disclosure" open=${pathOpen} onToggle=${(e) => setPathOpen(e.currentTarget.open)}>
@@ -2243,7 +2255,7 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
       <${Crumb} feed=${feed} view=${view} draft=${draft} />
       <${DraftToolbar} key=${feed.id} feedId=${feed.id} feedConnectorId=${feed.connector_id} draft=${draft} onWritten=${onChanged} connectors=${connectors}
         onOpenHosts=${() => go({ name: 'hosts' })}
-        onOpsChanged=${() => { opsChanged(); reloadFiles(); }} onOpsCleared=${reloadFiles} />
+        onOpsChanged=${() => { opsChanged(); reloadFiles(); }} onOpsCleared=${reloadFiles} go=${go} />
     <//>
     <div class="feed-head">
       <header class="head">
@@ -2937,6 +2949,7 @@ function AddFeeds({ connectors, feeds, onAdded, go }) {
           <span class="text"><span class="label">${row.title}</span><span class="summary">${row.text}</span></span><span class="go">›</span>
         </button>`)}
       <//>`}
+      ${group.hint && html`<p class="hint">${group.hint}</p>`}
     </section>`)}
     <${AddFeedSheet} open=${open} title=${title} connectors=${connectors} feeds=${feeds} found=${found} setFound=${setFound}
       onAdded=${onAdded} onClose=${close} />
@@ -3331,7 +3344,7 @@ function OutlinePage({ feed, panel, draft, changedFeeds, go, onAdding, onImporti
   return html`<div class="panel-page">
     <${Bar}><span class="bar-title">${feed.title || 'Untitled feed'}</span>
       ${isEditable(feed) && html`<${DraftToolbar} key=${feed.id} feedId=${feed.id} feedConnectorId=${feed.connector_id} draft=${draft}
-        onWritten=${onChanged} connectors=${connectors} onOpenHosts=${() => go({ name: 'hosts' })} onOpsChanged=${opsChanged} onOpsCleared=${() => {}} />`}
+        onWritten=${onChanged} connectors=${connectors} onOpenHosts=${() => go({ name: 'hosts' })} onOpsChanged=${opsChanged} onOpsCleared=${() => {}} go=${go} />`}
     <//>
     <section class="section outline-page">
       <${Outline} panel=${panel} draft=${draft} changedFeeds=${changedFeeds} go=${go} showReleases=${null}
@@ -3383,16 +3396,8 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
   const headFeed = inGroup && head && head.id !== null ? feeds.find((f) => f.id === head.id) : null;
   const more = releaseAdd(headFeed, headFeed && headFeed.title);
   const [adding, setAdding] = useState(false);
-  const addAction = useAction();
-  const addedRelease = async (f) => {
+  const addedRelease = (f) => {
     setAdding(false);
-    if (f && ['music', 'musicl'].includes((f.medium || '').toLowerCase())) {
-      const done = await addAction.run(async () => {
-        await api(`/feeds/${headFeed.id}/links`, { method: 'POST', body: { release: f.id } });
-        return true;
-      });
-      if (done !== true) return;
-    }
     onAddedFeed(f);
   };
   // A feed group keeps its own sort and direction (ADR 0085 item 8).
@@ -3424,7 +3429,6 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
       ${head && head.id === null && html`<p class="hint releases-roles">${head.note}</p>`}
       ${releases.levelTile && html`<${LevelFeedTile} tile=${releases.levelTile} view=${releases.view}
         outside=${outside[releases.levelTile.id]} onOpen=${onOpen} />`}
-      <${ErrorNotice} error=${addAction.error} />
       ${releases.letters && html`<${LetterBar} letters=${releases.letters} idOf=${(id) => `release-${id}`} />`}
       ${hasRows
         ? html`<${RowList} as="ul" className=${`releases-list ${releases.view}`} mode=${releases.view === 'tiles' ? 'grid' : 'list'} selector=":scope > li > button">

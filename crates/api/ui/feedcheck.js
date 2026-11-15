@@ -54,6 +54,7 @@ const REPAIRS = {
   read_the_size: 'Read the Size',
   open_the_track: 'Open the Track',
   select_a_language: 'Select a Language',
+  link_a_page: 'Link a Page',
 };
 
 // What a button does. A repair calls the repair route. The two other
@@ -65,7 +66,18 @@ const ACTIONS = {
   read_the_size: 'repair',
   open_the_track: 'open-track',
   select_a_language: 'open-language',
+  link_a_page: 'open-pages',
 };
+
+export const PAGE_FINDING_TEXT = {
+  no_artist_page: 'This release has no artist page.',
+  no_publisher_page: 'This feed has no artist, label or hosting page.',
+};
+
+export function pageRefusalView(reason) {
+  const text = PAGE_FINDING_TEXT[reason];
+  return text ? { text, button: 'Link a Page' } : null;
+}
 
 // The label of the tab: "Check 5", or "Check" for no finding and before the
 // first answer (ADR 0174 item 17).

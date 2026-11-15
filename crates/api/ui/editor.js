@@ -5,7 +5,7 @@
 import { html, useState, useEffect, useRef, createContext, useContext } from './vendor/htm-preact-standalone.module.js';
 import { CONFIRMS } from './confirms.js';
 import { VIEWS, VIEW_LABELS, VIEW_HINTS, normalizeView, shownLines, localTimeNote, runs, commonIndent, stripIndent, moreLabel, fieldRows, guardRow, changeKeys, MERGE_TITLE, MERGE_INTRO, MERGE_HEADINGS, mergeRows, mergeReady, showsExamine, streamProblemRows } from './review.js';
-import { onSegmentKey, dropAreaClass, useFileDrop, api, saveTicket, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext, Icon, AddFeedRowSheet, inDesktopApp } from './app.js';
+import { onSegmentKey, dropAreaClass, useFileDrop, api, saveTicket, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ChoiceSelect, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext, Icon, AddFeedRowSheet, inDesktopApp } from './app.js';
 import { AlbumPayments, TrackPayments } from './values.js';
 import { PickerLayout, PickFillRow, FindOneSheet, PickFold, TakenTag, useFieldList } from './pickers.js';
 import { PersonArt, useProfiles } from './peoplepages.js';
@@ -16,7 +16,7 @@ import { roleSummary } from './roles.js';
 import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName } from './shell.js';
 import { isLiveItem, liveKey, liveDot, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner, OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning, hasBadAddress, problemGroup, setLiveStreamType, viewAfterLiveGone, withoutLive } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
-import { checkRows, unreadableRows, hasShowGrant, checkTexts, COPY_SHEET_TEXT, WAYS_SHEET_TEXT } from './feedcheck.js';
+import { checkRows, unreadableRows, hasShowGrant, checkTexts, pageRefusalView, COPY_SHEET_TEXT, WAYS_SHEET_TEXT } from './feedcheck.js';
 import { addressParts } from './breaks.js';
 import { buildDateNotices } from './builddate.js';
 import { versionLabel, LOCK_HELP, hasSpace, spaceNotice, ROW_SPACE_NOTE, newFeedAddress, newFeedAddressLine, libraryFolderRow } from './feedfacts.js';
@@ -32,7 +32,8 @@ import { coverOf, coverConflict } from './cover.js';
 import { platformBlocks } from './listing.js';
 import { deleteWrite } from './feeddelete.js';
 import { pageSequence } from './pages.js';
-import { nextStep, firstStart, releaseAdd, FIRST_STEPS, HOST_STEP } from './welcome.js';
+import { RELEASE_KINDS } from './addfeeds.js';
+import { nextStep, firstStart, releaseAdd, releaseArtistChoices, FIRST_STEPS, HOST_STEP } from './welcome.js';
 import {
   fileState, fileStatus, canDownloadToDevice, canCopyFile, missingCount, missingNotice, reviewNotice, dayText,
   SERVER_NOTICE, ADD_TRACKS_NOTICE, ENTRY_TEXT,
@@ -1968,7 +1969,7 @@ export async function currentSignerChoice(toSign) {
 
 // The review sheet: the draft status, the diff and the write (ADR 0029 item
 // 2). It is the same content as the former Changes panel.
-function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, onWritten, onClose, connectors, onOpenHosts, onOpsChanged, onOpsCleared }) {
+function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, onWritten, onClose, connectors, onOpenHosts, onOpsChanged, onOpsCleared, go }) {
   const ref = useSheet(open);
   const [diff, setDiff] = useState(null);
   const returnWait = useReturnWait(feedId, diff && diff.feed_move);
@@ -2134,10 +2135,16 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
   // The files that the write sends. On a server that holds no assets,
   // Studio then removes its copies (ADR 0105 item 19).
   const sentCount = diff && !assetMode().holdAssets ? diff.operations.filter((op) => op.kind === 'upload').length : 0;
-  const hasWork = diff && (diff.changed || diff.operations.length > 0 || diff.blocked.length > 0 || !!diff.feed_move || diff.grants.length > 0);
   const streamRows = diff ? streamProblemRows(diff.stream_problems, draft.model && draft.model.live_items) : [];
   const streamRefusal = streamRows.some((problem) => problem.blocksWrite);
   const deletion = diff && deleteWrite(diff);
+  const pageRefusal = diff && pageRefusalView(diff.page_refusal);
+  const hasWork = !pageRefusal && diff && (diff.changed || diff.operations.length > 0 || diff.blocked.length > 0 || !!diff.feed_move || diff.grants.length > 0);
+  const openLinkedPages = () => {
+    ref.current.close();
+    go({ name: 'feed', id: feedId, page: 'album' });
+    setTimeout(() => document.getElementById('linked-artist-and-label-pages')?.scrollIntoView({ block: 'center' }), 50);
+  };
   return html`<dialog ref=${ref} class="sheet" aria-labelledby="review-title" onClose=${onClose}>
     <header>
       <h2 id="review-title">Review changes</h2>
@@ -2176,6 +2183,9 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
         <ul class="address-list">${draft.bad.map((b) => html`<li><span class="mono">${b.field}</span>: <span class="mono">${b.value}</span></li>`)}</ul>
       </div>`}
       ${refusal && html`<${LinkRefusal} refusal=${refusal} busy=${busy} onRepair=${repair} />`}
+      ${pageRefusal && html`<div class="notice error" role="alert"><p>${pageRefusal.text}</p>
+        <div class="actions"><button class="button" type="button" onClick=${openLinkedPages}>${pageRefusal.button}</button></div>
+      </div>`}
       ${streamRows.map((problem) => problem.blocksWrite
         ? html`<div class="notice error" role="alert" key=${problem.guid + problem.text}>
             <strong>${problem.title}</strong> ${problem.text}
@@ -2212,7 +2222,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
       ${diff && html`<${GrantChecks} feedId=${feedId} model=${draft.model} diff=${diff} busy=${busy} signerHost=${signerHost} onDiff=${setDiff} run=${run} />`}
       ${diff && (diff.changed
         ? html`<${DiffView} diff=${diff} />`
-        : !hasWork && html`<p>The draft is the same as the hosted file.</p>`)}
+        : !hasWork && !pageRefusal && html`<p>The draft is the same as the hosted file.</p>`)}
       ${waiting && html`<p class="hint" role="status">Wait for each download, then write.</p>`}
       ${diff && toSign.length > 0 && html`<p class="hint" role="status">${signSummary(toSign.length)}</p>`}
       ${diff && choice.kind === 'differs' && html`<div class="notice error" role="alert"><strong>${signErrorText('signer_key_differs')}</strong></div>`}
@@ -2286,7 +2296,7 @@ function toolbarStatus(draft) {
 
 // The toolbar of the editor: the draft status, and the buttons that open
 // the review sheet and the versions sheet (ADR 0029 items 1 to 3).
-export function DraftToolbar({ feedId, feedConnectorId, draft, onWritten, connectors, onOpenHosts, onOpsChanged, onOpsCleared }) {
+export function DraftToolbar({ feedId, feedConnectorId, draft, onWritten, connectors, onOpenHosts, onOpsChanged, onOpsCleared, go }) {
   // null, 'review' or 'versions': the sheet that is open now.
   const [open, setOpen] = useState(null);
   const [mergeRequest, setMergeRequest] = useState(0);
@@ -2307,7 +2317,7 @@ export function DraftToolbar({ feedId, feedConnectorId, draft, onWritten, connec
     <button class="button primary" type="button" onClick=${() => setOpen('review')}>Review</button>
     <${ReviewSheet} feedId=${feedId} feedConnectorId=${feedConnectorId} draft=${draft} open=${open === 'review'} mergeRequest=${mergeRequest}
       onWritten=${onWritten} onClose=${() => setOpen(null)} connectors=${connectors} onOpenHosts=${onOpenHosts}
-      onOpsChanged=${onOpsChanged} onOpsCleared=${onOpsCleared} />
+      onOpsChanged=${onOpsChanged} onOpsCleared=${onOpsCleared} go=${go} />
     <${VersionsSheet} feedId=${feedId} draft=${draft} open=${open === 'versions'} onClose=${() => setOpen(null)} />
   </div>`;
 }
@@ -2559,7 +2569,7 @@ function ArtistsAndLabels({ feed, feeds, model, update, draft, go, onListChanged
     })).changed);
     if (done) setChosen('');
   };
-  return html`<section class="page-section"><h2>Linked artist and label pages</h2>
+  return html`<section id="linked-artist-and-label-pages" class="page-section"><h2>Linked artist and label pages</h2>
     <div class="group">
       <${ChangedNotices} changed=${changed} go=${go} />
       ${rows.length === 0 && html`<p class="hint">Not linked to an artist or label page yet.</p>`}
@@ -2603,6 +2613,28 @@ function publisherLine(entry, match, index) {
   if (!match) parts.push('Not in the collection');
   if (index === 0) parts.push('Primary');
   return parts.join(' · ');
+}
+
+function ReleaseArtistPicker({ choices, onChoose, onCreateArtist, onClose }) {
+  const ref = useSheet(true);
+  return html`<dialog ref=${ref} class="sheet small" aria-labelledby="release-artist-title" onClose=${onClose}>
+    <header><h2 id="release-artist-title">Add a release</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button></header>
+    <div class="body"><p class="hint">Select an artist page for this release.</p>
+      ${choices.length > 0
+        ? html`<div class="field"><label for="label-release-artist">Artist</label>
+            <select id="label-release-artist" value="" onChange=${(event) => {
+              const id = event.target.value;
+              const choice = choices.find((row) => row[0] === id);
+              if (choice) onChoose(Number(id), choice[1]);
+            }}>
+              <option value="">Select an artist page</option>
+              ${choices.map(([id, title]) => html`<option value=${id}>${title}</option>`)}</select>
+          </div>`
+        : html`<p class="hint">No artist page is available. Make an artist page first.</p>
+            <div class="actions"><button class="button primary" type="button" onClick=${onCreateArtist}>Make an Artist Page</button></div>`}
+    </div>
+  </dialog>`;
 }
 
 // The cover field of a channel (ADR 0060). It shows the cover of the model
@@ -2692,7 +2724,12 @@ const isLocked = (locked) => !!locked && (locked.value || '').trim().toLowerCase
 // and the two editor fields (ADR 0064 items 3 to 7, ADR 0068 item 8). An empty field gives `null`, so that
 // Studio writes no empty element. No field refuses a value that is not an
 // email address. The core removes the space at the ends of each text.
-function SettingsPage({ model, update, album, op3Tracks }) {
+function SettingsPage({ feed, model, update, album, release, op3Tracks, onListChanged }) {
+  const kindAction = useAction();
+  const saveKind = (kind) => kindAction.run(async () => {
+    await api(`/feeds/${feed.id}/kind`, { method: 'PUT', body: { kind: kind || null } });
+    await onListChanged();
+  });
   const field = (name) => (value) => update((m) => set(m, name, value));
   const owner = model.owner || { name: null, email: null };
   const setOwner = (name, value) => update((m) => {
@@ -2709,6 +2746,13 @@ function SettingsPage({ model, update, album, op3Tracks }) {
   const hint = op3Hint(op3Tracks);
   const setLockOwner = (value) => update((m) => set(m, 'locked', { ...m.locked, owner: value }));
   const shown = {
+    kind: () => html`<section class="page-section"><h2>Kind</h2>
+      <div class="group"><${ChoiceSelect} id="release-kind" label="Kind" value=${feed.release_kind || ''}
+        options=${RELEASE_KINDS}
+        hint="Studio shows this kind. The feed file has no tag for it."
+        onChange=${saveKind} /></div>
+      <${ErrorNotice} error=${kindAction.error} />
+    </section>`,
     language: () => html`<section class="page-section"><h2>Language</h2>
       <div class="group">
         <${TextField} id="ch-language" label="Language" hint="For example en or de-AT." value=${model.language} onChange=${field('language')} />
@@ -2760,7 +2804,7 @@ function SettingsPage({ model, update, album, op3Tracks }) {
       </div>
     </section>`,
   };
-  return showSections(pageSequence('settings', { album }), shown);
+  return showSections(pageSequence('settings', { album, release }), shown);
 }
 
 // The listing control of a channel (ADR 0063, ADR 0065). One switch hides the
@@ -3798,6 +3842,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
   const [chosen, setChosen] = useState('');
   // The row of the Add feeds page that is open, from the first steps (ADR 0119).
   const [addOpen, setAddOpen] = useState(null);
+  const [releaseStart, setReleaseStart] = useState(null);
   // The members of this feed, from `GET /feeds/{id}/members` (ADR 0118 item 9).
   const [members, setMembers] = useState([]);
   useEffect(() => {
@@ -3934,7 +3979,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
               onClick=${() => removeRow(row)}>Remove</button>
           </div>
         </div>`)}
-        ${more && html`<button class="link-row add" type="button" onClick=${() => setAddOpen('release')}>
+        ${more && html`<button class="link-row add" type="button" onClick=${() => { setReleaseStart(more.start); setAddOpen('release-form'); }}>
           <span class="num">＋</span><span class="title">${more.label}</span></button>`}
         ${candidates.length > 0 && html`<div class="field">
           <label for="pub-release">Release</label>
@@ -3964,8 +4009,10 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
   // sheet of the Add feeds page. A new album or playlist becomes a release
   // of this feed before its page opens (ADR 0164 item 3). When the link
   // fails, this page stays and shows the error.
+  const first = nextStep(feed);
   const addedFeed = async (f) => {
-    if (f && !readOnly && ['music', 'musicl'].includes(mediumOf(f))) {
+    const linkedByNewFeedRoute = addOpen === 'release-form' || (addOpen === 'album' && first === 'album');
+    if (f && !readOnly && !linkedByNewFeedRoute && ['music', 'musicl'].includes(mediumOf(f))) {
       const done = await twoDrafts(linkAction, async () => (await api(`/feeds/${feed.id}/links`, {
         method: 'POST',
         body: { release: f.id },
@@ -3976,7 +4023,10 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
     }
     go(f ? { name: 'feed', id: f.id } : { name: 'releases' });
   };
-  const first = nextStep(feed);
+  const artistChoices = releaseArtistChoices(feeds);
+  const addReleaseFromLabel = () => {
+    setAddOpen(artistChoices.length > 0 ? 'release' : 'publisher');
+  };
   return html`<${ChangedNotices} changed=${changed} go=${go} />
     ${first === 'album' && html`<div class="group first-step">
       <div class="link-row static first-step-row">
@@ -3986,10 +4036,15 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
       </div>
     </div>`}
     ${first === 'label' && html`<div class="group">${FIRST_STEPS.label.map((step) => html`<button class="link-row" type="button" key=${step.open}
-      onClick=${() => setAddOpen(step.open)}><span class="step-icon" aria-hidden="true"><${Icon} name=${step.icon} /></span>
+      onClick=${() => step.open === 'album' ? addReleaseFromLabel() : setAddOpen(step.open)}><span class="step-icon" aria-hidden="true"><${Icon} name=${step.icon} /></span>
       <span class="text"><span class="label">${step.title}</span><span class="summary">${step.line}</span></span><span class="go" aria-hidden="true">›</span></button>`)}</div>`}
-    ${addOpen && html`<${AddFeedRowSheet} open=${addOpen === 'release' ? 'album' : addOpen} connectors=${connectors} feeds=${feeds}
-      start=${addOpen === 'release' ? more.start : firstStart(first, addOpen, model)} onAdded=${addedFeed} onClose=${() => setAddOpen(null)} />`}
+    ${addOpen === 'release' && html`<${ReleaseArtistPicker} choices=${artistChoices}
+      onChoose=${(publisherId, name) => { setReleaseStart({ author: name, publisher_id: publisherId }); setAddOpen('release-form'); }}
+      onCreateArtist=${() => setAddOpen('publisher')} onClose=${() => setAddOpen(null)} />`}
+    ${addOpen === 'release-form' && html`<${AddFeedRowSheet} open="album" connectors=${connectors} feeds=${feeds}
+      start=${releaseStart} onAdded=${addedFeed} onClose=${() => { setAddOpen(null); setReleaseStart(null); }} />`}
+    ${addOpen && !['release', 'release-form'].includes(addOpen) && html`<${AddFeedRowSheet} open=${addOpen} connectors=${connectors} feeds=${feeds}
+      start=${firstStart(first, addOpen, model, feed.id)} onAdded=${addedFeed} onClose=${() => setAddOpen(null)} />`}
     ${showSections(pageSequence('publisher'), shown)}`;
 }
 
@@ -4844,10 +4899,15 @@ function CheckPage({ feed, model, check, go }) {
     };
     setTimeout(focus, 0);
   };
+  const openLinkedPages = () => {
+    go({ name: 'feed', id: feed.id, page: 'album' });
+    setTimeout(() => document.getElementById('linked-artist-and-label-pages')?.scrollIntoView({ block: 'center' }), 50);
+  };
   const press = (row) => {
     if (row.action === 'repair') check.repair(row);
     else if (row.action === 'open-track') go({ name: 'feed', id: feed.id, page: 'track', track: row.track });
     else if (row.action === 'open-language') openLanguage();
+    else if (row.action === 'open-pages') openLinkedPages();
     else if (row.action === 'show-copy' || row.action === 'show-ways') { setCopied(false); setSheet(row); }
   };
   const closeSheet = () => setSheet(null);
@@ -4969,7 +5029,11 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
   if (page === 'check') {
     body = html`<${CheckPage} feed=${feed} model=${model} check=${check} go=${go} />`;
   } else if (page === 'settings') {
-    body = html`<${SettingsPage} model=${model} update=${update} album=${!publisher && !playlist} op3Tracks=${draft.op3Tracks} />`;
+    // The API gives `kind_shown` only for a feed with the medium `music`
+    // (ADR 0213 items 13 and 15).
+    const release = !!feed.kind_shown;
+    body = html`<${SettingsPage} feed=${feed} model=${model} update=${update} album=${!publisher && !playlist}
+      release=${release} op3Tracks=${draft.op3Tracks} onListChanged=${onListChanged} />`;
   } else if (publisher && page !== 'files' && page !== 'credits' && page !== 'recipients') {
     body = html`<${PublisherPage} feed=${feed} feeds=${feeds} model=${model} update=${update} bad=${draft.bad}
       draft=${draft} go=${go} onListChanged=${onListChanged} onArtwork=${onArtwork} onRemoved=${onRemoved} connectors=${connectors} />`;

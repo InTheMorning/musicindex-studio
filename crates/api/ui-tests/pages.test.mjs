@@ -44,6 +44,14 @@ test('the page settings gives op3 after locked for an album only', () => {
   assert.equal(tierError('settings', pageSequence('settings', { album: true })), null);
 });
 
+test('the release kind section starts Settings and does not appear for a show', () => {
+  const owner = 'ADR 0213 item 13: Settings of a release starts with Kind. Fix pages.js and editor.js.';
+  const release = pageSequence('settings', { album: true, release: true });
+  assert.equal(release[0].id, 'kind', owner);
+  assert.equal(tierError('settings', release), null, owner);
+  assert.ok(!pageSequence('settings', { album: true, release: false }).some((section) => section.id === 'kind'), owner);
+});
+
 for (const server of [true, false]) {
   for (const page of pageNames()) {
     test(`the sections of the page ${page} have tiers that do not go down (server ${server})`, () => {

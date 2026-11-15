@@ -1,14 +1,13 @@
 // The model of the Add feeds page and of the form that makes a feed (ADR 0073
 // items 1 to 10, ADR 0042). The functions have no Preact and no browser
 // state. `app.js` shows the rows and the form.
-import { feedKind, compareNames } from './shell.js';
+import { compareNames } from './shell.js';
 
 // The rows of the Add feeds page, in two groups. With no connected host, the
 // group "Make a new feed" has no rows and the flag `connect`. The row
 // "From a file host folder" needs a file host, so it goes out too.
 export function addChoices({ hasHost }) {
   const make = [
-    { id: 'album', title: 'Album', text: 'A release with its tracks' },
     { id: 'publisher', title: 'Artist or label', text: 'A list of your releases' },
     { id: 'show', title: 'Show', text: 'A feed for live shows' },
     { id: 'playlist', title: 'Playlist', text: 'Tracks from other feeds' },
@@ -20,18 +19,24 @@ export function addChoices({ hasHost }) {
   ];
   return [
     hasHost
-      ? { id: 'make', label: 'Make a new feed', rows: make }
-      : { id: 'make', label: 'Make a new feed', rows: [], connect: true },
+      ? { id: 'make', label: 'Make a new feed', rows: make, hint: 'A release starts on the page of its artist.' }
+      : { id: 'make', label: 'Make a new feed', rows: [], connect: true, hint: 'A release starts on the page of its artist.' },
     { id: 'have', label: 'Add a feed you have', rows: hasHost ? have : have.filter((row) => row.id !== 'folder') },
   ];
 }
 
 // The values of the select menu "Type" in the form that makes a feed.
 export const MAKE_TYPES = [
-  ['album', 'Album'],
   ['publisher', 'Artist or label'],
   ['show', 'Show'],
   ['playlist', 'Playlist'],
+];
+
+export const RELEASE_KINDS = [
+  ['', 'From the tracks'],
+  ['album', 'Album'],
+  ['ep', 'EP'],
+  ['single', 'Single'],
 ];
 
 const FIELDS = {
@@ -74,11 +79,11 @@ export function feedFileStart(title) {
 }
 
 // The values of the select menu "Start from" (ADR 0077 item 1). The first
-// value is an empty album. Then come the albums of the list of releases, in
+// value is an empty album. Then come the music feeds of the list of releases, in
 // the sequence of their titles. A feed with no title uses its address.
 export function startChoices(feeds) {
   const albums = (feeds || [])
-    .filter((feed) => feedKind(feed).label === 'Album')
+    .filter((feed) => (feed.medium || '').toLowerCase() === 'music')
     .map((feed) => [String(feed.id), feed.title || feed.path || 'Untitled feed']);
   albums.sort((a, b) => compareNames(a[1], b[1]));
   return [['', 'Empty album'], ...albums];

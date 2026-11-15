@@ -34,7 +34,8 @@ const PAGES = {
     { id: 'publishers', tier: 'details' },
     { id: 'feed', tier: 'setup', rows: ['facts'] },
   ],
-  settings: ({ album = false } = {}) => [
+  settings: ({ album = false, release = false } = {}) => [
+    ...(release ? [{ id: 'kind', tier: 'identity' }] : []),
     { id: 'language', tier: 'setup' },
     { id: 'keywords', tier: 'setup' },
     { id: 'owner', tier: 'setup' },

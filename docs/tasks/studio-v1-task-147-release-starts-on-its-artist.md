@@ -2,7 +2,7 @@
 
 Decision: [ADR 0213](../adr/0213-a-release-starts-on-the-page-of-its-artist.md).
 
-Status: In progress. Packets 147a and 147b are complete on 2026-11-15. Packet 147c is open.
+Status: Complete on 2026-11-15, in three packets, with the screenshot visual check. The human gate of ADR 0213 is open.
 
 ## Result Of Packet 147a
 
@@ -23,6 +23,27 @@ Status: In progress. Packets 147a and 147b are complete on 2026-11-15. Packet 14
 - The fixtures `paid_feed`, `feed_xml` of the retire tests and `FEED` of the server tests have an artist link.
 - Tests: `page_findings_follow_adr_0213_for_releases_playlists_shows_and_publishers`, `page_refusal_is_in_the_diff_and_blocks_release_and_playlist_writes`, `hidden_feed_has_no_page_refusal_and_can_be_written`, `feed_rows_report_a_completed_host_delete` (the delete of the feed file) and `a_change_set_writes_a_release_with_no_artist_page`.
 - Open: the row of a feed that a change set did not change also removes the stop until the change set closes.
+
+## Result Of Packet 147c
+
+- ChatGPT did the build. The main session read the diff, made four corrections, ran the five checks and took the screenshots.
+- The page "Add feeds" and the menu "Type" have no album. The hint is below the rows.
+- `releaseAdd` gives the action only for an artist page with a file host. The first-step row of a label opens a sheet with the menu of the artist pages.
+- The release form has the menu "Kind" with its hint, and no menu "Type". It sends `kind` and `publisher_id`. The page of the publisher feed makes no second link.
+- `feedKind` gives "Album", "EP" or "Single" from `kind_shown`. The tab **Settings** of a feed with `kind_shown` has the section "Kind".
+- The tab **Check** and Review show **Link a Page**. It opens the tab of the feed and moves the section "Linked artist and label pages" into view.
+- Corrections of the main session: the hint was above the rows, the tab **Settings** used its own rule for a release and its own copy of the menu values, and the title of the finding was a copy of its text. The titles are "No artist page" and "No linked page".
+- Tests: `addfeeds.test.mjs`, `welcome.test.mjs`, `shell.test.mjs`, `feedcheck.test.mjs` and `pages.test.mjs`. 802 Node tests pass.
+
+Visual check, with `.studio-dev/walk/steps-147-make.json`, `steps-147-check.json`, `steps-147-390.json` and `steps-147-label.json`:
+
+- Passed at 1280 px light: the page "Add feeds", the release form from an artist page, the new release with the label "EP", the menu "Kind" on the tab **Settings**, and the change to "Single" in the head and the left panel with no write.
+- Passed at 1280 px light: the finding on the tab **Check**, the refusal in Review with **Link a Page** and no write button, and the jump to the section.
+- Passed at 1280 px light: the first-step row of a label page opens the menu of the artist pages, and a selection opens the form.
+- Passed at 390 px dark: the release form. `$edges()` and `$overflow()` gave no finding in each step.
+- The fit check gave three findings at 390 px only while the page was in the scroll position of the jump. An input was then below the fixed top bar. With the page at its top, the fit check gave no finding at 390 px and 761 px.
+- Not shown: the page "Add feeds" at 390 px. The walk did not open it at that width.
+- Seen in the walk, not a part of this task: a request waits many seconds while the page of a group reads the outside checks of its feeds with no network. `POST /feeds/new` with `publisher_id` took 0.05 s to 0.18 s with `curl`.
 
 ## Goal
 

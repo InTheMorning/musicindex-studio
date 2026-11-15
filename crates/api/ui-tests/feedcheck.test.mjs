@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   tabLabel, checkCount, checkRows, unreadableRows, repairLabel, hasShowGrant, checkTexts,
+  PAGE_FINDING_TEXT, pageRefusalView,
   CHECK_LEAD, CHECK_NONE, CHECK_GRANT, CHECK_READ_ONLY, CHECK_UNREADABLE,
   COPY_SHEET_TEXT, WAYS_SHEET_TEXT,
 } from '../ui/feedcheck.js';
@@ -96,6 +97,23 @@ test('the repair labels follow the core names', () => {
   assert.equal(repairLabel('use_the_public_address'), 'Use the Public Address');
   assert.equal(repairLabel(null), null);
   assert.equal(repairLabel('other'), null);
+});
+
+test('page findings and refusal use the words of ADR 0213 items 18, 19 and 21', () => {
+  const owner = 'ADR 0213 items 18, 19 and 21: show the page finding words and Link a Page. Fix feedcheck.js.';
+  assert.deepEqual(PAGE_FINDING_TEXT, {
+    no_artist_page: 'This release has no artist page.',
+    no_publisher_page: 'This feed has no artist, label or hosting page.',
+  }, owner);
+  const rows = checkRows(check([
+    finding('no_artist_page', 'link_a_page', { title: PAGE_FINDING_TEXT.no_artist_page }),
+    finding('no_publisher_page', 'link_a_page', { title: PAGE_FINDING_TEXT.no_publisher_page }),
+  ]));
+  assert.deepEqual(rows.map((row) => row.button), ['Link a Page', 'Link a Page'], owner);
+  assert.deepEqual(rows.map((row) => row.action), ['open-pages', 'open-pages'], owner);
+  assert.deepEqual(pageRefusalView('no_artist_page'), { text: PAGE_FINDING_TEXT.no_artist_page, button: 'Link a Page' }, owner);
+  assert.deepEqual(pageRefusalView('no_publisher_page'), { text: PAGE_FINDING_TEXT.no_publisher_page, button: 'Link a Page' }, owner);
+  assert.equal(pageRefusalView(null), null, owner);
 });
 
 test('each address that a read did not reach gives a notice', () => {

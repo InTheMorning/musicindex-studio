@@ -49,7 +49,10 @@ export function relLabel(rel) {
 // a set of roles, or the core finds the first role on the two sides of a
 // link (ADR 0082 item 5, ADR 0087 item 2).
 export function feedKind(feed) {
-  return mediumKind(feed.medium, feed.publisher_roles, feed.roles_confirmed === true || feed.roles_linked === true);
+  const kind = mediumKind(feed.medium, feed.publisher_roles, feed.roles_confirmed === true || feed.roles_linked === true);
+  if ((feed.medium || '').toLowerCase() !== 'music') return kind;
+  const labels = { album: 'Album', ep: 'EP', single: 'Single' };
+  return { ...kind, label: labels[feed.kind_shown] || 'Album' };
 }
 
 // The choice of the Role menu for a set of roles: "artist", "label",

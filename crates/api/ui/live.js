@@ -18,6 +18,15 @@ export function isLiveItem(live, key) {
   return liveKey(live) === key || `cid-${live._cid}` === key;
 }
 
+// The view to show when the live show of the view is not in the model, for
+// example after a discard of the draft that added it. The tab Live Shows
+// replaces the page of the show. Gives null when the view needs no change.
+export function viewAfterLiveGone(view, model) {
+  if (!model || view.page !== 'live') return null;
+  if ((model.live_items || []).some((live) => isLiveItem(live, view.track))) return null;
+  return { name: 'feed', id: view.id, page: 'lives' };
+}
+
 // Set the stream type of one live item in the draft (ADR 0187 item 3).
 export function setLiveStreamType(model, guid, mediaType) {
   return {

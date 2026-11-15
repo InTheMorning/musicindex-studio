@@ -5,7 +5,7 @@ import {
   liveKey, isLiveItem, canRecord, hasRecording, statusLabel, nextAction, showSummary,
   grantLimit, grantActive, grantSummary, grantWriteText,
   hostUsesSigner, grantBoxState,
-  OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning, hasBadAddress, problemGroup,
+  OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning, hasBadAddress, problemGroup, viewAfterLiveGone,
 } from '../ui/live.js';
 
 const link = { href: 'https://example.com/show', label: 'Watch' };
@@ -227,4 +227,17 @@ test('each problem shows in the group of its field (ADR 0173)', () => {
   assert.equal(group('status'), 'status');
   assert.equal(group('later'), 'status', 'A field with no group shows in the Status section.');
   assert.equal(group('stream', false), 'status', 'A show with a recording has no Stream section.');
+});
+
+test('a live show that the model does not have gives the tab Live Shows', () => {
+  const show = { _cid: 4, item: { guid: 'g-1' } };
+  const view = { name: 'feed', id: 7, page: 'live', track: 'g-1' };
+  assert.equal(viewAfterLiveGone(view, { live_items: [show] }), null);
+  assert.equal(viewAfterLiveGone({ ...view, track: 'cid-4' }, { live_items: [show] }), null);
+  // After a discard of the draft that added the show.
+  assert.deepEqual(viewAfterLiveGone(view, { live_items: [] }), { name: 'feed', id: 7, page: 'lives' });
+  assert.deepEqual(viewAfterLiveGone(view, {}), { name: 'feed', id: 7, page: 'lives' });
+  // No model: the draft loads, and the view stays.
+  assert.equal(viewAfterLiveGone(view, null), null);
+  assert.equal(viewAfterLiveGone({ ...view, page: 'lives' }, { live_items: [] }), null);
 });

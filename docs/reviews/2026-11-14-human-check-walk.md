@@ -328,6 +328,7 @@ The operator answered a questionnaire about the list above. These lines record t
     - The flow to make a feed: design 7.
     - The moves by a different Studio: missing function 1 and design 8.
     - The phone and the live shows: missing function 3 and design 9.
+- Defect 1 is corrected: a live show that the draft does not have gives the tab **Live Shows** (`viewAfterLiveGone` in `crates/api/ui/live.js`, with a test). An agent walk at 1280 px showed "Album 2 › Live shows", the tab **Live Shows** and "No live show yet." after the discard. The human check in the next candidate is open.
 - Open: texts 3, 5 and 7 have no new words. Defect 2 needs a measurement in WebKitGTK.
 
 Runbook text that is out of date: `docs/runbooks/operator-human-checks.md` says 7 days for a move, the button **Use** for a suggestion, and the return warning below the move row.

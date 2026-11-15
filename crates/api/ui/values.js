@@ -10,6 +10,7 @@ import { PersonArt, useLookup } from './peoplepages.js';
 import { AddressRow } from './addressrow.js';
 import { api, askConfirm, Field, ErrorNotice, useAction, CopyButton, Icon } from './app.js';
 import { onListKey } from './listkeys.js';
+import { shortKey } from './nostrkey.js';
 
 
 // ---- Share bars ----
@@ -184,7 +185,7 @@ function Recipients({ id, recipients, defaultType, onChange }) {
           <span class="title">${r.name || r.address || 'New recipient'}</span>
           <${Meter} percent=${percent[i]} />
           <span class="share">${percentText(percent[i])}${isFee(r) ? ' fee' : ''}</span>
-          <span class="mono address">${r.address || 'No address'}</span>
+          <span class="mono address" title=${r.address || null}>${r.address ? (r.recipient_type === 'lnaddress' ? r.address : shortKey(r.address)) : 'No address'}</span>
         </summary>
         <div class="form">
         <${TextField} id=${`${rid}-split`} label='Split (shares)' inputmode="numeric" value=${r.split} onChange=${change('split')} />

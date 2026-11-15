@@ -2,12 +2,17 @@
 // Preact and no browser state. The UI sends the key as the user selected or
 // typed it. The core gives the `npub` form (ADR 0065).
 
-// A short form of a key for a summary line: the first 8 characters, an
-// ellipsis and the last 4 characters. An empty key gives an empty text.
+// The short form of a node address or an `npub` (musicindex ADR 0076
+// R-ADDRESS-1): the first 10 characters, "…" and the last 8 characters. A
+// text of 20 characters or fewer, a text that starts with "lnurl" in any case
+// and a text with "@" stay in full. The count is in characters, not in UTF-16
+// units. This is the copy of `short_address` of the crate musicindex-value,
+// and `shortaddress.test.mjs` runs it against the shared vectors.
 export function shortKey(npub) {
   const text = String(npub ?? '');
-  if (!text) return '';
-  return text.length <= 13 ? text : `${text.slice(0, 8)}…${text.slice(-4)}`;
+  const chars = Array.from(text);
+  if (chars.length <= 20 || /^lnurl/i.test(text) || text.includes('@')) return text;
+  return `${chars.slice(0, 10).join('')}…${chars.slice(-8).join('')}`;
 }
 
 // The summary line of a row with a Nostr key.

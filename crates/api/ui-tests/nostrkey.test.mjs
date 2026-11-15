@@ -4,8 +4,8 @@ import { withPersonKey, shortKey, keySummary, keyRowView, feedKey, withFeedKey, 
 
 const KEY = 'npub1g2nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxck';
 
-test('shortKey keeps the first 8 and the last 4 characters', () => {
-  assert.equal(shortKey(KEY), 'npub1g2n…xxck');
+test('shortKey keeps the first 10 and the last 8 characters (musicindex ADR 0076)', () => {
+  assert.equal(shortKey(KEY), 'npub1g2nxx…xxxxxxck');
   assert.equal(shortKey(''), '');
   assert.equal(shortKey(null), '');
 });

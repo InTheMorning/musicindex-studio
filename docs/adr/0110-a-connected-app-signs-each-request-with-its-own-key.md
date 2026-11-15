@@ -9,6 +9,7 @@
 - Changes: [ADR 0058](0058-grant-vaults-and-connected-apps-on-the-server.md) items 4, 5, 8, 9, 11, 15, 17, 18, 19 and 20 (the app key, the wrappers, a new app, a removed app, the granted write, the apps from before, the routes, the index, the limits and the text of ADR 0003 item 4).
 - Changes: [ADR 0107](0107-a-user-can-export-and-import-an-account.md) items 2 and 14 (the index of app tokens and the apps after an import).
 - Changes: [ADR 0003](0003-user-unlocked-secret-vault.md), Each User Unlocks A Secret Vault. ADR 0003 names the changed items.
+- Changed: 2026-11-15 by the operator, through musicindex ADR 0076 (musicindex `a08dc01`). Item 18 gives the short key the form of R-ADDRESS-1.
 - Uses: [ADR 0056](0056-server-sign-in-methods-and-vault-wrappers.md) item 6 (a signed event of kind 27235), [ADR 0013](0013-vault-format-and-cryptography.md) (the vault format), ADR 0106 (a recent unlock, written by [task 069](../tasks/studio-v1-task-069-account-protection.md)) and the [research note on host secrets under a show grant](../research/2026-11-01-connected-app-host-secrets.md).
 
 ## Context
@@ -70,7 +71,7 @@
 15. The workspace keeps the accepted event IDs for 120 seconds, and the latest accepted `created_at` of each app, in its collection, not in memory, so that a restart does not clear them. Studio records an event ID before the route runs. A request that fails after that point uses up its event, and the app signs a new event.
 16. `/app/v1/` accepts no other credential. `/api/` and `/auth/` refuse the header of item 12.
 17. No log holds a request body, an `Authorization` header, a signed event, a pairing text or a grant vault key.
-18. Studio records the time and the client address of the last accepted request of each app. Connected apps shows them, with the short key and the live value origin (screen 7). Only the user of the account sees them.
+18. Studio records the time and the client address of the last accepted request of each app. Connected apps shows them, with the short key and the live value origin (screen 7). The short key is the `npub` of the app in the short form of musicindex ADR 0076 R-ADDRESS-1: the first 10 characters, "…" and the last 8 characters. The core gives it with `short_address` of the crate `musicindex-value`. Only the user of the account sees them.
 
 ### The Grant
 

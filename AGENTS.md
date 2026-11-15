@@ -44,23 +44,18 @@ The UI starts on Releases and shows the outline of an open feed. Below Releases,
 | `tools/fit-check.mjs` | The fit check helpers of musicindex ADR 0065 R-FIT-5. It is a copy from musicindex-lib. Do not change it in this repository. |
 | `tools/release_desktop.py` | Gives the version, packages a desktop archive, runs its smoke test and writes `SHA256SUMS.txt`. The release workflow uses it ([desktop release runbook](docs/runbooks/desktop-release.md)). |
 | `tools/release-candidate.sh` | Sets the version, pushes `main`, waits for CI, pushes the tag, waits for the server image and runs `tools/deploy-server.sh`. Its header gives the steps. A second run continues after the last completed step. |
+| `tools/gate.sh` | The commit gate: the four checks of CI and the ADR link guard. |
 | `tools/node` | Runs a pinned Node.js from `.studio-dev/tools/` ([ADR 0042](docs/adr/0042-ui-models-with-node-tests.md)). |
 
 ## Commands
 
-These five checks must pass before each commit. CI runs the first four ([ADR 0042](docs/adr/0042-ui-models-with-node-tests.md) adds the fourth). `rust-toolchain.toml` pins the Rust version, and CI uses the same version ([ADR 0049](docs/adr/0049-the-rust-toolchain-is-pinned.md)).
+`tools/gate.sh` is the commit gate. It must pass before each commit. It runs `cargo fmt`, `cargo clippy`, the Rust tests, the Node tests of the UI models ([ADR 0042](docs/adr/0042-ui-models-with-node-tests.md)) and the ADR link guard of the `project-baseline` skill. CI runs the first four checks, because the guard script is not in this repository. `rust-toolchain.toml` pins the Rust version, and CI uses the same version ([ADR 0049](docs/adr/0049-the-rust-toolchain-is-pinned.md)).
 
 ```sh
-cargo fmt --all --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-node --test crates/api/ui-tests/*.test.mjs
-python3 ~/.agents/skills/project-baseline/scripts/check_adr_links.py --counts .
+tools/gate.sh
 ```
 
-The fifth check is the ADR link guard of the `project-baseline` skill. CI does not run it, because the script is not in this repository. Its limit check enforces global `CLAUDE.md` §Consolidate A Changed Decision.
-
-On a computer with no Node.js, run `tools/node --test crates/api/ui-tests/*.test.mjs`. `tools/node` gets a pinned Node.js into `.studio-dev/tools/` at its first run. It also runs `tools/drive-ui.mjs`.
+`tools/node` gets a pinned Node.js into `.studio-dev/tools/` at its first run. It runs the Node tests and `tools/drive-ui.mjs`.
 
 Run Studio locally. The command prints the UI address with its access token:
 

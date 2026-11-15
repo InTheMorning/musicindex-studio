@@ -342,6 +342,14 @@ The operator answered a questionnaire about the list above. These lines record t
 - Missing function 3 has a decision. The orchestrator session relayed it on 2026-11-14: the narrow layout of Studio does not change, and the website gets the same stack (musicindex ADR 0070). A swipe from the screen edge is the quick way. A visual cue for the swipe is not decided.
 - Finding from the website session, not examined: Studio makes the history entry of its root page at the start, with no input of the user (`crates/api/ui/app.js`, about line 3772). Chromium and Safari can skip such an entry at the Back button and the back swipe. Thus Back on the start page, before the first touch, possibly leaves Studio. The check tool of the agent cannot push the Back button of a browser, so only a person can examine this. No code changed.
 - Defects 3 and 4, missing function 1 and design item 8 have a decision: [ADR 0211](../adr/0211-studio-follows-a-move-that-a-different-studio-made.md), with task 145.
+- Design item 7, the flow to make a feed, has these operator choices of 2026-11-14. No ADR and no task hold them at this time:
+    - The operator rejected a block "Where it goes" with the levels as a tree.
+    - A release is made only from within an artist. The form does not show a hosting page or a label page. Studio presumes that they are the same as for the artist.
+    - The root of the levels is a publisher feed with the role hosting, not a file host. A hosting page and a label page are optional. A release must have an artist page.
+    - The release kind (album, EP, single) is a value that Studio keeps and shows. The feed file has no tag for it. Its start value comes from the count of the tracks: 1 to 3 tracks a single, 4 to 6 an EP, 7 or more an album.
+    - A release with no artist page gets a finding on the tab **Check**, and Review also stops its write.
+    - Open: ADR 0073 owns the rows of the page "Add a Feed" and the menu "Type" of its form. It has three "Changed by" lines, which is the limit. A change of it needs a consolidation of ADR 0073 first.
+    - Open: it is not decided if a show feed and a playlist are also made only from within an artist.
 - Operator choice for text 5: the button of the confirm of **Delete Now…** is **Review the Deletion**. The click already opens Review.
 - Operator choice for text 7: when a move copies no file and no old file stays, the plan of the move sheet has the row "Old files" with "None. No waiting time." Defect 2 needs a measurement in WebKitGTK.
 

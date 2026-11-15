@@ -35,6 +35,8 @@ Facts:
 - ADR 0003 names the keychain of the operating system as an alternative. The operator rejected it, because the encrypted file can move between computers.
 - [ADR 0142](../adr/0142-a-user-selects-the-time-before-the-vault-locks.md) item 2 gives the desktop the lock time "Never" as the start value. That time applies only after an unlock.
 
+Task: [task 156](../tasks/studio-v1-task-156-research-vault-unlock-at-the-start-of-the-desktop-app.md) gives the research.
+
 Open: the task did not start. An unlock at the start must keep the vault key or the passphrase in a location that is not the vault file. That changes ADR 0003 item 2.
 
 ### Note 3: A Keyboard Shortcut For The Left Panel At A Narrow Width
@@ -48,6 +50,8 @@ Facts:
 - [ADR 0085](../adr/0085-each-artist-and-label-is-a-destination.md) item 7 puts the destinations on the root page at that width. It names musicindex ADR 0069 R-SHELL-2 item 2 as the rule of the three apps.
 - The edge grip shows only on a touch screen. A device with no touch screen has the Back button of the toolbar and the Back key of the browser.
 - The search found no keyboard shortcut for a move between pages in `crates/api/ui`. The key handlers there move the focus in a list, a tree, a menu or a tab row.
+
+Task: [task 157](../tasks/studio-v1-task-157-research-keyboard-shortcut-for-the-narrow-shell.md) gives the research.
 
 Open: the task did not start. The shell has no panel to open at that width, so the task must first say what the shortcut shows. A panel that opens above the page changes ADR 0088 item 7, and musicindex ADR 0069 can also apply.
 
@@ -114,7 +118,7 @@ Facts:
 
 Operator choice, from the questionnaire of 2026-11-15, from drawings: a change of the menu saves at once, as before. A hint below the menu says "Saves at once. The feed file has no tag for the kind."
 
-Open: no task. The move changes ADR 0213 item 13.
+Open: [task 154](../tasks/studio-v1-task-154-kind-menu-in-the-first-tab-of-a-release.md) is not started. The move changes ADR 0213 items 13 and 16, in the commit of that task.
 
 ### Note 8: The Domain Line After A Delete
 
@@ -177,7 +181,7 @@ Facts:
 
 Operator choice, from the questionnaire of 2026-11-15, from drawings: "Notice on the feed page". After a write with a podping, the feed page shows a notice with the state of the podping. Studio asks Music Index at intervals for some minutes. The notice changes to a confirmation, then goes. With no reply, the notice says so and has **Check Again**. The notice has the form of the notice of ADR 0184.
 
-Open: no ADR and no task. The requests after the write change ADR 0175 item 1.
+Open: [task 155a](../tasks/studio-v1-task-155a-last-write-facts-in-the-outside-check.md) and [task 155b](../tasks/studio-v1-task-155b-notice-after-a-write-with-a-podping.md) are not started. The requests after the write change ADR 0175 item 1, in the commit of task 155b. Task 155b uses three recommended values that the operator has not selected: the interval, the time that the confirmation stays, and the age limit of a write.
 
 ### Note 12: An Added Live Item Shows Its Times In Review
 
@@ -234,7 +238,7 @@ Operator choice, from the questionnaire of 2026-11-15, from drawings: "Menu, Rem
 
 Correction: the drawing showed "Save to People". The button in the code has the label **Add to People**, and the menu entry keeps that label.
 
-Open: no task. [ADR 0207](../adr/0207-recipients-change-sets-and-wallets.md) item 60 gives the rule. A recipient of a feed has no default address, so the menu has no **Make Default**.
+Open: [task 153](../tasks/studio-v1-task-153-address-row-of-a-recipient-has-the-menu.md) is not started. [ADR 0207](../adr/0207-recipients-change-sets-and-wallets.md) item 60 gives the rule. A recipient of a feed has no default address, so the menu has no **Make Default**.
 
 ## Results Of The Steps
 

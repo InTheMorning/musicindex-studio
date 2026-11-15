@@ -2,7 +2,18 @@
 
 Decision: [ADR 0175](../adr/0175-the-check-shows-what-music-index-holds.md) items 1 and 10. The main session changes item 1 in the commit of task 155b, with a `- Revised:` line. Item 1 then permits the requests of the notice after a write.
 
-Status: Not started. The packet is ready for a delegate. Task 155b needs this task first.
+Status: Complete on 2026-11-15. The task has no visual criterion. Task 155b has the visual gate.
+
+## Result
+
+- The delegate was `gpt-6-luna` with medium effort.
+- Correction of the main session: the delegate compared the date of the index with the time of the write. ADR 0175 item 10 compares it with the `lastBuildDate` of the written file. Review sets that date before the write, so the index date was always earlier and `index_read` stayed `false`.
+- Correction of the main session: the queue did not link a podping to a write. After a write with the check box off, the podping of an older write looked like the podping of the last write.
+- Choice of the main session for the two corrections: the write records its time and its build date in the new table `feed_writes` (`record_feed_write`, `feed_write`). `outside::last_write` gives a podping only when its time is not before the time of that record. A feed with no record gives `last_write: null`.
+- A podping that the user sends with no write, after the last write, counts for that write. The response then shows its state.
+- Corrections of the main session: `outside::index_difference` now reads the record of the one `feed_presence` request, and the route has no copy of its comparison. One function makes the key `last_write`. The test server counts its requests (`TestServer::requests`) for criterion 4. The delegate had no test for criterion 4 and no test for criterion 5.
+- The new migration moved the position of three migrations that tests find by a count from the end of the list. The main session corrected the three counts.
+- The gate passed on the tree with this change.
 
 Source: [walk notes of 2026-11-15](../reviews/2026-11-15-walk-notes.md), Note 11.
 

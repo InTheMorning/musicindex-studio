@@ -667,6 +667,15 @@ SELECT id, 'website', href, 0, created_at FROM people WHERE href <> '';
     r"
 ALTER TABLE feeds ADD COLUMN release_kind TEXT;
 ",
+    // ADR 0175 item 10: keep the time and the build date of the last write
+    // of a feed.
+    r"
+CREATE TABLE feed_writes (
+    feed_id INTEGER PRIMARY KEY REFERENCES feeds(id) ON DELETE CASCADE,
+    written_at INTEGER NOT NULL,
+    build_date INTEGER
+);
+",
 ];
 
 /// `root` as a relative path under `data_dir`, when it is a folder inside
@@ -981,6 +990,16 @@ pub struct OutsideRow {
     pub changed: bool,
     /// The new address when the last check found a move.
     pub moved_url: Option<String>,
+}
+
+/// The last write of a feed (ADR 0175 item 10).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FeedWrite {
+    /// The time of the write, in seconds after the Unix epoch.
+    pub written_at: i64,
+    /// The `lastBuildDate` of the written file, in seconds after the Unix
+    /// epoch. It is none when the file has no date that Studio can read.
+    pub build_date: Option<i64>,
 }
 
 /// The last feed move that Studio completed (ADR 0184 item 3).
@@ -1890,6 +1909,47 @@ impl Collection {
                     Ok(WrittenFeedMove {
                         from_url: row.get(0)?,
                         moved_at: row.get(1)?,
+                    })
+                },
+            )
+            .optional()?)
+    }
+
+    /// Record the last write of a feed (ADR 0175 item 10).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn record_feed_write(
+        &self,
+        feed: FeedId,
+        written_at: i64,
+        build_date: Option<i64>,
+    ) -> Result<(), CollectionError> {
+        self.db.execute(
+            "INSERT INTO feed_writes (feed_id, written_at, build_date)
+             VALUES (?1, ?2, ?3)
+             ON CONFLICT (feed_id) DO UPDATE SET written_at = ?2, build_date = ?3",
+            params![feed.0, written_at, build_date],
+        )?;
+        Ok(())
+    }
+
+    /// Give the last write of a feed.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn feed_write(&self, feed: FeedId) -> Result<Option<FeedWrite>, CollectionError> {
+        Ok(self
+            .db
+            .query_row(
+                "SELECT written_at, build_date FROM feed_writes WHERE feed_id = ?1",
+                [feed.0],
+                |row| {
+                    Ok(FeedWrite {
+                        written_at: row.get(0)?,
+                        build_date: row.get(1)?,
                     })
                 },
             )
@@ -4925,13 +4985,13 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let previous_path = dir.path().join("previous.sqlite");
         let db = Connection::open(&previous_path).unwrap();
-        for migration in &MIGRATIONS[..MIGRATIONS.len() - 1] {
+        for migration in &MIGRATIONS[..MIGRATIONS.len() - 2] {
             db.execute_batch(migration).unwrap();
         }
         db.pragma_update(
             None,
             "user_version",
-            i64::try_from(SCHEMA_VERSION - 1).unwrap(),
+            i64::try_from(SCHEMA_VERSION - 2).unwrap(),
         )
         .unwrap();
         db.execute(
@@ -6412,7 +6472,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("collection.sqlite");
         let db = Connection::open(&path).unwrap();
-        let previous = MIGRATIONS.len() - 3;
+        let previous = MIGRATIONS.len() - 4;
         for migration in &MIGRATIONS[..previous] {
             db.execute_batch(migration).unwrap();
         }
@@ -6439,7 +6499,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("collection.sqlite");
         let db = Connection::open(&path).unwrap();
-        let previous = MIGRATIONS.len() - 2;
+        let previous = MIGRATIONS.len() - 3;
         for migration in &MIGRATIONS[..previous] {
             db.execute_batch(migration).unwrap();
         }

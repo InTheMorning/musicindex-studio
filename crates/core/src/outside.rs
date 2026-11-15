@@ -12,7 +12,7 @@ use crate::discover::MAX_FEED_BYTES;
 use crate::feed::Feed;
 use crate::inventory::is_placeholder_address;
 use crate::media::plain_address;
-use crate::musicindex::MusicIndex;
+use crate::musicindex::IndexFeed;
 use crate::web::Web;
 use crate::xml::Document;
 
@@ -42,6 +42,79 @@ pub struct LastWrittenMove {
     pub moved_at: i64,
     /// The announcement state of the address that a move announces.
     pub announcements: Vec<MoveAnnouncement>,
+}
+
+/// The last write of a feed with no move, and the state of its podping.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct LastWrite {
+    /// The time of the write, in seconds after the Unix epoch.
+    pub written_at: i64,
+    /// The `lastBuildDate` of the written file, in seconds after the Unix
+    /// epoch (ADR 0175 item 10).
+    #[serde(skip)]
+    pub build_date: Option<i64>,
+    /// The state of each podping of the write.
+    pub announcements: Vec<MoveAnnouncement>,
+}
+
+/// Give the last write of a feed and the state of its podping.
+///
+/// The function gives nothing when the last write was a move, because the
+/// notice of ADR 0184 shows that write. It gives nothing when the write
+/// planned no podping. A podping that the user sent after the write, with
+/// no write, counts for the write.
+///
+/// # Errors
+///
+/// Gives a [`CollectionError`] when SQLite fails.
+pub fn last_write(
+    collection: &Collection,
+    row: &FeedRow,
+) -> Result<Option<LastWrite>, CollectionError> {
+    let Some(write) = collection.feed_write(row.id)? else {
+        return Ok(None);
+    };
+    if collection
+        .written_feed_move(row.id)?
+        .is_some_and(|movement| movement.moved_at >= write.written_at)
+    {
+        return Ok(None);
+    }
+    let announcements = announce::recent(collection, row.id)?
+        .into_iter()
+        .filter(|announcement| announcement.podping && announcement.created_at >= write.written_at)
+        .map(announcement_state)
+        .collect::<Vec<_>>();
+    if announcements.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(LastWrite {
+        written_at: write.written_at,
+        build_date: write.build_date,
+        announcements,
+    }))
+}
+
+fn announcement_state(announcement: announce::Announcement) -> MoveAnnouncement {
+    let (state, send_at, finished_at, error) = match announcement.state {
+        AnnouncementState::Waiting | AnnouncementState::Sending => {
+            ("waiting", Some(announcement.next_at), None, None)
+        }
+        AnnouncementState::Sent => ("sent", None, announcement.finished_at, None),
+        AnnouncementState::Failed => (
+            "failed",
+            None,
+            announcement.finished_at,
+            announcement.last_error,
+        ),
+    };
+    MoveAnnouncement {
+        url: announcement.url,
+        state,
+        send_at,
+        finished_at,
+        error,
+    }
 }
 
 /// Tell if the Music Index address is the source of the last written move.
@@ -462,13 +535,12 @@ pub fn compare_folder(row: &FeedRow, bytes: &[u8], folder_url: &str) -> OutsideR
 }
 
 /// The address that musicindex gives for this feed when it is different from
-/// the public address (ADR 0150 item 5). No answer and no entry give `None`.
+/// the public address (ADR 0150 item 5). No address gives `None`.
 #[must_use]
-pub fn index_difference(index: &MusicIndex, row: &FeedRow) -> Option<String> {
+pub fn index_difference(row: &FeedRow, found: &IndexFeed) -> Option<String> {
     let own = address_of(row)?;
-    let guid = row.podcast_guid.as_deref()?;
-    let found = index.feed_url(guid).ok()??;
-    (plain_address(found.trim()) != own.trim()).then_some(found)
+    let found = found.url.as_deref()?;
+    (plain_address(found.trim()) != own.trim()).then(|| found.to_owned())
 }
 
 #[cfg(test)]
@@ -730,6 +802,63 @@ mod tests {
             found.announcements[0].url, "https://old.example/a.xml",
             "ADR 0189 item 3: show the address before the move. Fix: select movement.from_url."
         );
+    }
+
+    fn queue_podping(collection: &Collection, row: &FeedRow, now: u64) {
+        announce::queue(
+            collection,
+            row.id,
+            &[announce::PlannedAnnouncement {
+                url: "https://r2.example/a.xml".to_owned(),
+                podping: true,
+            }],
+            &announce::Timing::DEFAULT,
+            now,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn last_write_gives_the_time_and_podping_but_not_a_move() {
+        let (collection, row) = fixture();
+        collection
+            .record_feed_write(row.id, 200, Some(190))
+            .unwrap();
+        queue_podping(&collection, &row, 200);
+        let found = last_write(&collection, &row).unwrap().unwrap();
+        assert_eq!(found.written_at, 200);
+        assert_eq!(found.build_date, Some(190));
+        assert_eq!(found.announcements[0].state, "waiting");
+
+        collection
+            .record_written_feed_move(row.id, None, 300)
+            .unwrap();
+        collection
+            .record_feed_write(row.id, 300, Some(290))
+            .unwrap();
+        queue_podping(&collection, &row, 300);
+        assert_eq!(last_write(&collection, &row).unwrap(), None);
+    }
+
+    #[test]
+    fn last_write_is_empty_when_the_write_did_not_plan_a_podping() {
+        let (collection, row) = fixture();
+        assert_eq!(last_write(&collection, &row).unwrap(), None);
+        // A write with a podping, then a write with the check box off. The
+        // podping of the first write is not the podping of the last write.
+        collection
+            .record_feed_write(row.id, 200, Some(190))
+            .unwrap();
+        queue_podping(&collection, &row, 200);
+        collection
+            .record_feed_write(row.id, 400, Some(390))
+            .unwrap();
+        assert_eq!(last_write(&collection, &row).unwrap(), None);
+        // A podping that the user sends after that write counts for it.
+        queue_podping(&collection, &row, 500);
+        let found = last_write(&collection, &row).unwrap().unwrap();
+        assert_eq!(found.written_at, 400);
+        assert_eq!(found.build_date, Some(390));
     }
 
     #[test]

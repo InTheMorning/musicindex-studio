@@ -42,6 +42,7 @@ type Routes = Arc<Mutex<HashMap<String, Response>>>;
 pub struct TestServer {
     port: u16,
     routes: Routes,
+    seen: Arc<Mutex<Vec<String>>>,
 }
 
 impl TestServer {
@@ -69,6 +70,8 @@ impl TestServer {
             .collect();
         let routes = Arc::new(Mutex::new(routes));
         let shared = Arc::clone(&routes);
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let seen_paths = Arc::clone(&seen);
         thread::spawn(move || {
             for stream in listener.incoming() {
                 let Ok(mut stream) = stream else { continue };
@@ -87,6 +90,9 @@ impl TestServer {
                 let method = line.split_whitespace().next().unwrap_or("GET").to_owned();
                 let target = line.split_whitespace().nth(1).unwrap_or("/").to_owned();
                 let path = target.split('?').next().unwrap_or(&target).to_owned();
+                if let Ok(mut seen) = seen_paths.lock() {
+                    seen.push(path.clone());
+                }
                 // A route with a query in its key wins over the route for
                 // the path alone.
                 let route = shared
@@ -103,7 +109,18 @@ impl TestServer {
                 let _ = stream.write_all(&route.answer(&method, range));
             }
         });
-        Self { port, routes }
+        Self { port, routes, seen }
+    }
+
+    /// The number of requests that this server got for a path.
+    ///
+    /// # Panics
+    ///
+    /// Panics when the lock of the request list is poisoned.
+    #[must_use]
+    pub fn requests(&self, path: &str) -> usize {
+        let seen = self.seen.lock().expect("the request list lock");
+        seen.iter().filter(|seen| seen.as_str() == path).count()
     }
 
     /// The full address of a path on this server.

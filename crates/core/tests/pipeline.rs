@@ -3255,6 +3255,23 @@ fn with_the_choice_off_the_diff_gives_off_and_the_write_queues_nothing() {
 }
 
 #[test]
+fn a_write_records_its_time_and_the_outside_check_links_the_podping_to_it() {
+    let mut s = setup();
+    edit_title(&s);
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    write_s(&mut s, &diff.id).unwrap();
+    let first = s.collection.feed_write(s.feed).unwrap().expect(
+        "ADR 0175 item 10: a write records its time. Fix: call record_feed_write in the write.",
+    );
+    let row = s.collection.feed(s.feed).unwrap();
+    let found = studio_core::outside::last_write(&s.collection, &row)
+        .unwrap()
+        .expect("the write planned a podping");
+    assert_eq!(found.written_at, first.written_at);
+    assert_eq!(found.build_date, first.build_date);
+}
+
+#[test]
 fn a_feed_and_a_host_with_no_public_address_give_no_address_and_the_write_succeeds() {
     let server = FakeS3::start("bk");
     let dir = tempfile::tempdir().unwrap();

@@ -1,6 +1,6 @@
-// A menu button and its menu (ADR 0153 and ADR 0210). They use the sort
+// A menu button and its menu (ADR 0153 and ADR 0207 items 55 to 57). They use the sort
 // menu styles and Escape behavior. With `row`, the button has two forms
-// (ADR 0210 item 3): the styles show the ellipsis icon in the narrow layout
+// (ADR 0207 item 55): the styles show the ellipsis icon in the narrow layout
 // and the text in the wide layout. `Icon` is the icon component of the
 // shell, so that this module does not import the shell.
 import { html, useState, useRef } from './vendor/htm-preact-standalone.module.js';

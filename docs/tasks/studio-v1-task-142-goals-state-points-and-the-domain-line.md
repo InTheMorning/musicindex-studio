@@ -1,8 +1,8 @@
 # Studio v1 Task 142: Goals, State Points And The Domain Line
 
-Decision: [ADR 0208](../adr/0208-the-delete-and-move-sheets-give-goals-state-points-and-the-domain-line.md).
+Decision: ADR 0208, which the operator deleted on 2026-11-15. [ADR 0131](../adr/0131-delete-a-feed-from-its-file-host.md) items 1 to 4, 7, 10 and 15 to 19 and [ADR 0198](../adr/0198-the-review-of-a-delete-names-the-delete-and-a-deleted-feed-shows-only-what-it-can-do.md) items 9 to 11 own its rules. The item numbers in this file are the numbers of that record.
 
-Status: Complete on 2026-11-14, with its screenshot visual check. The human gate of ADR 0208 is open.
+Status: Complete on 2026-11-14, with its screenshot visual check. The human gate of the new owners is open.
 
 ## Result
 

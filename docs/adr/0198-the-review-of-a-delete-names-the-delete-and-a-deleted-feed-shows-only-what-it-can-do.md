@@ -8,8 +8,7 @@
 - Changes: [ADR 0131](0131-delete-a-feed-from-its-file-host.md) items 8 and 12 for a feed with a done delete.
 - Uses: [ADR 0193](0193-a-destructive-button-is-the-first-button-of-its-row.md) items 1 and 4, and musicindex ADR 0069 R-ACT-3 items 1 and 3.
 - Source: finding 5 and finding 6 of the [human test findings of 0.1.0-rc.22](../reviews/2026-11-13-rc22-human-test-findings.md).
-- Changed by: [ADR 0208](0208-the-delete-and-move-sheets-give-goals-state-points-and-the-domain-line.md) item 13: a deleted feed also shows **Put the File Back**.
-- Changed by: [ADR 0209](0209-the-review-sheet-keeps-the-podping-box-in-view-and-names-each-delete.md) items 13 to 16: a write of only deletions also has the destructive write button.
+- Revised: 2026-11-15 by operator decision. Items 9 to 11 give **Put the File Back**, and items 12 to 15 give the write of only deletions. The operator selected them on 2026-11-14, from drawings. These rules were in ADR 0208 and ADR 0209, which are deleted. Item 6 names item 9.
 
 ## Context
 
@@ -33,21 +32,37 @@ The read-only feed also shows **Stop Retiring** and **Link to This Page**. Each 
 ### The Retire Block Of A Deleted Feed
 
 5. `retire_facts` gives `Written` when the feed has a done delete and its draft hides the feed. The snapshot of the delete is the last write. Step 1 thus shows the existing text "Hide from apps is on in the last write." The UI keeps no copy of this rule.
-6. A feed with a done delete does not show **Stop Retiring**. **Check Again** stays, because step 2 still reads Music Index.
+6. A feed with a done delete does not show **Stop Retiring**. It shows **Put the File Back** (item 9), then **Check Again**, because step 2 still reads Music Index.
 7. A feed with a done delete does not show the select menu "Link to an artist or label page" and **Link to This Page**. The rows of the linked pages stay. The API gives the done delete on the feed row, so that the section does not need the retire state.
 8. A different read-only feed (ADR 0067) keeps these controls. Item 7 applies only to a done delete.
+
+### Put The File Back
+
+9. A feed with a done delete shows the button **Put the File Back** in the actions of the Retire block, before **Check Again**.
+10. The button calls `POST /feeds/{id}/delete/restore`, shows the draft of the answer and opens Review. The user writes the draft as a usual write ([ADR 0007](0007-draft-diff-write-and-announce.md)). A discard of the draft gives the state after the delete again.
+11. The file comes back as it was at the delete, with "Hide from apps" on. The UI adds no rule. An error of the route, for example a file at the path, shows in the block.
+
+### A Write Of Only Deletions
+
+12. When each operation of the diff is a deletion, and the feed file does not change and does not move, the write button is destructive. Its label is **Delete 1 File** or **Delete N Files**, with the count of the delete operations.
+13. The destructive write button is the first button of the footer (ADR 0193 items 1 and 4). **Discard the Draft** then has the normal style, at the right edge. The footer thus has one destructive button.
+14. A refused deletion ([ADR 0036](0036-library-records-host-inventory-and-host-operations.md) item 13) does not count. A diff with only refused deletions has no write.
+15. A write that changes the feed and also deletes a file keeps **Write to the File Host**. Items 1 to 3 do not change.
 
 ## Alternatives Considered
 
 - **Write to the File Host** in the destructive style. Rejected by the operator: the label does not say that the write deletes files.
 - Keep **Discard the Draft** destructive, after the delete button. Rejected: the footer then has two red buttons, and the second one removes no work. ADR 0193 item 12 also gives a row with only destructive buttons one menu.
 - Show **Stop Retiring** and **Link to This Page** dimmed, with a reason. Rejected by the operator: a dimmed button is hard to read, and the feed has no use for it.
+- A red write button for each write that deletes a file. Not chosen: a usual write with one replaced image becomes red.
 - A different text in the UI for a deleted feed. Rejected: the core already knows the state, and the existing text is correct when the state is correct.
 
 ## Consequences
 
 - The user sees in the button what the write deletes.
-- A deleted feed shows only **Check Again** as an action of the Retire block. A write to the same address brings the file back (ADR 0131 item 14).
+- A deleted feed shows **Put the File Back** and **Check Again** as the actions of the Retire block. It has a way back in the UI.
+- A user who deletes the old files of a move sees a red button with the count.
+- It is not decided if a write of only deletions needs a podping.
 - The feed row of the API has one more field.
 
 ## How This Decision Is Checked
@@ -57,7 +72,9 @@ Mechanical:
 - A Node test proves the label of item 1 for one and for three delete operations, and the order and styles of items 2 and 3. A review with no delete keeps **Write to the File Host** in the primary style.
 - A Rust test proves that `retire_facts` gives `Written` for a feed with a done delete and a hidden draft, and `DraftOnly` for a feed with no delete.
 - A Node test or an API test proves that a feed with a done delete gives the field of item 7, and that the UI hides the controls of items 6 and 7 for it.
-- The four commit checks pass.
+- A Node test proves that the Retire block view gives **Put the File Back** only for a done delete, before **Check Again**.
+- A Node test proves the write view of only deletions: **Delete 1 File** and **Delete N Files**. It proves no destructive view with a feed change, a feed move, an upload or only refused deletions.
+- The commit checks pass.
 
 Visual, by the planning model:
 

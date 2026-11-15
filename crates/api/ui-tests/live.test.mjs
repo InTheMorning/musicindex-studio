@@ -14,13 +14,13 @@ const live = {
   item: { guid: 'g-1', title: 'Show' }, live_value: null, content_links: [link],
 };
 
-test('withoutLive removes only the show of the key (ADR 0210 item 12)', () => {
+test('withoutLive removes only the show of the key (ADR 0205 item 38)', () => {
   const other = { ...live, _cid: 5, item: { guid: 'g-2', title: 'Other' } };
   const model = { live_items: [live, other], title: 'Feed' };
   assert.deepEqual(withoutLive(model, 'g-1'), { ...model, live_items: [other] },
-    'ADR 0210: remove the selected live show and keep each other show. Fix withoutLive in crates/api/ui/live.js.');
+    'ADR 0205 item 38: remove the selected live show and keep each other show. Fix withoutLive in crates/api/ui/live.js.');
   assert.deepEqual(withoutLive(model, 'missing'), model,
-    'ADR 0210: keep all live shows when the key does not match. Fix withoutLive in crates/api/ui/live.js.');
+    'ADR 0205 item 38: keep all live shows when the key does not match. Fix withoutLive in crates/api/ui/live.js.');
 });
 
 test('the key of a live item is its GUID, or its client ID with no GUID', () => {

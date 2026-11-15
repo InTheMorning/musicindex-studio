@@ -1,8 +1,8 @@
 # Studio v1 Task 143: The Review Sheet Keeps The Podping Box In View And Names Each Delete
 
-Decision: [ADR 0209](../adr/0209-the-review-sheet-keeps-the-podping-box-in-view-and-names-each-delete.md).
+Decision: ADR 0209, which the operator deleted on 2026-11-15. [ADR 0205](../adr/0205-publisher-feeds-announcements-and-show-grants.md) item 19, [ADR 0036](../adr/0036-library-records-host-inventory-and-host-operations.md) items 13 and 14 and [ADR 0198](../adr/0198-the-review-of-a-delete-names-the-delete-and-a-deleted-feed-shows-only-what-it-can-do.md) items 12 to 15 own its rules. ADR 0205 item 19 removes the row **Announce** of this task. The item numbers in this file are the numbers of that record.
 
-Status: Complete on 2026-11-14, with its screenshot visual check. The human gate of ADR 0209 is open.
+Status: Complete on 2026-11-14, with its screenshot visual check. The human gate of the new owners is open.
 
 ## Result
 

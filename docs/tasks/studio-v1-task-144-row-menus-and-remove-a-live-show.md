@@ -1,8 +1,8 @@
 # Studio v1 Task 144: A Row Has One Menu, And A Live Show Can Be Removed
 
-Decision: [ADR 0210](../adr/0210-a-row-has-one-menu-and-a-live-show-can-be-removed.md).
+Decision: ADR 0210, which the operator deleted on 2026-11-15. [ADR 0207](../adr/0207-recipients-change-sets-and-wallets.md) items 53 to 59, [ADR 0183](../adr/0183-each-collection-row-has-one-actions-menu.md) item 1 and [ADR 0205](../adr/0205-publisher-feeds-announcements-and-show-grants.md) item 38 own its rules. The item numbers in this file are the numbers of that record.
 
-Status: Complete on 2026-11-14, with its screenshot visual check. The human gate of ADR 0210 is open.
+Status: Complete on 2026-11-14, with its screenshot visual check. The human gate of the new owners is open.
 
 ## Result
 

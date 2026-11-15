@@ -6,6 +6,7 @@
 - Changed by: [ADR 0180](0180-the-files-page-has-a-folder-picker-and-one-step-for-each-copy.md). Item 8: a library file has no host of its own. Item 12: the Files page names "Reference" **Use This Copy**, and has no "Move" for one file.
 - Changed by: [ADR 0167](0167-each-release-has-an-editable-library-folder.md), Each Release Has An Editable Library Folder.
 - Changed by: [ADR 0148](0148-a-move-keeps-the-old-files-until-the-user-reviews-the-deletion.md), A Move Keeps The Old Files Until The User Reviews The Deletion.
+- Revised: 2026-11-15 by operator decision. Item 13 gives the row of a refused deletion, and item 14 gives the text colors of a row. The operator selected them on 2026-11-14, from drawings. These rules were in ADR 0209, which is deleted.
 
 ## Context
 
@@ -58,11 +59,18 @@ The planning model added the technical choices below.
     - Copy: put a library file on a different host, with no change of the feed.
     - Move: copy, reference the new copy, and delete the copy from before.
     - Delete: remove a copy from a host.
-13. Studio refuses a deletion of a host file while a feed of the library refers to its address. The diff names each feed that refers to it.
+13. Studio refuses a deletion of a host file while a feed of the library refers to its address. The diff names each feed that refers to it. The row of a refused deletion in the review has these properties:
+    - It has the style of a warning: the triangle icon and the Warning color ([ADR 0191](0191-a-return-warning-has-the-warning-color-and-a-sent-podping-can-go-again.md) item 1, musicindex ADR 0068 R-STATUS-1). Its kind is "Not deleted". It is not an alert.
+    - For a pointer file, the text is "Studio does not delete this file. It tells the apps the new address of the feed."
+    - For a file that feeds refer to, the text is "Studio does not delete this file. These feeds use it: {titles}".
+    - **Undo** stays. It removes the refused deletion from the draft.
 
 ### The Write
 
-14. The diff lists the feed XML change, each upload and copy with its host and its size, and each deletion with its host.
+14. The diff lists the feed XML change, each upload and copy with its host and its size, and each deletion with its host. The text of a row in the review has these rules:
+    - A value has the normal text color. A value is an address, a path or the name of a file host. A label, such as "From" and "To", and a note have the muted color.
+    - The row of a feed move shows "From" and "To", each with its address. The name of the file host is on its own line below the address that it belongs to.
+    - The UI shows the file host of the address before the move only when the diff gives it. The UI adds no rule.
 15. The write puts the uploads and the copies first, then the feed XML, then the deletions. Before the deletions, Studio reads each new address through its connector, to confirm that the file is there ([ADR 0009](0009-studio-connects-to-hosts-and-moves-files.md)).
 16. `Connector` gets `stat(path)`, which gives the size and the stamp of one file, and `delete(path, stamp)`. A deletion uses the stamp from the inventory, so Studio does not delete a file that changed after the scan.
 

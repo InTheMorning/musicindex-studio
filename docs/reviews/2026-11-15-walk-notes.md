@@ -14,7 +14,7 @@ Comment: the row **Announce** in the review of a draft is not necessary. The che
 
 Facts:
 
-- [ADR 0209](../adr/0209-the-review-sheet-keeps-the-podping-box-in-view-and-names-each-delete.md) items 1 to 3 own the two parts. Item 2 keeps the row **Announce** at the top, with the full words and the address. Item 3 puts the time of the send in that row.
+- ADR 0209 items 1 to 3 own the two parts. Item 2 keeps the row **Announce** at the top, with the full words and the address. Item 3 puts the time of the send in that row.
 - The consequences of ADR 0209 say that the address of the podping and the check box are in two places.
 - `AnnounceLines` in `crates/api/ui/editor.js` makes the row. `announceLines` in `crates/api/ui/announce.js` gives its lines.
 - The row gives four things that the check box does not give:
@@ -23,7 +23,7 @@ Facts:
     - The line "No announcement. No index learns about this write until it reads the feed by itself." when the check box is off.
     - The cause of no announcement, when the feed has no public address or the write deletes the feed file. The sheet shows no check box in these two conditions.
 
-Open: no decision. A removal of the row changes ADR 0209 items 2 and 3. Each of the four things then needs a new position, or a decision removes it.
+Decided: Note 9 gives the selection. The operator deleted ADR 0208, ADR 0209 and ADR 0210 on 2026-11-15, and the ADR that owns each area states their live rules. [ADR 0205](../adr/0205-publisher-feeds-announcements-and-show-grants.md) item 19 has no row **Announce**.
 
 ### Note 2: The Desktop App Asks For The Passphrase At Each Start
 
@@ -122,13 +122,15 @@ Comment: the domain of the feed address assures only one thing, that the artist 
 
 Facts:
 
-- [ADR 0208](../adr/0208-the-delete-and-move-sheets-give-goals-state-points-and-the-domain-line.md) item 1 gives the words: "Keep the domain {host}. If it expires, its new owner can take over this feed and its payments." Item 4 gives the same words in four places.
+- ADR 0208 item 1 gives the words: "Keep the domain {host}. If it expires, its new owner can take over this feed and its payments." Item 4 gives the same words in four places.
 - After a done delete, the line shows in the Retire block, with **Put the File Back** (ADR 0208 items 12 and 13).
 - The context of ADR 0208 gives the same cause: the next owner of the domain can publish a feed with the same GUID and different payment recipients. It says that no test has shown this.
 - `podcast_guid_for_url` in `crates/core/src/guid.rs` makes the GUID of a new feed from its address. A feed keeps its GUID when its address changes.
 - After a delete, the user has no feed at the address and gets no payments there. The words "take over this feed and its payments" then do not give the danger of the comment.
 
-Open: no decision. Different words after a done delete change ADR 0208 items 1 and 4. The orchestrator said on 2026-11-15 that ADR 0208 is not decided, so this session changed nothing.
+Operator choice, from the questionnaire of 2026-11-15: "Name the GUID and the payments". After a done delete, the second sentence of the line is "If it expires, its new owner can publish a feed with the same GUID and collect the payments that apps still send to it."
+
+Decided: [ADR 0131](../adr/0131-delete-a-feed-from-its-file-host.md) item 16 gives these words, and `domainLine` in `crates/api/ui/feeddelete.js` shows them. ADR 0131 items 15 to 19 own the domain line.
 
 ### Note 9: The Review Sheet Has No Row **Announce**, And The Check Box Moves
 
@@ -137,13 +139,13 @@ Comment: the check box "Send a podping" moves to the right side of the review sh
 Facts:
 
 - This note continues Note 1, which gives the four things that only the row **Announce** shows.
-- [ADR 0209](../adr/0209-the-review-sheet-keeps-the-podping-box-in-view-and-names-each-delete.md) item 1 puts the check box in the footer, in its own row above the buttons. Items 2 and 3 keep the row **Announce**.
+- ADR 0209 item 1 puts the check box in the footer, in its own row above the buttons. Items 2 and 3 keep the row **Announce**.
 
 Operator choice: remove the row **Announce**, and put the check box at the right side above **Write to the File Host**.
 
 Operator choice, from the questionnaire of 2026-11-15, from drawings: "Box only". The footer shows only the check box. The address and the time of the send go. When no podping is possible, a line with the cause shows in the position of the check box.
 
-Open: the choice changes ADR 0209 items 1 to 3. The orchestrator said on 2026-11-15 that ADR 0209 is not decided, so this session changed nothing.
+Decided: [ADR 0205](../adr/0205-publisher-feeds-announcements-and-show-grants.md) item 19 gives the selection, and the review sheet shows it. `announceSkipLine` in `crates/api/ui/announce.js` gives the line with the cause.
 
 ### Note 10: One Row In Review For "Hide From Apps"
 
@@ -223,14 +225,16 @@ Comment: the wallet address rows of a release and of a track do not look like th
 Facts:
 
 - The comment came in step 15, on the iPhone.
-- [ADR 0210](../adr/0210-a-row-has-one-menu-and-a-live-show-can-be-removed.md) items 1 to 7 give the address row of a wallet in People. The row has one menu button with **Make Default**, **Edit** and **Copy**. In the narrow layout the button is the round ellipsis button.
+- ADR 0210 items 1 to 7 give the address row of a wallet in People. The row has one menu button with **Make Default**, **Edit** and **Copy**. In the narrow layout the button is the round ellipsis button.
 - ADR 0210 item 6 gives the same control to the collection rows of ADR 0183. It does not name the recipient rows of a feed.
 - `Recipients` in `crates/api/ui/values.js` makes the rows of the tab **Value Routes** and of the payments of a track. The address row there has the text button **Change…**, and the recipient has the button **Remove**. It has no menu button.
 - The two rows use the same CSS class `address-row`.
 
 Operator choice, from the questionnaire of 2026-11-15, from drawings: "Menu, Remove stays a button". The address row of a recipient gets the menu button of the People row, with **Change…**, **Copy** and **Save to People**. The destructive button **Remove** stays below the row. The operator asked that the row uses the People code again and is not a copy.
 
-Open: no task. A recipient of a feed has no default address, so the menu has no **Make Default**. The choice adds the recipient rows to ADR 0210 item 6. The operator has not decided on ADR 0210, from the message of the orchestrator on 2026-11-15.
+Correction: the drawing showed "Save to People". The button in the code has the label **Add to People**, and the menu entry keeps that label.
+
+Open: no task. [ADR 0207](../adr/0207-recipients-change-sets-and-wallets.md) item 60 gives the rule. A recipient of a feed has no default address, so the menu has no **Make Default**.
 
 ## Results Of The Steps
 

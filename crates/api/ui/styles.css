@@ -1821,7 +1821,7 @@ button.outline-feed {
 .row-menu-icon .icon { display: block; width: 18px; height: 18px; }
 .address-status { display: flex; align-items: center; gap: 8px; }
 .collections-group, .collection-rows { overflow: visible; }
-/* A group with an address row does not clip the open menu of the row (ADR 0210 item 1). */
+/* A group with an address row does not clip the open menu of the row (ADR 0207 item 53). */
 .group:has(> .address-row .row-menu-wrap) { overflow: visible; }
 .letters {
   position: sticky;
@@ -2171,7 +2171,7 @@ button.outline-feed {
 .announce-choice { display: grid; gap: 4px; }
 .announce-choice .hint { margin: 0; }
 .section > .announce-choice { padding: 0 4px; }
-.announce-footer-row { flex: 1 0 100%; min-width: 0; }
+.announce-footer-row { flex: 1 0 100%; min-width: 0; display: flex; justify-content: flex-end; text-align: end; }
 .announce-footer-row .check { display: flex; align-items: center; gap: 8px; min-height: var(--target); }
 .player-time { flex: none; min-width: 11ch; color: var(--muted); font-variant-numeric: tabular-nums; text-align: end; }
 /* A drop target (ADR 0125). During a file drag, each target has a light

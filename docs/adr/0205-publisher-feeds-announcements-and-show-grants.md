@@ -9,8 +9,7 @@
 - Supersedes: [ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md), Live Items, Connected Apps And Show Grants.
 - Uses: [ADR 0007](0007-draft-diff-write-and-announce.md) for the draft, the diff and the write. [ADR 0008](0008-feed-types-and-feed-identity.md) for the feed types and the GUIDs. [ADR 0035](0035-a-release-library-is-the-master-of-each-feed.md) for the release folder. [ADR 0045](0045-phase-9-crates-test-servers-and-host-forms.md) for the test servers.
 - Uses: these current ADRs own a part of this area. This ADR names each one at its item. [ADR 0058](0058-grant-vaults-and-connected-apps-on-the-server.md) (the grant vaults and the apps on the server), [ADR 0075](0075-the-publisher-page-has-payments-and-credits.md) (the payments and the credits of a publisher feed), [ADR 0082](0082-a-publisher-feed-has-a-set-of-roles.md) (the roles of a publisher feed), [ADR 0083](0083-hosting-is-a-first-class-role.md) (the roles of the form), [ADR 0122](0122-a-new-user-starts-with-a-default-file-host.md) (the placeholder GUID), [ADR 0086](0086-a-playlist-links-to-its-artist-or-label.md) (a playlist as a release), [ADR 0110](0110-a-connected-app-signs-each-request-with-its-own-key.md) (the key of an app and the pairing), [ADR 0127](0127-a-changed-feed-gets-a-new-build-date.md) (the build date), [ADR 0135](0135-the-panel-holds-the-content-and-the-page-has-tabs.md) (the tabs and the outline), [ADR 0136](0136-one-announcement-choice-at-the-write.md) (the announcement choice), [ADR 0161](0161-a-live-item-needs-a-stream-and-a-content-link-is-recommended.md) (the checks of a live item), [ADR 0184](0184-after-a-move-studio-shows-the-podping-of-the-move.md) (the podping of a move), [ADR 0189](0189-a-move-sends-one-podping-of-the-old-address.md) (the address of a move), [ADR 0190](0190-review-gives-the-return-wait-of-music-index.md) (the send time of a return), [ADR 0191](0191-a-return-warning-has-the-warning-color-and-a-sent-podping-can-go-again.md) (the podping that goes again).
-- Changed by: [ADR 0209](0209-the-review-sheet-keeps-the-podping-box-in-view-and-names-each-delete.md) items 1 to 3: in the review sheet, the check box of item 19 is in the footer.
-- Changed by: [ADR 0210](0210-a-row-has-one-menu-and-a-live-show-can-be-removed.md) items 9 to 14: the page of a live show of item 38 also removes the show.
+- Revised: 2026-11-15 by operator decision. Item 19 gives the position of the check box in the review sheet, from the selections of the operator on 2026-11-14 and 2026-11-15: the sheet has no row **Announce**. Item 38 gives the removal of a live show, which the operator selected on 2026-11-14. These rules were in ADR 0209 and ADR 0210, which are deleted.
 
 ## Context
 
@@ -54,7 +53,11 @@
 
 ### The Announcement Choice
 
-19. One check box, "Tell Podcast Index and send a podping", is directly above the Write button of the review sheet, and on the review page of a change set. One check box applies to each feed of a change set (ADR 0136 items 1 and 7).
+19. One check box gives the announcement choice of a write. One check box applies to each feed of a change set (ADR 0136 items 1 and 7). This item owns its position and its label:
+    - In the review sheet, the check box is in the footer, at the right side, directly above the write button. It is in view at each scroll position. Its label is "Send a podping".
+    - The review sheet has no row **Announce**. It does not show the address of the podping or the time of the send.
+    - When the feed has no public address, or when the write deletes the feed file, the sheet has no check box. A line with the cause is in the position of the check box.
+    - On the review page of a change set, the check box has the label "Tell Podcast Index and send a podping", directly above the write button.
 20. Studio remembers the last choice for the next write. It starts on. The Settings page has no announcement section (ADR 0136 item 2).
 
 ### The Addresses
@@ -88,7 +91,12 @@
 
 36. A live item is in an album feed that Studio can write, or in a show feed. A show feed is a new feed with `podcast:medium` `music` that the user makes for live items. Its form is that of a new album feed ([ADR 0032](0032-new-releases-formats-paths-and-new-feeds.md)).
 37. A new live item gets a new UUID v4 `guid`, the status `pending`, and a `start` time from the user. The `guid` does not change after that (ADR 0008).
-38. The page of a live show edits the title, the description, the image, `start`, `end`, the stream enclosure, `podcast:contentLink` and the item value routes. It shows `podcast:liveValue`, and the user can change it or remove it. The tab Live Shows of the feed page has one row for each show, and the page of one show keeps this tab (ADR 0135 item 5).
+38. The page of a live show edits the title, the description, the image, `start`, `end`, the stream enclosure, `podcast:contentLink` and the item value routes. It shows `podcast:liveValue`, and the user can change it or remove it. The tab Live Shows of the feed page has one row for each show, and the page of one show keeps this tab (ADR 0135 item 5). The page also removes the show:
+    - The page of a live show has the button **Remove the Show** at its end. It is destructive.
+    - The button opens a confirm with the title `Remove “{title}”?` and the destructive button **Remove the Show** ([ADR 0193](0193-a-destructive-button-is-the-first-button-of-its-row.md)).
+    - The text of the confirm is "Studio removes the show from the draft. The feed changes at the next write." For a show with the status `live`, the text also says "Apps lose the stream of this show at that write."
+    - After the confirm, Studio removes the live item from the draft and shows the tab **Live Shows**. Review shows the removal before the write, as each change of the draft.
+    - The tab **Live Shows** has no remove control on its rows. The removal adds no rule to the UI. A rule of the core about a live item with a grant stays in the core.
 39. Studio does not write a live item with no `start`, with a `status` that is not `pending`, `live` or `ended`, or with no stream. ADR 0161 items 1 to 9 give the checks of the stream and the warning for a live item with no content link. A refusal stops the write before any change on a host, as for an incorrect address.
 40. "Go live" changes the status from `pending` to `live`, and "End the show" changes it from `live` to `ended`. Each one changes the draft and opens the review sheet. The user writes, and the announcement follows.
 41. An `ended` live item can get a recording. The user imports an audio file, as for a track ([ADR 0026](0026-import-music-files-through-the-draft.md), [ADR 0033](0033-a-lossless-import-gives-an-mp3-enclosure.md)), and the enclosure of the live item points to it.

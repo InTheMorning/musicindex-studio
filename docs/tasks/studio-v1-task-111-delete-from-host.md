@@ -84,7 +84,7 @@ Visual, by the planning model:
 
 Human, by the operator. On 2026-11-13 the retire and the delete passed. The restore did not run:
 
-- The human criteria of ADR 0131. The human gate of [ADR 0208](../adr/0208-the-delete-and-move-sheets-give-goals-state-points-and-the-domain-line.md) has the restore, with its button **Put the File Back**.
+- The human criteria of ADR 0131. The human gate of [ADR 0198](../adr/0198-the-review-of-a-delete-names-the-delete-and-a-deleted-feed-shows-only-what-it-can-do.md) items 9 to 11 has the restore, with its button **Put the File Back**.
 
 ## Stop And Ask When
 

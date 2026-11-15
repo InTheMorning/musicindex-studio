@@ -5,6 +5,7 @@
 - Owner: operator
 - Accepted: 2026-11-02 by the operator, from screens 2 to 6 of the mockups in `.studio-dev/mockup-start/site/`.
 - Revised: 2026-11-02 by the operator: "My own server" is the first row of item 6. Item 11 comes from the visual check of task 083.
+- Changed: 2026-11-14 by the operator, at the human check walk. The button of items 8 and 9 is "Add a Release".
 - Changed by: [ADR 0122](0122-a-new-user-starts-with-a-default-file-host.md) items 1 to 4, step 2.
 - Changed by: [ADR 0164](0164-the-releases-of-a-publisher-feed-have-an-add-row.md) item 9: the new album becomes a release of the artist.
 - Changes: [ADR 0072](0072-add-a-feed-opens-from-releases.md), the empty Releases page.
@@ -35,9 +36,9 @@
 6. Step 2, "Where it lives", has the text "Studio does not keep your music. It puts your {artist page or label page} and your songs on a file host that you choose. You can move them later." It shows one row for each file host type. "My own server" is first, because a folder on this computer lets a user try Studio before the user selects a hosting provider. Then come "Nostr site (nsite)" and "S3 or Cloudflare R2". A Blossom host holds media only (ADR 0048 item 2), so it is not a row. The lines are in the task file. A row opens the form of that file host (ADR 0045). With one connected file host, step 2 does not show. With two or more, step 2 is a select menu.
 7. After step 2, the core makes the publisher feed as a draft, with the role `artist` or `label`. The sheet uses the route of the form that makes a feed. Studio writes nothing. The feed file gets its start value from the name (ADR 0073 item 8).
 8. Then the page of the new feed opens. The toolbar shows the draft status and "Review", as on each editor page. The page has one large row at its top:
-    - Musician: "Add your first album", with "Drop the songs in. Studio reads their names and order, and makes the album page." and the button "Add an Album".
+    - Musician: "Add your first album", with "Drop the songs in. Studio reads their names and order, and makes the album page." and the button "Add a Release".
     - Label: the rows "Add an artist", "Add a release" and "Find an artist that is online".
-9. "Add an Album" opens "Add tracks" of ADR 0073 for a new album of this artist. The first write of the artist page and the album goes through Review (ADR 0007).
+9. "Add a Release" opens "Add tracks" of ADR 0073 for a new album of this artist. The first write of the artist page and the album goes through Review (ADR 0007).
 10. The first steps use the words "artist page", "label page", "album", "release" and "file host". They do not use the word "feed". The Add feeds page, the settings and the details keep the word "feed".
 11. The Welcome page replaces the question of the first-run wizard, "Do you already have a feed?", and its page "Welcome" (ADR 0020 items 1 and 2). A new user goes from the library folder, or from the sign-up on a server, to the Welcome page. "My music is online already" uses the same search as the answer "Yes" of ADR 0020, and ADR 0020 items 3 to 15 do not change. Below the groups, the line "Moving from MSP 2.0? Import the Backups" opens the MSP 2.0 import.
 

@@ -5,6 +5,7 @@
 - Owner: operator
 - Accepted: 2026-11-10 by the operator, through the questionnaire. The operator selected the drawing "Row in Releases".
 - Revised: 2026-11-10 by the operator. Items 6 and 7 come from the check of the first version: the list view of a group also gets the action, and the title of the sheet names the page.
+- Changed: 2026-11-14 by the operator, at the human check walk. Item 2 gives **＋ Add a Release** to each role.
 - Changes: [ADR 0119](0119-a-new-user-starts-as-a-musician-or-a-label.md) item 9.
 - Uses: [ADR 0041](../archive/adr/0041-publisher-feeds-and-two-way-links.md) for the two-way link and its notices. [ADR 0119](0119-a-new-user-starts-as-a-musician-or-a-label.md) item 8 for the first-step rows. [ADR 0007](0007-draft-diff-write-and-announce.md) for the write.
 
@@ -20,7 +21,7 @@ The first-step row also did not link the new album to the artist. The form sent 
 
 1. The section **Releases** of a publisher feed has an add row at its end, below the releases. The row shows when the feed has a file host and has no first-step row of ADR 0119 item 8.
 2. The words of the row come from the first role of the feed:
-    - artist: **＋ Add an Album**. The form starts with the name of the artist in **Artist**.
+    - artist: **＋ Add a Release**. The form starts with the name of the artist in **Artist**.
     - each other role: **＋ Add a Release**. The form has no start value.
 3. The row opens the same form as the first-step row. When the form makes an album or a playlist, Studio links it to this publisher feed with the two-way link of ADR 0041. Then the page of the new release opens. This applies also to the first-step rows, and it changes ADR 0119 item 9.
 4. When the link fails, the publisher page stays open and shows the error. The new release stays in the collection, and the field **Release** offers it.
@@ -55,7 +56,7 @@ The first-step row also did not link the new album to the artist. The form sent 
 
 Mechanical:
 
-- The function gives "Add an Album" with the artist name for an artist with a release.
+- The function gives "Add a Release" with the artist name for an artist with a release.
 - The function gives "Add a Release" with no start value for a label with a release.
 - The function gives no action for a feed with no file host. The page of the feed does not show the row with a first-step row.
 - The title function gives the words of item 7 for each type and role.

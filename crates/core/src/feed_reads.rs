@@ -206,14 +206,16 @@ fn index_of<'a>(net: Option<&'a NetworkFacts>, guid: Option<&str>) -> Option<&'a
 }
 
 /// The line under the rows (ADR 0175 item 10). `base_build_date` is the
-/// `lastBuildDate` text of the feed that Studio last wrote.
+/// `lastBuildDate` text of the feed that Studio last wrote. `hidden` is true
+/// when the draft is hidden from apps.
 #[must_use]
 pub fn index_line_of(
     net: Option<&NetworkFacts>,
     guid: Option<&str>,
     base_build_date: Option<&str>,
+    hidden: bool,
 ) -> Option<IndexLine> {
-    index_line(index_of(net, guid), base_build_date)
+    index_line(index_of(net, guid), base_build_date, hidden)
 }
 
 /// Read what the index holds for the feed in `links` and add it to `net`
@@ -922,11 +924,11 @@ mod tests {
         let (_, facts) = net.index.clone().unwrap();
         assert!(!facts.held);
         assert_eq!(
-            index_line_of(Some(&net), Some(GUID), None),
+            index_line_of(Some(&net), Some(GUID), None, false),
             Some(IndexLine::NotHeld)
         );
         // Facts that another GUID read do not apply.
-        assert_eq!(index_line_of(Some(&net), Some("other"), None), None);
+        assert_eq!(index_line_of(Some(&net), Some("other"), None, false), None);
     }
 
     #[test]

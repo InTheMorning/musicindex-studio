@@ -27,6 +27,9 @@ pub struct IndexFacts {
 pub enum IndexLine {
     /// The index has no record of the feed.
     NotHeld,
+    /// The index does not hold the feed, and the feed is hidden from apps.
+    /// Music Index does not take a hidden feed.
+    NotHeldHidden,
     /// The index read a build time that is earlier than the last write.
     LastWriteNotRead,
 }
@@ -37,6 +40,7 @@ impl IndexLine {
     pub fn text(self) -> &'static str {
         match self {
             Self::NotHeld => "Music Index does not hold this feed yet.",
+            Self::NotHeldHidden => "Music Index does not hold this feed.",
             Self::LastWriteNotRead => "Music Index has not read your last write yet.",
         }
     }
@@ -44,12 +48,21 @@ impl IndexLine {
 
 /// The state of the line under the rows. `base_build_date` is the
 /// `lastBuildDate` text of the feed that Studio last wrote. A date that
-/// Studio cannot read gives no line.
+/// Studio cannot read gives no line. `hidden` is true when the draft is
+/// hidden from apps.
 #[must_use]
-pub fn index_line(index: Option<&IndexFacts>, base_build_date: Option<&str>) -> Option<IndexLine> {
+pub fn index_line(
+    index: Option<&IndexFacts>,
+    base_build_date: Option<&str>,
+    hidden: bool,
+) -> Option<IndexLine> {
     let index = index?;
     if !index.held {
-        return Some(IndexLine::NotHeld);
+        return Some(if hidden {
+            IndexLine::NotHeldHidden
+        } else {
+            IndexLine::NotHeld
+        });
     }
     let read = index.last_build_date?;
     let written = datetime::parse_rfc2822(base_build_date?)?.seconds;
@@ -252,26 +265,37 @@ mod tests {
             .seconds;
         let mut index = held(Some(PUBLIC));
         let not_held = IndexFacts::default();
-        assert_eq!(index_line(Some(&not_held), base), Some(IndexLine::NotHeld));
-        assert_eq!(index_line(None, base), None);
+        assert_eq!(
+            index_line(Some(&not_held), base, false),
+            Some(IndexLine::NotHeld)
+        );
+        assert_eq!(
+            index_line(Some(&not_held), base, true),
+            Some(IndexLine::NotHeldHidden)
+        );
+        assert_eq!(index_line(None, base, false), None);
 
         index.last_build_date = Some(at - 1);
         assert_eq!(
-            index_line(Some(&index), base),
+            index_line(Some(&index), base, false),
             Some(IndexLine::LastWriteNotRead)
         );
         index.last_build_date = Some(at);
-        assert_eq!(index_line(Some(&index), base), None);
+        assert_eq!(index_line(Some(&index), base, false), None);
         index.last_build_date = Some(at + 5);
-        assert_eq!(index_line(Some(&index), base), None);
+        assert_eq!(index_line(Some(&index), base, false), None);
         index.last_build_date = None;
-        assert_eq!(index_line(Some(&index), base), None);
+        assert_eq!(index_line(Some(&index), base, false), None);
         index.last_build_date = Some(at - 1);
-        assert_eq!(index_line(Some(&index), None), None);
-        assert_eq!(index_line(Some(&index), Some("not a date")), None);
+        assert_eq!(index_line(Some(&index), None, false), None);
+        assert_eq!(index_line(Some(&index), Some("not a date"), false), None);
         assert_eq!(
             IndexLine::NotHeld.text(),
             "Music Index does not hold this feed yet."
+        );
+        assert_eq!(
+            IndexLine::NotHeldHidden.text(),
+            "Music Index does not hold this feed."
         );
         assert_eq!(
             IndexLine::LastWriteNotRead.text(),

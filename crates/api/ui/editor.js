@@ -2177,7 +2177,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
       ${diff && host.kind === 'move' && html`<div class="notice" role="status">
         The file at the address before the move stays and does not change. Apps that read that address continue to get the version from before the move.</div>`}
       ${hasWork && draft.model && draft.hidden && html`<div class="notice" role="status">
-        <strong>This feed is hidden from apps.</strong> Apps and directories do not list it after the write.</div>`}
+        <strong>This feed will be hidden from apps.</strong> Apps and directories do not list it after the write.</div>`}
       ${hasWork && html`<${AnnounceLines} diff=${diff} />`}
       ${diff && html`<${GrantChecks} feedId=${feedId} model=${draft.model} diff=${diff} busy=${busy} signerHost=${signerHost} onDiff=${setDiff} run=${run} />`}
       ${diff && (diff.changed

@@ -49,7 +49,12 @@ fn check_json(w: &Workspace, id: FeedId) -> ApiResult {
         }
     }
     let guid = inputs.links.feed.podcast_guid.as_deref();
-    let line = feed_reads::index_line_of(net, guid, inputs.base_build_date.as_deref());
+    let line = feed_reads::index_line_of(
+        net,
+        guid,
+        inputs.base_build_date.as_deref(),
+        inputs.links.feed.hidden(),
+    );
     // The report of ADR 0175 item 8 is for the user to copy. The core
     // gives its text.
     let findings: Vec<serde_json::Value> = result

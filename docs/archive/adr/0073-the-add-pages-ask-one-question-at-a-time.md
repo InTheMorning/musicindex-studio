@@ -1,16 +1,18 @@
+> Archived: superseded by [ADR 0212](../../adr/0212-the-add-pages.md) on 2026-11-14. ADR 0212 restates each live rule of this ADR. Its item map gives the new item of each item.
+
 # ADR 0073: The Add Pages Ask One Question At A Time
 
-- Status: Accepted
+- Status: Superseded by ADR 0212
 - Date: 2026-10-28
 - Owner: operator
 - Accepted: 2026-10-28 by the operator.
-- Changes: [ADR 0023](0023-web-addresses-and-audio-file-facts.md) item 6, [ADR 0029](0029-editor-pages-toolbar-and-three-levels.md) item 8, [ADR 0039](../archive/adr/0039-the-shell-releases-and-the-outline.md) item 6 and [ADR 0068](../archive/adr/0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md) item 2.
-- Changes: [ADR 0029](0029-editor-pages-toolbar-and-three-levels.md), Editor Pages, The Toolbar And Three Background Levels. ADR 0029 names the changed items.
-- Changes: [ADR 0039](../archive/adr/0039-the-shell-releases-and-the-outline.md), The Shell, Releases And The Outline Of A Feed. ADR 0039 names the changed items.
-- Changes: [ADR 0068](../archive/adr/0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md), The Sequence Of The Sections And Fields Of An Editor Page. ADR 0068 names the changed items.
-- Changed by: [ADR 0077](0077-a-new-album-can-start-from-an-album.md) adds the select menu "Start from" to the form of items 5 and 6, for the type Album.
-- Changed by: [ADR 0130](0130-the-facts-of-an-audio-file-stay-locked.md). Item 14: "Properties" of the add sheet shows the values as text. The boxes show after "Advanced".
-- Changed by: [ADR 0119](0119-a-new-user-starts-as-a-musician-or-a-label.md), A New User Starts As A Musician Or A Label.
+- Changes: [ADR 0023](../../adr/0023-web-addresses-and-audio-file-facts.md) item 6, [ADR 0029](../../adr/0029-editor-pages-toolbar-and-three-levels.md) item 8, [ADR 0039](0039-the-shell-releases-and-the-outline.md) item 6 and [ADR 0068](0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md) item 2.
+- Changes: [ADR 0029](../../adr/0029-editor-pages-toolbar-and-three-levels.md), Editor Pages, The Toolbar And Three Background Levels. ADR 0029 names the changed items.
+- Changes: [ADR 0039](0039-the-shell-releases-and-the-outline.md), The Shell, Releases And The Outline Of A Feed. ADR 0039 names the changed items.
+- Changes: [ADR 0068](0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md), The Sequence Of The Sections And Fields Of An Editor Page. ADR 0068 names the changed items.
+- Changed by: [ADR 0077](../../adr/0077-a-new-album-can-start-from-an-album.md) adds the select menu "Start from" to the form of items 5 and 6, for the type Album.
+- Changed by: [ADR 0130](../../adr/0130-the-facts-of-an-audio-file-stay-locked.md). Item 14: "Properties" of the add sheet shows the values as text. The boxes show after "Advanced".
+- Changed by: [ADR 0119](../../adr/0119-a-new-user-starts-as-a-musician-or-a-label.md), A New User Starts As A Musician Or A Label.
 
 ## Context
 
@@ -20,7 +22,7 @@ On 2026-10-28 the operator said that the pages to add a feed and to add a track 
 - Four forms make a new feed: a release, an artist feed or a label feed, a show feed and a playlist. Three forms add a feed that exists: by address or name, from a connected folder, and from MSP 2.0 backup files. The user reads all seven forms to find one.
 - Each form that makes a feed asks for "Feed file" before the title. The file name is a technical fact.
 - The outline and the Tracks section have two rows: "Add a track" and "Import files". "Add a track" opens a sheet that asks for the size in bytes and the media type. "Import files" reads these facts from the file.
-- The core finds the size and the type of an audio address ([ADR 0023](0023-web-addresses-and-audio-file-facts.md) item 5, the route `/media/facts`). The sheet shows the two fields before the user gives the address.
+- The core finds the size and the type of an audio address ([ADR 0023](../../adr/0023-web-addresses-and-audio-file-facts.md) item 5, the route `/media/facts`). The sheet shows the two fields before the user gives the address.
 
 The operator selected each decision of this ADR from a questionnaire.
 
@@ -31,7 +33,7 @@ The operator selected each decision of this ADR from a questionnaire.
 1. The Add feeds page holds two groups of rows, and no form:
    - "Make a new feed": Album, Artist or label, Show, Playlist.
    - "Add a feed you have": By address or name, From a host folder, From MSP 2.0 backups.
-2. Each row shows its title, one line of text, and `›`. A group holds rows, as [ADR 0029](0029-editor-pages-toolbar-and-three-levels.md) item 11 says.
+2. Each row shows its title, one line of text, and `›`. A group holds rows, as [ADR 0029](../../adr/0029-editor-pages-toolbar-and-three-levels.md) item 11 says.
 3. A row opens a sheet with the form of that row. The forms of "Add a feed you have" do not change.
 4. With no connected host, "Make a new feed" shows the hint and the button "Connect a Host", and not its rows. The row "From a host folder" does not show.
 
@@ -45,9 +47,9 @@ The operator selected each decision of this ADR from a questionnaire.
    - Playlist: "Playlist name" and "Author".
 7. "Host" shows only when more than one host is connected.
 8. "Feed file" gets a start value from the title. Studio writes the title in lower case and removes the accents. Each sequence of characters other than `a` to `z` and `0` to `9` becomes one hyphen, with no hyphen at the two ends. Then `.xml` follows.
-   - The form shows it in a closed row "Feed file", with the start value as the summary ([ADR 0028](0028-summary-lines-and-one-open-entry.md)). The row opens to show the field. After the user changes the field, the title does not change it again.
+   - The form shows it in a closed row "Feed file", with the start value as the summary ([ADR 0028](../../adr/0028-summary-lines-and-one-open-entry.md)). The row opens to show the field. After the user changes the field, the title does not change it again.
 9. The core checks the path, as before. When the file exists, the row opens and shows the field with the error.
-10. The start value of item 8 is an edit aid of [ADR 0065](0065-the-core-applies-each-feed-rule.md). It is not a feed rule. A model module gives it, and a Node test examines it.
+10. The start value of item 8 is an edit aid of [ADR 0065](../../adr/0065-the-core-applies-each-feed-rule.md). It is not a feed rule. A model module gives it, and a Node test examines it.
 
 ### Add Tracks
 
@@ -58,7 +60,7 @@ The operator selected each decision of this ADR from a questionnaire.
 
 ## Alternatives Considered
 
-- An accordion: each row opens its form below it, one at a time ([ADR 0028](0028-summary-lines-and-one-open-entry.md)). Not selected: on a phone, an open form pushes the other rows down.
+- An accordion: each row opens its form below it, one at a time ([ADR 0028](../../adr/0028-summary-lines-and-one-open-entry.md)). Not selected: on a phone, an open form pushes the other rows down.
 - Keep the seven forms, and only hide the technical fields. Not selected: the user continues to read seven forms.
 - Keep four forms to make a feed. Not selected: the four forms repeat the same fields.
 - Show "Host" and "Feed file" after the title. Not selected: the user continues to see a file name that Studio can give.
@@ -87,7 +89,7 @@ Situational, until a decision replaces these pages:
 
 ## Verification
 
-Mechanical, in the model modules of [ADR 0042](0042-ui-models-with-node-tests.md):
+Mechanical, in the model modules of [ADR 0042](../../adr/0042-ui-models-with-node-tests.md):
 
 - The model of the Add feeds page gives the two groups of item 1, and leaves out the rows of item 4 with no host.
 - The model of the form gives the fields of item 6 for each type.

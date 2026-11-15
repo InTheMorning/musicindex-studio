@@ -4,14 +4,14 @@
 - Date: 2026-10-28
 - Owner: operator
 - Accepted: 2026-10-28 by the operator.
-- Changes: [ADR 0073](0073-the-add-pages-ask-one-question-at-a-time.md) items 5 and 6, which give the fields of the form that makes a new feed.
+- Changes: [ADR 0073](../archive/adr/0073-the-add-pages-ask-one-question-at-a-time.md) items 5 and 6, which give the fields of the form that makes a new feed.
 
 ## Context
 
 - MSP 2.0 makes a new feed from a template (`origin/master:src/App.tsx`, `src/utils/regenerateGuids.ts`). The template keeps each field and each track. It gives a new feed GUID and a new GUID to each track. It removes the `atom:link` with `rel="self"` and each `podcast:txt`, because a verification token names one feed.
 - MSP 2.0 also removes the artist key `podcast:txt purpose="npub"`. That key names the artist, not the feed.
 - Studio gives a new feed the GUID of its address ([ADR 0032](0032-new-releases-formats-paths-and-new-feeds.md)). A sent item with no key and no GUID gets a new random UUID ([ADR 0022](0022-the-editor-sends-the-model-with-entry-keys.md) item 7).
-- One form makes each new feed. Its first field is "Type" ([ADR 0073](0073-the-add-pages-ask-one-question-at-a-time.md) item 5).
+- One form makes each new feed. Its first field is "Type" ([ADR 0212](0212-the-add-pages.md) item 6).
 - A link between a publisher feed and a release changes the two feeds ([ADR 0041](../archive/adr/0041-publisher-feeds-and-two-way-links.md)).
 - Studio deletes a file on a host only when no feed of the library refers to its address ([ADR 0035](0035-a-release-library-is-the-master-of-each-feed.md) item 17).
 
@@ -22,7 +22,7 @@ The operator selected each decision of this ADR from a questionnaire on 2026-10-
 ### The Form
 
 1. When "Type" is Album and the collection has an album, the form shows the select menu "Start from", after "Type". The first value is "Empty album". Each album of the collection follows, by title.
-2. A selected album gives the start value of "Artist". "Album title" stays empty. "Feed file" gets its start value from the title, as ADR 0073 item 8 says.
+2. A selected album gives the start value of "Artist". "Album title" stays empty. "Feed file" gets its start value from the title, as ADR 0212 item 10 says.
 3. A read-only album can be the source ([ADR 0067](0067-a-read-only-feed-opens-in-the-editor.md)).
 
 ### The Copy
@@ -46,7 +46,7 @@ The operator selected each decision of this ADR from a questionnaire on 2026-10-
 ## Alternatives Considered
 
 - Copy the album settings only, with no tracks. Not selected by the operator: the operator selected the copy of each track.
-- A button on the album page. Not selected: one form makes each new feed (ADR 0073).
+- A button on the album page. Not selected: one form makes each new feed (ADR 0212 item 6).
 - Remove each `podcast:txt`, as MSP 2.0 does. Rejected: the artist key names the artist, and the new album has the same artist.
 - Keep the publisher links. Rejected: a link changes the publisher feed too, and the user did not see that diff.
 - Copy each audio file to the release folder of the new album. Not selected: the user usually replaces the tracks, and ADR 0035 item 17 keeps the files of the source.

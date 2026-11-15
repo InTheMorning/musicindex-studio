@@ -8,6 +8,7 @@
 - Technical choices: items 6, 7 and the time of item 10 are choices of the planning model.
 - Changes: [ADR 0150](0150-studio-shows-a-change-from-outside-when-a-page-opens.md) item 1.
 - Uses: [ADR 0150](0150-studio-shows-a-change-from-outside-when-a-page-opens.md) for the check. [ADR 0088](0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) for the rows of the left panel. musicindex ADR 0032 R-DOT-1 keeps the dot for the type only.
+- Changed by: [ADR 0211](0211-studio-follows-a-move-that-a-different-studio-made.md) items 19 and 20: the mark of an outside change has the Warning color.
 
 ## Context
 

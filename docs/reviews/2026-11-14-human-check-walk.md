@@ -341,6 +341,7 @@ The operator answered a questionnaire about the list above. These lines record t
 - Design item 9 and the removal of a live show have a decision: [ADR 0210](../adr/0210-a-row-has-one-menu-and-a-live-show-can-be-removed.md), with task 144.
 - Missing function 3 has a decision. The orchestrator session relayed it on 2026-11-14: the narrow layout of Studio does not change, and the website gets the same stack (musicindex ADR 0070). A swipe from the screen edge is the quick way. A visual cue for the swipe is not decided.
 - Finding from the website session, not examined: Studio makes the history entry of its root page at the start, with no input of the user (`crates/api/ui/app.js`, about line 3772). Chromium and Safari can skip such an entry at the Back button and the back swipe. Thus Back on the start page, before the first touch, possibly leaves Studio. The check tool of the agent cannot push the Back button of a browser, so only a person can examine this. No code changed.
+- Defects 3 and 4, missing function 1 and design item 8 have a decision: [ADR 0211](../adr/0211-studio-follows-a-move-that-a-different-studio-made.md), with task 145.
 - Operator choice for text 5: the button of the confirm of **Delete Now…** is **Review the Deletion**. The click already opens Review.
 - Operator choice for text 7: when a move copies no file and no old file stays, the plan of the move sheet has the row "Old files" with "None. No waiting time." Defect 2 needs a measurement in WebKitGTK.
 

@@ -34,6 +34,9 @@ export function outsideNotice(check) {
       after: 'The old address has a pointer file.',
       difference: check.connected === true,
       follow: true,
+      // A return writes a pointer file at the new address, so it needs a
+      // connected file host there and here (ADR 0211 item 18).
+      back: Boolean(check.new_host) && check.connected === true,
       keep: true,
       again: false,
     };

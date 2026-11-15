@@ -170,14 +170,17 @@ test('The style of a mark sets the color of the icon, not only of the row (ADR 0
 });
 
 test('ADR 0211: outside warnings use the Warning tone and the move actions', () => {
-  assert.equal(outsideMark({ state: 'changed' }).tone, 'warning', 'ADR 0211 item 19: outside changes use Warning. Fix outsideMark in crates/api/ui/outsidecheck.js.');
-  assert.equal(outsideMark({ state: 'moved' }).tone, 'warning', 'ADR 0211 item 19: outside moves use Warning. Fix outsideMark in crates/api/ui/outsidecheck.js.');
+  assert.equal(outsideMark({ state: 'changed' }).tone, 'warning', 'ADR 0211 item 20: outside changes use Warning. Fix outsideMark in crates/api/ui/outsidecheck.js.');
+  assert.equal(outsideMark({ state: 'moved' }).tone, 'warning', 'ADR 0211 item 20: outside moves use Warning. Fix outsideMark in crates/api/ui/outsidecheck.js.');
   const notice = outsideNotice({ state: 'moved', new_url: 'https://new.example/a.xml', new_host: 'New host', connected: true });
   assert.deepEqual([notice.strong, notice.text, notice.host, notice.after], ['A different Studio moved this feed.', 'New address', 'New host', 'The old address has a pointer file.'], 'ADR 0211 item 6: give the warning text and new host. Fix outsideNotice in crates/api/ui/outsidecheck.js.');
   assert.deepEqual([notice.follow, notice.difference, notice.keep], [true, true, true], 'ADR 0211 items 7 and 8: give each button in order. Fix outsideNotice in crates/api/ui/outsidecheck.js.');
-  assert.equal('back' in notice, false, 'ADR 0211 items 17 and 18: Move It Back is not built. Do not show a button that Review refuses.');
-  assert.equal(outsideNotice({ state: 'changed' }).tone, 'warning', 'ADR 0211 item 21: a change notice uses Warning. Fix outsideNotice in crates/api/ui/outsidecheck.js.');
-  assert.equal(stateMark([feedOf(1)], { 1: read('changed') }).tone, 'warning', 'ADR 0211 item 20: the panel mark uses Warning. Fix STATE_MARKS in crates/api/ui/outsidecheck.js.');
+  assert.equal(outsideNotice({ state: 'moved', new_url: 'https://x/a.xml', new_host: 'New Host', connected: true }).back, true,
+    'ADR 0211 item 17: Move It Back shows when a connected file host gives the new address. Fix outsideNotice in crates/api/ui/outsidecheck.js.');
+  assert.equal(outsideNotice({ state: 'moved', new_url: 'https://x/a.xml', new_host: null, connected: true }).back, false,
+    'ADR 0211 item 18: with no connected file host for the new address, a return cannot write its pointer file. Fix outsideNotice in crates/api/ui/outsidecheck.js.');
+  assert.equal(outsideNotice({ state: 'changed' }).tone, 'warning', 'ADR 0211 item 22: a change notice uses Warning. Fix outsideNotice in crates/api/ui/outsidecheck.js.');
+  assert.equal(stateMark([feedOf(1)], { 1: read('changed') }).tone, 'warning', 'ADR 0211 item 21: the panel mark uses Warning. Fix STATE_MARKS in crates/api/ui/outsidecheck.js.');
 });
 
 test('ADR 0211: read-only host notice gives its text and action', () => {

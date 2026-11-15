@@ -64,6 +64,18 @@ export function localTime(text, zone) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'medium', timeZone: zone }).format(time);
 }
 
+// The present parts of a live item that Review names when it is added or removed.
+export function liveParts(value, zone) {
+  if (!value || typeof value !== 'object') return [];
+  const parts = [];
+  if (typeof value.status === 'string' && value.status) parts.push(value.status);
+  const times = ['start', 'end']
+    .filter((key) => typeof value[key] === 'string' && value[key])
+    .map((key) => localTime(value[key], zone) ?? value[key]);
+  if (times.length) parts.push(times.join(' to '));
+  return parts;
+}
+
 // The text below a changed line with a time, or null. A `start` or an `end`
 // is a time only in a live item.
 export function localTimeNote(row, zone) {
@@ -221,7 +233,7 @@ export function valueText(value, path, profiles, short = false) {
 }
 
 // The row of one change: its label, its text and its warning or null.
-export function changeRow(group, change, profiles) {
+export function changeRow(group, change, profiles, zone) {
   const field = group.kind === 'field';
   const word = pathWord(change.path);
   const label = field ? keyWord(group.name) : (change.entry || word || keyWord(group.name) || 'Entry');
@@ -234,8 +246,12 @@ export function changeRow(group, change, profiles) {
   } else {
     const verb = change.op === 'added' ? 'Added' : 'Removed';
     const value = change.op === 'added' ? change.new : change.old;
+    const isWholeLiveItem = group.kind === 'live' && !change.entry && !change.path;
+    const parts = isWholeLiveItem ? liveParts(value, zone) : [];
     const shown = brief(value);
-    text = shown && !change.entry ? `${verb}: ${shown}` : verb;
+    text = parts.length
+      ? `${verb}: ${parts.join(', ')}`
+      : shown && !change.entry && !isWholeLiveItem ? `${verb}: ${shown}` : verb;
   }
   if (lead) text = `${lead}: ${text}`;
   let warning = null;

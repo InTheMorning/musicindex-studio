@@ -114,6 +114,17 @@ test('a title, an added entry and a removed entry have a line', () => {
   assert.deepEqual([gone.label, gone.text], ['Credits', 'Removed: Zed']);
 });
 
+test('added and removed live items show their status and local times', async () => {
+  const { changeRow } = await import('../ui/review.js');
+  const group = { kind: 'live', name: 'Show' };
+  const liveItem = { status: 'pending', start: '2026-11-05T14:00:00Z', end: '2026-11-05T15:00:00Z', item: { title: 'Show' } };
+  const times = `${localTime(liveItem.start, 'UTC')} to ${localTime(liveItem.end, 'UTC')}`;
+  assert.equal(changeRow(group, { op: 'added', path: '', entry: null, new: liveItem, old: null }, null, 'UTC').text, `Added: pending, ${times}`);
+  assert.equal(changeRow(group, { op: 'removed', path: '', entry: null, old: liveItem, new: null }, null, 'UTC').text, `Removed: pending, ${times}`);
+  const track = changeRow({ kind: 'track', name: 'Show', position: 1 }, { op: 'added', path: '', entry: 'track', new: { title: 'Track' }, old: null });
+  assert.equal(track.text, 'Added');
+});
+
 test('a key line shows the profile, the short key or the warning', () => {
   const group = { kind: 'credits', name: 'HeyCitizen' };
   const withProfile = changeRow(group, credit('musician'), profiles);

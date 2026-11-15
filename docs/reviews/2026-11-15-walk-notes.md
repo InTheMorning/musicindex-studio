@@ -211,3 +211,4 @@ The step numbers are those of the section "What to test" of the [notes of `0.1.0
 - Step 10: pass. The operator removed a test live show and wrote the feed.
 - Step 11: pass. The operator deployed the candidate, and an account stays.
 - Step 12: pass. The server follows the move of the desktop app, and it edits the feed after **Use This File Host**.
+- Step 13: open. The operator did not do this step.

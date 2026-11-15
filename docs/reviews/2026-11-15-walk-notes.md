@@ -100,3 +100,9 @@ Facts:
 - [ADR 0213](../adr/0213-a-release-starts-on-the-page-of-its-artist.md) has the rules of the release kind.
 
 Open: no task. The reply needs a `track_count` field, and the row needs a position for the count. A playlist has no tracks of its own, so the task must say what its row shows.
+
+## Results Of The Steps
+
+The step numbers are those of the section "What to test" of the [notes of `0.1.0-rc.23`](../releases/0.1.0-rc.23.md).
+
+- Step 3: the kind of each release agrees with its track count. A release of 2 tracks shows "Single" (two releases). A release of 7 tracks and a release of 19 tracks show "Album". The collection has no release of 4 to 6 tracks, so the upgrade to "EP" stays open.

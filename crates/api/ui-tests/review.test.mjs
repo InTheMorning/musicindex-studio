@@ -163,6 +163,13 @@ test('the word table has a word for each key of the feed model', () => {
   assert.deepEqual(missing, []);
 });
 
+test('the simplified view names a change of Hide from apps', () => {
+  const [group] = fieldRows([{ kind: 'field', name: 'hidden', changes: [{ op: 'changed', path: '', old: 'No', new: 'Yes' }] }], null);
+  assert.equal(group.rows[0].label, 'Hide from apps');
+  assert.equal(group.rows[0].text, 'No → Yes');
+  assert.ok(Object.values(KEY_WORDS).every((word) => !word.includes('Apple Podcasts') && word !== 'Blocks'));
+});
+
 test('a word in a summary line keeps sentence case', () => {
   assert.equal(inSentence('Nostr key'), 'Nostr key');
   assert.equal(inSentence('Picture'), 'picture');

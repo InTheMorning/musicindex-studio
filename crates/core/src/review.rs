@@ -167,14 +167,14 @@ pub fn review(base: &[u8], draft: &[u8]) -> Review {
     let draft_text = String::from_utf8_lossy(draft);
     let old = Model::load(base, &base_text);
     let new = Model::load(draft, &draft_text);
-    let mut fields = match (&old, &new) {
+    let (mut fields, coverage_fields) = match (&old, &new) {
         (Some(old), Some(new)) => diff_models(old, new),
-        _ => Vec::new(),
+        _ => (Vec::new(), Vec::new()),
     };
     let mut lines = diff_lines(&base_text, &draft_text);
     cover(
         &mut lines,
-        &fields,
+        &coverage_fields,
         (&base_text, old.as_ref()),
         (&draft_text, new.as_ref()),
     );
@@ -564,9 +564,9 @@ impl<'d> Obj<'_, 'd> {
 // The field changes
 // ---------------------------------------------------------------------
 
-fn diff_models(old: &Model, new: &Model) -> Vec<FieldGroup> {
+fn diff_models(old: &Model, new: &Model) -> (Vec<FieldGroup>, Vec<FieldGroup>) {
     let (Some(old_map), Some(new_map)) = (old.json.as_object(), new.json.as_object()) else {
-        return Vec::new();
+        return (Vec::new(), Vec::new());
     };
     let old_obj = Obj {
         map: old_map,
@@ -601,7 +601,82 @@ fn diff_models(old: &Model, new: &Model) -> Vec<FieldGroup> {
             }
         }
     }
-    groups
+    let coverage_groups = groups.clone();
+    if let (Some(old_feed), Some(new_feed)) = (
+        old.doc.as_ref().and_then(|doc| Feed::read(doc).ok()),
+        new.doc.as_ref().and_then(|doc| Feed::read(doc).ok()),
+    ) {
+        simplify_hidden_changes(&mut groups, (old, &old_feed), (new, &new_feed));
+    }
+    (groups, coverage_groups)
+}
+
+/// The element at a place of a document.
+fn element_at<'d>(doc: &'d Document, place: &Place) -> Option<&'d Element> {
+    place
+        .path
+        .iter()
+        .try_fold(doc.root(), |element, &index| element.elements().nth(index))
+}
+
+/// Is this a change of a `podcast:block` with no `id`? The switch "Hide
+/// from apps" owns only those blocks. A change with no element is not one.
+fn is_switch_block(change: &FieldChange, old: &Model, new: &Model) -> bool {
+    let element = |model: &Model, place: Option<&Place>| {
+        let doc = model.doc.as_ref()?;
+        element_at(doc, place?).map(|element| element.attribute("id").is_none())
+    };
+    element(new, change.new_at.as_ref())
+        .or_else(|| element(old, change.old_at.as_ref()))
+        .unwrap_or(false)
+}
+
+/// One row for a change of the switch "Hide from apps", in place of the rows
+/// of its tags. A block with an `id` keeps its row.
+fn simplify_hidden_changes(
+    groups: &mut Vec<FieldGroup>,
+    (old_model, old): (&Model, &Feed),
+    (new_model, new): (&Model, &Feed),
+) {
+    if old.hidden() == new.hidden() {
+        return;
+    }
+
+    let mut hidden_changes = Vec::new();
+    for group in groups.iter_mut() {
+        match group.name.as_deref() {
+            Some("itunes_block") => hidden_changes.append(&mut group.changes),
+            Some("blocks") => {
+                let (kept, removed): (Vec<_>, Vec<_>) = group
+                    .changes
+                    .drain(..)
+                    .partition(|change| !is_switch_block(change, old_model, new_model));
+                group.changes = kept;
+                hidden_changes.extend(removed);
+            }
+            _ => {}
+        }
+    }
+    groups.retain(|group| !group.changes.is_empty());
+    groups.push(FieldGroup {
+        kind: GroupKind::Field,
+        name: Some("hidden".to_owned()),
+        position: None,
+        changes: vec![FieldChange {
+            op: ChangeOp::Changed,
+            path: String::new(),
+            entry: None,
+            name: None,
+            old: Some(Value::from(if old.hidden() { "Yes" } else { "No" })),
+            new: Some(Value::from(if new.hidden() { "Yes" } else { "No" })),
+            old_at: hidden_changes
+                .iter()
+                .find_map(|change| change.old_at.clone()),
+            new_at: hidden_changes
+                .iter()
+                .find_map(|change| change.new_at.clone()),
+        }],
+    });
 }
 
 fn push_group(
@@ -1279,6 +1354,14 @@ mod tests {
         format!("{HEAD}{channel}</channel>\n</rss>\n")
     }
 
+    fn feed_with_itunes(channel: &str) -> String {
+        feed(channel).replace(
+            "xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"",
+            "xmlns:podcast=\"https://podcastindex.org/namespace/1.0\" \
+             xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\"",
+        )
+    }
+
     fn six_credits(npub: bool) -> String {
         let roles = [
             "musician",
@@ -1302,6 +1385,97 @@ mod tests {
 
     fn run(base: &str, draft: &str) -> Review {
         review(base.as_bytes(), draft.as_bytes())
+    }
+
+    fn set_hidden(source: &str, hidden: bool) -> String {
+        let mut doc = Document::parse(source).unwrap();
+        let mut feed = Feed::read(&doc).unwrap();
+        feed.set_hidden(hidden);
+        feed.write(&mut doc).unwrap();
+        doc.write()
+    }
+
+    #[test]
+    fn changing_hidden_shows_one_switch_row() {
+        let base = feed_with_itunes(
+            "<itunes:block>No</itunes:block>\n\
+             <podcast:block>No</podcast:block>\n\
+             <podcast:block id=\"apple\">no</podcast:block>\n",
+        );
+        let draft = set_hidden(&base, true);
+
+        let review = run(&base, &draft);
+
+        assert_eq!(review.fields.len(), 1, "{:?}", review.fields);
+        let group = &review.fields[0];
+        assert_eq!(group.kind, GroupKind::Field);
+        assert_eq!(group.name.as_deref(), Some("hidden"));
+        assert_eq!(group.changes.len(), 1);
+        assert_eq!(group.changes[0].old, Some(Value::from("No")));
+        assert_eq!(group.changes[0].new, Some(Value::from("Yes")));
+        assert_eq!(review.uncovered, 0);
+    }
+
+    #[test]
+    fn a_platform_block_keeps_its_row_when_the_switch_changes() {
+        let base = feed_with_itunes(
+            "<itunes:block>No</itunes:block>\n\
+             <podcast:block>No</podcast:block>\n\
+             <podcast:block id=\"apple\">no</podcast:block>\n",
+        );
+        let draft = set_hidden(&base, true).replace(">no</podcast:block>", ">yes</podcast:block>");
+
+        let review = run(&base, &draft);
+
+        let names: Vec<_> = review.fields.iter().map(|g| g.name.as_deref()).collect();
+        assert_eq!(
+            names,
+            [Some("blocks"), Some("hidden")],
+            "{:?}",
+            review.fields
+        );
+        assert_eq!(review.fields[0].changes.len(), 1);
+        assert_eq!(review.fields[0].changes[0].new, Some(Value::from("yes")));
+    }
+
+    #[test]
+    fn changing_a_platform_block_keeps_its_own_row() {
+        let base = feed("<podcast:block id=\"apple\">no</podcast:block>\n");
+        let draft = base.replace(">no</podcast:block>", ">yes</podcast:block>");
+
+        let review = run(&base, &draft);
+
+        assert!(review.fields.iter().any(|group| {
+            group.name.as_deref() == Some("blocks")
+                && group.changes.iter().any(|change| change.path == "value")
+        }));
+        assert!(
+            !review
+                .fields
+                .iter()
+                .any(|group| group.name.as_deref() == Some("hidden"))
+        );
+    }
+
+    #[test]
+    fn itunes_tag_change_keeps_its_row_when_the_switch_stays_off() {
+        let base = feed_with_itunes(
+            "<itunes:block>No</itunes:block>\n\
+             <podcast:block>no</podcast:block>\n",
+        );
+        let draft = base.replace("<itunes:block>No", "<itunes:block>no");
+
+        let review = run(&base, &draft);
+
+        assert!(review.fields.iter().any(|group| {
+            group.name.as_deref() == Some("itunes_block") && group.changes.len() == 1
+        }));
+        assert!(
+            !review
+                .fields
+                .iter()
+                .any(|group| group.name.as_deref() == Some("hidden"))
+        );
     }
 
     #[test]

@@ -2,7 +2,16 @@
 
 Decision: none. This is Note 10 of the walk. [ADR 0063](../adr/0063-one-switch-hides-a-feed-from-apps.md) items 3 to 5 own the switch and its two tags, and [ADR 0065](../adr/0065-the-core-applies-each-feed-rule.md) puts the rule in the core. They do not change.
 
-Status: Not started. The packet is ready for a delegate.
+Status: Complete on 2026-11-15, with the screenshot visual check. The visual gate for the operator is open.
+
+## Result
+
+- The delegate was `gpt-6-luna`. The first run, with medium effort, had no Rust test for criteria 1 to 3. The second run, with high effort, added the three tests.
+- Correction of the main session: the code of the delegate removed the change of each block that did not change its `id`. A block with an `id` then lost its row when the switch also changed. The function `is_switch_block` reads the element of the change, and only a block with no `id` goes into the row "Hide from apps". The test `a_platform_block_keeps_its_row_when_the_switch_changes` guards this.
+- The guard row counts with the tag changes, so the change of the switch is not an uncovered change.
+- The gate passed on the tree with this change.
+- Screenshots of the main session: Review of a draft with the switch set to on, at 1280 px in the light theme and at 390 px in the dark theme. The simplified view shows one row "Hide from apps" with "No → Yes" and no guard row. The detailed view shows the lines `<itunes:block>Yes</itunes:block>` and `<podcast:block>yes</podcast:block>`.
+- The fit check at 390 px reports word breaks in the XML lines of the detailed view. This task does not change those lines.
 
 Source: [walk notes of 2026-11-15](../reviews/2026-11-15-walk-notes.md).
 

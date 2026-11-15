@@ -7,7 +7,7 @@ import { UI_SCALES, SCALE_KEY, normalizeScale } from './uiscale.js';
 import { LOCK_HINT, lockChoiceText } from './vaultlock.js';
 import { serverFilesRows, sizeText, SERVER_FILES_NOTE } from './assets.js';
 import { failedLine } from './failures.js';
-import { OPEN_MERGE, MoveAllSheet, AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, AnnounceChoice } from './editor.js';
+import { OPEN_MERGE, OPEN_FEED_MOVE, MoveAllSheet, AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, AnnounceChoice } from './editor.js';
 import {
   recipientKey,
   outcomeText, blockedText, operationLine, nameOf, writableIds, firstOpenId, initialStatuses, refreshedStatuses, startWrite,
@@ -4812,6 +4812,16 @@ function OutsideNotices({ feed, busy, refresh, onChanged }) {
     await onChanged();
     await load();
   });
+  // "Move It Back…" follows the move, then opens the usual move sheet with
+  // the old file host as the target. The write is a return, with the usual
+  // review (ADR 0211 item 17).
+  const moveBack = () => run(async () => {
+    const oldHost = feed.connector_id;
+    await api(`/feeds/${feed.id}/outside/follow`, { method: 'POST' });
+    await onChanged();
+    await load();
+    window.dispatchEvent(new CustomEvent(OPEN_FEED_MOVE, { detail: { id: feed.id, start: oldHost } }));
+  });
   const readOnly = readOnlyHostNotice(feed);
   const useHost = () => run(async () => { await api(`/feeds/${feed.id}/outside/use-host`, { method: 'POST' }); await onChanged(); });
   return html`${notice && html`<div class=${notice.tone === 'warning' ? 'notice warning' : notice.tone === 'error' ? 'notice error' : 'notice'} role=${notice.tone === 'error' ? 'alert' : 'status'}>
@@ -4824,6 +4834,7 @@ function OutsideNotices({ feed, busy, refresh, onChanged }) {
         : html` ${notice.text}`}
       <div class="actions">
         ${notice.follow && html`<button class="button action" type="button" disabled=${busy || sending} onClick=${follow}>Follow the Move</button>`}
+        ${notice.back && html`<button class="button action" type="button" disabled=${busy || sending} onClick=${moveBack}>Move It Back…</button>`}
         ${notice.again && html`<button class="button action" type="button" disabled=${busy} onClick=${refresh}>Read Again</button>`}
         ${notice.difference && html`<button class="button action" type="button" onClick=${() => window.dispatchEvent(new Event(OPEN_MERGE))}>Show the Difference</button>`}
         ${notice.keep && html`<button class="button" type="button" onClick=${keep}>Keep This File Host</button>`}

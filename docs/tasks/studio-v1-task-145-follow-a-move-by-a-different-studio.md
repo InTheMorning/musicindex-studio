@@ -2,7 +2,7 @@
 
 Decision: [ADR 0211](../adr/0211-studio-follows-a-move-that-a-different-studio-made.md).
 
-Status: Complete on 2026-11-14, with its screenshot visual check, except **Move It Back…**, which is not built. The human gate of ADR 0211 is open.
+Status: Complete on 2026-11-14, with its screenshot visual check. The human gate of ADR 0211 is open.
 
 ## Result Of Packet 145a
 
@@ -26,7 +26,8 @@ Status: Complete on 2026-11-14, with its screenshot visual check, except **Move 
     - **Follow the Move** was a filled button, and the bar already has one. It is now an action button (musicindex ADR 0069 R-ACT-1).
     - The facts of the warning were one line of text. They are now labeled lines. The mark of a tile has the triangle icon.
     - After a follow with no connected file host, the result "moved" came back, because the collection keeps the folder address of the old file host. `folder_address` now gives none for a feed with no file host. The core test `follow_move_read_without_a_host_keeps_an_edited_draft_and_snapshots` proves it.
-- **Move It Back…** is not built. In the walk, Review refused the write: the draft of a moved feed names the new address in `itunes:new-feed-url`. ADR 0211 items 17 and 18 give the reason.
+- **Move It Back…** first opened Review of the current draft. In the walk, Review refused that write: the draft of a moved feed names the new address in `itunes:new-feed-url`. The operator then selected a return function.
+- **Move It Back…** now follows the move and then opens the move sheet with the old file host as the target (ADR 0211 items 17 to 19). It shows only when a connected file host gives the new address. The walk `steps-145-back.json` showed the sheet with the plan "New Host → Local Host", and Review with the return warning and the move row. Review refused the write in the walk only because the test address `127.0.0.1` is not a public address. The write on real file hosts is in the human gate.
 - Walk: `setup-145.py` with `steps-145-host.json`, and `setup-145-nohost.py` with `steps-145-nohost.json`. The setup starts two local HTTP servers for the old and the new address. Stop `data/http.pid` and `data/http2.pid` after a run.
 - The walk showed these results with no edge, overflow or fit finding, at 1280 px light and 390 px dark:
     - The mark of the tile and the cloud of the left panel have the Warning color.
@@ -39,8 +40,8 @@ Status: Complete on 2026-11-14, with its screenshot visual check, except **Move 
 
 1. The outside check gives the result "moved" for a pointer file at the folder address (ADR 0211 items 1 to 5).
 2. The core follows a move, with or with no connected file host for the new address (items 9 to 16).
-3. The feed page shows one warning with its buttons, and the read-only notice (items 6 to 8, 15 to 18).
-4. Each mark of an outside change has the Warning color (items 19 to 21).
+3. The feed page shows one warning with its buttons, and the read-only notice (items 6 to 8, 15 to 19).
+4. Each mark of an outside change has the Warning color (items 20 to 22).
 
 The work has two packets. Packet 145a is the core and the API. Packet 145b is the UI. Do 145a first. One delegate does one packet.
 

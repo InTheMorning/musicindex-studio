@@ -4920,7 +4920,13 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
   const addLive = useAction();
   const [feedMove, setFeedMove] = useState(null);
   useEffect(() => {
-    const openMove = (event) => { if (event.detail === feed.id) setFeedMove({ start: null }); };
+    // The detail is the feed ID, or the feed ID with the file host that the
+    // sheet starts with (ADR 0211 item 17).
+    const openMove = (event) => {
+      const detail = event.detail;
+      if (detail === feed.id) setFeedMove({ start: null });
+      else if (detail && detail.id === feed.id) setFeedMove({ start: detail.start ?? null });
+    };
     const openDeleteReview = async () => {
       await draft.load();
       window.dispatchEvent(new Event(OPEN_REVIEW));

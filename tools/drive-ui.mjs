@@ -24,6 +24,9 @@
 // A step {"press": selector} clicks the center of the first element that the
 // selector finds, through `Input.dispatchMouseEvent`. The page gets a real
 // user gesture, which an audio element needs before it plays.
+// A step {"key": "Tab"} sends one key press through `Input.dispatchKeyEvent`.
+// Add "shift": true for Shift+Tab. The focus that it moves is keyboard focus,
+// so `:focus-visible` applies. The keys are Tab, Enter and Escape.
 // A step {"manifest": true} sends `Page.getAppManifest`. It prints the
 // manifest `url`, the `errors` and the parsed `name` and `display`. An empty
 // `errors` list means that Chromium found no manifest error.
@@ -346,6 +349,14 @@ async function runStep(step) {
     await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, button: 'left', clickCount: 1 });
     await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, button: 'left', clickCount: 1 });
     console.log('press =>', step.press);
+  }
+  if (step.key) {
+    const codes = { Tab: 9, Enter: 13, Escape: 27 };
+    if (!codes[step.key]) throw new Error('no key ' + step.key);
+    const k = { key: step.key, code: step.key, windowsVirtualKeyCode: codes[step.key], modifiers: step.shift ? 8 : 0 };
+    await send('Input.dispatchKeyEvent', { type: 'keyDown', ...k });
+    await send('Input.dispatchKeyEvent', { type: 'keyUp', ...k });
+    console.log('key =>', step.key);
   }
   if (step.manifest) {
     const m = (await send('Page.getAppManifest')).result;

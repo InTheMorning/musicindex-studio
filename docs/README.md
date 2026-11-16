@@ -493,6 +493,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [Studio v1 task 157: Research, a keyboard shortcut for the left panel at a narrow width](tasks/studio-v1-task-157-research-keyboard-shortcut-for-the-narrow-shell.md)
 - [Studio v1 task 159: The title button and the brand mark of the narrow shell](tasks/studio-v1-task-159-title-button-and-brand-mark.md)
 - [Studio v1 task 160: The mark before Back in the narrow shell](tasks/studio-v1-task-160-the-mark-before-back.md)
+- [Studio v1 task 161: The focus ring gap on an accent fill](tasks/studio-v1-task-161-focus-gap-on-an-accent-fill.md)
 - [Studio v1 task 055: The date and time fields](tasks/studio-v1-task-055-date-time-fields.md)
 - [Studio v1 task 055a: The times in the core](tasks/studio-v1-task-055a-times-in-the-core.md)
 - [Studio v1 task 055b: The date and time field](tasks/studio-v1-task-055b-date-time-field.md)

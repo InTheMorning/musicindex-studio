@@ -1,6 +1,6 @@
 # Studio v1 Task 159: The Title Button And The Brand Mark Of The Narrow Shell
 
-Decision: musicindex ADR 0079, "The Toolbar Title Opens The Root Page" (musicindex `e5e606a`), R-TITLE-1 and R-TITLE-2. It supersedes musicindex ADR 0071, the edge indicator. [ADR 0206](../adr/0206-the-shell-and-the-editor-pages.md) item 11 names it for the narrow shell of Studio. Studio adds no rule, so this task has no Studio ADR.
+Decision: musicindex ADR 0079, "The Toolbar Title Opens The Root Page" (musicindex `6e4e071`), R-TITLE-1 and R-TITLE-2. It supersedes musicindex ADR 0071, the edge indicator. [ADR 0206](../adr/0206-the-shell-and-the-editor-pages.md) item 11 names it for the narrow shell of Studio. Studio adds no rule, so this task has no Studio ADR.
 
 Status: Complete on 2026-11-16, with its screenshot visual check. The visual gate for the operator is open. The orchestrator session sent this task on 2026-11-16.
 

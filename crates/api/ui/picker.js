@@ -32,12 +32,18 @@ const EXTENSIONS = {
   lyrics: ['srt', 'vtt', 'txt', 'json', 'html'],
 };
 
-// The accept list of the file input for each kind.
+// The accept list of the file input for each kind. Each list names each
+// extension of EXTENSIONS. Some file pickers do not match an MP3 file to
+// `audio/*` and show it gray.
+const dotted = (kind) => EXTENSIONS[kind].map((ext) => `.${ext}`);
 const ACCEPT = {
-  image: 'image/*,.jpg,.jpeg,.png,.webp,.gif',
-  audio: 'audio/*,.wav,.flac,.m4a,.ogg,.opus',
-  lyrics: '.srt,.vtt,.txt,.json,.html',
+  image: ['image/*', ...dotted('image')].join(','),
+  audio: ['audio/*', ...dotted('audio')].join(','),
+  lyrics: dotted('lyrics').join(','),
 };
+
+// The accept list of "Choose Music and Image Files" on Add tracks.
+export const TRACK_FILES_ACCEPT = ['audio/*', 'image/*', ...dotted('audio'), ...dotted('image')].join(',');
 
 // The text that an upload of the wrong kind shows (ADR 0062 item 13).
 const WRONG_KIND_TEXT = {

@@ -47,7 +47,7 @@ import { mediaSource, playerNotice, canPlay, playerError, isPlaceholderAddress, 
 import { shortType as formatLabel, propertiesSummary, propertiesOpen, propertyRows, propertiesNotice, needsMetadataRead, clockText } from './audio.js';
 import { MOVE_SCOPES, fileHostRows, planRows, stayRows, deleteLabel, deleteAllLabel, DELETE_NOTE_ON, DELETE_NOTE_OFF, waitLabel, waitingView, readyNotice, partMoveNotice, existsRefusalView, addDisabled, replacesCopyNote, replaceWarning, indexNeedsRead, INDEX_READ_AGAIN_MS } from './releasemove.js';
 import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary, artworkPreview } from './artwork.js';
-import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, addsAsTrackFile, refusedText, wrongKindText, replacedAddresses, selectedFacts } from './picker.js';
+import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, addsAsTrackFile, refusedText, wrongKindText, replacedAddresses, selectedFacts, TRACK_FILES_ACCEPT } from './picker.js';
 import { deleteChoices, deleteButtonEnabled, retireSteps, retireActions, domainLine, DELETE_POINTS, operationNote, refusedDelete } from './feeddelete.js';
 
 // A text where only each web address can break inside a word (musicindex ADR
@@ -1482,7 +1482,7 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd, onAddress })
         </p>
         <input id="import-input" class="visually-hidden" type="file" multiple
           aria-describedby="import-input-hint"
-          accept="audio/*,image/*,.wav,.flac,.m4a,.ogg,.opus"
+          accept=${TRACK_FILES_ACCEPT}
           onChange=${(e) => { addFiles(e.target.files); e.target.value = ''; }} />
         <label for="import-input" class="button action">＋ Choose Music and Image Files</label>
         ${refused.length > 0 && html`<p class="field-error" role="alert">${refusedText(refused)}</p>`}

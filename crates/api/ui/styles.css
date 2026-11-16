@@ -1774,7 +1774,9 @@ button.outline-feed {
    (ADR 0039 items 2 and 2a). A marked row has the fill of an open entry. */
 .releases { padding: 8px 32px 32px; display: grid; gap: 16px; }
 .releases-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.releases-head h1 { flex: 1; min-width: 0; font-size: var(--text-title-1); font-weight: 800; letter-spacing: -.03em; }
+/* The base size of the heading is its text width, so the tools wrap to a new
+   line before they cover the heading. */
+.releases-head h1 { flex: 1 1 auto; min-width: 0; font-size: var(--text-title-1); font-weight: 800; letter-spacing: -.03em; }
 .releases-roles { display: flex; align-items: center; gap: 8px; margin-top: 4px; color: var(--muted); }
 /* The tools wrap, so that "＋ Add a feed" goes to a new line in a narrow
    window and stays in the margins of the page (ADR 0072 item 2). */

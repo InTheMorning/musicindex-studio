@@ -11,7 +11,8 @@ import { onPageListKey } from './listkeys.js';
 
 // A list of rows that open a page or select a value, with one Tab stop
 // (ADR 0172 item 2). A row is a `button.link-row`, or the button of a
-// `PickFillRow`. `mode` 'grid' gives the keys of the tiles view (item 3).
+// `PickFillRow`. `mode` 'grid' gives the keys of the tiles view (item 3,
+// musicindex ADR 0078 R-GRIDKEY-1).
 const ROWS = ':scope > button.link-row, :scope > .link-row.static > button.link-row';
 export function RowList({ children, className = 'group', selector = ROWS, mode = 'list', as = 'div' }) {
   const [current, setCurrent] = useState(0);

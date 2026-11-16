@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, addsAsTrackFile, refusedText,
-  replacedAddresses, selectedFacts, kindOfFile, NO_ADDRESS_TEXT,
+  replacedAddresses, selectedFacts, kindOfFile, NO_ADDRESS_TEXT, TRACK_FILES_ACCEPT,
 } from '../ui/picker.js';
 
 const A = 'https://m.example/a.jpg';
@@ -28,6 +28,27 @@ test('sources gives the three sources in sequence, with one host entry for each 
   assert.match(sources('cover', [])[2].accept, /\.png/);
   assert.match(sources('track-audio', [])[2].accept, /\.flac/);
   assert.deepEqual(sources('cover', [])[1].hosts, []);
+});
+
+// A picker with no .mp3 in its accept list showed each MP3 file gray.
+test('each accept list names each extension that kindOfFile reads', () => {
+  const audio = ['.mp3', '.m4a', '.flac', '.ogg', '.opus', '.wav'];
+  const image = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
+  const names = (accept) => accept.split(',');
+  for (const ext of audio) {
+    assert.ok(names(sources('track-audio', [])[2].accept).includes(ext), `track audio: ${ext}`);
+    assert.ok(names(TRACK_FILES_ACCEPT).includes(ext), `Add tracks: ${ext}`);
+    assert.equal(kindOfFile({ name: `a${ext}` }), 'audio');
+  }
+  for (const ext of image) {
+    assert.ok(names(sources('cover', [])[2].accept).includes(ext), `cover: ${ext}`);
+    assert.ok(names(TRACK_FILES_ACCEPT).includes(ext), `Add tracks: ${ext}`);
+  }
+});
+
+test('editor.js takes the Add tracks accept list from picker.js', () => {
+  const editor = readFileSync(new URL('../ui/editor.js', import.meta.url), 'utf8');
+  assert.match(editor, /id="import-input"[^>]*accept=\$\{TRACK_FILES_ACCEPT\}/s);
 });
 
 test('hostTree makes folders from nested paths', () => {

@@ -47,7 +47,7 @@ import {
   mediumKind, feedKind, FIRST_CLASS_ROLES, roleWord, kindGlow, isEditable, isReadOnly, isPublisher, trackKey, isTrack,
   leftPanel, releasesList, listQuery, queryText, sortLabel, sortEntries, mosaicCells, otherFeedText, feedCover,
   startNav, pushNav, backNav, forwardNav, releasesView, canBack, canForward, setScroll,
-  isFeedView, openFeedView, navAtWidth, pageTabs, tabsFit, showsTitleButton, rootNav, segmentKey, levelFeedSet } from './shell.js';
+  isFeedView, openFeedView, navAtWidth, pageTabs, tabsFit, showsRootButtons, rootNav, segmentKey, levelFeedSet } from './shell.js';
 import {
   eventsToSign, signErrorText,
   npubOf, addressLines, linesText, invalidConfigField, blossomDefaultName, siteAddress, siteNameFromGuid, isNsec,
@@ -1952,16 +1952,20 @@ function FeedAddress({ url }) {
   </p>`;
 }
 
-// In a narrow window, the title of each page other than the root page is a
-// button that opens the root page, with the musicindex mark first (musicindex
-// ADR 0079 R-TITLE-1 and R-TITLE-2). The first child is the title. The other
-// children, such as the draft toolbar, stay after the button.
+// In a narrow window, each page other than the root page has two buttons that
+// open the root page (musicindex ADR 0080 R-TITLE-1 and R-TITLE-2). The home
+// button is the musicindex mark, and it is the first control of the bar,
+// before Back and Forward (R-SHELL-2 item 6). The title button is the title
+// area after them. The first child is the title. The other children, such as
+// the draft toolbar, stay after the title button.
 export function Bar({ back = true, children }) {
   const nav = useContext(NavContext);
   const items = Array.isArray(children) ? children : [children];
   const [title, ...rest] = items;
-  const titleButton = back && nav && nav.titleButton;
+  const rootButtons = back && nav && nav.rootButtons;
   return html`<div class="bar">
+    ${rootButtons && html`<button class="bar-home" type="button" aria-label="Destinations"
+      onClick=${nav.toRoot}><span class="bar-mark" aria-hidden="true"></span></button>`}
     ${back && nav && (nav.coarse
       ? html`<button class="button icon-button back" type="button" aria-label="Back"
           disabled=${!nav.canBack} onClick=${nav.back}><${Chevron} direction="back" /></button>`
@@ -1969,8 +1973,8 @@ export function Bar({ back = true, children }) {
           disabled=${!nav.canBack} onClick=${nav.back}><${Chevron} direction="back" /></button>
         <button class="button icon-button" type="button" aria-label="Forward" title="Forward"
           disabled=${!nav.canForward} onClick=${nav.forward}><${Chevron} direction="forward" /></button>`)}
-    ${titleButton
-      ? html`<button class="bar-home" type="button" onClick=${nav.toRoot}><span class="bar-mark" aria-hidden="true"></span>${title}<span class="visually-hidden">, Destinations</span></button>${rest}`
+    ${rootButtons
+      ? html`<button class="bar-title-button" type="button" onClick=${nav.toRoot}>${title}<span class="visually-hidden">, Destinations</span></button>${rest}`
       : children}
   </div>`;
 }
@@ -3744,10 +3748,11 @@ function Shell({ vault, onLock }) {
       history.replaceState({ scope: 'shell', index: next.index, mirrored: mirrored.current }, '');
     });
   };
-  // The title button of a narrow window (musicindex ADR 0079 R-TITLE-1). When
-  // the history agrees with the state, the browser goes back to the root
-  // entry, and `popstate` moves the state. Otherwise the state moves in
-  // place, as `back` does, and the history entry gets the index of the root.
+  // The home button and the title button of a narrow window (musicindex ADR
+  // 0080 R-TITLE-1). When the history agrees with the state, the browser goes
+  // back to the root entry, and `popstate` moves the state. Otherwise the
+  // state moves in place, as `back` does, and the history entry gets the
+  // index of the root.
   const toRoot = () => {
     const current = withScroll();
     const next = rootNav(current);
@@ -4002,7 +4007,7 @@ function Shell({ vault, onLock }) {
   }
 
   const navValue = { coarse, canBack: canBack(nav), canForward: canForward(nav), back, forward, setLeaveGuard,
-    titleButton: showsTitleButton(nav, narrow), toRoot };
+    rootButtons: showsRootButtons(nav, narrow), toRoot };
   const panelProps = { panel, draft, changedFeeds, go, showReleases, onAdding: setAdding, onImporting: setImporting, onLock: lock };
   return html`<${NavContext.Provider} value=${navValue}><${OutsideContext.Provider} value=${outsideValue}><div class="shell">
     ${!narrow && html`<nav class="sidebar" aria-label="Collection">

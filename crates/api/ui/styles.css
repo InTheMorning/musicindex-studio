@@ -786,30 +786,42 @@ input[type="checkbox"]:disabled { opacity: .5; cursor: default; }
 /* The touch back control is a circular icon button that does not shrink
    (musicindex ADR 0031 R-NAV-3). */
 .bar .back { flex: none; }
-/* The title button of a narrow window (musicindex ADR 0079 R-TITLE-1). It
-   fills the first bar row after the back control. Its height is the target
-   token, 44 px with touch (R-TITLE-1 item 3, R-TARGET-1 Touch). Its
-   first item is the one-color mark, 24 px high (R-TITLE-2). Its only cues are
-   the pressed state and the focus ring (R-TITLE-1 item 8). */
-.bar-home {
-  flex: 1 1 0;
-  min-width: 0;
+/* The home button and the title button of a narrow window (musicindex ADR
+   0080 R-TITLE-1). The home button is the first control of the bar, before
+   the back control. It holds the one-color mark, 24 px high, in the middle
+   of its target (R-TITLE-2). The left edge of the mark is on the content
+   margin, and the target extends into the margin (operator choice of
+   2026-11-16). The title button fills the first bar row after
+   the back control. Each target is the target token, 44 px with touch
+   (R-TITLE-1 item 3, R-TARGET-1 Touch). The only cues are the pressed state
+   and the focus ring (R-TITLE-1 item 8). */
+.bar-home, .bar-title-button {
   min-height: var(--target);
   display: flex;
   align-items: center;
-  gap: 10px;
   margin: 0;
-  padding: 0 8px;
   border: 0;
   border-radius: 10px;
   background: transparent;
   color: inherit;
   font: inherit;
-  text-align: start;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
-.bar-home:active { background: var(--fill-soft); }
+.bar-home {
+  flex: none;
+  min-width: var(--target);
+  justify-content: center;
+  padding: 0;
+  margin-inline-start: calc((24px * 735 / 681 - var(--target)) / 2);
+}
+.bar-title-button {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0 8px;
+  text-align: start;
+}
+.bar-home:active, .bar-title-button:active { background: var(--fill-soft); }
 .bar-mark {
   flex: none;
   width: calc(24px * 735 / 681);

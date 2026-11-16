@@ -2,10 +2,10 @@
 
 - Status: Accepted
 - Date: 2026-11-12
-- Owner: operator, through musicindex ADR 0069 R-ACT-3, with the technical choices of the planning model
+- Owner: operator, through musicindex ADR 0080 R-ACT-3, with the technical choices of the planning model
 - Accepted: 2026-11-12. The orchestrator session gave the request, and cited musicindex ADR 0069 R-ACT-3 and ADR 0064 R-ACT-8.
 - Technical choices: items 3 and 5 are choices of the planning model.
-- Applies: musicindex ADR 0069 R-ACT-3 items 1, 3 and 4, and musicindex ADR 0064 R-ACT-8.
+- Applies: musicindex ADR 0080 R-ACT-3 items 1, 3 and 4, and musicindex ADR 0064 R-ACT-8.
 - Source: the review of ADR 0193 on 2026-11-12.
 
 ## Context

@@ -856,17 +856,17 @@ export function widthNav(view, narrow) {
   return { entries, index: entries.length - 1 };
 }
 
-// The title button of musicindex ADR 0079 R-TITLE-1 shows in the narrow
-// layout on each page other than the root page.
-export function showsTitleButton(nav, narrow) {
+// The home button and the title button of musicindex ADR 0080 R-TITLE-1 show
+// in the narrow layout on each page other than the root page.
+export function showsRootButtons(nav, narrow) {
   if (!narrow || !nav) return false;
   const view = nav.entries[nav.index];
   return Boolean(view) && view.name !== 'root';
 }
 
-// The state after the title button (R-TITLE-1 item 4): the stack goes back to
-// the root entry, one `backNav` step at a time, so that each step marks the
-// feed row on Releases as Back does. The entries after the root entry stay
+// The state after the home button or the title button (R-TITLE-1 item 4):
+// the stack goes back to the root entry, one `backNav` step at a time, so
+// that each step marks the feed row on Releases as Back does. The entries after the root entry stay
 // for Forward. The count of steps is the `n` of `history.go(-n)`.
 export function rootNav(nav) {
   let next = nav;

@@ -129,7 +129,7 @@
 53. On the page of a person, each address row of a wallet has one menu button. The row has no other button.
 54. The menu has **Make Default**, **Edit** and **Copy**, in that sequence. The default address ([ADR 0203](0203-people.md) item 10) has no **Make Default**.
 55. The menu button of a row has two forms. In the narrow layout it is a round icon button with the Lucide icon `ellipsis`. In the wide layout it is the text button **Actions**.
-56. The two forms are one control with one accessible name, which names its row, for example "Actions for hey@getalby.com". The layout selects the form. The label is not the text character "…" (musicindex ADR 0026 R-ELLIPSIS-1, musicindex ADR 0069 R-ACT-2 item 2).
+56. The two forms are one control with one accessible name, which names its row, for example "Actions for hey@getalby.com". The layout selects the form. The label is not the text character "…" (musicindex ADR 0026 R-ELLIPSIS-1, musicindex ADR 0080 R-ACT-2 item 2).
 57. On Touch, the target of the icon button has the default size of musicindex ADR 0068 R-TARGET-1. The control is the menu control of [ADR 0153](0153-the-people-list-has-a-sort-and-names-sort-with-numbers.md).
 58. An address row shows its label, the address, and one status line. A node address shows in the short form of musicindex ADR 0076 R-ADDRESS-1, and its hover text and **Copy** give the full address. An LNURL address shows in full. The status line has the tag **Default**, when applicable, and the text of the use count.
 59. **Remove Wallet** stays a button of the wallet. It is not in a menu.

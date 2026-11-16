@@ -63,3 +63,5 @@ Mechanical:
 The walk cannot prove that the list of item 5 is complete. The last review of a diff that adds a sheet examines the list.
 
 Visual: make the window 390 px wide. Open People, the person, and Actions → Edit on a wallet row. The sheet spans the window from side to side, and its content has a minimum of 16 px on each side. Each field is in view. The sheet does not scroll horizontally.
+
+The operator passed this visual check on 2026-11-15, on commit `cbca4ec`.

@@ -2681,7 +2681,7 @@ function HostCard({ connector, connectors, feeds, removeBusy, onRemove, onOpen, 
                 <dt>Folder in the bucket</dt><dd class="mono">${config.prefix || '—'}</dd>`
               : isSftp
                 ? html`<dt>Server</dt><dd class="mono">${`${config.user}@${config.host}:${config.port}`}</dd>
-                  <dt>Folder</dt><dd class="mono">${config.root}</dd>
+                  <dt>Folder</dt><dd class="mono" data-fit-allow-break>${config.root}</dd>
                   <dt>Login</dt><dd>${{ key: 'Private key', password: 'Password', agent: 'ssh-agent' }[config.login] || config.login}</dd>
                   <dt>Host key</dt><dd class="mono">${config.host_key}</dd>`
                 : isNostr
@@ -2691,7 +2691,7 @@ function HostCard({ connector, connectors, feeds, removeBusy, onRemove, onOpen, 
                       <dt>Relays</dt><dd><ul class="address-list">${(config.relays || []).map((r) => html`<li class="mono">${r}</li>`)}</ul></dd>`}
                     <dt>Blossom servers</dt><dd><ul class="address-list">${(config.servers || []).map((r) => html`<li class="mono">${r}</li>`)}</ul></dd>
                     <dt>Signing</dt><dd>${signingText}</dd>`
-                  : isTemporary ? null : html`<dt>Folder</dt><dd class="mono">${config.root}</dd>`}
+                  : isTemporary ? null : html`<dt>Folder</dt><dd class="mono" data-fit-allow-break>${config.root}</dd>`}
             ${!isNostr && !isTemporary && html`<dt>Public address</dt><dd><span class="mono">${config.base_url || '—'}</span>
               ${config.base_url && config.base_url_inferred && html`<span class="sub"> · Studio found it from the feeds</span>`}</dd>`}
             <dt>Feeds</dt><dd>${written.length === 0 ? 'None yet' : html`<details class="disclosure host-feeds">

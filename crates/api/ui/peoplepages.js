@@ -1574,7 +1574,7 @@ export function WalletPage({ recipient, feeds, go }) {
   return html`<div><${Bar}><span class="bar-title">${row.title}</span><//><section class="section">
     <${ErrorNotice} error=${error} />
     <header class="recipient-head"><h1>${breakParts(row.title).map((part, i) => html`${i > 0 && html`<wbr />`}${part}`)}</h1>
-      ${addressLines(recipient).map((line) => html`<p class="hint" key=${line.address || line.label}>${line.label}${line.address && html` <span class="mono">${line.address}</span>`}${line.account && ` · account ${line.account}`}</p>`)}</header>
+      ${addressLines(recipient).map((line) => html`<p class="hint" key=${line.address || line.label}>${line.label}${line.address && html` <span class="mono" data-fit-allow-break>${line.address}</span>`}${line.account && ` · account ${line.account}`}</p>`)}</header>
     <section class="page-section"><h2>Person</h2><div class="group"><${ListRow} title=${PERSON_SECTION_TITLE} lines=${[PERSON_SECTION_LINE]}
       onClick=${() => setPersonSheet(true)} /></div></section>
     <section class="page-section"><h2>Change your feeds</h2><div class="group">${walletActions(recipient).map((action) => html`<${ListRow}

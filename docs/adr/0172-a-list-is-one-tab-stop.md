@@ -6,6 +6,7 @@
 - Accepted: 2026-11-10 by the operator. The orchestrator session relayed the decision of musicindex ADR 0061.
 - Technical choices: items 2, 5 and 6 are choices of the planning model.
 - Applies: musicindex ADR 0061 R-LISTKEY-1 items 1 to 6 and R-LISTKEY-2 items 1 to 3, at musicindex `5123573`.
+- Changed by: musicindex ADR 0078 R-GRIDKEY-1, at musicindex `574c4c4`, for the keys of item 3.
 - Uses: [ADR 0171](0171-a-closed-fold-is-a-row-and-enter-closes-the-field-list.md) for the types of row. [ADR 0157](0157-the-page-tabs-are-a-segmented-control.md) item 5 for the keys of a segmented control.
 
 ## Context
@@ -24,7 +25,7 @@ In Studio, each row of a list is its own Tab stop, and no list has arrow keys. A
         - the rows of the Add feeds page
         - the results of `SearchResults`
         - the list view of Releases
-3. The tiles view of Releases is a list too. Left and Right move between tiles in a row of tiles, and Up and Down move between rows of tiles.
+3. The tiles view of Releases is a list too. Its keys follow musicindex ADR 0078 R-GRIDKEY-1. The key module reads the lines of tiles from the layout at each key press. Up on the first line and Down on the last line do not move.
 4. A fold header (ADR 0171 item 2), a segmented control (ADR 0157 item 5), a select menu and the field list of ADR 0154 keep their own keys.
 5. The list remembers its current row. When Tab goes back into the list, the focus goes to that row.
 6. One module gives the keys of each list and each tree. A list does not write its own key handler.
@@ -35,6 +36,7 @@ Mechanical:
 
 - A Node test of the key module gives the next row of a list model for Up, Down, Home and End. It also gives the open condition after Right and Left.
 - A Node test gives, for a tree model, the parent row after Left on a child row.
+- A Node test gives the 11 vectors of musicindex ADR 0078 for the tiles of item 3. It also gives the lines from the top of each tile.
 - A browser drive presses Tab into each list and each tree of item 2. One Tab stop holds the list, and the next Tab leaves it.
 - A browser drive reads the roles: `tree` and `treeitem` with `aria-expanded` on each tree, and a button with `aria-expanded` on each expandable row.
 

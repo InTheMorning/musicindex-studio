@@ -1,8 +1,10 @@
-// The key model for lists and trees (ADR 0172, musicindex ADR 0061).
+// The key model for lists and trees (ADR 0172, musicindex ADR 0061), and for
+// a grid of tiles (musicindex ADR 0078 R-GRIDKEY-1).
 // The model has no Preact dependency. The tree handler reads the live DOM.
 
 // Each row has a kind: 'page', 'expandable' or 'tree'. A row can name its
 // parent by row index and can set `expanded`, `expandable` and `visible`.
+// In mode 'grid', `options.lines` gives the row indexes of each line of tiles.
 export function createListModel(rows, current = 0, options = {}) {
   const items = (rows || []).map((row) => ({
     kind: row.kind,
@@ -12,7 +14,23 @@ export function createListModel(rows, current = 0, options = {}) {
     visible: row.visible !== false,
   }));
   const selected = items.length === 0 ? null : Math.max(0, Math.min(current, items.length - 1));
-  return { rows: items, current: selected, mode: options.mode || 'list', columns: Math.max(1, options.columns || 1) };
+  const lines = options.lines || [items.map((_, index) => index)];
+  return { rows: items, current: selected, mode: options.mode || 'list', lines };
+}
+
+// Divide tiles into lines from the top of each tile, in the order of the list
+// (musicindex ADR 0078 R-GRIDKEY-1 item 5).
+export function gridLines(tops) {
+  const lines = [];
+  let lineTop = null;
+  tops.forEach((top, index) => {
+    if (lineTop === null || Math.abs(top - lineTop) > 1) {
+      lines.push([]);
+      lineTop = top;
+    }
+    lines[lines.length - 1].push(index);
+  });
+  return lines;
 }
 
 // Apply one key. The returned action is 'none', 'page' or 'toggle'.
@@ -42,13 +60,22 @@ export function listKey(model, key) {
   };
   const firstVisible = () => rows.findIndex((item) => item.visible);
   const lastVisible = () => rows.findLastIndex((item) => item.visible);
+  // Up and Down go to the same column of the next line, or to its last tile.
+  // On the first line and the last line they do not move (R-GRIDKEY-1 item 3).
+  const lineMove = (direction) => {
+    const at = model.lines.findIndex((line) => line.includes(current));
+    const target = at < 0 ? undefined : model.lines[at + direction];
+    if (!target || target.length === 0) return unchanged;
+    const column = model.lines[at].indexOf(current);
+    return move(target[Math.min(column, target.length - 1)]);
+  };
 
   switch (key) {
     case 'ArrowDown':
-      if (model.mode === 'grid') return move(Math.min(rows.length - 1, current + model.columns));
+      if (model.mode === 'grid') return lineMove(1);
       return move(nextVisible(current + 1, 1));
     case 'ArrowUp':
-      if (model.mode === 'grid') return move(Math.max(0, current - model.columns));
+      if (model.mode === 'grid') return lineMove(-1);
       return move(nextVisible(current - 1, -1));
     case 'ArrowRight':
       if (model.mode === 'grid') return move(Math.min(rows.length - 1, current + 1));
@@ -78,13 +105,10 @@ export function onPageListKey(event, current, setCurrent, selector = ':scope > b
   const indexByElement = new Map(elements.map((element, index) => [element, index]));
   const active = indexByElement.get(document.activeElement);
   if (active === undefined || event.target !== document.activeElement) return;
-  let columns = 1;
-  if (mode === 'grid' && elements.length > 1) {
-    const firstTop = elements[0].getBoundingClientRect().top;
-    columns = elements.findIndex((element) => element.getBoundingClientRect().top > firstTop);
-    if (columns < 1) columns = elements.length;
-  }
-  const result = listKey(createListModel(elements.map(() => ({ kind: 'page' })), active, { mode, columns }), event.key);
+  const lines = mode === 'grid'
+    ? gridLines(elements.map((element) => element.getBoundingClientRect().top))
+    : undefined;
+  const result = listKey(createListModel(elements.map(() => ({ kind: 'page' })), active, { mode, lines }), event.key);
   const next = result.model.current;
   if (next === active) {
     if (result.action.type === 'page') {

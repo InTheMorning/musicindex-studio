@@ -25,9 +25,9 @@ After a write with a podping, the feed page shows a notice with the state of the
 ## Operator Choices
 
 - Operator choice (2026-11-15), from drawings: "Notice on the feed page". The notice has the form of the notice of ADR 0184. With no reply, the notice says so and has **Check Again**.
-- Open choice, with the recommended value in use: Studio asks Music Index each 20 seconds, for a maximum of 15 requests. These are the values of `indexNeedsRead` for a move.
-- Open choice, with the recommended value in use: the confirmation stays until the user opens a different page or loads the feed page again.
-- Open choice, with the recommended value in use: a feed page that opens more than 5 minutes after the write sends one request. It then shows the state with no reply, and **Check Again**.
+- Operator choice (2026-11-15): Studio asks Music Index each 20 seconds, for a maximum of 15 requests. These are the values of `indexNeedsRead` for a move.
+- Operator choice (2026-11-15): the confirmation stays until the user opens a different page or loads the feed page again.
+- Operator choice (2026-11-15): a feed page that opens more than 5 minutes after the write sends one request. It then shows the state with no reply, and **Check Again**.
 - A write with a move shows only the notice of ADR 0184.
 
 ## Texts

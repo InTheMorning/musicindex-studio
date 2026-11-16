@@ -41,6 +41,23 @@
 // attribute data-fit-allow-break (R-FIT-3 item 3).
 // A step {"save": "name.json"} writes the value of window.__walkChecks to that
 // file in the out dir.
+// A step {"sheet": "name"} runs the sheet check of musicindex ADR 0077
+// R-SHEET-2 on the open sheet, dialog or popover at 390 px and at 761 px. It
+// runs the four helpers and sheetFits. The overflow and overlap helpers
+// examine only the controls in the sheet. sheetFits finds a sheet that is
+// wider than the window less the window margin, content in the 16 px inner
+// padding of a bottom sheet, content that goes past an edge of the sheet,
+// and a horizontal scroll in the sheet. Then it sets the earlier size again.
+// A step {"sheets": "tools/sheets.json"} opens each sheet of that list
+// (R-SHEET-2 item 2, ADR 0214). For each entry and each width, it loads the
+// start address again, runs the steps of `open` at the earlier size, and
+// runs the sheet check at that width with the `name` of the entry. The
+// check examines the panels that `panel` selects, and the default is
+// "dialog[open]". With no such panel open, the entry fails. An entry
+// has a `data` key when it needs a condition that the usual walk data does
+// not have. The step {"sheets": path, "data": "collections"} opens only the
+// entries with that key. The default is "walk".
+// A finding of the sheet check is a fit finding.
 // $fieldText() gives each visible text field and select with text smaller
 // than 16 px. iOS Safari zooms the page when such a field gets the focus
 // (musicindex ADR 0024 R-TYPE-1, Body on Touch). Use it with "touch": true.
@@ -48,7 +65,7 @@
 // when the fit check has a finding, after the last step and its screenshot.
 // DRIVE_UI_PORT sets the DevTools port. The default is 9333.
 import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { edgeCuts, overflows, overlaps, wordBreaks, fitMessage } from './fit-check.mjs';
@@ -102,6 +119,12 @@ const helpers = `
   window.$set = (sel, v) => { const e = document.querySelector(sel); e.value = v; e.dispatchEvent(new Event('input', { bubbles: true })); };
   window.$click = (text) => { const e = [...document.querySelectorAll('button, label')].find((b) => b.textContent.trim().startsWith(text)); if (!e) throw new Error('no ' + text); e.click(); };
   window.$text = () => document.body.innerText;
+  window.$go = (t, root) => { const v = (e) => (e.checkVisibility ? e.checkVisibility() : e.offsetParent); const n = (e) => e.textContent.trim().replace(/\\s+/g, ' ');
+    const all = [...(root ? document.querySelector(root) : document).querySelectorAll('button, a, summary, [role=tab], [role=menuitem], label')].filter(v);
+    const e = all.find((x) => n(x) === t || x.getAttribute('aria-label') === t) || all.find((x) => n(x).startsWith(t)) || all.find((x) => n(x).includes(t));
+    if (!e) throw new Error('no ' + t); e.click(); return n(e).slice(0, 40); };
+  window.$tab = (t) => { const s = document.querySelector('select.page-tab-menu'); if (s && (s.checkVisibility ? s.checkVisibility() : s.offsetParent)) { const o = [...s.options].find((x) => x.text.startsWith(t)); s.value = o.value; s.dispatchEvent(new Event('change', { bubbles: true })); return o.text; } return $go(t, '.page-tabs'); };
+  window.$actions = (rowText, root = 'main') => { const r = [...document.querySelector(root).querySelectorAll('.address-row, .link-row, .row, .recipient, li, .card')].find((x) => x.textContent.includes(rowText) && x.querySelector('[aria-haspopup], .menu-button, button')); if (!r) throw new Error('no row ' + rowText); (r.querySelector('[aria-haspopup]') || r.querySelector('button')).click(); return rowText; };
   window.$edges = ${edgeCuts};
   window.$overflow = ${overflows};
   window.$overlaps = ${overlaps};
@@ -109,26 +132,148 @@ const helpers = `
   window.$fieldText = () => [...document.querySelectorAll('input, select, textarea')].filter((e) => !['checkbox', 'radio', 'range', 'file', 'hidden', 'color'].includes(e.type) && (e.checkVisibility ? e.checkVisibility() : e.offsetParent) && parseFloat(getComputedStyle(e).fontSize) < 16).map((e) => getComputedStyle(e).fontSize + ' ' + e.outerHTML.slice(0, 70));
   window.$small = () => [...document.querySelectorAll('button, input, select, a')].filter((e) => !e.classList.contains('visually-hidden') && (e.checkVisibility ? e.checkVisibility() : e.offsetParent) && e.getBoundingClientRect().height < 44 && !(e.closest('label') && e.closest('label').getBoundingClientRect().height >= 44)).map((e) => e.outerHTML.slice(0, 70));
 `;
+// The sheet check of musicindex ADR 0077 R-SHEET-1 and R-SHEET-2 item 3. It
+// runs in the page and uses no name from outside its body. A sheet is an open
+// dialog, an open popover or an open menu of `menu.js`. The window margin is
+// that of musicindex ADR 0068 R-SPACE-1 item 2: 16 px up to the narrow width
+// of Studio (760 px) and 20 px above it. In a narrow window, a dialog that
+// touches the two sides and the bottom edge is a bottom sheet. It passes at
+// the window width, and its content must not go into the inner padding.
+function sheetFits({ panels = 'dialog[open], .sort-menu', narrow = 760, narrowMargin = 16, wideMargin = 20 } = {}) {
+  const shown = (e) => (e.checkVisibility ? e.checkVisibility() : !!e.offsetParent);
+  const label = (e) => (e.getAttribute('aria-label') || e.textContent || e.getAttribute('placeholder') || '').trim().replace(/\s+/g, ' ').slice(0, 50) || e.outerHTML.slice(0, 70);
+  const width = document.documentElement.clientWidth;
+  const margin = width <= narrow ? narrowMargin : wideMargin;
+  const found = [];
+  const open = [...document.querySelectorAll(panels)].filter(shown);
+  for (const p of document.querySelectorAll('[popover]')) {
+    try { if (p.matches(':popover-open') && !open.includes(p)) open.push(p); } catch (_) {}
+  }
+  if (open.length === 0) found.push({ fault: 'no-sheet', text: '', detail: 'no open sheet, dialog or popover' });
+  for (const sheet of open) {
+    const s = sheet.getBoundingClientRect();
+    // A dialog in the sheet shows in the top layer. It is a sheet of its own,
+    // not content of this sheet.
+    const own = (e) => { const d = e.closest('dialog'); return !d || d === sheet || !sheet.contains(d); };
+    const bottom = width <= narrow && sheet.tagName === 'DIALOG' && Math.abs(s.left) < 0.5
+      && Math.abs(s.right - width) < 0.5 && s.bottom >= window.innerHeight - 0.5;
+    if (bottom) {
+      // Each control, picture and text of the bottom sheet stays out of the
+      // inner padding. A box with only a background, such as a group or a
+      // line, can span the sheet.
+      const parts = [];
+      for (const e of sheet.querySelectorAll('button, a, input, select, textarea, img, svg, [role=button]')) {
+        if (shown(e) && own(e) && !e.parentElement?.closest('svg')) parts.push([e, e.getBoundingClientRect()]);
+      }
+      const walker = document.createTreeWalker(sheet, NodeFilter.SHOW_TEXT);
+      for (let t = walker.nextNode(); t; t = walker.nextNode()) {
+        if (!t.data.trim() || !shown(t.parentElement) || !own(t.parentElement) || t.parentElement.closest('button, a, [role=button]')) continue;
+        const range = document.createRange();
+        range.selectNodeContents(t);
+        parts.push([t.parentElement, range.getBoundingClientRect()]);
+      }
+      const seen = new Set();
+      for (const [e, r] of parts) {
+        if (r.width === 0 || seen.has(e)) continue;
+        const into = Math.max(margin - r.left, r.right - (width - margin));
+        if (into <= 0.5) continue;
+        seen.add(e);
+        found.push({ fault: 'sheet-padding', text: label(e), detail: { into: Math.round(into), margin } });
+      }
+    } else if (s.left < margin - 0.5 || s.right > width - margin + 0.5) {
+      found.push({ fault: 'sheet-width', text: label(sheet.querySelector('h2') || sheet), detail: { width: Math.round(s.width), left: Math.round(s.left), right: Math.round(width - s.right), allowed: width - 2 * margin } });
+    }
+    // Each element must stay in its nearest box that clips or scrolls, or in
+    // the sheet. A box that clips content hides a cut (item 2).
+    const outer = [];
+    for (const e of sheet.querySelectorAll('*')) {
+      if (!shown(e) || !own(e) || outer.some((o) => o.contains(e))) continue;
+      const r = e.getBoundingClientRect();
+      if (r.width === 0) continue;
+      let box = sheet;
+      for (let a = e.parentElement; a && a !== sheet; a = a.parentElement) {
+        if (getComputedStyle(a).overflowX !== 'visible') { box = a; break; }
+      }
+      const b = box.getBoundingClientRect();
+      if (r.right <= b.right + 0.5 && r.left >= b.left - 0.5) continue;
+      outer.push(e);
+      found.push({ fault: 'sheet-content', text: label(e), detail: `${Math.round(Math.max(r.right - b.right, b.left - r.left))} px` });
+    }
+    for (const e of [sheet, ...sheet.querySelectorAll('*')]) {
+      if (e.matches('input, textarea, select') || !shown(e) || !own(e)) continue;
+      const x = getComputedStyle(e).overflowX;
+      if ((x === 'auto' || x === 'scroll') && e.scrollWidth > e.clientWidth + 1) {
+        found.push({ fault: 'sheet-scroll', text: label(e), detail: `content ${e.scrollWidth} px in a box of ${e.clientWidth} px` });
+      }
+      // A box that hides its overflow cuts content that is wider than the
+      // box. A text with an ellipsis is a short form, not a cut.
+      if ((x === 'hidden' || x === 'clip') && e.scrollWidth > e.clientWidth + 1 && getComputedStyle(e).textOverflow !== 'ellipsis') {
+        found.push({ fault: 'sheet-clip', text: label(e), detail: `content ${e.scrollWidth} px in a box of ${e.clientWidth} px` });
+      }
+    }
+  }
+  return found;
+}
+
+// The failure message of musicindex ADR 0077 R-SHEET-2 item 5.
+function sheetMessage(finding, name, width) {
+  const head = `musicindex ADR 0077 R-SHEET-1: at ${width} px the sheet "${name}"`;
+  switch (finding.fault) {
+    case 'sheet-width':
+      return `${head} is ${finding.detail.width} px wide (${finding.detail.left} px from the left edge and ${finding.detail.right} px from the right edge), and the window allows ${finding.detail.allowed} px.\n`
+        + 'Give the sheet the width min(design width, 100vw - 2 × margin), and let each child shrink (min-width: 0).';
+    case 'sheet-padding':
+      return `musicindex ADR 0077 R-SHEET-1: at ${width} px the content "${finding.text}" of the bottom sheet "${name}" goes ${finding.detail.into} px into the ${finding.detail.margin} px inner padding.\n`
+        + 'Give the content the window margin as its padding, and let each child shrink (min-width: 0).';
+    case 'sheet-content':
+      return `${head} has content "${finding.text}" that goes ${finding.detail} past an edge of the sheet.\n`
+        + 'Let each child shrink (min-width: 0), let the row wrap, and give a long key the short form of ADR 0076 R-ADDRESS-1.';
+    case 'sheet-scroll':
+      return `${head} scrolls horizontally in "${finding.text}" (${finding.detail}).\n`
+        + 'A sheet scrolls only vertically (item 5). Let each child shrink (min-width: 0) and let the text wrap.';
+    case 'sheet-clip':
+      return `${head} cuts content in "${finding.text}" (${finding.detail}).\n`
+        + 'Let the text wrap between words, give a long key the short form of ADR 0076 R-ADDRESS-1, and give a URL the attribute data-fit-allow-break.';
+    case 'no-sheet':
+      return `${head} is not open. Correct the "open" steps of the sheet in tools/sheets.json.`;
+    default:
+      return `${head}: ${finding.text}.`;
+  }
+}
+
 // The fit check of musicindex ADR 0065 at the two widths of R-FIT-2.
 const fitWidths = [390, 761];
 let size = null;
 let fitRan = false;
 const fitFindings = [];
-const fit = async () => {
-  fitRan = true;
+// With `sheet`, the check also runs sheetFits and names the sheet. The
+// overflow and overlap checks then examine only the controls in the sheet: an
+// open menu covers the page, and that is not an overlap (R-SHEET-2 item 3).
+const inSheet = (controls) => controls.split(', ').flatMap((c) => [`dialog[open] ${c}`, `.sort-menu ${c}`]).join(', ');
+const fit = async (sheet = null, widths = fitWidths, panel = 'dialog[open], .sort-menu') => {
+  if (sheet === null) fitRan = true;
   const height = size ? size[1] : 1000;
-  for (const width of fitWidths) {
+  const scope = sheet === null ? '' : JSON.stringify({
+    controls: inSheet('button, [role=button], [role=radio], [role=tab], .segment'),
+  });
+  const pairs = sheet === null ? '' : JSON.stringify({
+    controls: inSheet('button, a, input, select, textarea, [role=button], [role=radio], [role=tab]'),
+  });
+  for (const width of widths) {
     await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
     await sleep(500);
+    const sheetFound = sheet === null ? [] : await evaluate(`(${sheetFits})(${JSON.stringify({ panels: panel })})`);
     // edgeCuts opens each disclosure, so it runs last.
     const found = [
-      ...await evaluate(`(${overflows})()`),
-      ...await evaluate(`(${overlaps})()`),
+      ...await evaluate(`(${overflows})(${scope})`),
+      ...await evaluate(`(${overlaps})(${pairs})`),
       ...await evaluate(`(${wordBreaks})()`),
       ...await evaluate(`(${edgeCuts})()`),
     ];
-    for (const f of found) fitFindings.push(fitMessage(f, width));
-    console.log(`fit at ${width} px =>`, found.length ? `${found.length} finding(s)` : 'no finding');
+    for (const f of sheetFound) fitFindings.push(sheetMessage(f, sheet, width));
+    for (const f of found) fitFindings.push(sheet === null ? fitMessage(f, width) : `With the sheet "${sheet}" open: ${fitMessage(f, width)}`);
+    const count = sheetFound.length + found.length;
+    console.log(`${sheet === null ? 'fit' : `sheet "${sheet}"`} at ${width} px =>`, count ? `${count} finding(s)` : 'no finding');
   }
   if (size) await send('Emulation.setDeviceMetricsOverride', { width: size[0], height: size[1], deviceScaleFactor: 1, mobile: size[2] });
   else await send('Emulation.clearDeviceMetricsOverride');
@@ -136,10 +281,35 @@ const fit = async () => {
 };
 let authenticatorId;
 const steps = JSON.parse(process.argv[4] || '[]');
+// Open each sheet of a list (musicindex ADR 0077 R-SHEET-2). The walk opens
+// each entry again for each width from the start address, so that the state
+// of one entry does not change the next entry, and a menu that closes when the
+// window changes is open at each width.
+const walkSheets = async (path, data = 'walk') => {
+  const list = JSON.parse(readFileSync(path, 'utf8'));
+  const start = size ? [...size] : null;
+  for (const entry of list.sheets.filter((e) => (e.data || 'walk') === data)) {
+    for (const width of fitWidths) {
+      if (start) await runStep({ size: [start[0], start[1]], touch: start[2] });
+      await send('Page.navigate', { url: 'about:blank' });
+      await sleep(200);
+      await send('Page.navigate', { url });
+      await sleep(1500);
+      await evaluate(helpers);
+      try {
+        for (const step of entry.open) await runStep(step);
+      } catch (e) {
+        fitFindings.push(sheetMessage({ fault: 'no-sheet' }, entry.name, start ? start[0] : 0) + `\n${String(e.message).slice(0, 200)}`);
+        break;
+      }
+      await fit(entry.name, [width], entry.panel || 'dialog[open]');
+    }
+  }
+};
 await send('Page.navigate', { url });
 await sleep(1500);
 await evaluate(helpers);
-for (const step of steps) {
+async function runStep(step) {
   if (step.wait) await sleep(step.wait);
   if (step.size) {
     size = [step.size[0], step.size[1], step.touch === true];
@@ -187,7 +357,10 @@ for (const step of steps) {
   if (step.shot) await shot(step.shot);
   if (step.save) writeFileSync(`${out}/${step.save}`, JSON.stringify(await evaluate('window.__walkChecks || {}'), null, 2) + '\n');
   if (step.fit) await fit();
+  if (step.sheet) await fit(step.sheet);
+  if (step.sheets) await walkSheets(step.sheets, step.data);
 }
+for (const step of steps) await runStep(step);
 if (!fitRan) await fit();
 console.log(logs.length ? logs.join('\n') : 'no console errors');
 ws.close();

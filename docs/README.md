@@ -192,6 +192,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0211: Studio follows a move that a different Studio made](adr/0211-studio-follows-a-move-that-a-different-studio-made.md)
 - [ADR 0212: The add pages](adr/0212-the-add-pages.md)
 - [ADR 0213: A release starts on the page of its artist](adr/0213-a-release-starts-on-the-page-of-its-artist.md)
+- [ADR 0214: Each sheet fits the window, and the walk opens it](adr/0214-each-sheet-fits-the-window-and-the-walk-opens-it.md)
 
 ## Plans
 

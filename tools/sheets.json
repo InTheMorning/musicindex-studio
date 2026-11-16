@@ -1,0 +1,1172 @@
+{
+  "about": "The list of each sheet, dialog and popover of Studio (musicindex ADR 0077 R-SHEET-2 item 2, ADR 0214). tools/drive-ui.mjs opens each entry with the step {\"sheets\": \"tools/sheets.json\", \"data\": NAME} and examines it at 390 px and at 761 px. `source` is the file and the component. `open` holds drive-ui steps that start at the start address in a 1280 px window. `panel` selects the open panel to examine, and the default is \"dialog[open]\". `data` names the condition that the entry needs, and the default is \"walk\": the walk data of .studio-dev/walk with the setup of ADR 0076. Add each new sheet to this list in the commit that adds the sheet.",
+  "sheets": [
+    {
+      "name": "Add a Feed",
+      "source": "app.js AddFeedSheet",
+      "open": [
+        {
+          "js": "$go('Releases')"
+        },
+        {
+          "wait": 800,
+          "js": "$go('Add a Feed')"
+        },
+        {
+          "wait": 800,
+          "js": "$go('By address or name')"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "Releases sort menu",
+      "source": "app.js SortMenu, menu.js",
+      "open": [
+        {
+          "js": "$go('Releases')"
+        },
+        {
+          "wait": 800,
+          "js": "document.querySelector('main [aria-haspopup=menu]').click(); 1"
+        },
+        {
+          "wait": 400
+        }
+      ],
+      "panel": ".sort-menu"
+    },
+    {
+      "name": "Credit",
+      "source": "editor.js CreditSheet",
+      "open": [
+        {
+          "js": "$go('Album 2')"
+        },
+        {
+          "wait": 1200,
+          "js": "$tab('Credits')"
+        },
+        {
+          "wait": 800,
+          "js": "$go('Add a credit')"
+        },
+        {
+          "wait": 600
+        }
+      ]
+    },
+    {
+      "name": "Find One on Music Index",
+      "source": "pickers.js FindOneSheet",
+      "open": [
+        {
+          "js": "$go('Album 2')"
+        },
+        {
+          "wait": 1200,
+          "js": "$tab('Credits')"
+        },
+        {
+          "wait": 800,
+          "js": "$go('Add a credit')"
+        },
+        {
+          "wait": 600,
+          "js": "$go('Find on Music Index', 'dialog[open]')"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "Support Link",
+      "source": "editor.js FundingSheet",
+      "open": [
+        {
+          "js": "$go('Album 2')"
+        },
+        {
+          "wait": 1200,
+          "js": "$tab('Credits')"
+        },
+        {
+          "wait": 800,
+          "js": "$go('Add a support link')"
+        },
+        {
+          "wait": 600
+        }
+      ]
+    },
+    {
+      "name": "Add Tracks",
+      "source": "editor.js ImportSheet",
+      "open": [
+        {
+          "js": "$go('Album 2')"
+        },
+        {
+          "wait": 1200,
+          "js": "$go('Add tracks')"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "The Audio Is Already Online",
+      "source": "editor.js AddTrackSheet",
+      "open": [
+        {
+          "js": "$go('Album 2')"
+        },
+        {
+          "wait": 1200,
+          "js": "$go('Add tracks')"
+        },
+        {
+          "wait": 800,
+          "js": "$go('The Audio Is Already Online')"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "Nostr Profile",
+      "source": "editor.js NostrSheet",
+      "open": [
+        {
+          "js": "$go('Album 2')"
+        },
+        {
+          "wait": 1200,
+          "js": "$go('Nostr profile', 'main')"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "Artwork",
+      "source": "editor.js ArtworkSheet",
+      "open": [
+        {
+          "js": "$go('Album 2')"
+        },
+        {
+          "wait": 1200,
+          "js": "$go('Artwork', 'main')"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "File Picker",
+      "source": "editor.js FilePicker",
+      "open": [
+        {
+          "js": "$go('Album 2')"
+        },
+        {
+          "wait": 1200,
+          "js": "$go('Artwork', 'main')"
+        },
+        {
+          "wait": 800,
+          "js": "$go('Choose…', 'dialog[open]')"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "Review",
+      "source": "editor.js ReviewSheet",
+      "open": [
+        {
+          "js": "$go('Album 2')"
+        },
+        {
+          "wait": 1200,
+          "js": "$go('Review')"
+        },
+        {
+          "wait": 1200
+        }
+      ]
+    },
+    {
+      "name": "Versions",
+      "source": "editor.js VersionsSheet",
+      "open": [
+        {
+          "js": "$go('Album 2')"
+        },
+        {
+          "wait": 1200,
+          "js": "$go('Versions')"
+        },
+        {
+          "wait": 1200
+        }
+      ]
+    },
+    {
+      "name": "Delete from File Host",
+      "source": "editor.js FeedDelete, first dialog",
+      "open": [
+        {
+          "js": "$go('Album 2')"
+        },
+        {
+          "wait": 1500,
+          "js": "$go('Delete from File Host…')"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "Add a Live Show",
+      "source": "editor.js AddLiveSheet",
+      "open": [
+        {
+          "js": "$go('Album 2')"
+        },
+        {
+          "wait": 1200,
+          "js": "$tab('Live Shows')"
+        },
+        {
+          "wait": 800,
+          "js": "$go('Add a Live Show')"
+        },
+        {
+          "wait": 600
+        }
+      ]
+    },
+    {
+      "name": "Move This Release",
+      "source": "editor.js MoveReleaseSheet",
+      "open": [
+        {
+          "js": "$go('Album 2')"
+        },
+        {
+          "wait": 1200,
+          "js": "$tab('Files')"
+        },
+        {
+          "wait": 800,
+          "js": "$go('Move This Release…')"
+        },
+        {
+          "wait": 800
+        }
+      ],
+      "data": "two-hosts"
+    },
+    {
+      "name": "Release Folder",
+      "source": "editor.js LibraryFolderSheet",
+      "open": [
+        {
+          "js": "$go('Album 2')"
+        },
+        {
+          "wait": 1200,
+          "js": "$tab('Files')"
+        },
+        {
+          "wait": 800,
+          "js": "$go('Change…', 'main')"
+        },
+        {
+          "wait": 800
+        }
+      ],
+      "data": "library"
+    },
+    {
+      "name": "Recipient, Add",
+      "source": "values.js RecipientSheet",
+      "open": [
+        {
+          "js": "$go('Album 2')"
+        },
+        {
+          "wait": 1200,
+          "js": "$tab('Value Routes')"
+        },
+        {
+          "wait": 800,
+          "js": "$go('Add a recipient')"
+        },
+        {
+          "wait": 600
+        }
+      ]
+    },
+    {
+      "name": "Copy from a Feed",
+      "source": "values.js PickerSheet",
+      "open": [
+        {
+          "js": "$go('Album 2')"
+        },
+        {
+          "wait": 1200,
+          "js": "$tab('Value Routes')"
+        },
+        {
+          "wait": 800,
+          "js": "$go('Add a recipient')"
+        },
+        {
+          "wait": 600,
+          "js": "$go('Copy from a Feed', 'dialog[open]')"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "Recipient Actions menu",
+      "source": "values.js RecipientAddressActions, addressrow.js, menu.js",
+      "open": [
+        {
+          "js": "$go('Album 2')"
+        },
+        {
+          "wait": 1200,
+          "js": "$tab('Value Routes')"
+        },
+        {
+          "wait": 800,
+          "js": "document.querySelector('.recipient').open = true; 1"
+        },
+        {
+          "wait": 400,
+          "js": "document.querySelector('.recipient[open] [aria-haspopup=menu]').click(); 1"
+        },
+        {
+          "wait": 400
+        }
+      ],
+      "panel": ".sort-menu"
+    },
+    {
+      "name": "Recipient, Change",
+      "source": "values.js RecipientSheet",
+      "open": [
+        {
+          "js": "$go('Album 2')"
+        },
+        {
+          "wait": 1200,
+          "js": "$tab('Value Routes')"
+        },
+        {
+          "wait": 800,
+          "js": "document.querySelector('.recipient').open = true; 1"
+        },
+        {
+          "wait": 400,
+          "js": "document.querySelector('.recipient[open] [aria-haspopup=menu]').click(); 1"
+        },
+        {
+          "wait": 400,
+          "js": "$go('Change…', '.sort-menu')"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "People sort menu",
+      "source": "peoplepages.js SortMenu, menu.js",
+      "open": [
+        {
+          "js": "$go('People')"
+        },
+        {
+          "wait": 1200,
+          "js": "document.querySelector('main [aria-haspopup=menu]').click(); 1"
+        },
+        {
+          "wait": 400
+        }
+      ],
+      "panel": ".sort-menu"
+    },
+    {
+      "name": "Add a Person",
+      "source": "peoplepages.js AddPersonSheet",
+      "open": [
+        {
+          "js": "$go('People')"
+        },
+        {
+          "wait": 1200,
+          "js": "$go('Add a Person')"
+        },
+        {
+          "wait": 600
+        }
+      ]
+    },
+    {
+      "name": "Add a Wallet",
+      "source": "peoplepages.js LinkSheet",
+      "open": [
+        {
+          "js": "$go('People')"
+        },
+        {
+          "wait": 1200,
+          "js": "$go('Prosperous Soul', 'main')"
+        },
+        {
+          "wait": 1500,
+          "js": "$go('Add a Wallet')"
+        },
+        {
+          "wait": 1000
+        }
+      ]
+    },
+    {
+      "name": "Edit a Wallet",
+      "source": "peoplepages.js LinkSheet",
+      "open": [
+        {
+          "js": "$go('People')"
+        },
+        {
+          "wait": 1200,
+          "js": "$go('Prosperous Soul', 'main')"
+        },
+        {
+          "wait": 1500,
+          "js": "$actions('Node address')"
+        },
+        {
+          "wait": 400,
+          "js": "$go('Edit', '.sort-menu')"
+        },
+        {
+          "wait": 1000
+        }
+      ]
+    },
+    {
+      "name": "Wallet Actions menu",
+      "source": "peoplepages.js AddressRow, menu.js",
+      "open": [
+        {
+          "js": "$go('People')"
+        },
+        {
+          "wait": 1200,
+          "js": "$go('Prosperous Soul', 'main')"
+        },
+        {
+          "wait": 1500,
+          "js": "$actions('Node address')"
+        },
+        {
+          "wait": 400
+        }
+      ],
+      "panel": ".sort-menu"
+    },
+    {
+      "name": "Add a Credit Name",
+      "source": "peoplepages.js LinkSheet",
+      "open": [
+        {
+          "js": "$go('People')"
+        },
+        {
+          "wait": 1200,
+          "js": "$go('Prosperous Soul', 'main')"
+        },
+        {
+          "wait": 1500,
+          "js": "$go('Add a Credit Name')"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "Add a Support Link",
+      "source": "peoplepages.js LinkSheet",
+      "open": [
+        {
+          "js": "$go('People')"
+        },
+        {
+          "wait": 1200,
+          "js": "$go('Prosperous Soul', 'main')"
+        },
+        {
+          "wait": 1500,
+          "js": "$go('Add a Support Link')"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "Person Nostr Key",
+      "source": "editor.js NostrSheet, from People",
+      "open": [
+        {
+          "js": "$go('People')"
+        },
+        {
+          "wait": 1200,
+          "js": "$go('Prosperous Soul', 'main')"
+        },
+        {
+          "wait": 1500,
+          "js": "$go('Add a Nostr Key')"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "Change the Nickname",
+      "source": "peoplepages.js NicknameSheet",
+      "open": [
+        {
+          "js": "$go('People')"
+        },
+        {
+          "wait": 1200,
+          "js": "$go('Prosperous Soul', 'main')"
+        },
+        {
+          "wait": 1500,
+          "js": "$go('Change the Nickname')"
+        },
+        {
+          "wait": 600
+        }
+      ]
+    },
+    {
+      "name": "Find on Music Index (person)",
+      "source": "peoplepages.js FindSheet",
+      "open": [
+        {
+          "js": "$go('People')"
+        },
+        {
+          "wait": 1200,
+          "js": "$go('Prosperous Soul', 'main')"
+        },
+        {
+          "wait": 1500,
+          "js": "$go('Find on Music Index', 'main')"
+        },
+        {
+          "wait": 1000
+        }
+      ]
+    },
+    {
+      "name": "Merge with a Person",
+      "source": "peoplepages.js MergeSheet",
+      "open": [
+        {
+          "js": "$go('People')"
+        },
+        {
+          "wait": 1200,
+          "js": "$go('Prosperous Soul', 'main')"
+        },
+        {
+          "wait": 1500,
+          "js": "$go('Merge with a Person')"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "Add to All Releases",
+      "source": "peoplepages.js OperationSheet",
+      "open": [
+        {
+          "js": "$go('People')"
+        },
+        {
+          "wait": 1200,
+          "js": "$go('Prosperous Soul', 'main')"
+        },
+        {
+          "wait": 1500,
+          "js": "$go('Add to All Releases')"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "Delete the Person",
+      "source": "app.js ConfirmHost",
+      "open": [
+        {
+          "js": "$go('People')"
+        },
+        {
+          "wait": 1200,
+          "js": "$go('Prosperous Soul', 'main')"
+        },
+        {
+          "wait": 1500,
+          "js": "$go('Delete')"
+        },
+        {
+          "wait": 600
+        }
+      ]
+    },
+    {
+      "name": "Payee: Add to a Person",
+      "source": "peoplepages.js WalletPersonSheet",
+      "open": [
+        {
+          "js": "$go('People')"
+        },
+        {
+          "wait": 1200,
+          "js": "$go('Payees with no person')"
+        },
+        {
+          "wait": 600,
+          "js": "$go('Adam Curry', 'main')"
+        },
+        {
+          "wait": 2000,
+          "js": "$go('Add to a Person', 'main')"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "Payee: Change the Address",
+      "source": "peoplepages.js WalletSheet",
+      "open": [
+        {
+          "js": "$go('People')"
+        },
+        {
+          "wait": 1200,
+          "js": "$go('Payees with no person')"
+        },
+        {
+          "wait": 600,
+          "js": "$go('Adam Curry', 'main')"
+        },
+        {
+          "wait": 2000,
+          "js": "$go('Change Address', 'main')"
+        },
+        {
+          "wait": 1000
+        }
+      ]
+    },
+    {
+      "name": "Payee: Add to All Releases",
+      "source": "peoplepages.js WalletSheet",
+      "open": [
+        {
+          "js": "$go('People')"
+        },
+        {
+          "wait": 1200,
+          "js": "$go('Payees with no person')"
+        },
+        {
+          "wait": 600,
+          "js": "$go('Adam Curry', 'main')"
+        },
+        {
+          "wait": 2000,
+          "js": "$go('Add to All Releases', 'main')"
+        },
+        {
+          "wait": 1000
+        }
+      ]
+    },
+    {
+      "name": "Export Studio",
+      "source": "app.js ExportSheet",
+      "open": [
+        {
+          "js": "$go('Settings')"
+        },
+        {
+          "wait": 1000,
+          "js": "$tab('Data')"
+        },
+        {
+          "wait": 1000,
+          "js": "$go('Export Studio')"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "Collection Actions menu",
+      "source": "app.js MenuControl, collectionlist.js",
+      "open": [
+        {
+          "js": "$go('Settings')"
+        },
+        {
+          "wait": 1000,
+          "js": "$tab('Data')"
+        },
+        {
+          "wait": 1000,
+          "js": "$go('Actions', 'main')"
+        },
+        {
+          "wait": 400
+        }
+      ],
+      "data": "collections",
+      "panel": ".sort-menu"
+    },
+    {
+      "name": "New Collection",
+      "source": "app.js CollectionSheet",
+      "open": [
+        {
+          "js": "$go('Settings')"
+        },
+        {
+          "wait": 1000,
+          "js": "$tab('Data')"
+        },
+        {
+          "wait": 1000,
+          "js": "$go('New Collection…')"
+        },
+        {
+          "wait": 600
+        }
+      ],
+      "data": "collections"
+    },
+    {
+      "name": "Import an Account File",
+      "source": "app.js CollectionSheet",
+      "open": [
+        {
+          "js": "$go('Settings')"
+        },
+        {
+          "wait": 1000,
+          "js": "$tab('Data')"
+        },
+        {
+          "wait": 1000,
+          "js": "$go('Import an Account File…')"
+        },
+        {
+          "wait": 600
+        }
+      ],
+      "data": "collections"
+    },
+    {
+      "name": "Copy a Collection",
+      "source": "app.js CollectionSheet",
+      "open": [
+        {
+          "js": "$go('Settings')"
+        },
+        {
+          "wait": 1000,
+          "js": "$tab('Data')"
+        },
+        {
+          "wait": 1000,
+          "js": "$go('Actions', 'main')"
+        },
+        {
+          "wait": 400,
+          "js": "$go('Copy…', '.sort-menu')"
+        },
+        {
+          "wait": 600
+        }
+      ],
+      "data": "collections"
+    },
+    {
+      "name": "Rename a Collection",
+      "source": "app.js CollectionActionSheet",
+      "open": [
+        {
+          "js": "$go('Settings')"
+        },
+        {
+          "wait": 1000,
+          "js": "$tab('Data')"
+        },
+        {
+          "wait": 1000,
+          "js": "$go('Actions', 'main')"
+        },
+        {
+          "wait": 400,
+          "js": "$go('Rename…', '.sort-menu')"
+        },
+        {
+          "wait": 600
+        }
+      ],
+      "data": "collections"
+    },
+    {
+      "name": "Export a Collection",
+      "source": "app.js ExportSheet",
+      "open": [
+        {
+          "js": "$go('Settings')"
+        },
+        {
+          "wait": 1000,
+          "js": "$tab('Data')"
+        },
+        {
+          "wait": 1000,
+          "js": "$go('Actions', 'main')"
+        },
+        {
+          "wait": 400,
+          "js": "$go('Export…', '.sort-menu')"
+        },
+        {
+          "wait": 600
+        }
+      ],
+      "data": "collections"
+    },
+    {
+      "name": "Remove a File Host",
+      "source": "app.js ConfirmHost",
+      "open": [
+        {
+          "js": "$go('File hosts')"
+        },
+        {
+          "wait": 1200,
+          "js": "$go('Remove', 'main')"
+        },
+        {
+          "wait": 600
+        }
+      ]
+    },
+    {
+      "name": "Start Sheet",
+      "source": "app.js StartSheet",
+      "data": "empty",
+      "open": [
+        {
+          "js": "$go('I make music')"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "Import an Account",
+      "source": "app.js ImportShell",
+      "data": "empty",
+      "open": [
+        {
+          "js": "$go('Import an Account')"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "Unlock Studio",
+      "source": "app.js UnlockSheet",
+      "data": "locked",
+      "open": [
+        {
+          "js": "$go('Unlock Studio')"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "Delete the Feed File",
+      "source": "editor.js FeedDelete, last dialog",
+      "data": "removal-done",
+      "open": [
+        {
+          "js": "$go('Album 2')"
+        },
+        {
+          "wait": 1500,
+          "js": "$go('Delete from File Host…')"
+        },
+        {
+          "wait": 800,
+          "js": "$go('Remove the file', 'dialog[open]')"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "Add a Release",
+      "source": "editor.js ReleaseArtistPicker",
+      "data": "label-no-release",
+      "open": [
+        {
+          "js": "$go('Label B')"
+        },
+        {
+          "wait": 1500,
+          "js": "$go('Add a release', 'main')"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "Playlist: Add Tracks",
+      "source": "editor.js PlaylistPickerSheet",
+      "data": "playlist",
+      "open": [
+        {
+          "js": "$go('Releases')"
+        },
+        {
+          "wait": 800,
+          "js": "$go('Playlist', 'main')"
+        },
+        {
+          "wait": 1500,
+          "js": "$tab('Tracks')"
+        },
+        {
+          "wait": 800,
+          "js": "$go('Add a Track')"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "Move All Releases",
+      "source": "editor.js MoveAllSheet",
+      "data": "two-hosts",
+      "open": [
+        {
+          "js": "$go('File hosts')"
+        },
+        {
+          "wait": 1200,
+          "js": "$go('Move All Releases…')"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "Check: A Copy Pays Other People",
+      "source": "editor.js CheckPage",
+      "data": "findings",
+      "open": [
+        {
+          "js": "$go('Album 2')"
+        },
+        {
+          "wait": 1500,
+          "js": "$tab('Check')"
+        },
+        {
+          "wait": 1000,
+          "js": "$go('Show What to Do')"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "Check: Music Index Has Another Address",
+      "source": "editor.js CheckPage",
+      "data": "findings",
+      "open": [
+        {
+          "js": "$go('Album 2')"
+        },
+        {
+          "wait": 1500,
+          "js": "$tab('Check')"
+        },
+        {
+          "wait": 1000,
+          "js": "$go('Show the Ways')"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "Update from Linked Pages",
+      "source": "peoplepages.js LinkedPageReview",
+      "data": "linked-page",
+      "open": [
+        {
+          "js": "$go('People')"
+        },
+        {
+          "wait": 1200,
+          "js": "$go('Update from Linked Pages')"
+        },
+        {
+          "wait": 1500
+        }
+      ]
+    },
+    {
+      "name": "Credit Offer",
+      "source": "peoplepages.js CreditSheet",
+      "data": "linked-page",
+      "open": [
+        {
+          "js": "$go('People')"
+        },
+        {
+          "wait": 1200,
+          "js": "$go('Prosperous Soul', 'main')"
+        },
+        {
+          "wait": 1500,
+          "js": "$go('Save')"
+        },
+        {
+          "wait": 1000
+        }
+      ]
+    },
+    {
+      "name": "Check a Suggestion",
+      "source": "peoplepages.js CheckSuggestionSheet",
+      "data": "suggestion",
+      "open": [
+        {
+          "js": "$go('People')"
+        },
+        {
+          "wait": 1200,
+          "js": "$go('Suggestions from your feeds')"
+        },
+        {
+          "wait": 600,
+          "js": "$go('Check', 'main details[open]')"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    },
+    {
+      "name": "From Music Index (person)",
+      "source": "peoplepages.js ValuesSheet",
+      "data": "network",
+      "open": [
+        {
+          "js": "$go('People')"
+        },
+        {
+          "wait": 1200,
+          "js": "$go('Prosperous Soul', 'main')"
+        },
+        {
+          "wait": 1500,
+          "js": "$go('Find on Music Index', 'main')"
+        },
+        {
+          "wait": 3000,
+          "js": "document.querySelector('dialog[open] .link-row').click(); 1"
+        },
+        {
+          "wait": 1000
+        }
+      ]
+    },
+    {
+      "name": "Correct the Feeds",
+      "source": "peoplepages.js CorrectSheet",
+      "data": "wrong-feeds",
+      "open": [
+        {
+          "js": "$go('People')"
+        },
+        {
+          "wait": 1200,
+          "js": "$go('Prosperous Soul', 'main')"
+        },
+        {
+          "wait": 1500,
+          "js": "$go('Correct', 'main')"
+        },
+        {
+          "wait": 800
+        }
+      ]
+    }
+  ]
+}

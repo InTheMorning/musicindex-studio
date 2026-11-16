@@ -40,6 +40,9 @@
   --muted:    #a1a1a6;
   --accent:   #2d7bff;
   --focus:    #2d7bff;
+  /* The gap of the focus ring on a control with the accent fill
+     (musicindex ADR 0073 R-FOCUS-2 item 6, focus-ring.studio.filled-offset). */
+  --focus-filled-offset: 2px;
   /* These two wait for the shared tokens of musicindex ADR 0063 R-CHECK-5. */
   --check-border: #6a708a;
   --on-accent: #0b0d13;
@@ -296,6 +299,11 @@ code, .mono {
   color: #fff;
 }
 .button.primary:hover { filter: brightness(1.08); }
+/* A control with the accent fill has its focus ring 2 px outside it, with the
+   page background in the gap. Without the gap, the ring has the color of the
+   fill and does not show (musicindex ADR 0073 R-FOCUS-2 item 6). Each other
+   control keeps the ring with no gap. */
+.button.primary:focus-visible { outline-offset: var(--focus-filled-offset); }
 .button:disabled { opacity: .5; cursor: default; }
 /* An action button: an accent label on a pale accent tint. A destructive
    button: an error label on a pale error tint. Neither is a primary
@@ -432,7 +440,7 @@ input[type="checkbox"]:checked, input[type="checkbox"]:indeterminate {
   border-color: var(--accent);
 }
 input[type="checkbox"]:checked::before, input[type="checkbox"]:indeterminate::before { display: block; }
-input[type="checkbox"]:focus-visible { border-radius: 4px; outline-offset: 2px; }
+input[type="checkbox"]:focus-visible { border-radius: 4px; outline-offset: var(--focus-filled-offset); }
 input[type="checkbox"]:disabled { opacity: .5; cursor: default; }
 /* A box in a row does not show its own focus: the row shows it. */
 .link-row input[type="checkbox"]:focus-visible, .choice input[type="checkbox"]:focus-visible { outline: none; }

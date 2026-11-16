@@ -590,21 +590,6 @@ input[type="checkbox"]:disabled { opacity: .5; cursor: default; }
   :root[data-ui-scale="x-large"] { zoom: 1.25; --ui-zoom: 1.25; }
 }
 
-/* The edge indicator (musicindex ADR 0071 R-EDGE-1 and R-EDGE-3). It shows that a
-   swipe from the screen edge goes Back. It is not a control. The values are
-   the entry `shape.edge-indicator` of tokens.json. */
-.edge-indicator {
-  position: fixed;
-  left: 4px;
-  top: calc(var(--bar-h) + (var(--window-height) - var(--bar-h)) / 2 - 24px);
-  width: 5px;
-  height: 48px;
-  border-radius: 999px;
-  background: var(--muted);
-  opacity: 0.8;
-  pointer-events: none;
-  z-index: 1;
-}
 .shell {
   display: grid;
   grid-template-columns: clamp(280px, calc(var(--window-width) * 0.24), 340px) 1fr;
@@ -801,6 +786,38 @@ input[type="checkbox"]:disabled { opacity: .5; cursor: default; }
 /* The touch back control is a circular icon button that does not shrink
    (musicindex ADR 0031 R-NAV-3). */
 .bar .back { flex: none; }
+/* The title button of a narrow window (musicindex ADR 0079 R-TITLE-1). It
+   fills the first bar row after the back control. Its height is the target
+   token, 44 px with touch (R-TITLE-1 item 3, R-TARGET-1 Touch). Its
+   first item is the one-color mark, 24 px high (R-TITLE-2). Its only cues are
+   the pressed state and the focus ring (R-TITLE-1 item 8). */
+.bar-home {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: var(--target);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.bar-home:active { background: var(--fill-soft); }
+.bar-mark {
+  flex: none;
+  width: calc(24px * 735 / 681);
+  height: 24px;
+  background: currentColor;
+  -webkit-mask: var(--mark-mask) center / contain no-repeat;
+  mask: var(--mark-mask) center / contain no-repeat;
+}
 /* The chevron of the back and forward controls has the line height of the
    text as its size (musicindex ADR 0025). */
 .bar .chevron { display: block; width: 1.45em; height: 1.45em; margin: auto; }

@@ -856,15 +856,26 @@ export function widthNav(view, narrow) {
   return { entries, index: entries.length - 1 };
 }
 
-// The edge indicator of musicindex ADR 0071 R-EDGE-2 shows only with the Touch
-// profile, in the narrow layout, when an entry of Studio is below the
-// current entry, and not on the root page. `mirrored` is true while the
-// browser history has one entry for each entry of the state. Only then
-// does Back in the browser open a page of Studio (R-EDGE-2 item 3).
-export function showsEdgeIndicator(nav, narrow, coarse, mirrored) {
-  if (!narrow || !coarse || !mirrored || !nav || nav.index <= 0) return false;
+// The title button of musicindex ADR 0079 R-TITLE-1 shows in the narrow
+// layout on each page other than the root page.
+export function showsTitleButton(nav, narrow) {
+  if (!narrow || !nav) return false;
   const view = nav.entries[nav.index];
   return Boolean(view) && view.name !== 'root';
+}
+
+// The state after the title button (R-TITLE-1 item 4): the stack goes back to
+// the root entry, one `backNav` step at a time, so that each step marks the
+// feed row on Releases as Back does. The entries after the root entry stay
+// for Forward. The count of steps is the `n` of `history.go(-n)`.
+export function rootNav(nav) {
+  let next = nav;
+  while (next.index > 0 && next.entries[next.index].name !== 'root') {
+    const stepped = backNav(next);
+    if (stepped.index === next.index) break;
+    next = stepped;
+  }
+  return next;
 }
 
 // The navigation state that fits a width. A state that already has the form

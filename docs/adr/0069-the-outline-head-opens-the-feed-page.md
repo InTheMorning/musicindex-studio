@@ -17,7 +17,7 @@ On 2026-10-27 the operator examined the outline of an album, and found these def
 - The function of the row "Album" is not easy to see. The head above it names the album, but the user cannot select the head.
 - The link "Releases" does not show that it opens the list of all releases, one level higher.
 
-musicindex ADR 0028 R-PAGE-1 gives the outline of an editor in this sequence: the item, its tracks, the value routes, then the credits. A head that opens the page of the item agrees with this rule. musicindex ADR 0069 R-NAV-2 item 5 says that a destination link in the outline is not a back control. musicindex.org and v4vmm have no outline (musicindex ADR 0069 R-SHELL-1 item 4).
+musicindex ADR 0028 R-PAGE-1 gives the outline of an editor in this sequence: the item, its tracks, the value routes, then the credits. A head that opens the page of the item agrees with this rule. musicindex ADR 0080 R-NAV-2 item 5 says that a destination link in the outline is not a back control. musicindex.org and v4vmm have no outline (musicindex ADR 0080 R-SHELL-1 item 4).
 
 ## Decision
 
@@ -32,7 +32,7 @@ musicindex ADR 0028 R-PAGE-1 gives the outline of an editor in this sequence: th
 ### The Link To Releases
 
 6. The link shows "‹ Releases": the back chevron icon of the bar, then the word "Releases". Its accessible name is "Releases".
-7. The link stays a destination link. It opens the Releases page at the same scroll position, with the row of the feed marked, as ADR 0039 item 7 says. It does not go back in the history (musicindex ADR 0069 R-NAV-2 item 5).
+7. The link stays a destination link. It opens the Releases page at the same scroll position, with the row of the feed marked, as ADR 0039 item 7 says. It does not go back in the history (musicindex ADR 0080 R-NAV-2 item 5).
 8. The link shows only in the left panel at a wide width. At 760 px or less, the back control of the bar does this function (ADR 0039 item 11a).
 
 ## Alternatives Considered

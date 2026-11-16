@@ -11,7 +11,7 @@
 - Changes: [ADR 0069](0069-the-outline-head-opens-the-feed-page.md), The Outline Head Opens The Feed Page. ADR 0069 names the changed items.
 - Changes: [ADR 0075](0075-the-publisher-page-has-payments-and-credits.md), The Publisher Page Has Payments And Credits. ADR 0075 names the changed items.
 - Changed by: [ADR 0157](0157-the-page-tabs-are-a-segmented-control.md), The Page Tabs Are A Segmented Control.
-- Uses: musicindex ADR 0069 R-ACT-1 item 3 and musicindex ADR 0023 R-CASE-1
+- Uses: musicindex ADR 0080 R-ACT-1 item 3 and musicindex ADR 0023 R-CASE-1
 - Source: [findings of local use, finding 4](../reviews/2026-11-06-local-use-findings.md), and the mockups in `.studio-dev/mockup-outline/`
 
 ## Context

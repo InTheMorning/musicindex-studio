@@ -15,7 +15,7 @@ The other destinations are pages for a set of objects: Releases, Hosts and Setti
 
 On 2026-10-28 the operator examined Studio on a phone. Studio opens on Releases. To add a feed, the user goes back to the root page first. The operator asked if Add a feed must be in Releases. The operator selected this decision.
 
-musicindex ADR 0069 R-SHELL-1 item 1 puts the destinations in the sidebar. It does not make a procedure a destination. This ADR changes no shared rule.
+musicindex ADR 0080 R-SHELL-1 item 1 puts the destinations in the sidebar. It does not make a procedure a destination. This ADR changes no shared rule.
 
 ## Decision
 
@@ -32,7 +32,7 @@ musicindex ADR 0069 R-SHELL-1 item 1 puts the destinations in the sidebar. It do
 
 - Keep Add a feed as a destination. Not selected: a procedure then has the position of a destination, and a phone user goes back to the root page to add a feed.
 - Show the row and the button. Rejected: two paths go to one page, and the row stays a procedure in the list of destinations.
-- Put the button in the bar of Releases. Not recommended: musicindex ADR 0069 R-TOOLBAR-1 item 1 gives the bar the back control and the title. The head of the list holds the list controls.
+- Put the button in the bar of Releases. Not recommended: musicindex ADR 0080 R-TOOLBAR-1 item 1 gives the bar the back control and the title. The head of the list holds the list controls.
 
 ## Consequences
 
@@ -51,7 +51,7 @@ Situational, until a decision replaces this layout:
 
 - No change to the Add feeds page, its sections or its forms.
 - No change to the outline of an open feed.
-- No change to the shared shell rules of musicindex ADR 0069.
+- No change to the shared shell rules of musicindex ADR 0080.
 
 ## Verification
 

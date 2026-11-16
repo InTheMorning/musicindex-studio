@@ -7,8 +7,8 @@
 - Supersedes: [ADR 0039](../archive/adr/0039-the-shell-releases-and-the-outline.md), The Shell, Releases And The Outline Of A Feed.
 - Supersedes: [ADR 0064](../archive/adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md), The Editor Edits The Fields That MSP 2.0 Edits.
 - Supersedes: [ADR 0068](../archive/adr/0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md), The Sequence Of The Sections And Fields Of An Editor Page.
-- Changed by: musicindex ADR 0079 R-TITLE-1 and R-TITLE-2, at musicindex `6e4e071`, for item 11. It supersedes musicindex ADR 0071.
-- Uses: musicindex ADR 0069 R-SHELL-1, R-NAV-2 and R-LIST-1, musicindex ADR 0028 R-PAGE-1, musicindex ADR 0069 R-SHELL-2 and musicindex ADR 0069 R-NAV-3. [ADR 0029](0029-editor-pages-toolbar-and-three-levels.md) for the editor pages and the bar. [ADR 0042](0042-ui-models-with-node-tests.md) for the model modules.
+- Changed by: musicindex ADR 0080 R-SHELL-2 item 6, R-TITLE-1 and R-TITLE-2, at musicindex `72b4e4a`, for items 10 to 12. It supersedes musicindex ADR 0069, ADR 0071 and ADR 0079.
+- Uses: musicindex ADR 0080 R-SHELL-1, R-NAV-2 and R-LIST-1, musicindex ADR 0028 R-PAGE-1, musicindex ADR 0080 R-SHELL-2 and musicindex ADR 0080 R-NAV-3. [ADR 0029](0029-editor-pages-toolbar-and-three-levels.md) for the editor pages and the bar. [ADR 0042](0042-ui-models-with-node-tests.md) for the model modules.
 - Uses: these current ADRs own a part of this area. This ADR names each one at its item. [ADR 0069](0069-the-outline-head-opens-the-feed-page.md) (the outline head), [ADR 0070](0070-a-cover-opens-the-artwork-sheet.md) (the Artwork sheet), [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) (Settings and the tiers), [ADR 0072](0072-add-a-feed-opens-from-releases.md) (Add a feed), [ADR 0212](0212-the-add-pages.md) (Add tracks), [ADR 0074](0074-nostr-keys-for-artists-labels-and-contributors.md) (the Nostr keys), [ADR 0076](0076-an-op3-switch-on-feed-settings.md) (OP3), [ADR 0080](0080-the-season-of-a-track-is-an-experimental-disc-setting.md) (the disc), [ADR 0085](0085-each-artist-and-label-is-a-destination.md) and [ADR 0088](0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) (the destinations of the publisher feeds), [ADR 0090](0090-studio-names-the-feeds-that-it-does-not-edit.md) (Other feeds), [ADR 0092](0092-file-hosts-and-the-destination-icons.md) (File hosts and the icons), [ADR 0112](0112-a-credit-role-comes-from-a-list.md) (the credit roles), [ADR 0119](0119-a-new-user-starts-as-a-musician-or-a-label.md) (the Welcome page), [ADR 0130](0130-the-facts-of-an-audio-file-stay-locked.md) (the audio facts), [ADR 0135](0135-the-panel-holds-the-content-and-the-page-has-tabs.md) (the tabs), [ADR 0155](0155-the-sort-menu-names-both-directions.md) (the sort directions), [ADR 0203](0203-people.md) (People).
 
 ## Context
@@ -30,7 +30,7 @@
    - On a server with a locked vault, "Unlock Studio" is in the place of "Lock Studio". It opens the unlock sheet of [ADR 0056](0056-server-sign-in-methods-and-vault-wrappers.md).
    - Each fixed destination shows its icon, and no destination row shows a type dot (ADR 0092 items 5 and 9).
 2. Releases is a list page at the full width of the content area. Each row shows the cover, the type label, the host and the draft state, for example "Saved, not written". Releases lists each album and each playlist. A publisher feed opens from its destination, not from a row of Releases (ADR 0085 item 6).
-3. Releases has the sort and the view of musicindex ADR 0069 R-LIST-1:
+3. Releases has the sort and the view of musicindex ADR 0080 R-LIST-1:
    - The sorts are "Newest", the default, and "A to Z" with a letter bar. "Newest" gives the feed that joined the collection last first. The menu also names the reversed direction of each sort: "Oldest" and "Z to A" ([ADR 0155](0155-the-sort-menu-names-both-directions.md) item 1).
    - The views are rows, the default, and tiles.
    - A sort, a direction or a view that is not the default is in the query of the address, as `sort=az`, `reversed=1` and `view=tiles` (ADR 0155 item 4).
@@ -41,23 +41,23 @@
 
 6. While a feed is open, the left panel shows the outline of that feed in place of the destinations of the top group. The bottom group stays at the bottom (item 1). The left panel is one panel at any time.
 7. The outline of an album shows the link to Releases and the head of the feed. Then it shows each track by its number and title, and "Add tracks" ([ADR 0135](0135-the-panel-holds-the-content-and-the-page-has-tabs.md) item 1, [ADR 0212](0212-the-add-pages.md) item 15). The head opens the first tab of the feed, and the outline has no row for the first page ([ADR 0069](0069-the-outline-head-opens-the-feed-page.md) items 1 and 2, ADR 0135 item 3). The outline of a publisher feed holds its head and its releases. The outline of a playlist holds only its head (ADR 0135 item 4). Value routes, credits, files and the settings of a feed are tabs of its page (ADR 0135 item 2).
-8. The link to Releases shows "‹ Releases" (ADR 0069 item 6). It opens the Releases page at the same scroll position, with the row of the feed marked. It is a destination link, not a back control (musicindex ADR 0069 R-NAV-2 item 5). A feed that opens from a level of a publisher feed shows "‹" with the name of that level. That link opens the level (ADR 0088 item 6).
+8. The link to Releases shows "‹ Releases" (ADR 0069 item 6). It opens the Releases page at the same scroll position, with the row of the feed marked. It is a destination link, not a back control (musicindex ADR 0080 R-NAV-2 item 5). A feed that opens from a level of a publisher feed shows "‹" with the name of that level. That link opens the level (ADR 0088 item 6).
 9. Each item of the outline opens one page of the editor. [ADR 0029](0029-editor-pages-toolbar-and-three-levels.md) items 7 to 9 stay.
 
 ### Back
 
-10. The editor bar has the back control of musicindex ADR 0069 R-NAV-2 at its leading edge: the icons `‹ ›` on Desktop, and the circular icon button `‹` named "Back" on Touch (musicindex ADR 0069 R-NAV-3).
+10. The editor bar has the back control of musicindex ADR 0080 R-NAV-2 at its leading edge, after the home button of item 11 in a narrow window: the icons `‹ ›` on Desktop, and the circular icon button `‹` named "Back" on Touch (musicindex ADR 0080 R-NAV-3).
 
 ### Narrow Width
 
-11. At 760 px or less, Studio is one stack (musicindex ADR 0069 R-SHELL-2). It has no menu button and no drawer. musicindex ADR 0070 gives the website the same stack. The back control of item 10 is the first control of the bar. On each page other than the root page, the title area after it is one button (musicindex ADR 0079 R-TITLE-1). The button goes back to the root entry with `history.go(-n)`. When the history does not agree with the stack, the stack goes back in place. Its first item is the musicindex mark (R-TITLE-2). Studio shows no edge indicator.
-12. At 760 px or less, the bar of a feed has two rows. The first row has the back control and the title. The second row has the draft status, then "Versions" and "Review". No part of the bar is hidden.
+11. At 760 px or less, Studio is one stack (musicindex ADR 0080 R-SHELL-2). It has no menu button and no drawer. musicindex ADR 0070 gives the website the same stack. On each page other than the root page, the bar starts with the home button, then the back control of item 10, then Forward with a mouse, then the title button (R-SHELL-2 item 6). The home button is the musicindex mark, and its accessible name is "Destinations" (R-TITLE-2). The left edge of the mark is on the content margin, and its target extends into the margin (operator choice of 2026-11-16, relayed by the orchestrator session). The title button is the title area. The two buttons go back to the root entry with `history.go(-n)` (R-TITLE-1). When the history does not agree with the stack, the stack goes back in place. The root page and a wide window have no home button, and the back control is the first control of the bar. Studio shows no edge indicator.
+12. At 760 px or less, the bar of a feed has two rows. The first row has the home button, the back control and the title button. The second row has the draft status, then "Versions" and "Review". No part of the bar is hidden.
 13. The root page "Studio" shows the destinations of item 1. It has no back control. Releases stays the start page (item 4), and the root page is below it in the stack. The root page has the color of the left panel, and its bar has the color of the other bars.
 14. A selection of a feed on Releases opens the outline page of the feed: the items of item 7 as a page. A selection on the outline page opens its part. Back from a part opens the outline page, and Back from the outline page opens Releases with the row of the feed marked. The outline page has the color of the left panel, as the root page has.
 
 ### Value Routes
 
-15. The Value routes page is at most 560 px wide. A share segment and a percentage show a tooltip at once, with the name, the percentage and the raw share (musicindex ADR 0069 R-VALUE-1 item 3).
+15. The Value routes page is at most 560 px wide. A share segment and a percentage show a tooltip at once, with the name, the percentage and the raw share (musicindex ADR 0080 R-VALUE-1 item 3).
 
 ### The MSP 2.0 Fields In The Core
 
@@ -136,7 +136,7 @@
 
 - Keep the tree in the sidebar. Rejected by the operator: the tree is a second place of work, and Studio opens on a placeholder.
 - A stack with no outline. Rejected: the person then goes back to move between the tracks of one album.
-- A row "‹ Releases" as the only way back. The research mockup draws it. Rejected: musicindex ADR 0069 R-NAV-2 gives the back control in the bar on each profile. The link stays as a destination link.
+- A row "‹ Releases" as the only way back. The research mockup draws it. Rejected: musicindex ADR 0080 R-NAV-2 gives the back control in the bar on each profile. The link stays as a destination link.
 - Write `<podcast:season>1</podcast:season>` into each new track, as MSP 2.0 does. Rejected: the feed then holds a value that its author did not set (item 18).
 - Always write `true` or `false`, as MSP 2.0 does. Rejected: the change of one switch then changes the form of a feed that uses `yes` or `no` (item 19).
 - Refuse a `managingEditor` that is not an email address. Rejected: the corpus has such values, and the RSS readers accept them.
@@ -185,7 +185,7 @@ Mechanical. The tests of the superseded ADRs enforce these items, and this ADR a
   - With a feed open, the outline model gives its items in the sequence of item 7.
   - After the link to Releases, the Releases page gives the marked feed row.
   - The Releases model gives the rows in the sequence of each sort, and the letter groups of "A to Z".
-  - The navigation model disables Forward when no subsequent page exists (musicindex ADR 0069 R-NAV-2 item 4).
+  - The navigation model disables Forward when no subsequent page exists (musicindex ADR 0080 R-NAV-2 item 4).
   - At narrow width, the navigation model gives the sequence of item 14, and the root page below Releases (item 13).
   - The tier test of ADR 0071 item 6 examines each page of `pages.js`.
   - The model module of the credits selection, the `purpose` tokens and the near ratio.

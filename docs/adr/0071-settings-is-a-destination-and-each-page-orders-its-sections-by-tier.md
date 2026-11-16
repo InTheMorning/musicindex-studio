@@ -20,7 +20,7 @@ On 2026-10-28 the operator examined the page. The first field on the page is "La
 
 The Studio journeys in `../musicindex-research` (`research_notes/ui-design/journeys/studio/`) count the steps of six tasks. They give no data on how frequently a user does each task. They are research, not rules.
 
-v4vmm has a destination "Settings". musicindex ADR 0069 R-SHELL-1 item 4 lets an app pin a destination to the bottom of the left panel.
+v4vmm has a destination "Settings". musicindex ADR 0080 R-SHELL-1 item 4 lets an app pin a destination to the bottom of the left panel.
 
 ## Decision
 
@@ -94,7 +94,7 @@ v4vmm has a destination "Settings". musicindex ADR 0069 R-SHELL-1 item 4 lets an
 
 - No new setting, and no change to a setting.
 - No change to the outline, to the editor pages, or to their sequence.
-- No change to the shared shell rules of musicindex ADR 0069.
+- No change to the shared shell rules of musicindex ADR 0080.
 
 ## Verification
 

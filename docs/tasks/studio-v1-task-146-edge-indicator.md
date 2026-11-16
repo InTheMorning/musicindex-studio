@@ -2,7 +2,7 @@
 
 Decision: musicindex ADR 0071, "The Edge Indicator Shows That A Swipe Goes Back" (musicindex `054a539`). [ADR 0206](../adr/0206-the-shell-and-the-editor-pages.md) item 11 names it for the narrow shell of Studio. Studio adds no rule, so this task has no Studio ADR.
 
-Status: Complete on 2026-11-14, with its screenshot visual check. The visual gate for the operator is open.
+Status: Superseded on 2026-11-16 by musicindex ADR 0079. [Task 159](studio-v1-task-159-title-button-and-brand-mark.md) removes the edge indicator. The open finding below is closed, and its visual gate for the operator is closed with no test.
 
 The orchestrator session sent this task on 2026-11-14. The operator selected the indicator on that day.
 
@@ -20,6 +20,8 @@ The orchestrator session sent this task on 2026-11-14. The operator selected the
 The website session reported that a browser can skip a history entry that a page made with no input of the user. Studio makes its root entry at the start. Thus Back on the start page, before the first touch, possibly leaves Studio.
 
 The check tool of the agent cannot push the Back button of a browser, so the agent did not examine this. On the start page, `showsEdgeIndicator` gives true, because the root entry is below. If the browser skips that entry, the indicator shows a swipe that leaves Studio. R-EDGE-2 item 3 does not permit that state. Only a person with a phone can examine it. No history code changed.
+
+Closed by the operator on 2026-11-16: on an iPhone, a Back swipe on Releases before the first touch opened the root page "Studio". The browser did not skip the root entry. musicindex ADR 0079 supersedes the rest of this task.
 
 ## Base components
 

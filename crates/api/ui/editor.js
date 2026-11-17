@@ -1246,7 +1246,8 @@ function ImportRow({ row, audioOptions, onRemove, onImageUseChange }) {
   return html`<div class="import-row">
     <div class="import-head">
       <span class="title">${row.file.name}</span>
-      <span class=${`state${failed ? ' failed' : ''}`} role=${failed ? 'alert' : undefined}>
+      <span class=${`state${failed ? ' failed' : ''}`} role=${failed ? 'alert' : undefined}
+        data-fit-allow-break=${failed ? '' : undefined}>
         ${importStateText(row, kind)}
       </span>
       <button class="button destructive" type="button" disabled=${row.state === 'sending'}

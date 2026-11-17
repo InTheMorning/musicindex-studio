@@ -314,6 +314,13 @@ pub(crate) async fn finish_upload(
                 format!("part {missing} is missing"),
             ));
         }
+        // A locked vault stops the import to a host that needs a secret. The
+        // check comes before the removal of the row, so that the upload
+        // stays and a finish after the unlock works. The import gives the
+        // error of a feed with no host (ADR 0067 item 7).
+        if w.collection.feed(row.feed_id)?.connector_id.is_some() {
+            routes::writer_check(w, row.feed_id)?;
+        }
         if !w.collection.remove_upload(&row.id)? {
             return Err(ApiError::new(
                 StatusCode::NOT_FOUND,

@@ -6409,6 +6409,58 @@ async fn a_blossom_host_with_a_vault_key_keeps_the_key_in_the_vault_only() {
     assert!(!data_files_text(&app).contains(NOSTR_SECRET_HEX));
 }
 
+/// A locked vault stops the finish of an upload to a feed whose host needs
+/// a secret. The upload stays, so that the finish after the unlock works.
+#[tokio::test]
+async fn a_finish_with_a_locked_vault_keeps_the_upload() {
+    let server = studio_core::testing::fake_s3::FakeS3::start("bk");
+    let app = app();
+    make_vault(&app).await;
+    let (status, connector) =
+        call(&app, "POST", "/api/v1/connectors", Some(s3_body(&server))).await;
+    assert_eq!(status, StatusCode::CREATED, "{connector}");
+    set_library_root(&app);
+    let feed = make_feed(
+        &app,
+        new_feed_body(connector["id"].as_i64().unwrap(), "a.xml", "A", None, None),
+    )
+    .await;
+    let id = feed["id"].as_i64().unwrap();
+    call(&app, "POST", "/api/v1/vault/lock", None).await;
+
+    let bytes = std::fs::read(media_path("tagged.mp3")).unwrap();
+    let (status, started) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/uploads"),
+        Some(json!({ "name": "tagged.mp3", "size": bytes.len(), "replace": false })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{started}");
+    let upload = started["upload"].as_str().unwrap().to_owned();
+    let part_size = usize::try_from(started["part_size"].as_u64().unwrap()).unwrap();
+    for (n, part) in bytes.chunks(part_size).enumerate() {
+        let (status, body) = put_part(&app, &upload, n, part.to_vec()).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+    }
+    let finish = format!("/api/v1/uploads/{upload}/finish");
+    let (status, body) = call(&app, "POST", &finish, None).await;
+    assert_eq!(status, StatusCode::LOCKED, "{body}");
+    assert_eq!(body["error"]["code"], "vault_locked");
+
+    let (status, _) = call(
+        &app,
+        "POST",
+        "/api/v1/vault/unlock",
+        Some(json!({ "passphrase": PASSPHRASE })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, body) = call(&app, "POST", &finish, None).await;
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    assert_eq!(body["kind"], "audio");
+}
+
 #[tokio::test]
 async fn an_nsite_host_with_a_vault_key_needs_the_vault() {
     let servers = nsite_servers();

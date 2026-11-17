@@ -12,7 +12,7 @@
 ## Context
 
 - The destination "Hosts" holds the connectors: a local folder, S3 and R2, SFTP, Blossom and nsite ([ADR 0006](0006-connectors-and-the-v1-set.md)). Each UI text calls a connector "a host".
-- The left panel shows the role heading "Hosts" for the role `host` (`crates/api/ui/shell.js`, [ADR 0088](0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) item 4). The role `hosting` is a different role ([ADR 0083](0083-hosting-is-a-first-class-role.md)). When the collection has a feed with the role `host`, the left panel shows "Hosts" two times with two meanings.
+- The left panel shows the role heading "Hosts" for the role `host` (`crates/api/ui/shell.js`, [ADR 0088](../archive/adr/0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) item 4). The role `hosting` is a different role ([ADR 0083](0083-hosting-is-a-first-class-role.md)). When the collection has a feed with the role `host`, the left panel shows "Hosts" two times with two meanings.
 - The row "Hosts" shows the type dot of the role `hosting` (`crates/api/ui/app.js`, `LeftPanelFooter`). Task 026 added it in `6ceaddb`. A dot shows the type of a feed (musicindex ADR 0032 R-DOT-1), and an entity color is not a general accent ([ADR 0018](0018-passphrase-strength-and-error-color.md)).
 - The other destination rows have no marker.
 - v4vmm shows a monochrome Lucide icon on each destination of its sidebar. The icon of the current destination has the accent color (`src/ui/shells/library/sidebar.rs` in `../v4vmm`).

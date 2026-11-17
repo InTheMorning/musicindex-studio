@@ -81,7 +81,6 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0085: Each artist and label is a destination](adr/0085-each-artist-and-label-is-a-destination.md)
 - [ADR 0086: A playlist links to its artist or label](adr/0086-a-playlist-links-to-its-artist-or-label.md)
 - [ADR 0087: The two sides of a link confirm a role](adr/0087-the-two-sides-of-a-link-confirm-a-role.md)
-- [ADR 0088: The left panel shows the levels of the publisher feeds](adr/0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md)
 - [ADR 0089: The left panel shows the art of each publisher feed](adr/0089-the-left-panel-shows-the-art-of-each-publisher-feed.md)
 - [ADR 0090: Studio names the feeds that it does not edit](adr/0090-studio-names-the-feeds-that-it-does-not-edit.md)
 - [ADR 0092: File hosts and the destination icons](adr/0092-file-hosts-and-the-destination-icons.md)
@@ -193,6 +192,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0212: The add pages](adr/0212-the-add-pages.md)
 - [ADR 0213: A release starts on the page of its artist](adr/0213-a-release-starts-on-the-page-of-its-artist.md)
 - [ADR 0214: Each sheet fits the window, and the walk opens it](adr/0214-each-sheet-fits-the-window-and-the-walk-opens-it.md)
+- [ADR 0215: The left panel shows the levels of the publisher feeds](adr/0215-the-left-panel-shows-the-levels-of-the-publisher-feeds.md)
 
 ## Plans
 
@@ -614,6 +614,7 @@ Superseded decisions. Read them for research only. They bind no change.
 - [ADR 0055: The server shell: user folders, accounts, sessions and the vault window](archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md), superseded by ADR 0204
 - [ADR 0064: The editor edits the fields that MSP 2.0 edits](archive/adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md), superseded by ADR 0206
 - [ADR 0068: The sequence of the sections and fields of an editor page](archive/adr/0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md), superseded by ADR 0206
+- [ADR 0088: The left panel shows the levels of the publisher feeds](archive/adr/0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md), superseded by ADR 0215
 - [ADR 0091: A change set edits one recipient in many feeds](archive/adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md), superseded by ADR 0207
 - [ADR 0095: A Lightning address and its node key are one recipient](archive/adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md), superseded by ADR 0207
 - [ADR 0098: The People module](archive/adr/0098-the-people-module.md), superseded by ADR 0203

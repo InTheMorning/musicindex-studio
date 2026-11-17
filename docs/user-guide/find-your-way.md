@@ -45,7 +45,7 @@ Studio puts each feed with roles on a level. Hosting is first, then a label, the
 A label shows below a hosting feed when the two feeds share a release.
 An artist shows below a label for the same cause. An artist on two labels shows below each label.
 The first role of a feed gives its level. Thus an artist feed that also has the role label is on the level of an artist.
-A producer, a host, an author, a network or a sponsor is on the level of an artist.
+A curator, a producer, a host, an author, a network or a sponsor is on the level of an artist.
 
 Each feed in the left panel shows its cover. A feed with no cover shows the covers of its releases in the shape of the logo. The dot on the corner of the cover gives the type of the feed.
 

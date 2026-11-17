@@ -875,6 +875,9 @@ pub enum PublisherRole {
     Label,
     /// A hosting service.
     Hosting,
+    /// The publisher feed of a person who makes playlists (musicindex ADR
+    /// 0081 R-CURATOR-1).
+    Curator,
     /// A producer.
     Producer,
     /// A host.
@@ -888,11 +891,13 @@ pub enum PublisherRole {
 }
 
 impl PublisherRole {
-    /// The eight roles, in their sequence.
-    pub const ALL: [Self; 8] = [
+    /// The nine roles, in their sequence (musicindex ADR 0081 R-CURATOR-1
+    /// item 1).
+    pub const ALL: [Self; 9] = [
         Self::Artist,
         Self::Label,
         Self::Hosting,
+        Self::Curator,
         Self::Producer,
         Self::Host,
         Self::Author,
@@ -911,6 +916,7 @@ impl PublisherRole {
             Self::Producer => "producer",
             Self::Network => "network",
             Self::Hosting => "hosting",
+            Self::Curator => "curator",
             Self::Sponsor => "sponsor",
         }
     }

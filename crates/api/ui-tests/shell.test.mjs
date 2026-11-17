@@ -641,6 +641,12 @@ test('a level gives the way up, the head, the feeds below and the releases', () 
   assert.equal(level.head.title, 'Label A', message);
   assert.deepEqual(level.sections.map((s) => [s.heading, s.items.map((i) => i.label)]),
     [['Artists', ['Artist X']], ['Producers', ['Beat Lab']]], message);
+  // A curator feed is in "Curators", after Artists and before Producers
+  // (ADR 0215 item 4, musicindex ADR 0081 R-CURATOR-1 item 1).
+  const lists = { ...beatLab, id: 46, title: 'Lists', publisher_roles: ['curator', 'producer'] };
+  const withCurator = leftPanel({ view: { name: 'releases', group: 41, trail: [40] },
+    feeds: [...tree.map((f) => (f.id === 41 ? { ...f, child_ids: [43, 44, 46] } : f)), lists], model: null, vaultOpen: false });
+  assert.deepEqual(withCurator.sections.map((s) => s.heading), ['Artists', 'Curators', 'Producers'], message);
   assert.deepEqual(level.sections[0].items[0].view, { name: 'releases', group: 43, trail: [40, 41] }, message);
   assert.deepEqual(level.releases.map((r) => [r.title, r.from]), [['Album 1', { group: 41, trail: [40] }]], message);
   const top = leftPanel({ view: { name: 'releases', group: 40 }, feeds: tree, model: null, vaultOpen: false });

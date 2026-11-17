@@ -6,7 +6,7 @@
 - Owner: operator
 - Accepted: 2026-10-27 by the operator.
 - Changes: [ADR 0039](../archive/adr/0039-the-shell-releases-and-the-outline.md) items 6 and 7.
-- Changed by: [ADR 0088](0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) item 6: a feed that opens from a level has "‹" with the name of that level. It does not have "‹ Releases".
+- Changed by: [ADR 0088](../archive/adr/0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) item 6: a feed that opens from a level has "‹" with the name of that level. It does not have "‹ Releases".
 
 ## Context
 

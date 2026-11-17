@@ -101,6 +101,10 @@ test('a publisher feed lists each role, or shows Feed with a hollow dot', () => 
     { dot: 'artist hollow', label: 'Artist · Label · Producer · Host · Author' }, MESSAGE);
   assert.deepEqual(mediumKind('publisher', ['producer', 'label'], true), { dot: 'label', label: 'Label · Producer' }, MESSAGE);
   assert.deepEqual(mediumKind('publisher', ['sponsor'], true), { dot: 'sponsor', label: 'Sponsor' }, MESSAGE);
+  // Curator comes after the first-class roles and before producer
+  // (musicindex ADR 0081 R-CURATOR-1 items 1, 3 and 4).
+  assert.deepEqual(mediumKind('publisher', ['curator', 'artist'], true), { dot: 'artist', label: 'Artist · Curator' }, MESSAGE);
+  assert.deepEqual(mediumKind('publisher', ['producer', 'curator'], true), { dot: 'curator', label: 'Curator · Producer' }, MESSAGE);
   // Hosting comes before producer and host (musicindex ADR 0036 R-ROLE-1).
   assert.deepEqual(mediumKind('publisher', ['host', 'producer', 'hosting'], true), { dot: 'hosting', label: 'Hosting · Producer · Host' }, MESSAGE);
   assert.deepEqual(mediumKind('publisher', [], true), { dot: 'feed hollow', label: 'Feed' }, MESSAGE);

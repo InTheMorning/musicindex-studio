@@ -11,7 +11,7 @@
 ## Context
 
 - ADR 0091 item 9 gives the operation "Add to a level". It adds a recipient to each value block of a publisher feed and of each feed below it.
-- "Level" is a word of the left panel of [ADR 0088](0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md). The UI does not show it as a name. On 2026-10-31 the operator asked what "Add to a level" means.
+- "Level" is a word of the left panel of [ADR 0088](../archive/adr/0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md). The UI does not show it as a name. On 2026-10-31 the operator asked what "Add to a level" means.
 - The sheet has the placeholder "Select an artist or label", and the hint "Studio found no artist or label feed in your collection". Its menu has the label "Level".
 - The menu lists each publisher feed. A hosting feed is also in it.
 - The operator selected this name from a questionnaire on 2026-10-31. The other name was "Add to Feeds".

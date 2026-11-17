@@ -13,7 +13,7 @@
 - Changes: [ADR 0030](../../adr/0030-an-added-recipient-gets-no-split.md), for a recipient that a change set adds.
 - Changed by: [ADR 0092](../../adr/0092-file-hosts-and-the-destination-icons.md), File Hosts And The Destination Icons.
 - Changed by: [ADR 0096](../../adr/0096-add-to-an-artist-or-label.md), Add To An Artist Or Label.
-- Uses: [ADR 0027](0027-the-recipient-picker.md) for the identity of a recipient, [ADR 0088](../../adr/0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) for the levels, and [ADR 0007](../../adr/0007-draft-diff-write-and-announce.md) for the review and the write.
+- Uses: [ADR 0027](0027-the-recipient-picker.md) for the identity of a recipient, [ADR 0088](0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) for the levels, and [ADR 0007](../../adr/0007-draft-diff-write-and-announce.md) for the review and the write.
 - Changed by: [ADR 0148](../../adr/0148-a-move-keeps-the-old-files-until-the-user-reviews-the-deletion.md), A Move Keeps The Old Files Until The User Reviews The Deletion.
 
 ## Context

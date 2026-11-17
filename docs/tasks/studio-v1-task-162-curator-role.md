@@ -53,7 +53,7 @@ Visual, by the main session:
 
 1. At 1280 px in Dark and in Light, the left panel shows "Curators" after "Artists" and before "Producers". The curator feed has the curator color on its logo and its dot.
 
-Visual, by the operator. This gate is open:
+Visual, by the operator:
 
 1. musicindex ADR 0081 asks for the checks of musicindex ADR 0067 item 46 in the design study. In Light, the curator color is near the artist color.
 
@@ -62,3 +62,4 @@ Visual, by the operator. This gate is open:
 - Mechanical 1 to 4: met. The core publisher tests give 19 passed. The Node tests give 838 passed.
 - Mechanical 5: met.
 - Visual, by the main session: met. The shots are in `.studio-dev/walk/runs/curator-dark/shots/` and `.studio-dev/walk/runs/curator-light/shots/`. The headings are Labels, Artists, Curators, Producers and "No role". The dot is `rgb(234, 185, 249)` in Dark and `rgb(102, 60, 115)` in Light. `$edges()` and `$overflow()` give no finding, and the fit check gives no finding at 390 px and 761 px.
+- Visual, by the operator: met on 2026-11-17. The design study did not have curator. The main session added curator to the Creators group of the study (version 3). The operator examined the four vision modes in Dark and in Light. The palette A checks did not change: contrast 3.61:1 and group distance 0.157.

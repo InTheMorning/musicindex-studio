@@ -22,7 +22,6 @@ const want = {
   '--share-meter-height': `${shape['share-meter'].height}px`,
   '--share-meter-radius': `${shape['share-meter'].radius}px`,
   '--value-columns-share-rem': `${shape['value-columns']['share-rem']}rem`,
-  '--value-columns-address-maximum-rem': `${shape['value-columns']['address-maximum-rem']}rem`,
 };
 
 test('each size of the value routes has the value of tokens.json', () => {

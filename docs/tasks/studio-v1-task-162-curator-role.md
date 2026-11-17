@@ -6,7 +6,7 @@ Status: Complete on 2026-11-17, with its screenshot visual check. The orchestrat
 
 The gate of R-CURATOR-1 (2026-11-17): musicindex ADR 0081 puts two conditions before work on R-CURATOR-1 starts. Stophammer ADR 0102 must be accepted, and a Stophammer release must give its fields. Stophammer ADR 0102 is accepted. No release gives its fields.
 
-This gate of musicindex ADR 0081 also applies to Studio. The orchestrator sent this task before the release, and Studio reads the role from the `rel` of the feed file. Open: the orchestrator must accept this change before the release, or tell Studio to revert it.
+Operator choice, 2026-11-17 (sent by the orchestrator): R-CURATOR-1 and R-CURATOR-2 of musicindex ADR 0081 apply from 2026-11-17. The Stophammer release condition applies only to R-CURATOR-3 to R-CURATOR-6. The website changes the Accepted line of ADR 0081 to say this. Studio keeps this change.
 
 ## Problem
 

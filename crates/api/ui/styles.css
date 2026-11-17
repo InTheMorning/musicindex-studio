@@ -224,7 +224,6 @@
   --share-meter-height: 6px;
   --share-meter-radius: 3px;
   --value-columns-share-rem: 6.5rem;
-  --value-columns-address-maximum-rem: 9.5rem;
 }
 
 /* Diff tokens: an added line is green and a removed line is red. They are not
@@ -1255,13 +1254,14 @@ select option { background: var(--level-3); color: var(--text); }
    level, sits on an inset (mockup .inset). */
 .recipient > summary {
   display: grid;
-  /* The marker, the name, the meter, the percentage and the address. Fixed
-     columns let the meters line up from row to row. The address column has
-     the width of the short form of a node address (musicindex ADR 0076
-     R-ADDRESS-1) and musicindex ADR 0082 R-ROUTES-4 item 6. */
-  grid-template-columns: auto minmax(0, 1fr) var(--share-meter-width) var(--value-columns-share-rem) minmax(0, var(--value-columns-address-maximum-rem));
+  /* Two lines at each width (musicindex ADR 0082 R-ROUTES-4, operator
+     choice of 2026-11-17). Line 1 is the marker, the name, the meter and the
+     percentage, in fixed columns, so the meters line up from row to row.
+     Line 2 is the address under the name. */
+  grid-template-columns: auto minmax(0, 1fr) var(--share-meter-width) var(--value-columns-share-rem);
   align-items: center;
-  gap: 10px;
+  column-gap: 10px;
+  row-gap: 2px;
   min-height: var(--row);
   padding: 10px 16px;
   cursor: pointer;
@@ -1270,16 +1270,7 @@ select option { background: var(--level-3); color: var(--text); }
 .recipient > summary:hover { background: var(--fill-soft); }
 .recipient > summary .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recipient > summary .share { color: var(--muted); font-variant-numeric: tabular-nums; }
-.recipient > summary .address { color: var(--muted); font-size: var(--text-callout); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* At a narrow width, the fixed columns leave no width for the address. The
-   address goes on a second line below the name, as the status of a file row
-   (ADR 0105 item 18). The meter and the percentage stay on the first line,
-   in their fixed columns, so the meters line up (musicindex ADR 0082
-   R-ROUTES-4 item 7). */
-@media (max-width: 760px) {
-  .recipient > summary { grid-template-columns: auto minmax(0, 1fr) var(--share-meter-width) var(--value-columns-share-rem); row-gap: 2px; }
-  .recipient > summary .address { grid-column: 2 / -1; grid-row: 2; }
-}
+.recipient > summary .address { grid-column: 2 / -1; grid-row: 2; color: var(--muted); font-size: var(--text-callout); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recipient > .form { background: var(--level-3); margin: 0 8px 8px; border-radius: 10px; padding: 14px; }
 
 /* Share bars (task 012). A meter for one recipient, and a stack of all

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {
   recipientRow, rowLines, placesText, useRow, outcomeText, causeText, blockedText,
   initialStatuses, refreshedStatuses, addressLines, lnaddressOf, nodeOf, recipientTitle, lookupHint, memberStart, startType, operationLine, suggestionField, breakParts, OTHER_ADDRESS, startWrite, finishWrite, nextToWrite, statusText, writableIds, writeLabel, retryStatuses, nameOf, statusError,
-  walletActions, walletSheet, walletSheetStart, walletTypeChange, walletDetailsLine, walletSheetBody, walletSheetReady, WALLET_TYPES, CUSTOM_KEY_HINT, shareParts, percentages, feeLine,
+  walletActions, walletSheet, walletSheetStart, walletTypeChange, walletDetailsLine, walletSheetBody, walletSheetReady, WALLET_TYPES, CUSTOM_KEY_HINT, shareParts, percentages, feeLine, percentText,
 } from '../ui/recipients.js';
 
 const equalParts = (count) => Array.from({ length: count }, (_, i) => ({ name: `R${i}`, address: `r${i}`, split: '1' }));
@@ -22,6 +22,16 @@ test('the split uses the shares method of musicindex ADR 0075 R-VALUE-5', () => 
   assert.deepEqual(percentages(block([[10, true]])), [100], 'musicindex ADR 0075 R-VALUE-5 item 5: one recipient gets 100 %. Fix percentages in recipients.js.');
   assert.deepEqual(percentages(block([['x'], [3], [null], [-1]])), [null, 100, null, null], 'musicindex ADR 0075 R-VALUE-5 item 3: a share that is not valid gives no percentage and counts as 0. Fix percentages in recipients.js.');
   assert.deepEqual(percentages(block([[0], [0]])), [null, null], 'musicindex ADR 0075 R-VALUE-5 item 4: S of 0 gives no percentage. Fix percentages in recipients.js.');
+});
+
+test('a percentage has one decimal place, also below 1 % (musicindex ADR 0075 R-VALUE-5 item 1)', () => {
+  const fix = 'musicindex ADR 0075 R-VALUE-5 item 1 and ADR 0082 R-ROUTES-4 item 4: one decimal place, then " %". Fix percentText in recipients.js.';
+  assert.equal(percentText(0.5), '0.5 %', fix);
+  assert.equal(percentText(0.99), '1.0 %', fix);
+  assert.equal(percentText(0.04), '0.0 %', fix);
+  assert.equal(percentText(47.619), '47.6 %', fix);
+  assert.equal(percentText(100), '100.0 %', fix);
+  assert.equal(percentText(null), '—', fix);
 });
 
 test('the fee line names each fee and says that it comes out of the payment (musicindex ADR 0075 R-VALUE-5 item 7)', () => {

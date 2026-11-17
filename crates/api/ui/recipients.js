@@ -220,9 +220,10 @@ export function lookupHint(address) {
   return `Studio found no payment details for this address at ${domain}. Some apps cannot pay it.`;
 }
 
-// The text of a split in percent, as the share bar shows it (ADR 0133). A
-// missing split is a dash.
-export const percentText = (p) => (p === null || p === undefined ? '—' : `${p.toFixed(p < 1 && p > 0 ? 2 : 1)} %`);
+// The text of a split in percent, as the share bar shows it (ADR 0133). It has
+// one decimal place, also below 1 % (musicindex ADR 0075 R-VALUE-5 item 1 and
+// ADR 0082 R-ROUTES-4 item 4). A missing split is a dash.
+export const percentText = (p) => (p === null || p === undefined ? '—' : `${p.toFixed(1)} %`);
 
 // The row of a recipient: the name, the count of feeds and one line for each
 // address of the wallet (ADR 0095 item 7 and ADR 0091 item 2). The count is

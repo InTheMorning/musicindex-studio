@@ -209,6 +209,24 @@
   --share-track: rgba(26, 86, 192, .16);
 }
 
+/* The sizes of the value routes (musicindex ADR 0082 R-ROUTES-7). Each
+   name is the name of its token in tokens.json. The test
+   value-routes.test.mjs compares each value with tokens.json. */
+:root {
+  --radius-value-panel: 14px;
+  --share-stack-width: 160px;
+  --share-stack-height: 8px;
+  --share-stack-end-radius: 4px;
+  --share-stack-gap: 2px;
+  --share-stack-minimum-segment: 3px;
+  --share-stack-fee-stripe: 2px;
+  --share-meter-width: 64px;
+  --share-meter-height: 6px;
+  --share-meter-radius: 3px;
+  --value-columns-share-rem: 6.5rem;
+  --value-columns-address-maximum-rem: 9.5rem;
+}
+
 /* Diff tokens: an added line is green and a removed line is red. They are not
    entity colors and not --error. The sign of each line also shows its kind,
    so color is not the only sign. */
@@ -1240,8 +1258,8 @@ select option { background: var(--level-3); color: var(--text); }
   /* The marker, the name, the meter, the percentage and the address. Fixed
      columns let the meters line up from row to row. The address column has
      the width of the short form of a node address (musicindex ADR 0076
-     R-ADDRESS-1). */
-  grid-template-columns: auto minmax(0, 1fr) 64px 6.5rem minmax(0, 9.5rem);
+     R-ADDRESS-1) and musicindex ADR 0082 R-ROUTES-4 item 6. */
+  grid-template-columns: auto minmax(0, 1fr) var(--share-meter-width) var(--value-columns-share-rem) minmax(0, var(--value-columns-address-maximum-rem));
   align-items: center;
   gap: 10px;
   min-height: var(--row);
@@ -1255,9 +1273,11 @@ select option { background: var(--level-3); color: var(--text); }
 .recipient > summary .address { color: var(--muted); font-size: var(--text-callout); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* At a narrow width, the fixed columns leave no width for the address. The
    address goes on a second line below the name, as the status of a file row
-   (ADR 0105 item 18). The meter and the percentage stay on the first line. */
+   (ADR 0105 item 18). The meter and the percentage stay on the first line,
+   in their fixed columns, so the meters line up (musicindex ADR 0082
+   R-ROUTES-4 item 7). */
 @media (max-width: 760px) {
-  .recipient > summary { grid-template-columns: auto minmax(0, 1fr) 64px auto; row-gap: 2px; }
+  .recipient > summary { grid-template-columns: auto minmax(0, 1fr) var(--share-meter-width) var(--value-columns-share-rem); row-gap: 2px; }
   .recipient > summary .address { grid-column: 2 / -1; grid-row: 2; }
 }
 .recipient > .form { background: var(--level-3); margin: 0 8px 8px; border-radius: 10px; padding: 14px; }
@@ -1266,13 +1286,13 @@ select option { background: var(--level-3); color: var(--text); }
    recipients with a 2 px gap between the parts. */
 .share-meter {
   display: block;
-  width: 64px;
-  height: 6px;
-  border-radius: 3px;
+  width: var(--share-meter-width);
+  height: var(--share-meter-height);
+  border-radius: var(--share-meter-radius);
   background: var(--share-track);
   overflow: hidden;
 }
-.share-meter > span { display: block; height: 100%; border-radius: 3px; background: var(--share); }
+.share-meter > span { display: block; height: 100%; border-radius: var(--share-meter-radius); background: var(--share); }
 /* The bar on the summary line, and the legend on a new line under it. The
    bar is centered over the legend. */
 .share-preview {
@@ -1287,9 +1307,9 @@ select option { background: var(--level-3); color: var(--text); }
 .share-legend { text-align: center; }
 .share-stack {
   display: flex;
-  gap: 2px;
-  width: 160px;
-  height: 8px;
+  gap: var(--share-stack-gap);
+  width: var(--share-stack-width);
+  height: var(--share-stack-height);
 }
 .share-legend { color: var(--muted); font-size: var(--text-callout); font-weight: 400; font-variant-numeric: tabular-nums; }
 /* A part moves to the next line as one unit. Only a part that is wider than
@@ -1316,18 +1336,19 @@ select option { background: var(--level-3); color: var(--text); }
   z-index: 2;
   pointer-events: none;
 }
-.share-stack > span { flex-basis: 0; min-width: 3px; background: var(--share); }
+.share-stack > span { flex-basis: 0; min-width: var(--share-stack-minimum-segment); background: var(--share); }
 .share-stack > span.fee {
-  background: repeating-linear-gradient(45deg, var(--share) 0 2px, var(--share-track) 2px 4px);
+  background: repeating-linear-gradient(45deg, var(--share) 0 var(--share-stack-fee-stripe), var(--share-track) var(--share-stack-fee-stripe) calc(2 * var(--share-stack-fee-stripe)));
 }
-.share-stack > span:first-child { border-radius: 4px 0 0 4px; }
-.share-stack > span:last-child { border-radius: 0 4px 4px 0; }
-.share-stack > span:only-child { border-radius: 4px; }
+.share-stack > span:first-child { border-radius: var(--share-stack-end-radius) 0 0 var(--share-stack-end-radius); }
+.share-stack > span:last-child { border-radius: 0 var(--share-stack-end-radius) var(--share-stack-end-radius) 0; }
+.share-stack > span:only-child { border-radius: var(--share-stack-end-radius); }
 
 /* The Value routes page is at most 560 px wide (ADR 0039 item 12). Each
    group of recipients has a heading row in the group, like the heading of
    the picker. */
 .value-routes { max-width: 560px; }
+.value-routes .group { border-radius: var(--radius-value-panel); }
 .value-group { padding: 12px 16px 4px; font-size: var(--text-footnote); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 
 /* A list entry as one summary line (ADR 0028), a row of its group, like a

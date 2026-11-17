@@ -422,6 +422,16 @@ fn rel_of_writes_the_roles_in_their_sequence() {
         ]),
         "label hosting host"
     );
+    // Curator comes after hosting and before producer (musicindex ADR 0081
+    // R-CURATOR-1 item 1).
+    assert_eq!(
+        roles_from_rel("producer curator hosting"),
+        [
+            PublisherRole::Hosting,
+            PublisherRole::Curator,
+            PublisherRole::Producer
+        ]
+    );
 }
 
 #[test]

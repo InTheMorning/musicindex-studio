@@ -7,9 +7,9 @@ import { liveKey, isLiveItem, statusLabel } from './live.js';
 import { coverOf } from './cover.js';
 import { tabLabel } from './feedcheck.js';
 
-// The eight roles of a publisher feed, in the sequence of musicindex ADR
-// 0036 R-ROLE-1 (ADR 0083 item 1).
-export const ROLES = ['artist', 'label', 'hosting', 'producer', 'host', 'author', 'network', 'sponsor'];
+// The nine roles of a publisher feed, in the sequence of musicindex ADR
+// 0081 R-CURATOR-1 item 1 (ADR 0083 item 1).
+export const ROLES = ['artist', 'label', 'hosting', 'curator', 'producer', 'host', 'author', 'network', 'sponsor'];
 
 // The first-class roles, which the Role menu and the form of a new
 // publisher feed offer (musicindex ADR 0036 R-ROLE-2, ADR 0083 items 2
@@ -332,12 +332,13 @@ export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, 
 
 // ---- The levels of the hierarchy (ADR 0088) ----
 
-// The role headings of the levels, in their sequence (ADR 0088 item 4). A
-// feed is below the heading of its first role, so a feed with the roles
-// artist and label is one feed in Artists.
+// The role headings of the levels, in their sequence (ADR 0215 item 4):
+// Hosting, Labels and Artists, then each other role in the sequence of
+// ROLES. A feed is below the heading of its first role, so a feed with the
+// roles artist and label is one feed in Artists.
 const HEADINGS = [
-  ['hosting', 'Hosting'], ['label', 'Labels'], ['artist', 'Artists'], ['producer', 'Producers'],
-  ['host', 'Hosts'], ['author', 'Authors'], ['network', 'Networks'], ['sponsor', 'Sponsors'],
+  ['hosting', 'Hosting'], ['label', 'Labels'], ['artist', 'Artists'],
+  ...ROLES.filter((role) => !FIRST_CLASS_ROLES.includes(role)).map((role) => [role, `${roleWord(role)}s`]),
 ];
 
 function headingIndex(feed) {

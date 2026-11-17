@@ -6,7 +6,7 @@ Studio keeps both links correct when you add or remove a link.
 
 In RSS, the two types of feed have the medium `publisher`. Studio shows each role of the feed, for example **Artist** or **Artist · Label**. The dot has the color of the first role.
 
-A feed can have more than one role. The sequence is artist, label, hosting, producer, host, author, network and sponsor.
+A feed can have more than one role. The sequence is artist, label, hosting, curator, producer, host, author, network and sponsor. A curator makes playlists.
 When Studio finds the roles in the feed, the dot is hollow until you select the roles in the field **Role**. A feed with no role shows **Feed** with a hollow dot.
 
 ## Make an artist feed or a label feed

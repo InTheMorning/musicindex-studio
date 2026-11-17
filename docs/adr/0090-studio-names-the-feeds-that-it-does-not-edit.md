@@ -5,7 +5,7 @@
 - Owner: operator
 - Accepted: 2026-10-30 by the operator.
 - Changes: [ADR 0085](0085-each-artist-and-label-is-a-destination.md) items 3 and 6.
-- Changes: [ADR 0088](0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) item 4.
+- Changes: [ADR 0088](../archive/adr/0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) item 4.
 - Uses: [ADR 0008](0008-feed-types-and-feed-identity.md) (the feed types), [ADR 0025](0025-studio-serves-cover-art.md) (the image limit of 10 MB).
 
 ## Context

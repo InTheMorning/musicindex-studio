@@ -5,7 +5,7 @@
 - Owner: operator
 - Accepted: 2026-10-30 by the operator.
 - Changes: [ADR 0085](0085-each-artist-and-label-is-a-destination.md) item 1, which gives a row of a publisher feed a dot before its title.
-- Changes: [ADR 0088](0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) item 5, which gives a row of a publisher feed a dot before its title.
+- Changes: [ADR 0088](../archive/adr/0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) item 5, which gives a row of a publisher feed a dot before its title.
 - Revised: on 2026-11-05 the operator changed item 4: "dots are better for clarity".
 - Uses: musicindex ADR 0038 R-DOT-3 (a dot on art), musicindex ADR 0021 R-ART-2 and R-ART-3 item 2 (the art of an artist or a label) and musicindex ADR 0032 R-DOT-1.
 

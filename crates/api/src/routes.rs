@@ -2927,7 +2927,7 @@ pub(crate) async fn set_publisher_role(
                 ApiError::new(
                     StatusCode::UNPROCESSABLE_ENTITY,
                     "invalid_feed",
-                    "give one or more roles: artist, label, hosting, producer, host, author, network or sponsor",
+                    "give one or more roles: artist, label, hosting, curator, producer, host, author, network or sponsor",
                 )
             })?;
         let publisher_id = FeedId(id);

@@ -37,6 +37,11 @@ const FILES: &[(&str, &str, &[u8])] = &[
         include_bytes!("../ui/editor.js"),
     ),
     (
+        "writeresult.js",
+        "text/javascript; charset=utf-8",
+        include_bytes!("../ui/writeresult.js"),
+    ),
+    (
         "conflict.js",
         "text/javascript; charset=utf-8",
         include_bytes!("../ui/conflict.js"),

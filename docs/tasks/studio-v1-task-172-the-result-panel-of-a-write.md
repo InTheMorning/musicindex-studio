@@ -2,7 +2,7 @@
 
 Decision: [ADR 0217](../adr/0217-a-new-artist-sees-the-result-of-a-write-the-payment-types-and-an-undo-of-a-merge.md) items 1 to 6.
 
-Status: Open.
+Status: Complete. The screenshot check passed on 2026-11-18.
 
 ## Problem
 
@@ -47,3 +47,16 @@ Visual, by the main session with screenshots (`.studio-dev/journeys/run.sh`, dat
 - Write each comment and text in Simplified Technical English: `/home/citizen/.agents/skills/asd-ste100/SKILL.md`.
 - Do not commit. Leave the change in the working tree and report the changed files and the check results.
 - Do not make an architecture decision. When the ADR does not answer a question, stop and report.
+
+## Result
+
+- The delegate made the change. The main session corrected three faults that the screenshots showed:
+  - The check icon of the first line had no width, and it filled the panel.
+  - The line "Public address" used the markup of a row group. The label and the address overlapped.
+  - At 390 px, the icon of the Copy button had a width of 0. The rule `.copy-button .icon` has `flex: none` after the correction.
+- Screenshots in `.studio-dev/journeys/runs/v172a/shots/`, 1280 px and 390 px:
+  - The warning and **Put It Online…** after the first write of a new album to the default folder.
+  - **Put It Online…** opens File hosts with the edit form of the folder open.
+  - The line "Public address" with Copy, after the folder got a public address. A local HTTP server
+    served the folder, so that the write could examine the file at its public address.
+- The main session ran `tools/gate.sh`. It passed with 845 UI tests.

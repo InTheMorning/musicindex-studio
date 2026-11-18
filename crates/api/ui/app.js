@@ -2581,7 +2581,7 @@ function newestManifest(state) {
 // One host, a local folder or an S3 or R2 bucket. "Edit" opens the name field and the public
 // address field, with "Save" and "Cancel" (task 022b, ADR 0037). "Save"
 // calls `PUT /connectors/{id}`.
-function HostCard({ connector, connectors, feeds, removeBusy, onRemove, onOpen, onChanged, onMoved }) {
+function HostCard({ connector, connectors, feeds, removeBusy, onRemove, onOpen, onChanged, onMoved, edit = false }) {
   const [movingAll, setMovingAll] = useState(false);
   const config = JSON.parse(connector.config);
   const written = feeds.filter((f) => f.connector_id === connector.id);
@@ -2607,6 +2607,7 @@ function HostCard({ connector, connectors, feeds, removeBusy, onRemove, onOpen, 
     setGateway(config.gateway || 'nsite.lol');
     setEditing(true);
   };
+  useEffect(() => { if (edit) startEdit(); }, [edit]);
   const save = (event) => {
     event.preventDefault();
     run(async () => {
@@ -2752,7 +2753,7 @@ function HostCard({ connector, connectors, feeds, removeBusy, onRemove, onOpen, 
   </article>`;
 }
 
-function Hosts({ connectors, feeds, onChanged, onOpen, onMoved }) {
+function Hosts({ connectors, feeds, onChanged, onOpen, onMoved, view }) {
   const { busy, error, run } = useAction();
   const [linked, setLinked] = useState(null);
   const [adding, setAdding] = useState(false);
@@ -2781,7 +2782,7 @@ function Hosts({ connectors, feeds, onChanged, onOpen, onMoved }) {
   const showForm = adding || connectors.length === 0;
   // The sections of the page come from `pageSequence('hosts')` (ADR 0071).
   const sections = {
-    cards: () => html`${connectors.map((c) => html`<${HostCard} key=${c.id} connector=${c} connectors=${connectors} onMoved=${onMoved} feeds=${feeds} removeBusy=${busy}
+    cards: () => html`${connectors.map((c) => html`<${HostCard} key=${c.id} connector=${c} connectors=${connectors} onMoved=${onMoved} feeds=${feeds} removeBusy=${busy} edit=${Number(view.edit) === c.id}
         onRemove=${() => remove(c)} onOpen=${onOpen} onChanged=${onChanged} />`)}`,
     add: () => (showForm
       ? html`<div class="panel"><h2>${connectors.length === 0 ? 'Connect your first file host' : 'Add a file host'}</h2>
@@ -3969,7 +3970,7 @@ function Shell({ vault, onLock, version }) {
   } else if (view.name === 'root') {
     main = html`<${RootPage} panel=${panel} go=${go} onLock=${lock} />`;
   } else if (view.name === 'hosts') {
-    main = html`<${Hosts} connectors=${connectors} feeds=${feeds} onChanged=${() => load()}
+    main = html`<${Hosts} connectors=${connectors} feeds=${feeds} view=${view} onChanged=${() => load()}
       onOpen=${(id) => go({ name: 'feed', id })} onMoved=${async (id) => { await load(); go({ name: 'change-set', id, area: 'hosts' }); }} />`;
   } else if (view.name === 'settings') {
     main = html`<${SettingsPage} view=${view} go=${go} version=${version} />`;

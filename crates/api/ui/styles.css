@@ -484,6 +484,13 @@ input[type="checkbox"]:disabled { opacity: .5; cursor: default; }
 .notice.error { border: 1px solid var(--error); }
 .notice.warning > strong { display: flex; align-items: center; gap: 6px; color: var(--warning); }
 .notice.warning > strong > .icon { flex: none; width: 1.1em; height: 1.1em; }
+/* The result of a write to one feed (ADR 0217 items 2 to 4). */
+.write-result { display: grid; gap: 12px; }
+.write-result-line { display: flex; align-items: center; gap: 8px; margin: 0; font-weight: 600; }
+.write-result-line > .icon { flex: none; width: 1.2em; height: 1.2em; color: var(--success); }
+.write-result-address { display: grid; gap: 2px; }
+.write-result-url { display: flex; align-items: center; gap: 8px; }
+.write-result-url > .mono { overflow-wrap: anywhere; }
 .notice strong { display: block; }
 /* A button in a notice, such as "Close" of the notice after an import. */
 .notice > .actions { margin-top: 10px; }
@@ -2490,7 +2497,7 @@ button.outline-feed {
    narrow window, the line breaks into two lines. */
 .version-line { display: flex; align-items: center; gap: 8px; margin: 0; }
 .version-line .mono { min-width: 0; overflow-wrap: anywhere; user-select: text; }
-.copy-button .icon { display: block; width: 16px; height: 16px; }
+.copy-button .icon { display: block; flex: none; width: 16px; height: 16px; }
 .key-hint { display: flex; align-items: center; gap: 4px; }
 .key-hint-text { min-width: 0; }
 .key-text, .link-row .text .key-text { white-space: nowrap; }

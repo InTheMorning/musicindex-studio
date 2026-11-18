@@ -49,6 +49,7 @@ import { MOVE_SCOPES, fileHostRows, planRows, stayRows, deleteLabel, deleteAllLa
 import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary, artworkPreview } from './artwork.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, addsAsTrackFile, refusedText, wrongKindText, replacedAddresses, selectedFacts, TRACK_FILES_ACCEPT } from './picker.js';
 import { deleteChoices, deleteButtonEnabled, retireSteps, retireActions, domainLine, DELETE_POINTS, operationNote, refusedDelete } from './feeddelete.js';
+import { writeResult } from './writeresult.js';
 
 // A text where only each web address can break inside a word (musicindex ADR
 // 0065 R-FIT-3 item 3).
@@ -1962,6 +1963,10 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
   const { busy, error, run } = useAction();
   // The progress of the signer while a write signs the planned events.
   const [progress, setProgress] = useState(null);
+  const [result, setResult] = useState(null);
+  const [resultHostId, setResultHostId] = useState(null);
+  const resultTitle = useRef(null);
+  useEffect(() => { if (result) resultTitle.current?.focus(); }, [result]);
   // A diff is for one draft. After a user edit, the diff is not current.
   useEffect(() => { setDiff(null); setLinks(null); }, [draft.edits]);
   // The check of the links of the draft (ADR 0126 item 13). A request that
@@ -1979,7 +1984,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
   // The announcement choice of the footer (ADR 0205 item 19).
   const announce = useAnnounceChoice(refreshDiff);
   // The sheet examines the draft each time that it opens.
-  useEffect(() => { if (open) examine(); }, [open]);
+  useEffect(() => { if (open) { setResult(null); examine(); } }, [open]);
   const removeOperation = (operationId) => run(async () => {
     await api(`/feeds/${feedId}/operations/${operationId}`, { method: 'DELETE' });
     onOpsChanged();
@@ -2062,7 +2067,17 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
     onWritten(feed);
     // The feed page loads the new announcements.
     window.dispatchEvent(new Event(ANNOUNCE_RELOAD));
-    ref.current.close();
+    if (deletion || diff.grants.length > 0) {
+      ref.current.close();
+    } else {
+      const writtenConnectorId = feed.connector_id || hostId;
+      const writtenConnector = targets.find((item) => item.id === writtenConnectorId);
+      if (writtenConnector) {
+        setResultHostId(writtenConnectorId);
+        setResult(writeResult(feed, writtenConnector));
+      }
+      else ref.current.close();
+    }
   });
   const discard = async () => {
     if (!await askConfirm(CONFIRMS.discardDraft())) return;
@@ -2132,10 +2147,20 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
   };
   return html`<dialog ref=${ref} class="sheet" aria-labelledby="review-title" onClose=${onClose}>
     <header>
-      <h2 id="review-title">Review changes</h2>
+      <h2 id="review-title" ref=${result ? resultTitle : undefined} tabIndex=${result ? -1 : undefined}>${result ? result.title : 'Review changes'}</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
     </header>
     <div class="body">
+      ${result ? html`<div class="write-result">
+        <p class="write-result-line"><${Icon} name="check" />${result.line}</p>
+        ${result.address && html`<div class="write-result-address"><div class="notice-label">Public address</div>
+          <div class="write-result-url"><span class="mono">${result.address}</span><${CopyButton} text=${result.address} label="the public address" /></div></div>`}
+        ${result.warning && html`<div class="notice warning" role="status"><strong><${Icon} name="alert" />${result.warning.title}</strong>
+          <p>${result.warning.text}</p><div class="actions"><button class="button action" type="button" onClick=${() => {
+            ref.current.close();
+            go({ name: 'hosts', edit: resultHostId });
+          }}>Put It Online…</button></div></div>`}
+      </div>` : html`
       <p class="hint" role="status">${STATUS[draft.status]}</p>
       ${diff && html`<${ReturnWarning} move=${diff.feed_move} wait=${returnWait} />`}
       ${draft.error && draft.error.code === 'stale_revision'
@@ -2218,14 +2243,18 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
       ${showsExamine({ merge, diff, stale }) && html`<div class="actions">
         <button class="button" type="button" disabled=${busy || draft.status === 'loading'} onClick=${examine}>Examine the Changes</button>
       </div>`}
+      `}
     </div>
     <footer>
+      ${!result && html`
       ${diff && hasWork && !addressesBlocked && !choosing && html`<${AnnounceFooterChoice} choice=${announce} skip=${announceSkipLine(diff)} />`}
       ${deletion && diff && hasWork && !addressesBlocked && !choosing && html`<button class="button destructive" type="button" disabled=${busy || waiting || needsSigner || streamRefusal || blocksWrite(links)} onClick=${write}>
         ${progress ? signProgressLabel(progress) : busy ? 'Writing…' : deletion.label}</button>`}
       <button class=${`button${deletion ? '' : ' destructive'}`} type="button" disabled=${busy || (!deletion && !draft.changed)} onClick=${discard}>${deletion && deletion.cancel ? deletion.cancel : 'Discard the Draft'}</button>
       ${!deletion && diff && hasWork && !addressesBlocked && !choosing && html`<button class="button primary" type="button" disabled=${busy || waiting || needsSigner || streamRefusal || blocksWrite(links)} onClick=${write}>
         ${progress ? signProgressLabel(progress) : busy ? 'Writing…' : 'Write to the File Host'}</button>`}
+      `}
+      ${result && html`<button class="button primary" type="button" onClick=${() => ref.current.close()}>Close</button>`}
     </footer>
   </dialog>`;
 }

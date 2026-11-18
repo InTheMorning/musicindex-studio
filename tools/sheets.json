@@ -934,10 +934,10 @@
       "data": "locked",
       "open": [
         {
-          "js": "$go('Unlock Studio')"
+          "js": "import('/ui/app.js').then(({ api }) => { void api('/vault/signer-key', { method: 'POST' }).catch(() => {}); return 'Unlock requested'; })"
         },
         {
-          "wait": 800
+          "wait": 1000
         }
       ]
     },
@@ -969,6 +969,10 @@
       "open": [
         {
           "js": "$go('Label B')"
+        },
+        {
+          "wait": 800,
+          "js": "$go('Label B', 'main')"
         },
         {
           "wait": 1500,
@@ -1090,14 +1094,26 @@
         },
         {
           "wait": 1200,
-          "js": "$go('Prosperous Soul', 'main')"
+          "js": "document.querySelector('main button[id^=\"person-\"]').click(); 1"
         },
         {
           "wait": 1500,
+          "js": "$go('Link to an Artist or Label Page', 'main')"
+        },
+        {
+          "wait": 1200,
+          "js": "(() => { const d = [...document.querySelectorAll('dialog[open] details')].find(d => d.querySelector('summary').textContent.includes('Your artist and label pages')); if (!d.open) d.querySelector('summary').click(); })()"
+        },
+        {
+          "wait": 400,
+          "js": "document.querySelector('dialog[open] details[open] button.link-row').click(); 1"
+        },
+        {
+          "wait": 400,
           "js": "$go('Save')"
         },
         {
-          "wait": 1000
+          "wait": 1200
         }
       ]
     },
@@ -1111,11 +1127,11 @@
         },
         {
           "wait": 1200,
-          "js": "$go('Suggestions from your feeds')"
+          "js": "(() => { const d = [...document.querySelectorAll('main details')].find(d => d.querySelector('summary').textContent.includes('Suggestions from your feeds')); if (!d.open) d.querySelector('summary').click(); })()"
         },
         {
           "wait": 600,
-          "js": "$go('Check', 'main details[open]')"
+          "js": "(() => { const d = [...document.querySelectorAll('main details')].find(d => d.querySelector('summary').textContent.includes('Suggestions from your feeds')); const b = [...d.querySelectorAll('button')].find(b => b.textContent.includes('Walk Musician')); if (!b) throw new Error('No Walk Musician suggestion'); b.click(); })()"
         },
         {
           "wait": 800
@@ -1140,7 +1156,7 @@
         },
         {
           "wait": 3000,
-          "js": "document.querySelector('dialog[open] .link-row').click(); 1"
+          "js": "$go('Ann Bell Music', 'dialog[open]')"
         },
         {
           "wait": 1000
@@ -1158,6 +1174,10 @@
         {
           "wait": 1200,
           "js": "$go('Prosperous Soul', 'main')"
+        },
+        {
+          "wait": 1500,
+          "js": "$go('Check your feeds', 'main')"
         },
         {
           "wait": 1500,

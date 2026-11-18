@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-11-15
+- Revised: 2026-11-17, section "Consequences": the walk data of task 166.
 - Owner: operator, with the technical choices of the planning model
 - Accepted: 2026-11-15 by the operator, through musicindex ADR 0077 (musicindex `ff65fb9`, revised in `d3db352`). The operator selected that a bottom sheet in a narrow window spans the window, with the window margin as its inner padding.
 - Technical choices: the planning model selected items 4 and 6 to 10, and the shape of the list in item 5.
@@ -47,7 +48,8 @@ The walk keeps its entries in `tools/drive-ui.mjs`. A JSON file of its own keeps
 - At 390 px the close button of each sheet is 16 px from the right side, not 12 px.
 - The People sort menu opens to the left.
 - The folder path of a file host has the break attribute of R-FIT-3 item 3. The full key in the head of a payee page also has it.
-- The walk data does not have the conditions of 22 entries: `collections`, `empty`, `findings`, `label-no-release`, `library`, `linked-page`, `locked`, `network`, `playlist`, `removal-done`, `suggestion`, `two-hosts` and `wrong-feeds`. The walk does not open those entries. Walk data for those conditions is open work.
+- Each condition other than `walk` has a setup file and a steps file in `.studio-dev/walk`, and `.studio-dev/walk/sheets-all.sh` runs each condition ([task 166](../tasks/studio-v1-task-166-walk-data-for-each-sheet.md)). The condition `collections` needs a start with `CollectionsPlace`, which `run.sh` does not give. Its 6 entries do not open, and walk data for them is open work.
+- The folder name and the selected folder of the Release Folder sheet have the break attribute of R-FIT-3 item 3.
 - An entry opens at the start size. A sheet that opens only from a control of the narrow layout needs an entry with a narrow start size.
 
 ## How This Decision Is Checked

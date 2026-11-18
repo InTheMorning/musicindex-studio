@@ -4501,7 +4501,7 @@ function LibraryFolderSheet({ open, path, defaultPath, onMove, onClose }) {
     <div class="body form">
       <div class="group">
         <div class="link-row static"><span class="text"><span class="label">Selected folder</span>
-          <span class="summary mono" aria-live="polite">${target}</span></span></div>
+          <span class="summary mono address-text" data-fit-allow-break aria-live="polite">${target}</span></span></div>
       </div>
       <div class="actions">
         ${desktopApp && html`<button class="button" type="button" disabled=${action.busy} onClick=${choose}>Choose Folder…</button>`}
@@ -4521,7 +4521,7 @@ function LibraryFolderSheet({ open, path, defaultPath, onMove, onClose }) {
           ${folders.map((folder) => {
             const child = parent ? `${parent}/${folder}` : folder;
             return html`<button class="link-row" key=${child} type="button" onClick=${() => { setTarget(child); setParent(child); }}>
-              <span class="text"><span class="label">${folder}</span></span><span class="go" aria-hidden="true">›</span></button>`;
+              <span class="text"><span class="label address-text" data-fit-allow-break>${folder}</span></span><span class="go" aria-hidden="true">›</span></button>`;
           })}
           ${!parent && folders.length === 0 && html`<p class="hint">The library folder has no folders.</p>`}
         </div></section>`}

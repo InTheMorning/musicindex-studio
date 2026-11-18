@@ -194,3 +194,17 @@ Both evaluators put T1, T2 and T3 in their own first five.
 - No real user did these journeys. Each finding is a prediction by an evaluator, or a fact of the code.
 - The walks used no network. The steps with a remote host, a relay or Music Index are code reading only.
 - No walk used server mode, the narrow layout on these journeys or a touch device.
+
+## Operator choices
+
+Operator choices of 2026-11-18. No decision record owns them yet.
+
+- T1: after each write, a result panel tells where the release went and if listeners can get it. When they
+  cannot, the panel gives one next step. The first run does not change.
+- T2: the type choice of a payment address stays. Studio explains each type to the user with a picture, a
+  text and examples, so that the user knows which type to select. The menu `"Type"` stays a select menu.
+  Under it, a panel shows an icon, one sentence, an example and where to find the address. The panel changes
+  with the selection. The labels are `"Lightning address"` and `"Node address"`, as on the website.
+  `"Lightning address"` is the first item and the default.
+- T3: the merge sheet selects no person at the start. Each row tells its feed. After the merge, a message
+  with an undo shows. This needs an undo in the core.

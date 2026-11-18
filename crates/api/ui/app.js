@@ -2814,7 +2814,7 @@ function Hosts({ connectors, feeds, onChanged, onOpen, onMoved }) {
 // shows the tabs of `settingsTabs`, and the panels of the open tab. The open
 // tab is part of the view, so Back and Forward go between tabs. The page
 // opens on General.
-function SettingsPage({ view, go }) {
+function SettingsPage({ view, go, version }) {
   const [draft, setDraft] = useState(() => makeSettingsDraft({}));
   const [revision, setRevision] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -2875,6 +2875,7 @@ function SettingsPage({ view, go }) {
     apps: ConnectedAppsPanel,
     nostr: NostrPanel,
     outside: OutsidePanel,
+    version: VersionPanel,
     move: MovePanel,
     collections: CollectionsPanel,
     library: LibraryPanel,
@@ -2897,7 +2898,7 @@ function SettingsPage({ view, go }) {
     <section class="section settings-content">
       ${sections.map((section) => {
         const Panel = panels[section.id];
-        return html`<${Panel} key=${`${section.id}-${revision}`} draft=${record} draftState=${draft} changed=${changed} causes=${{ ...draftView.causes, ...saveErrors }} />`;
+        return html`<${Panel} key=${`${section.id}-${revision}`} draft=${record} draftState=${draft} changed=${changed} causes=${{ ...draftView.causes, ...saveErrors }} version=${version} />`;
       })}
     </section>
   </div>`;
@@ -3665,7 +3666,7 @@ function writeNav(nav) {
 // The shell. It owns the list of views, the left panel at a wide width, the
 // one stack at a narrow width and the Releases page. Each new view is a history entry, so
 // that the browser Back button works (musicindex ADR 0027 R-NAV-2).
-function Shell({ vault, onLock }) {
+function Shell({ vault, onLock, version }) {
   const [feeds, setFeeds] = useState(null);
   const [connectors, setConnectors] = useState([]);
   // At 760 px or less the window is one stack (musicindex ADR 0030 R-SHELL-2).
@@ -3968,7 +3969,7 @@ function Shell({ vault, onLock }) {
     main = html`<${Hosts} connectors=${connectors} feeds=${feeds} onChanged=${() => load()}
       onOpen=${(id) => go({ name: 'feed', id })} onMoved=${async (id) => { await load(); go({ name: 'change-set', id, area: 'hosts' }); }} />`;
   } else if (view.name === 'settings') {
-    main = html`<${SettingsPage} view=${view} go=${go} />`;
+    main = html`<${SettingsPage} view=${view} go=${go} version=${version} />`;
   } else if (view.name === 'people') {
     // The People list keeps its sort in the navigation record, as a feed
     // group does (ADR 0085 item 8, ADR 0153).
@@ -4944,6 +4945,17 @@ function OutsidePanel({ draft, draftState, changed, causes }) {
   </div></section>`;
 }
 
+// The version of Studio from `GET /status`, as the last section of General
+// (task 165). It has no control and no draft value.
+function VersionPanel({ version }) {
+  if (version == null) return null;
+  return html`<section class="page-section settings-section">
+    <h2>Version</h2><div class="group settings-group">
+      <dl class="facts"><dt>Studio</dt><dd class="mono">${version}</dd></dl>
+    </div>
+  </section>`;
+}
+
 const COLLECTIONS_CHANGED = 'studio-collections-changed';
 
 // The text of the mark of a collection in the left panel (ADR 0176 item 12).
@@ -5375,7 +5387,7 @@ function Studio({ epoch }) {
   }
   // A new user with no feed sees the Welcome page in the Shell (ADR 0119
   // item 11). The vault comes when the user first adds a secret (ADR 0020).
-  return html`<${Shell} vault=${status.vault} onLock=${load} />`;
+  return html`<${Shell} vault=${status.vault} onLock=${load} version=${status.version} />`;
 }
 
 // Ask the user to confirm an action with a sheet of Studio (musicindex ADR

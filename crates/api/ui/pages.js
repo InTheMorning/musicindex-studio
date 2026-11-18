@@ -76,6 +76,7 @@ const PAGES = {
     { id: 'apps', tier: 'setup', tab: 'apps' },
     { id: 'nostr', tier: 'setup', tab: 'nostr' },
     { id: 'outside', tier: 'setup', tab: 'general' },
+    { id: 'version', tier: 'setup', tab: 'general' },
     // The panel shows only in the desktop app (ADR 0149 item 5).
     ...(server || !collections ? [] : [{ id: 'collections', tier: 'setup', tab: 'data' }]),
     // A shell with no list of collections moves its data from here (ADR 0176

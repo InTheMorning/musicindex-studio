@@ -50,7 +50,10 @@ It runs docker compose up -d. Last, it waits at most 60 seconds for three
 facts:
   - The running container uses the image with that digest.
   - The revision label of the container is the commit of the tag vVERSION.
-  - The log of the container has the line "Music Index Studio server VERSION".
+  - The log of the container has the line
+    "Music Index Studio server VERSION (REVISION, DATE)", where REVISION is
+    the first 7 characters of the commit of the tag (musicindex ADR 0083
+    R-VERSION-2).
 The script makes no account and no invite code.
 USAGE
 }
@@ -166,7 +169,9 @@ echo "Pinned in .env: STUDIO_SERVER_IMAGE=${PINNED}"
 docker compose up -d
 
 # Wait at most 60 seconds. The start takes several seconds (Argon2).
-expected_line="Music Index Studio server ${RELEASE}"
+# musicindex ADR 0083 R-VERSION-2: the line also gives the git revision
+# and the build date.
+expected_line="Music Index Studio server ${RELEASE} (${EXPECTED_REVISION:0:7}, "
 actual_revision=""
 digest_found=0
 line_found=0
@@ -185,11 +190,13 @@ for _ in $(seq 1 30); do
         # Read the whole log first. With pipefail, `docker logs | grep -q`
         # can fail when grep stops at the first match.
         log="$(docker logs "${id}" 2>&1 || true)"
-        if grep -qxF "${expected_line}" <<<"${log}"; then
-            line_found=1
-        else
-            line_found=0
-        fi
+        line_found=0
+        while IFS= read -r line; do
+            if [[ "${line}" == "${expected_line}"*")" ]]; then
+                line_found=1
+                break
+            fi
+        done <<<"${log}"
         if [[ "${actual_revision}" == "${EXPECTED_REVISION}" && "${line_found}" -eq 1 && "${digest_found}" -eq 1 ]]; then
             break
         fi
@@ -207,7 +214,7 @@ if [[ "${actual_revision}" != "${EXPECTED_REVISION}" ]]; then
 fi
 if [[ "${line_found}" -ne 1 ]]; then
     echo >&2 "error: the log of the container has no line '${expected_line}'"
-    echo >&2 "       Expected: ${expected_line}"
+    echo >&2 "       Expected: ${expected_line}YYYY-MM-DD)"
     echo >&2 "       Found (first log line): $(docker logs "${id}" 2>&1 | head -n1)"
     exit 1
 fi

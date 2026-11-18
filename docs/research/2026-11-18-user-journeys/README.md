@@ -65,6 +65,8 @@ The method is the same as in the previous study.
 | `walks.md` | Each walk, its steps, its screenshots and its results. | STE |
 | `step-counts.md` | The step counts of the main journeys, with a comparison to the previous study. | STE |
 | `observations.md` | The observed facts and defects for the analysis. | STE |
+| `analysis.md` | The ranked themes of two journeys for a new independent artist. | STE |
+| `evaluations/` | The cognitive walkthrough and the heuristic evaluation that `analysis.md` uses. | Tool output |
 | `inventory/A-shell-and-settings.md` | Run A: first run, sign-in, vault, navigation, file hosts, Settings, collections, apps, live shows, notices, errors, surfaces and unused controls. | Tool output |
 | `inventory/B-feed-editor.md` | Run B: each journey in the feed editor, Review, the write, versions, conflicts, files, moves and deletion. | Tool output |
 | `inventory/C-people.md` | Run C: People, the person pages, merges, and the use of a person in a feed. | Tool output |

@@ -43,9 +43,9 @@ The [human check walk of 2026-11-14](../reviews/2026-11-14-human-check-walk.md),
 
 - Xvfb has no graphics card, so WebKitGTK paints in software. On a computer with an NVIDIA card, the app starts with `WEBKIT_DISABLE_DMABUF_RENDERER=1` (`crates/desktop-app/src/renderer.rs`). The drive did not use the Tauri binary.
 - The sandbox cannot read `/proc`, so the drive measured no CPU use.
-- Inference: the CPU use of `WebKitWebProcess` comes from the paint of rows that come into view. The cost then increases with the number of rows in the sheet. The "Detailed" view shows each line that the diff gives, also the lines of the kind `same` (`shownLines` in `crates/api/ui/review.js`).
+- Inference: the CPU use of `WebKitWebProcess` comes from the paint of rows that come into view. The cost then increases with the number of rows in the sheet.
+- The "Detailed" view already shows only the changed lines and `CONTEXT_LINES` lines around each change (`runs` in `crates/api/ui/review.js`). In the test draft, each of the 3606 lines is a new line, so the view hides no line.
 
 ## Open Items
 
 - A WebKitGTK profile on the computer of the operator can find the cause there. It is a human check.
-- A possible change is a "Detailed" view that shows only the changed lines with some lines around each change. It is a design decision of the operator, and this task does not make it.

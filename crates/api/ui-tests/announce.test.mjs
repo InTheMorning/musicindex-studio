@@ -27,6 +27,7 @@ test('the footer of the review sheet gives the label and the cause of no podping
   assert.equal(ANNOUNCE_FOOTER_LABEL, 'Send a podping', 'ADR 0205 item 19: use the footer label.');
   assert.equal(announceSkipLine({ announcements: [], announce_skip: 'no_address' }), 'No podping: this feed has no public address.', fix);
   assert.equal(announceSkipLine({ announcements: [], announce_skip: 'feed_deleted' }), 'No podping: this write deletes the feed file.', fix);
+  assert.equal(announceSkipLine({ announcements: [], announce_skip: 'feed_unchanged' }), 'No podping: this write does not change the feed.', fix);
   for (const diff of [{ announcements: [], announce_skip: 'off' }, { announcements: [], announce_skip: null }, {}, null]) {
     assert.equal(announceSkipLine(diff), null, `The check box gives the choice, so no line repeats it. ${fix}`);
   }

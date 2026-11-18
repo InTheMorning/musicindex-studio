@@ -2429,8 +2429,15 @@ fn diff_planned(
     let feed_move = feed_move(collection, hosts, &feed_row)?;
     let mut extra = operation_bytes(collection, hosts, &operations)?;
     extra.extend(feed_move_bytes(feed_move.as_ref()));
-    let (announcements, announce_skip) =
-        plan_announcements(collection, hosts, &feed_row, feed_move.as_ref(), granted)?;
+    let (announcements, announce_skip) = plan_announcements(
+        collection,
+        hosts,
+        &feed_row,
+        feed_move.as_ref(),
+        &operations,
+        draft.base_xml != draft.draft_xml,
+        granted,
+    )?;
     extra.extend(announce_bytes(&announcements, announce_skip));
     let grants = draft_grant_list(collection, id, &feed)?;
     extra.extend(grant_bytes(&grant_apps(collection, id, &grants)?));
@@ -2878,11 +2885,24 @@ fn plan_announcements(
     hosts: &Hosts,
     row: &FeedRow,
     feed_move: Option<&FeedMove>,
+    operations: &[HostOperation],
+    feed_changed: bool,
     granted: bool,
 ) -> Result<(Vec<PlannedAnnouncement>, Option<AnnounceSkip>), PipelineError> {
-    // A delete of the feed file announces nothing (ADR 0131).
+    // A delete of the feed file has its own skip cause (ADR 0131).
     if collection.has_draft_feed_delete(row.id)? {
         return Ok((Vec::new(), Some(AnnounceSkip::FeedDeleted)));
+    }
+    // A write of only deletions does not change the feed, so it announces
+    // nothing (ADR 0198 item 16). A granted write obeys the same rule.
+    if !feed_changed
+        && feed_move.is_none()
+        && !operations.is_empty()
+        && operations
+            .iter()
+            .all(|operation| operation.kind == OperationKind::Delete)
+    {
+        return Ok((Vec::new(), Some(AnnounceSkip::FeedUnchanged)));
     }
     // A granted write always announces, because a live show needs it (ADR 0136
     // item 6).
@@ -4619,8 +4639,15 @@ fn write_draft_signed_inner(
     let mut extra = operation_bytes(collection, hosts, &operations)?;
     extra.extend(feed_move_bytes(feed_move.as_ref()));
     let granted = matches!(links, LinkCheck::GrantedWrite);
-    let (announcements, announce_skip) =
-        plan_announcements(collection, hosts, &row, feed_move.as_ref(), granted)?;
+    let (announcements, announce_skip) = plan_announcements(
+        collection,
+        hosts,
+        &row,
+        feed_move.as_ref(),
+        &operations,
+        draft.base_xml != draft.draft_xml,
+        granted,
+    )?;
     extra.extend(announce_bytes(&announcements, announce_skip));
     let grants = draft_grant_list(collection, id, &feed)?;
     // The apps of the grants are read now. The draft goes out later in this

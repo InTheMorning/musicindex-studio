@@ -26,6 +26,7 @@ export function announceSkipLine(diff) {
   const skip = diff ? diff.announce_skip : null;
   if (skip === 'no_address') return 'No podping: this feed has no public address.';
   if (skip === 'feed_deleted') return 'No podping: this write deletes the feed file.';
+  if (skip === 'feed_unchanged') return 'No podping: this write does not change the feed.';
   return null;
 }
 

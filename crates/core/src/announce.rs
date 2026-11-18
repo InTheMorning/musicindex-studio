@@ -105,6 +105,8 @@ pub enum AnnounceSkip {
     NoAddress,
     /// The write deletes the feed file (ADR 0131).
     FeedDeleted,
+    /// The write deletes files but does not change or move the feed.
+    FeedUnchanged,
 }
 
 impl AnnounceSkip {
@@ -115,6 +117,7 @@ impl AnnounceSkip {
             Self::Off => "off",
             Self::NoAddress => "no_address",
             Self::FeedDeleted => "feed_deleted",
+            Self::FeedUnchanged => "feed_unchanged",
         }
     }
 }

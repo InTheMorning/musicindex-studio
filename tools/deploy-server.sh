@@ -175,6 +175,7 @@ expected_line="Music Index Studio server ${RELEASE} (${EXPECTED_REVISION:0:7}, "
 actual_revision=""
 digest_found=0
 line_found=0
+found_line=""
 for _ in $(seq 1 30); do
     id="$(docker compose ps -q studio | head -n1)"
     if [[ -n "${id}" ]]; then
@@ -194,6 +195,7 @@ for _ in $(seq 1 30); do
         while IFS= read -r line; do
             if [[ "${line}" == "${expected_line}"*")" ]]; then
                 line_found=1
+                found_line="${line}"
                 break
             fi
         done <<<"${log}"
@@ -220,7 +222,7 @@ if [[ "${line_found}" -ne 1 ]]; then
 fi
 echo "   the container uses ${repo}@${digest}"
 echo "   revision ${actual_revision} is the commit of v${RELEASE}"
-echo "   log line found: ${expected_line}"
+echo "   log line found: ${found_line}"
 REMOTE
 
 echo ":: Done"

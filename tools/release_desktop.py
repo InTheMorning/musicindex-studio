@@ -193,7 +193,10 @@ def smoke(target, archive):
         binary = next(folder.glob(f"*/{binary_name}"))
         result = subprocess.run([str(binary), "--version"], capture_output=True, text=True,
                                 timeout=10, check=True)
-        if result.stdout.strip() != f"Music Index Studio {version()}":
+        # musicindex ADR 0083 R-VERSION-2: the line also gives the git
+        # revision and the build date.
+        line = rf"Music Index Studio {re.escape(version())} \([0-9a-f]{{7,}}(-dirty)?, \d{{4}}-\d{{2}}-\d{{2}}\)"
+        if not re.fullmatch(line, result.stdout.strip()):
             raise ValueError("the packaged binary has the wrong version")
         data = folder / "data"
         vault_hash = smoke_start(binary, data, None)

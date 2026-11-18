@@ -2486,6 +2486,10 @@ button.outline-feed {
   .row-menu-text { display: none; }
 }
 .copy-button { flex: none; color: var(--muted); }
+/* The version line of Settings (musicindex ADR 0083 R-VERSION-4). In a
+   narrow window, the line breaks into two lines. */
+.version-line { display: flex; align-items: center; gap: 8px; margin: 0; }
+.version-line .mono { min-width: 0; overflow-wrap: anywhere; user-select: text; }
 .copy-button .icon { display: block; width: 16px; height: 16px; }
 .key-hint { display: flex; align-items: center; gap: 4px; }
 .key-hint-text { min-width: 0; }

@@ -16,6 +16,7 @@ directories.workspace = true
 axum = "0.8"
 futures-util = { version = "0.3", default-features = false }
 getrandom = "0.4"
+musicindex-build-info.workspace = true
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 studio-core.workspace = true

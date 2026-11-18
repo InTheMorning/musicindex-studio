@@ -74,13 +74,19 @@ fn harden_process() -> Result<(), String> {
     Ok(())
 }
 
+/// The name of the app in the version line (musicindex ADR 0083 R-VERSION-2).
+const NAME: &str = "Music Index Studio server";
+
 async fn run() -> Result<(), String> {
     harden_process()?;
+    // musicindex ADR 0083 R-VERSION-2 and R-VERSION-3.
+    let build = musicindex_build_info::build_info!(NAME);
+    studio_api::set_build_info(build);
     let args: Vec<String> = std::env::args().skip(1).collect();
     // The same two options as `studio-desktop`. The image smoke test of
     // ADR 0066 runs them.
     if args == ["--version"] {
-        println!("Music Index Studio server {}", env!("CARGO_PKG_VERSION"));
+        println!("{}", build.version_line());
         return Ok(());
     }
     if args == ["--help"] {
@@ -159,7 +165,10 @@ async fn serve(options: ServeOptions) -> Result<(), String> {
     let listener = tokio::net::TcpListener::bind(options.listen)
         .await
         .map_err(|e| e.to_string())?;
-    println!("Music Index Studio server {}", env!("CARGO_PKG_VERSION"));
+    println!(
+        "{}",
+        musicindex_build_info::build_info!(NAME).version_line()
+    );
     println!("Data: {}", options.data_dir.display());
     println!("Listening on {}", options.listen);
     println!("Public origin: {}", options.origin.text);

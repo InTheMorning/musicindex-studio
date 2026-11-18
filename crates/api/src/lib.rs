@@ -46,6 +46,27 @@ pub use workspace::{
     Workspace, WorkspaceHandle, private_dir,
 };
 
+pub use musicindex_build_info::BuildInfo;
+
+/// The build values of the binary that serves the API (musicindex ADR 0083
+/// R-VERSION-3). The binary sets them once at its start, because the macro
+/// `build_info!` reads the values of the crate that calls it.
+static BUILD: std::sync::OnceLock<BuildInfo> = std::sync::OnceLock::new();
+
+/// Give the build values of the binary to the status route. Call it once,
+/// before the first request. A second call changes nothing.
+pub fn set_build_info(info: BuildInfo) {
+    // A second call keeps the first values. This is not an error.
+    let _ = BUILD.set(info);
+}
+
+/// The build values for the status route. Before [`set_build_info`], the
+/// version is the version of this crate and the other values are unknown.
+pub(crate) fn build_info() -> BuildInfo {
+    *BUILD
+        .get_or_init(|| BuildInfo::new("Music Index Studio", env!("CARGO_PKG_VERSION"), None, None))
+}
+
 /// A system folder picker supplied by the desktop app.
 pub type FolderPicker =
     Arc<dyn Fn(PathBuf) -> Pin<Box<dyn Future<Output = Option<PathBuf>> + Send>> + Send + Sync>;

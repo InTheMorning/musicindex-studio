@@ -610,6 +610,9 @@ fn setup(app: &AppHandle) -> Result<(), String> {
 fn main() {
     // ADR 0104 item 1: this call comes first.
     studio_desktop::harden_process();
+    // musicindex ADR 0083 R-VERSION-3: the status route gives the build
+    // values of this binary.
+    studio_desktop::set_build_info(musicindex_build_info::build_info!("Music Index Studio"));
     #[cfg(target_os = "linux")]
     renderer::restart_if_necessary();
     let app = tauri::Builder::default()

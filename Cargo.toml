@@ -13,6 +13,8 @@ publish = false
 directories = "6"
 studio-core = { path = "crates/core" }
 studio-api = { path = "crates/api" }
+# The build values of musicindex ADR 0083 R-VERSION-8.
+musicindex-build-info = { git = "https://github.com/InTheMorning/musicindex-lib", rev = "e6d11118d33069c26c01368f7de71524988039c6" }
 # Signing and the multipart upload body only. No default features.
 rusty-s3 = { version = "0.10", default-features = false, features = ["rustcrypto", "xml"] }
 # SSH client for the SFTP connector. The vendored OpenSSL needs no system library.

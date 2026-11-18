@@ -13,9 +13,11 @@ path = "src/main.rs"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+musicindex-build-info.workspace = true
 
 [dependencies]
 directories.workspace = true
+musicindex-build-info.workspace = true
 studio-core.workspace = true
 studio-desktop = { path = "../desktop" }
 tauri = { version = "2", features = ["tray-icon"] }

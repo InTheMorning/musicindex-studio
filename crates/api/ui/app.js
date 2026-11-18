@@ -4948,13 +4948,14 @@ function OutsidePanel({ draft, draftState, changed, causes }) {
   </div></section>`;
 }
 
-// The version of Studio from `GET /status`, as the last section of General
-// (task 165). It has no control and no draft value.
+// The version line of Studio from `GET /status`, as the last section of
+// General (musicindex ADR 0083 R-VERSION-4). The text can be selected, and
+// the button copies the line for a bug report. It has no draft value.
 function VersionPanel({ version }) {
   if (version == null) return null;
   return html`<section class="page-section settings-section">
     <h2>Version</h2><div class="group settings-group">
-      <dl class="facts"><dt>Studio</dt><dd class="mono">${version}</dd></dl>
+      <p class="version-line"><span class="mono">${version}</span><${CopyButton} text=${version} label="version" /></p>
     </div>
   </section>`;
 }
@@ -5390,7 +5391,7 @@ function Studio({ epoch }) {
   }
   // A new user with no feed sees the Welcome page in the Shell (ADR 0119
   // item 11). The vault comes when the user first adds a secret (ADR 0020).
-  return html`<${Shell} vault=${status.vault} onLock=${load} version=${status.version} />`;
+  return html`<${Shell} vault=${status.vault} onLock=${load} version=${status.version_line} />`;
 }
 
 // Ask the user to confirm an action with a sheet of Studio (musicindex ADR

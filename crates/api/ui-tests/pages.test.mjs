@@ -97,9 +97,9 @@ test('tierError gives a message that names ADR 0071 item 1 for an unknown tier',
 
 test('studio-settings has account only on a server', () => {
   const ids = (server) => pageSequence('studio-settings', { server }).map((s) => s.id);
-  assert.deepEqual(ids(true), ['scale', 'lock', 'account', 'apps', 'nostr', 'outside', 'library']);
+  assert.deepEqual(ids(true), ['scale', 'lock', 'account', 'apps', 'nostr', 'outside', 'version', 'library']);
   // ADR 0176 items 10 and 11: the desktop app has "Collections", and a shell with no list has "Move Studio".
-  assert.deepEqual(ids(false), ['scale', 'lock', 'window', 'apps', 'nostr', 'outside', 'collections', 'library']);
+  assert.deepEqual(ids(false), ['scale', 'lock', 'window', 'apps', 'nostr', 'outside', 'version', 'collections', 'library']);
   const desktop = pageSequence('studio-settings', { server: false, collections: false });
   assert.equal(desktop.find((s) => s.id === 'move').tier, 'setup');
   assert.equal(tierError('studio-settings', desktop), null);
@@ -107,7 +107,7 @@ test('studio-settings has account only on a server', () => {
 
 test('a server that holds no assets shows files on this server in the tier limits (ADR 0105 item 17)', () => {
   const sections = pageSequence('studio-settings', { server: true, holdAssets: false });
-  assert.deepEqual(sections.map((s) => s.id), ['scale', 'lock', 'account', 'apps', 'nostr', 'outside', 'files']);
+  assert.deepEqual(sections.map((s) => s.id), ['scale', 'lock', 'account', 'apps', 'nostr', 'outside', 'version', 'files']);
   assert.equal(sections.at(-1).tier, 'limits');
   assert.equal(tierError('studio-settings', sections), null);
   const on = pageSequence('studio-settings', { server: true, holdAssets: true }).map((s) => s.id);
@@ -120,12 +120,12 @@ test('Settings tabs give the labels and sections of ADR 0166 item 1', () => {
   const desktop = settingsTabs({ server: false });
   assert.deepEqual(desktop.map(({ label }) => label), ['General', 'Nostr', 'Apps', 'Data']);
   assert.deepEqual(desktop.map(({ sections }) => sections.map(({ id }) => id)), [
-    ['scale', 'lock', 'window', 'outside'], ['nostr'], ['apps'], ['collections', 'library'],
+    ['scale', 'lock', 'window', 'outside', 'version'], ['nostr'], ['apps'], ['collections', 'library'],
   ]);
   const server = settingsTabs({ server: true, holdAssets: true });
   assert.deepEqual(server.map(({ label }) => label), ['General', 'Account', 'Nostr', 'Apps', 'Data']);
   assert.deepEqual(server.map(({ sections }) => sections.map(({ id }) => id)), [
-    ['scale', 'lock', 'outside'], ['account'], ['nostr'], ['apps'], ['library'],
+    ['scale', 'lock', 'outside', 'version'], ['account'], ['nostr'], ['apps'], ['library'],
   ]);
   for (const tabs of [desktop, server, settingsTabs({ server: true, holdAssets: false })]) {
     for (const tab of tabs) assert.equal(tierError(`studio-settings ${tab.label}`, tab.sections), null);

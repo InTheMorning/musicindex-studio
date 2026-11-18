@@ -197,14 +197,14 @@ Both evaluators put T1, T2 and T3 in their own first five.
 
 ## Operator choices
 
-Operator choices of 2026-11-18. No decision record owns them yet.
+Operator choices of 2026-11-18. [ADR 0217](../../adr/0217-a-new-artist-sees-the-result-of-a-write-the-payment-types-and-an-undo-of-a-merge.md) owns them.
 
 - T1: after each write, a result panel tells where the release went and if listeners can get it. When they
   cannot, the panel gives one next step. The first run does not change.
 - T2: the type choice of a payment address stays. Studio explains each type to the user with a picture, a
   text and examples, so that the user knows which type to select. The menu `"Type"` stays a select menu.
   Under it, a panel shows an icon, one sentence, an example and where to find the address. The panel changes
-  with the selection. The labels are `"Lightning address"` and `"Node address"`, as on the website.
-  `"Lightning address"` is the first item and the default.
+  with the selection. The words of ADR 0138 stay: `"LNURL address"` and `"Node address"`. `"LNURL Address"`
+  is the first item and the default.
 - T3: the merge sheet selects no person at the start. Each row tells its feed. After the merge, a message
   with an undo shows. This needs an undo in the core.

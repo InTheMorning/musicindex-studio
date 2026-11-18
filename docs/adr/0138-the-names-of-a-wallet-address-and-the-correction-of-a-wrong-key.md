@@ -8,6 +8,7 @@
 - Changes: the words of [ADR 0099](../archive/adr/0099-the-people-destination-and-the-page-of-a-person.md) item 15 in the UI.
 - Changes: the button of [ADR 0103](../archive/adr/0103-one-person-collects-the-items-of-many-suggestions.md) item 18 for a key with a warning.
 - Uses: [ADR 0111](../archive/adr/0111-the-page-of-a-person-checks-the-feeds.md) for the correction of a key.
+- Used by: [ADR 0217](0217-a-new-artist-sees-the-result-of-a-write-the-payment-types-and-an-undo-of-a-merge.md) items 7 to 11. The words of item 3 stay. "LNURL Address" is the first item of a type menu.
 - Source: [findings of local use, findings 19 and 20](../reviews/2026-11-06-local-use-findings.md)
 
 ## Context

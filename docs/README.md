@@ -194,6 +194,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0214: Each sheet fits the window, and the walk opens it](adr/0214-each-sheet-fits-the-window-and-the-walk-opens-it.md)
 - [ADR 0215: The left panel shows the levels of the publisher feeds](adr/0215-the-left-panel-shows-the-levels-of-the-publisher-feeds.md)
 - [ADR 0216: The Linux packages of the desktop app](adr/0216-the-linux-packages-of-the-desktop-app.md)
+- [ADR 0217: A new artist sees the result of a write, the payment types and an undo of a merge](adr/0217-a-new-artist-sees-the-result-of-a-write-the-payment-types-and-an-undo-of-a-merge.md)
 
 ## Plans
 

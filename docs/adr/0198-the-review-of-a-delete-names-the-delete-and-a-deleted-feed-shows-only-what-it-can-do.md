@@ -9,6 +9,7 @@
 - Uses: [ADR 0193](0193-a-destructive-button-is-the-first-button-of-its-row.md) items 1 and 4, and musicindex ADR 0080 R-ACT-3 items 1 and 3.
 - Source: finding 5 and finding 6 of the [human test findings of 0.1.0-rc.22](../reviews/2026-11-13-rc22-human-test-findings.md).
 - Revised: 2026-11-15 by operator decision. Items 9 to 11 give **Put the File Back**, and items 12 to 15 give the write of only deletions. The operator selected them on 2026-11-14, from drawings. These rules were in ADR 0208 and ADR 0209, which are deleted. Item 6 names item 9.
+- Revised: 2026-11-17 by operator decision. Items 16 and 17 give the podping of a write of only deletions. The operator selected "No podping" on 2026-11-17, from drawings.
 
 ## Context
 
@@ -48,6 +49,8 @@ The read-only feed also shows **Stop Retiring** and **Link to This Page**. Each 
 13. The destructive write button is the first button of the footer (ADR 0193 items 1 and 4). **Discard the Draft** then has the normal style, at the right edge. The footer thus has one destructive button.
 14. A refused deletion ([ADR 0036](0036-library-records-host-inventory-and-host-operations.md) item 13) does not count. A diff with only refused deletions has no write.
 15. A write that changes the feed and also deletes a file keeps **Write to the File Host**. Items 1 to 3 do not change.
+16. A write of only deletions (item 12) sends no podping. The feed file does not change, so an index has nothing new to read. `plan_announcements` (`crates/core/src/pipeline.rs`) plans no announcement and gives the skip cause `feed_unchanged`.
+17. The review footer shows the line "No podping: this write does not change the feed." in the position of the check box (ADR 0205 item 19). The UI shows the cause from the core and adds no rule about the operations.
 
 ## Alternatives Considered
 
@@ -62,7 +65,7 @@ The read-only feed also shows **Stop Retiring** and **Link to This Page**. Each 
 - The user sees in the button what the write deletes.
 - A deleted feed shows **Put the File Back** and **Check Again** as the actions of the Retire block. It has a way back in the UI.
 - A user who deletes the old files of a move sees a red button with the count.
-- It is not decided if a write of only deletions needs a podping.
+- A write of only deletions announces nothing, also when the announcements are on.
 - The feed row of the API has one more field.
 
 ## How This Decision Is Checked
@@ -74,6 +77,8 @@ Mechanical:
 - A Node test or an API test proves that a feed with a done delete gives the field of item 7, and that the UI hides the controls of items 6 and 7 for it.
 - A Node test proves that the Retire block view gives **Put the File Back** only for a done delete, before **Check Again**.
 - A Node test proves the write view of only deletions: **Delete 1 File** and **Delete N Files**. It proves no destructive view with a feed change, a feed move, an upload or only refused deletions.
+- A Rust test proves that a write of only deletions gives no announcement and the skip cause `feed_unchanged`. It also proves that a write that changes the feed and deletes a file keeps its announcement.
+- A Node test proves the footer line of item 17 for the skip cause `feed_unchanged`.
 - The commit checks pass.
 
 Visual, by the planning model:

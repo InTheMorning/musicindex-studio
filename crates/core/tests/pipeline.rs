@@ -3255,6 +3255,90 @@ fn with_the_choice_off_the_diff_gives_off_and_the_write_queues_nothing() {
 }
 
 #[test]
+fn only_deletions_give_feed_unchanged_and_no_announcement() {
+    let s = setup();
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    let connector_id = s.collection.feed(s.feed).unwrap().connector_id.unwrap();
+    s.connector
+        .write("stray.jpg", b"stray", &Expected::Absent)
+        .unwrap();
+    inventory::scan(&s.collection, &s.hosts, connector_id).unwrap();
+    s.collection
+        .add_draft_operation(
+            s.feed,
+            DraftOperationKind::Delete,
+            None,
+            connector_id,
+            "stray.jpg",
+        )
+        .unwrap();
+
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert_eq!(diff.announce_skip, Some(AnnounceSkip::FeedUnchanged));
+    assert_eq!(announced(&diff), []);
+}
+
+#[test]
+fn a_feed_change_and_deletion_keep_the_announcement() {
+    let s = setup();
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    let connector_id = s.collection.feed(s.feed).unwrap().connector_id.unwrap();
+    s.connector
+        .write("stray.jpg", b"stray", &Expected::Absent)
+        .unwrap();
+    inventory::scan(&s.collection, &s.hosts, connector_id).unwrap();
+    pipeline::edit_draft(&s.collection, s.feed, |feed| {
+        feed.title = Some("Changed".into());
+    })
+    .unwrap();
+    s.collection
+        .add_draft_operation(
+            s.feed,
+            DraftOperationKind::Delete,
+            None,
+            connector_id,
+            "stray.jpg",
+        )
+        .unwrap();
+
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert_eq!(diff.announce_skip, None);
+    assert_eq!(
+        announced(&diff),
+        [("https://music.example/album.xml".to_owned(), true)]
+    );
+}
+
+#[test]
+fn refused_deletions_do_not_give_feed_unchanged() {
+    let s = setup();
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    let connector_id = s.collection.feed(s.feed).unwrap().connector_id.unwrap();
+    s.connector
+        .write("cover.jpg", b"cover", &Expected::Absent)
+        .unwrap();
+    inventory::scan(&s.collection, &s.hosts, connector_id).unwrap();
+    let cover_url = s.connector.public_url("cover.jpg").unwrap();
+    pipeline::edit_draft(&s.collection, s.feed, move |feed| {
+        feed.image = Some(cover_url);
+    })
+    .unwrap();
+    s.collection
+        .add_draft_operation(
+            s.feed,
+            DraftOperationKind::Delete,
+            None,
+            connector_id,
+            "cover.jpg",
+        )
+        .unwrap();
+
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert_eq!(diff.blocked.len(), 1);
+    assert_ne!(diff.announce_skip, Some(AnnounceSkip::FeedUnchanged));
+}
+
+#[test]
 fn a_write_records_its_time_and_the_outside_check_links_the_podping_to_it() {
     let mut s = setup();
     edit_title(&s);

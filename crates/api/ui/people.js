@@ -6,7 +6,7 @@
 import { shortKey } from './nostrkey.js';
 import { titleCase } from './casing.js';
 import { feedKind, isPublisher, isReadOnly, roleWord, compareNames, letterGroups } from './shell.js';
-import { placesText, recipientTitle, percentText } from './recipients.js';
+import { placesText, recipientTitle, percentText, WALLET_TYPES } from './recipients.js';
 
 // The actions of one saved wallet address (ADR 0207 items 53 and 54).
 export function addressMenu(isDefault, hasAddress) {
@@ -850,7 +850,7 @@ export const LINK_FORMS = {
     editTitle: 'Edit a Wallet',
     editButton: 'Save the Wallet',
     fields: [
-      { id: 'recipient_type', label: 'Type', select: [['lnaddress', 'LNURL Address'], ['node', 'Node Address']], start: 'lnaddress' },
+      { id: 'recipient_type', label: 'Type', select: true, start: 'lnaddress' },
       { id: 'address', label: 'Address', required: true },
       { id: 'custom_key', label: 'Custom key', node: true, hint: 'Some nodes need a custom key and an account to find the wallet.' },
       { id: 'custom_value', label: 'Account', node: true },
@@ -882,7 +882,8 @@ export const LINK_FORMS = {
 
 // The fields of a link form that show, from the type of a wallet.
 export const linkFields = (kind, values) => LINK_FORMS[kind].fields
-  .filter((f) => !f.node || values.recipient_type === 'node');
+  .filter((f) => !f.node || values.recipient_type === 'node')
+  .map((f) => f.select === true ? { ...f, select: WALLET_TYPES } : f);
 
 export const linkStart = (kind) => ({
   ...Object.fromEntries(LINK_FORMS[kind].fields.map((f) => [f.id, f.start ?? ''])),

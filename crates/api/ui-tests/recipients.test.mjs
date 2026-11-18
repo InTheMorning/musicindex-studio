@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {
   recipientRow, rowLines, placesText, useRow, outcomeText, causeText, blockedText,
   initialStatuses, refreshedStatuses, addressLines, lnaddressOf, nodeOf, recipientTitle, lookupHint, memberStart, startType, operationLine, suggestionField, breakParts, OTHER_ADDRESS, startWrite, finishWrite, nextToWrite, statusText, writableIds, writeLabel, retryStatuses, nameOf, statusError,
-  walletActions, walletSheet, walletSheetStart, walletTypeChange, walletDetailsLine, walletSheetBody, walletSheetReady, WALLET_TYPES, CUSTOM_KEY_HINT, shareParts, percentages, feeLine, percentText,
+  walletActions, walletSheet, walletSheetStart, walletTypeChange, walletDetailsLine, walletSheetBody, walletSheetReady, WALLET_TYPES, addressProblem, CUSTOM_KEY_HINT, shareParts, percentages, feeLine, percentText,
 } from '../ui/recipients.js';
 
 const equalParts = (count) => Array.from({ length: count }, (_, i) => ({ name: `R${i}`, address: `r${i}`, split: '1' }));
@@ -22,6 +22,27 @@ test('the split uses the shares method of musicindex ADR 0075 R-VALUE-5', () => 
   assert.deepEqual(percentages(block([[10, true]])), [100], 'musicindex ADR 0075 R-VALUE-5 item 5: one recipient gets 100 %. Fix percentages in recipients.js.');
   assert.deepEqual(percentages(block([['x'], [3], [null], [-1]])), [null, 100, null, null], 'musicindex ADR 0075 R-VALUE-5 item 3: a share that is not valid gives no percentage and counts as 0. Fix percentages in recipients.js.');
   assert.deepEqual(percentages(block([[0], [0]])), [null, null], 'musicindex ADR 0075 R-VALUE-5 item 4: S of 0 gives no percentage. Fix percentages in recipients.js.');
+});
+
+test('payment address types follow ADR 0217 and reject values with the wrong form', () => {
+  assert.deepEqual(WALLET_TYPES.map(([type]) => type), ['lnaddress', 'node']);
+  assert.equal(addressProblem('node', 'a'.repeat(66)), null);
+  assert.equal(addressProblem('lnaddress', 'name@getalby.com'), null);
+  assert.deepEqual(addressProblem('node', 'name@getalby.com'), { reason: 'This is an LNURL address.', otherType: 'lnaddress' });
+  for (const value of ['', 'a@b@c', 'a @b.com', 'a@b/c']) {
+    assert.ok(addressProblem('lnaddress', value), `refuses ${JSON.stringify(value)}`);
+  }
+});
+
+test('the payment type panel gives the texts and examples of ADR 0217 item 8', async () => {
+  const { readFileSync } = await import('node:fs');
+  const panel = readFileSync(new URL('../ui/peoplepages.js', import.meta.url), 'utf8');
+  const values = readFileSync(new URL('../ui/values.js', import.meta.url), 'utf8');
+  for (const text of ['Looks like an email address. Most wallet apps give you one. Some apps call it a Lightning address.',
+    'name@getalby.com', 'In your wallet app, under Receive.',
+    'A code of 66 letters and numbers. You have one when you run a Lightning node, or when a node service gives you one.',
+    '031ce2f1…1d9dc0d5', 'In the settings of your node.']) assert.ok(panel.includes(text), text);
+  assert.match(values, /recipient \|\| \{ recipient_type: 'lnaddress' \}/);
 });
 
 test('a percentage has one decimal place, also below 1 % (musicindex ADR 0075 R-VALUE-5 item 1)', () => {
@@ -277,7 +298,7 @@ test('the address lines of a row and of a header are one function (ADR 0099 item
 });
 
 test('the type menu of a wallet sheet gives Node Address and LNURL Address (ADR 0099 item 14)', () => {
-  assert.deepEqual(WALLET_TYPES, [['node', 'Node Address'], ['lnaddress', 'LNURL Address']]);
+  assert.deepEqual(WALLET_TYPES, [['lnaddress', 'LNURL Address'], ['node', 'Node Address']]);
   assert.equal(CUSTOM_KEY_HINT, 'Most wallets do not need it. Copy it from your wallet when it gives one.');
 });
 

@@ -11,7 +11,7 @@ import { pageSequence } from './pages.js';
 import { shortKey } from './nostrkey.js';
 import { onListKey } from './listkeys.js';
 import {
-  recipientKey, recipientRow, addWalletSections, walletBodyOf, PERSON_SECTION_TITLE, PERSON_SECTION_LINE, breakParts, addressLines, lnaddressOf, suggestionField, OTHER_ADDRESS, walletActions, WALLET_TYPES, refreshLookups,
+  recipientKey, recipientRow, addWalletSections, walletBodyOf, PERSON_SECTION_TITLE, PERSON_SECTION_LINE, breakParts, addressLines, lnaddressOf, suggestionField, OTHER_ADDRESS, walletActions, WALLET_TYPES, addressProblem, refreshLookups,
   CUSTOM_KEY_HINT, removeWalletHint, walletSheet, walletSheetStart, walletTypeChange, walletDetailsLine, walletSheetBody,
   walletSheetReady, recipientTitle,
 } from './recipients.js';
@@ -37,6 +37,25 @@ import {
   creditOffers, creditAddTitle, creditRemoveTitle, creditAddNote, creditPublicNote, creditRemoveNote, creditOperation, REMOVE_CREDIT_OPERATION,
   lookupAddress, showFindEmpty, addPersonView, addPersonSelection, addPersonPlan, findPersonPageModel,
 } from './people.js';
+
+// The panel explains the selected payment address type (ADR 0217 item 8).
+export function TypePanel({ type }) {
+  const ln = type === 'lnaddress';
+  return html`<aside class="type-panel">
+    <${Icon} name=${ln ? 'at-sign' : 'zap'} />
+    <p>${ln ? 'Looks like an email address. Most wallet apps give you one. Some apps call it a Lightning address.' : 'A code of 66 letters and numbers. You have one when you run a Lightning node, or when a node service gives you one.'}</p>
+    <code>${ln ? 'name@getalby.com' : '031ce2f1…1d9dc0d5'}</code>
+    <span>${ln ? 'In your wallet app, under Receive.' : 'In the settings of your node.'}</span>
+  </aside>`;
+}
+
+// The button that changes the type to the type that the address matches
+// (ADR 0217 item 11). It goes in the address field, below the reason.
+export function UseTypeButton({ problem, onUse }) {
+  if (!problem || !problem.otherType) return null;
+  const label = WALLET_TYPES.find(([value]) => value === problem.otherType)[1];
+  return html`<button class="button action use-type" type="button" onClick=${() => onUse(problem.otherType)}>Use ${label}</button>`;
+}
 
 // The merges of this page load: the ID of each merged person, to the ID of
 // the person that kept its items.
@@ -529,11 +548,14 @@ function LinkForm({ kind, personId, edit = null, onCancel, onAdded }) {
       onAdded();
     });
   };
+  const addressIssue = kind === 'wallets' && String(values.address || '').trim() !== '' && addressProblem(values.recipient_type, values.address);
   const fields = html`<div class="group rows">${linkFields(kind, values).map((f) => (f.select
     ? html`<${ChoiceSelect} key=${f.id} id=${`link-${f.id}`} label=${f.label} value=${values[f.id]} options=${f.select}
-        onChange=${(v) => set(f.id, v)} />`
+        onChange=${(v) => set(f.id, v)} />${kind === 'wallets' && html`<${TypePanel} type=${values.recipient_type} />`}`
     : html`<${Field} key=${f.id} id=${`link-${f.id}`} label=${f.label} hint=${f.hint} required=${!!f.required}
-        value=${values[f.id]} onInput=${(e) => set(f.id, e.target.value)} />`))}
+        error=${f.id === 'address' && addressIssue ? addressIssue.reason : null}
+        value=${values[f.id]} onInput=${(e) => set(f.id, e.target.value)}>${f.id === 'address' && html`<${UseTypeButton} problem=${addressIssue}
+        onUse=${(next) => set('recipient_type', next)} />`}</${Field}>`))}
     ${form.nostrKey && html`<${NostrKeyRow} label="Nostr key" name=${values.name} value=${values.npub}
       onOpen=${() => setKeyOpen(true)} />`}</div>
     ${editing && (edit.note || walletEditNote(edit.others)) && html`<p class="hint" role="status">${edit.note || walletEditNote(edit.others)}</p>`}`;
@@ -551,7 +573,7 @@ function LinkForm({ kind, personId, edit = null, onCancel, onAdded }) {
       onPick=${(found) => setValues((current) => ({ ...current, ...(kind === 'wallets' ? walletValues(found) : found) }))} onClose=${() => setFinding(false)} />
     ${form.nostrKey && html`<${NostrSheet} open=${keyOpen} value=${values.npub} offerPeople=${false} onSet=${(npub) => set('npub', npub)}
       onClose=${() => setKeyOpen(false)} />`}
-    <footer><button class="button primary" type="submit" form="link-form" disabled=${busy || !linkReady(kind, values)}>${editing ? (busy ? 'Saving…' : form.editButton) : (busy ? 'Adding…' : form.button)}</button></footer>`;
+    <footer><button class="button primary" type="submit" form="link-form" disabled=${busy || !linkReady(kind, values) || !!addressIssue}>${editing ? (busy ? 'Saving…' : form.editButton) : (busy ? 'Adding…' : form.button)}</button></footer>`;
 }
 
 // The sheet of one operation of a person (ADR 0099 items 7 to 12). The
@@ -1513,14 +1535,18 @@ function WalletForm({ kind, recipient, uses, feeds, go }) {
   };
   const ids = rows ? checkedIds(rows) : [];
   const ready = walletSheetReady(kind, fields, ids);
+  // Only the sheets with the type menu check the address against the type.
+  const addressIssue = (kind === 'change_address' || adding) && String(fields.address || '').trim() !== ''
+    && addressProblem(fields.type, fields.address);
   const submit = () => run(async () => {
     const made = await api('/change-sets', { method: 'POST', body: { recipient: key, operation: walletSheetBody(kind, fields), feed_ids: ids } });
     go({ name: 'change-set', id: made.id });
   });
   const typeMenu = html`<${ChoiceSelect} id="op-type" label="Type" value=${fields.type}
-    onChange=${(next) => setFields(walletTypeChange(recipient, fields, next))} options=${WALLET_TYPES} />`;
+    onChange=${(next) => setFields(walletTypeChange(recipient, fields, next))} options=${WALLET_TYPES} /><${TypePanel} type=${fields.type} />`;
   const addressFields = html`<${Field} id="op-address" label=${fields.type === 'lnaddress' ? 'LNURL address' : 'Node address key'} required
-      value=${fields.address} onInput=${(e) => set({ address: e.target.value })} />
+      error=${addressIssue ? addressIssue.reason : null} value=${fields.address} onInput=${(e) => set({ address: e.target.value })}>
+      <${UseTypeButton} problem=${addressIssue} onUse=${(next) => set({ type: next })} /></${Field}>
     ${fields.type !== 'lnaddress' && html`<${Field} id="op-custom-key" label="Custom key" hint=${CUSTOM_KEY_HINT}
         value=${fields.custom_key} onInput=${(e) => set({ custom_key: e.target.value })} />
       <${Field} id="op-custom-value" label="Account" value=${fields.custom_value} onInput=${(e) => set({ custom_value: e.target.value })} />`}`;
@@ -1551,7 +1577,7 @@ function WalletForm({ kind, recipient, uses, feeds, go }) {
       <${ErrorNotice} error=${error} />
     </div>
     <footer>
-      <button class="button primary" type="button" disabled=${busy || !ready} onClick=${submit}>${busy ? BUSY_REVIEW : reviewLabel(ids.length)}</button>
+      <button class="button primary" type="button" disabled=${busy || !ready || !!addressIssue} onClick=${submit}>${busy ? BUSY_REVIEW : reviewLabel(ids.length)}</button>
     </footer>`;
 }
 

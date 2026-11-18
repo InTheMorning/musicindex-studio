@@ -2,7 +2,7 @@
 
 Decision: [ADR 0217](../adr/0217-a-new-artist-sees-the-result-of-a-write-the-payment-types-and-an-undo-of-a-merge.md) items 7 to 11. [ADR 0138](../adr/0138-the-names-of-a-wallet-address-and-the-correction-of-a-wrong-key.md) item 3 gives the words.
 
-Status: Open.
+Status: Complete. The screenshot check passed on 2026-11-18.
 
 ## Problem
 
@@ -49,3 +49,21 @@ Visual, by the main session with screenshots:
 - Write each comment and text in Simplified Technical English: `/home/citizen/.agents/skills/asd-ste100/SKILL.md`.
 - Do not commit. Leave the change in the working tree and report the changed files and the check results.
 - Do not make an architecture decision. When the ADR does not answer a question, stop and report.
+
+## Result
+
+- The delegate made the change. The main session corrected these faults:
+  - The refusal was a line below the field group, not in the Address field. After the correction, it is
+    the error of the Address field. One component, `UseTypeButton` in `peoplepages.js`, gives the button **Use LNURL Address**
+    or **Use Node Address** in the three forms.
+  - The reason "This is a Node Address." used the menu form. The correct text is "This is a Node address."
+    (ADR 0138 item 3).
+  - `WalletForm` examined the address in each type of sheet. The sheet "use_lnaddress" has the type of the
+    wallet and an LNURL address, so its button became disabled with no reason. After the correction, the check
+    applies only to the sheets with the type menu: "change_address" and "add".
+- Screenshots in `.studio-dev/journeys/runs/v173a/shots/` and `v173b/shots/`, 1280 px and 390 px:
+  - The form "Add a Recipient" starts with "LNURL Address" and its panel.
+  - A node address with the type "LNURL Address" gives the reason and **Use Node Address**. The button
+    "Add the Recipient" is disabled. **Use Node Address** changes the type and the panel.
+  - The form "Add a Wallet" of a person page gives the same panel, reason and button.
+- The main session ran `tools/gate.sh`. It passed with 845 UI tests.

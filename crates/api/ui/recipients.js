@@ -450,7 +450,23 @@ export function walletActions(entry) {
 }
 
 // The menu of the type of an address (ADR 0099 item 14).
-export const WALLET_TYPES = [['node', 'Node Address'], ['lnaddress', 'LNURL Address']];
+export const WALLET_TYPES = [['lnaddress', 'LNURL Address'], ['node', 'Node Address']];
+
+const LNURL_ADDRESS = /^[^@\s/]+@[^@\s/]+$/;
+const NODE_ADDRESS = /^[0-9a-fA-F]{66}$/;
+
+// Check an address against the selected type. The other type is given when
+// the address matches it, so the form can offer a correction.
+export function addressProblem(type, address) {
+  const value = String(address ?? '').trim();
+  const matchesLn = LNURL_ADDRESS.test(value);
+  const matchesNode = NODE_ADDRESS.test(value);
+  if (type === 'lnaddress' && matchesLn) return null;
+  if (type === 'node' && matchesNode) return null;
+  if (matchesLn) return { reason: 'This is an LNURL address.', otherType: 'lnaddress' };
+  if (matchesNode) return { reason: 'This is a Node address.', otherType: 'node' };
+  return { reason: type === 'lnaddress' ? 'Enter a valid LNURL address.' : 'Enter a 66-character hexadecimal node address.', otherType: null };
+}
 
 // The hint of the custom key (ADR 0099 item 14).
 export const CUSTOM_KEY_HINT = 'Most wallets do not need it. Copy it from your wallet when it gives one.';

@@ -380,6 +380,12 @@ code, .mono {
    error only (ADR 0018). */
 .field input[aria-invalid="true"] { border: 1px solid var(--error); }
 .field-error { color: var(--error); font-size: var(--text-callout); font-weight: 500; }
+.type-panel { display: grid; grid-template-columns: 20px 1fr; gap: 4px 10px; align-items: start; padding: 10px 16px; color: var(--muted); }
+.type-panel > .icon { grid-row: 1 / span 3; }
+.type-panel p { margin: 0; color: var(--text); }
+.type-panel code { color: var(--text); }
+/* The button that changes the type of an address (ADR 0217 item 11). */
+.field-body > .use-type { justify-self: start; }
 /* A warning uses the Warning color (musicindex ADR 0025 R-STATUS-1, ADR 0161). */
 .field-warning { color: var(--warning); font-size: var(--text-callout); font-weight: 500; }
 /* A control with a pending change has a mark at its start edge (ADR 0116 item 6). */

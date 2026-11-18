@@ -745,10 +745,9 @@ test('recipientFromPerson gives the name and the values of the default address, 
 test('the type menu of the value editor uses the words of ADR 0099 item 14', async () => {
   const { readFileSync } = await import('node:fs');
   const source = readFileSync(new URL('../ui/values.js', import.meta.url), 'utf8');
-  assert.match(source, /label: WALLET_TYPES\[0\]\[1\]/);
-  assert.match(source, /label: WALLET_TYPES\[1\]\[1\]/);
+  assert.match(source, /const TYPES = WALLET_TYPES\.map/);
   const { WALLET_TYPES } = await import('../ui/recipients.js');
-  assert.deepEqual(WALLET_TYPES.map(([, label]) => label), ['Node Address', 'LNURL Address']);
+  assert.deepEqual(WALLET_TYPES.map(([, label]) => label), ['LNURL Address', 'Node Address']);
   assert.match(source, /Add to People/);
 });
 

@@ -3,10 +3,10 @@
 import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
 import { TextField, set, setAt, withCids, startOpen, openOnce, useSheet } from './editor.js';
 import { CONFIRMS } from './confirms.js';
-import { percentText, lookupHint, WALLET_TYPES, CUSTOM_KEY_HINT, percentages, feeLine, isFee, shares, shareParts, splitOrder, recipientFields, recipientFromFields } from './recipients.js';
+import { percentText, lookupHint, WALLET_TYPES, addressProblem, CUSTOM_KEY_HINT, percentages, feeLine, isFee, shares, shareParts, splitOrder, recipientFields, recipientFromFields } from './recipients.js';
 import { recipientPickRows, recipientChoices, recipientIdentity, personKeys, memberText, addRecipientsLabel, trackHeading, recipientAddressMenu } from './people.js';
 import { PickerLayout, PickFillRow, FindOneSheet, PickFold, SearchResults, TakenTag, useFieldList } from './pickers.js';
-import { PersonArt, useLookup } from './peoplepages.js';
+import { PersonArt, TypePanel, UseTypeButton, useLookup } from './peoplepages.js';
 import { AddressRow } from './addressrow.js';
 import { api, askConfirm, Field, ErrorNotice, useAction, CopyButton, Icon } from './app.js';
 import { onListKey } from './listkeys.js';
@@ -61,10 +61,8 @@ function fresh(value) {
 // each track. It does not show the payment type or the suggested amount.
 // Studio keeps the values of the fields that the editor does not show.
 
-const TYPES = [
-  { value: 'node', label: WALLET_TYPES[0][1], hint: 'The public key of the Lightning node, 66 hexadecimal characters.' },
-  { value: 'lnaddress', label: WALLET_TYPES[1][1], hint: 'An LNURL address, for example name@example.com.' },
-];
+const TYPES = WALLET_TYPES.map(([value, label]) => ({ value, label,
+  hint: value === 'node' ? 'The public key of the Lightning node, 66 hexadecimal characters.' : 'An LNURL address, for example name@example.com.' }));
 
 // One load of `GET /recipients` for the page. Each `Recipients` shares it. The
 // map goes from the lowercase address to its keysend lookup. A failed load
@@ -211,23 +209,23 @@ function Recipients({ id, recipients, defaultType, onChange }) {
     ${ofGroup(true)}
     ${!recipients.some(isFee) && html`<p class="hint">No fees.</p>`}
     ${feeLine(recipients) && html`<p class="hint">${feeLine(recipients)}</p>`}
-    <${RecipientSheet} open=${sheet !== null} recipient=${changing || null} defaultType=${defaultType} recipients=${recipients}
+    <${RecipientSheet} open=${sheet !== null} recipient=${changing || null} recipients=${recipients}
       onSave=${save} onCopy=${() => { setSheet(null); setCopying(true); }} onClose=${() => setSheet(null)} />
     <${PickerSheet} open=${copying} recipients=${recipients} onAdd=${addCopied} onClose=${() => setCopying(false)} />`;
 }
 
 // The sheet "Add a Recipient", or "Change the Address" of a row (ADR 0144). It
 // has the layout of each sheet that adds a value (ADR 0145).
-function RecipientSheet({ open, recipient, defaultType, recipients, onSave, onCopy, onClose }) {
+function RecipientSheet({ open, recipient, recipients, onSave, onCopy, onClose }) {
   const ref = useSheet(open);
   return html`<dialog ref=${ref} class="sheet" aria-labelledby="recipient-title" onClose=${onClose}>
-    ${open && html`<${RecipientForm} key=${recipient ? recipient._cid : 'new'} recipient=${recipient} defaultType=${defaultType}
+    ${open && html`<${RecipientForm} key=${recipient ? recipient._cid : 'new'} recipient=${recipient}
       recipients=${recipients} onSave=${(values) => { onSave(values); ref.current.close(); }} onCopy=${onCopy} onCancel=${() => ref.current.close()} />`}
   </dialog>`;
 }
 
-function RecipientForm({ recipient, defaultType, recipients, onSave, onCopy, onCancel }) {
-  const [fields, setFields] = useState(() => recipientFields(recipient || { recipient_type: defaultType }));
+function RecipientForm({ recipient, recipients, onSave, onCopy, onCancel }) {
+  const [fields, setFields] = useState(() => recipientFields(recipient || { recipient_type: 'lnaddress' }));
   const [list, setList] = useState(null);
   const [lookups, setLookups] = useState(null);
   const [finding, setFinding] = useState(false);
@@ -242,6 +240,7 @@ function RecipientForm({ recipient, defaultType, recipients, onSave, onCopy, onC
   const set = (name) => (value) => setFields((current) => ({ ...current, [name]: value ?? '' }));
   const type = TYPES.find((t) => t.value === fields.recipient_type);
   const address = fields.address.trim();
+  const problem = address === '' ? null : addressProblem(fields.recipient_type, address);
   const others = new Set(recipients.filter((r) => r !== recipient).map(identityOf));
   const values = recipientFromFields(fields);
   const taken = address !== '' && others.has(identityOf(values));
@@ -258,13 +257,15 @@ function RecipientForm({ recipient, defaultType, recipients, onSave, onCopy, onC
       <h2 id="recipient-title">${recipient ? 'Change the Address' : 'Add a Recipient'}</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${onCancel}>✕</button>
     </header>
-    <${PickerLayout} id="recipient-form" onSubmit=${(e) => { e.preventDefault(); if (address !== '' && !taken) onSave(values); }}
+    <${PickerLayout} id="recipient-form" onSubmit=${(e) => { e.preventDefault(); if (address !== '' && !taken && !problem) onSave(values); }}
       fields=${html`<div class="group rows">
         <${Choice} id="recipient-type" label="Type" value=${fields.recipient_type} options=${TYPES} onChange=${set('recipient_type')} />
+        <${TypePanel} type=${fields.recipient_type} />
         <${TextField} id="recipient-address" label="Address" required
           hint=${fields.recipient_type === 'lnaddress' && address && lookups && lookups.get(address.toLowerCase()) === 'none'
             ? lookupHint(address) : type ? type.hint : ''}
-          value=${fields.address} onChange=${set('address')} />
+          error=${problem ? problem.reason : null} value=${fields.address} onChange=${set('address')}>
+          <${UseTypeButton} problem=${problem} onUse=${set('recipient_type')} /></${TextField}>
         <${TextField} id="recipient-name" label="Name" required value=${fields.name} onChange=${set('name')} />
         ${fields.recipient_type !== 'lnaddress' && html`
           <${TextField} id="recipient-key" label="Custom key" required hint=${CUSTOM_KEY_HINT} value=${fields.custom_key} onChange=${set('custom_key')} />
@@ -276,7 +277,7 @@ function RecipientForm({ recipient, defaultType, recipients, onSave, onCopy, onC
         ? { title: 'Find on Music Index', summary: 'Fill the form from a feed.', onOpen: () => setFinding(true) }
         : { title: 'Copy from a Feed', summary: 'Select many recipients of a different feed.', onOpen: onCopy }}
       lists=${list === null ? [] : [{ title: 'Your people', rows: list.people.map(pickRow) }, { title: 'Payees with no person', rows: list.payees.map(pickRow) }]} />
-    <footer><button class="button primary" type="submit" form="recipient-form" disabled=${address === '' || taken}>${recipient ? 'Use This Address' : 'Add the Recipient'}</button></footer>
+    <footer><button class="button primary" type="submit" form="recipient-form" disabled=${address === '' || taken || !!problem}>${recipient ? 'Use This Address' : 'Add the Recipient'}</button></footer>
     <${FindOneSheet} open=${finding} start=${fields.name} choices=${recipientChoices} empty="This feed has no payment address."
       onPick=${(route) => setFields((current) => ({ ...current, ...recipientFields(route) }))} onClose=${() => setFinding(false)} />`;
 }

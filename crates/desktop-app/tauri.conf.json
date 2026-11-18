@@ -20,6 +20,12 @@
     "linux": {
       "appimage": {
         "bundleMediaFramework": true
+      },
+      "deb": {
+        "recommends": ["xdg-utils"]
+      },
+      "rpm": {
+        "recommends": ["xdg-utils"]
       }
     },
     "icon": [

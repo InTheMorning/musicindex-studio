@@ -1,0 +1,106 @@
+# Maintainer: HeyCitizen <4637290+InTheMorning@users.noreply.github.com>
+#
+# The Arch package of the Studio desktop app (ADR 0216, musicindex ADR 0084
+# R-PACKAGE-1). docs/runbooks/arch-package.md tells how to build and
+# install it.
+
+pkgname=musicindex-studio-git
+_pkgname=musicindex-studio
+pkgver=0.1.0rc.26
+pkgrel=1
+pkgdesc='Desktop app that edits your hosted Podcasting 2.0 music feeds'
+arch=('x86_64')
+url='https://github.com/InTheMorning/musicindex-studio'
+license=('AGPL-3.0-only')
+# The binary links glibc, gcc-libs, zlib, dbus, glib2, cairo, gdk-pixbuf2,
+# gtk3, libsoup3 and webkit2gtk-4.1. WebKitGTK plays the audio through
+# GStreamer. The two plugin packages hold the plugins of ADR 0124 item 26
+# that play MP3, FLAC, Ogg, Opus and WAV. TLS uses the webpki-roots crate, so
+# the package needs no system certificates.
+depends=(
+  'cairo'
+  'dbus'
+  'gcc-libs'
+  'gdk-pixbuf2'
+  'glib2'
+  'glibc'
+  'gst-plugins-base'
+  'gst-plugins-good'
+  'gtk3'
+  'libsoup3'
+  'webkit2gtk-4.1'
+  'zlib'
+)
+# rustup installs the toolchain in rust-toolchain.toml. The bundled C
+# libraries need cmake and perl (OpenSSL), and pkg-config finds the GTK and
+# WebKitGTK libraries. The C compiler comes from base-devel.
+makedepends=('cmake' 'git' 'perl' 'pkgconf' 'rustup')
+# musicindex ADR 0084 R-PACKAGE-4 item 3: Studio starts xdg-open to open a
+# link in the browser.
+optdepends=(
+  'xdg-utils: open a link in the browser'
+  'gst-libav: play AAC and the other formats of the libav plugin'
+)
+provides=("${_pkgname}")
+conflicts=("${_pkgname}")
+source=("${_pkgname}::git+https://github.com/InTheMorning/musicindex-studio.git")
+sha256sums=('SKIP')
+
+# The makepkg default options=(lto) adds -flto=auto to CFLAGS. The cc crate
+# compiles the bundled C sources (SQLite, OpenSSL, LAME) with these CFLAGS,
+# and the Rust linker cannot read GCC LTO bitcode.
+options=('!lto')
+
+pkgver() {
+  cd "${_pkgname}"
+
+  # A pacman version has no hyphen: 0.1.0-rc.26 becomes 0.1.0rc.26.
+  local _crate_ver
+  _crate_ver=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n 1)
+
+  printf '%s.r%s.g%s' \
+    "${_crate_ver//-/}" \
+    "$(git rev-list --count HEAD)" \
+    "$(git rev-parse --short=7 HEAD)"
+}
+
+prepare() {
+  cd "${_pkgname}"
+
+  # Without an argument, rustup installs the toolchain in rust-toolchain.toml.
+  rustup toolchain install
+
+  local _host
+  _host=$(rustc -vV | sed -n 's/^host: //p')
+  cargo fetch --locked --target "${_host}"
+}
+
+build() {
+  cd "${_pkgname}"
+
+  # The same feature as `cargo tauri build`. The build script of the crate
+  # reads the git revision from the clone (musicindex ADR 0083).
+  export CARGO_TARGET_DIR="${srcdir}/target"
+  cargo build --frozen --release -p studio-desktop-app --features tauri/custom-protocol
+}
+
+check() {
+  cd "${_pkgname}"
+
+  # The tests of the app crate need no display and no network.
+  export CARGO_TARGET_DIR="${srcdir}/target"
+  cargo test --frozen -p studio-desktop-app
+}
+
+package() {
+  cd "${_pkgname}"
+
+  install -Dm0755 "${srcdir}/target/release/studio-desktop-app" -t "${pkgdir}/usr/bin/"
+  install -Dm0644 packaging/arch/musicindex-studio.desktop \
+    "${pkgdir}/usr/share/applications/musicindex-studio.desktop"
+  # The app icon is 512 x 512 pixels.
+  install -Dm0644 crates/desktop-app/icons/icon.png \
+    "${pkgdir}/usr/share/icons/hicolor/512x512/apps/musicindex-studio.png"
+  install -Dm0644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+  install -Dm0644 README.md "${pkgdir}/usr/share/doc/${_pkgname}/README.md"
+}

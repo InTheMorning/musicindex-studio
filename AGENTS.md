@@ -39,6 +39,7 @@ The UI starts on Releases and shows the outline of an open feed. Below Releases,
 | `crates/desktop` | `studio-desktop`: the desktop shell. It runs the local API and prints the UI address. Its default data folder is the local data folder of the operating system. Its library has the start of the shell, which the app also uses. |
 | `crates/desktop-app` | `studio-desktop-app`: the Tauri app "Music Index Studio" ([ADR 0124](docs/adr/0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md)). It opens one window on the local API, and it has a tray. |
 | `.github/workflows` | `ci.yml` runs the four checks. `desktop-release.yml` builds the desktop archives and installers, and makes a draft GitHub Release from a `v*` tag. |
+| `packaging/arch` | The PKGBUILD of the desktop app and its desktop file ([ADR 0216](docs/adr/0216-the-linux-packages-of-the-desktop-app.md), [Arch package runbook](docs/runbooks/arch-package.md)). |
 | `docs/` | ADRs, plans, tasks, reviews, runbooks, release notes (`docs/releases/`) and research. The index is `docs/README.md`. |
 | `tools/drive-ui.mjs` | Drives the UI in headless Chromium for a check. Its header gives the usage. |
 | `tools/fit-check.mjs` | The fit check helpers of musicindex ADR 0065 R-FIT-5. It is a copy from musicindex-lib. Do not change it in this repository. |

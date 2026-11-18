@@ -378,8 +378,24 @@ fn fail(app: &AppHandle, message: &str) {
 }
 
 fn open_outside(app: &AppHandle, address: &Url) {
-    // A failure to open leaves the window as it is.
-    let _ = app.opener().open_url(address.as_str(), None::<&str>);
+    // On Linux, the opener starts xdg-open or gio of the host. The AppImage
+    // does not hold them, so the app tells the user when none starts
+    // (musicindex ADR 0084 R-PACKAGE-4 item 2, ADR 0216). The window stays
+    // as it is.
+    if app
+        .opener()
+        .open_url(address.as_str(), None::<&str>)
+        .is_err()
+    {
+        app.dialog()
+            .message(format!(
+                "Studio could not open this address in your browser:\n{address}\n\nOn Linux, Studio uses the program xdg-open for links. Install the package xdg-utils, then try again."
+            ))
+            .title(TITLE)
+            .kind(MessageDialogKind::Warning)
+            .buttons(MessageDialogButtons::Ok)
+            .show(|_| {});
+    }
 }
 
 fn build_window(

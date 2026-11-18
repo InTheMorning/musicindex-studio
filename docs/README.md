@@ -193,6 +193,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0213: A release starts on the page of its artist](adr/0213-a-release-starts-on-the-page-of-its-artist.md)
 - [ADR 0214: Each sheet fits the window, and the walk opens it](adr/0214-each-sheet-fits-the-window-and-the-walk-opens-it.md)
 - [ADR 0215: The left panel shows the levels of the publisher feeds](adr/0215-the-left-panel-shows-the-levels-of-the-publisher-feeds.md)
+- [ADR 0216: The Linux packages of the desktop app](adr/0216-the-linux-packages-of-the-desktop-app.md)
 
 ## Plans
 
@@ -561,6 +562,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [studio-server](runbooks/studio-server.md)
 - [Start Music Index Studio](runbooks/install-desktop.md)
 - [Desktop release drafts](runbooks/desktop-release.md)
+- [The Arch package of the desktop app](runbooks/arch-package.md)
 - [Operator human checks](runbooks/operator-human-checks.md)
 
 ## Release notes

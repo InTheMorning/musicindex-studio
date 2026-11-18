@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Music Index Studio
+Comment=Edit your hosted Podcasting 2.0 music feeds
+Exec=studio-desktop-app
+Icon=musicindex-studio
+Terminal=false
+Categories=AudioVideo;Audio;
+StartupWMClass=studio-desktop-app

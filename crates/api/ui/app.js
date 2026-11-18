@@ -1957,7 +1957,9 @@ function FeedAddress({ url }) {
 // button is the musicindex mark, and it is the first control of the bar,
 // before Back and Forward (R-SHELL-2 item 6). The title button is the title
 // area after them. The first child is the title. The other children, such as
-// the draft toolbar, stay after the title button.
+// the draft toolbar, stay after the title button. They keep one place at each
+// width, so a change of width does not mount the draft toolbar again and close
+// its open sheet (ADR 0214).
 export function Bar({ back = true, children }) {
   const nav = useContext(NavContext);
   const items = Array.isArray(children) ? children : [children];
@@ -1974,8 +1976,9 @@ export function Bar({ back = true, children }) {
         <button class="button icon-button" type="button" aria-label="Forward" title="Forward"
           disabled=${!nav.canForward} onClick=${nav.forward}><${Chevron} direction="forward" /></button>`)}
     ${rootButtons
-      ? html`<button class="bar-title-button" type="button" onClick=${nav.toRoot}>${title}<span class="visually-hidden">, Destinations</span></button>${rest}`
-      : children}
+      ? html`<button class="bar-title-button" type="button" onClick=${nav.toRoot}>${title}<span class="visually-hidden">, Destinations</span></button>`
+      : title}
+    ${rest}
   </div>`;
 }
 

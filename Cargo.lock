@@ -2974,6 +2974,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "musicindex-build-info"
+version = "0.1.0"
+source = "git+https://github.com/InTheMorning/musicindex-lib?rev=e6d11118d33069c26c01368f7de71524988039c6#e6d11118d33069c26c01368f7de71524988039c6"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "musicindex-search"
 version = "0.1.0"
 source = "git+https://github.com/InTheMorning/musicindex-lib?rev=e84bab570ef53fb6daad3fc59681ec64abe5417f#e84bab570ef53fb6daad3fc59681ec64abe5417f"
@@ -4681,6 +4689,7 @@ dependencies = [
  "futures-util",
  "getrandom 0.4.3",
  "http-body-util",
+ "musicindex-build-info",
  "nostr",
  "qrcode",
  "rusqlite",
@@ -4760,6 +4769,7 @@ name = "studio-desktop"
 version = "0.1.0-rc.25"
 dependencies = [
  "directories",
+ "musicindex-build-info",
  "rustix",
  "studio-api",
  "studio-core",
@@ -4772,6 +4782,7 @@ name = "studio-desktop-app"
 version = "0.1.0-rc.25"
 dependencies = [
  "directories",
+ "musicindex-build-info",
  "serde_json",
  "studio-core",
  "studio-desktop",
@@ -4795,6 +4806,7 @@ dependencies = [
  "base64 0.23.1",
  "getrandom 0.4.3",
  "http-body-util",
+ "musicindex-build-info",
  "nostr",
  "p256",
  "rusqlite",

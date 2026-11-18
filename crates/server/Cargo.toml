@@ -7,7 +7,11 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[build-dependencies]
+musicindex-build-info.workspace = true
+
 [dependencies]
+musicindex-build-info.workspace = true
 axum = "0.8"
 base64 = "0.23"
 getrandom = "0.4"

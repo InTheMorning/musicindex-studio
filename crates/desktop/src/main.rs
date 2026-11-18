@@ -90,9 +90,12 @@ async fn main() -> ExitCode {
 
 async fn run() -> Result<(), String> {
     harden_process();
+    // musicindex ADR 0083 R-VERSION-2 and R-VERSION-3.
+    let build = musicindex_build_info::build_info!("Music Index Studio");
+    studio_api::set_build_info(build);
     let args: Vec<String> = std::env::args().skip(1).collect();
     if args == ["--version"] {
-        println!("Music Index Studio {}", env!("CARGO_PKG_VERSION"));
+        println!("{}", build.version_line());
         return Ok(());
     }
     if args == ["--help"] {
@@ -113,7 +116,7 @@ async fn run() -> Result<(), String> {
     // shutdown future of the serve does not end.
     let started =
         start(&start_options, listener, std::future::pending()).map_err(|e| e.to_string())?;
-    println!("Music Index Studio {}", env!("CARGO_PKG_VERSION"));
+    println!("{}", build.version_line());
     println!("Data: {}", options.data_dir.display());
     if options.port.is_none() && started.port != DEFAULT_PORT {
         println!(

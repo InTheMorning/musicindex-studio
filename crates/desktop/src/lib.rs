@@ -12,6 +12,7 @@ use std::pin::Pin;
 use studio_api::{Access, Workspace, local_router_with_drops_and_picker};
 pub use studio_api::{
     CollectionsPlace, DroppedFiles, FolderPicker, OnClose, OnOpen, WindowClose, Work,
+    set_build_info,
 };
 use tokio::net::TcpListener;
 

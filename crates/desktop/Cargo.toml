@@ -15,7 +15,11 @@ path = "src/lib.rs"
 name = "studio-desktop"
 path = "src/main.rs"
 
+[build-dependencies]
+musicindex-build-info.workspace = true
+
 [dependencies]
+musicindex-build-info.workspace = true
 directories.workspace = true
 studio-api.workspace = true
 studio-core.workspace = true

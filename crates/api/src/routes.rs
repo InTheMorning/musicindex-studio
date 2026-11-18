@@ -112,9 +112,15 @@ pub(crate) fn require_held_assets(w: &Workspace) -> Result<(), ApiError> {
 }
 
 pub(crate) async fn status(State(shared): State<Shared>) -> ApiResult {
-    blocking(shared, |w| {
+    let build = crate::build_info();
+    blocking(shared, move |w| {
         Ok(Json(json!({
-            "version": env!("CARGO_PKG_VERSION"),
+            // musicindex ADR 0083 R-VERSION-3: the three build values. The
+            // Settings line of R-VERSION-4 shows `version_line`.
+            "version": build.version,
+            "git_revision": build.git_revision,
+            "built_at": build.built_at,
+            "version_line": build.version_line(),
             // ADR 0105 item 1: false on a server with `--hold-assets off`.
             "hold_assets": w.holds_assets(),
             // The space in use and the limit of a server user, for the

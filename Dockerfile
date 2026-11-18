@@ -26,7 +26,12 @@ COPY --from=planner /build/recipe.json recipe.json
 RUN cargo chef cook --release -p studio-server --locked --recipe-path recipe.json
 
 COPY . .
-RUN cargo build --release -p studio-server --locked
+# musicindex ADR 0083 R-VERSION-8: the image has no `.git` folder, so the
+# release workflow gives the git revision. The build keeps its first 7
+# characters. With no value, the git revision is unknown.
+ARG STUDIO_REVISION=
+RUN STUDIO_GIT_REVISION="$(printf '%.7s' "$STUDIO_REVISION")" \
+    cargo build --release -p studio-server --locked
 
 # ── Runtime ────────────────────────────────────────────────────────────────────
 

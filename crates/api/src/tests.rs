@@ -366,6 +366,9 @@ async fn status_gives_the_vault_state_and_the_counts() {
     assert_eq!(body["connectors"], 0);
     assert_eq!(body["feeds"], 0);
     assert!(body["version"].is_string());
+    // musicindex ADR 0083 R-VERSION-3: an unknown build value is null.
+    assert!(body.get("git_revision").is_some());
+    assert!(body.get("built_at").is_some());
 }
 
 #[tokio::test]

@@ -120,11 +120,16 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
         run: |
           output="$(docker run --rm studio-server:check --version)"
-          expected="Music Index Studio server ${VERSION}"
-          if [ "$output" != "$expected" ]; then
-            echo "::error::The image printed '${output}'. Expected '${expected}'."
-            exit 1
-          fi
+          # musicindex ADR 0083 R-VERSION-2: the line also gives the git
+          # revision and the build date.
+          expected="Music Index Studio server ${VERSION} (${GITHUB_SHA:0:7}, "
+          case "$output" in
+            "$expected"*")") ;;
+            *)
+              echo "::error::The image printed '${output}'. Expected '${expected}YYYY-MM-DD)'."
+              exit 1
+              ;;
+          esac
           echo "$output"
 
       # The layers are in the cache, so this build does not compile again.

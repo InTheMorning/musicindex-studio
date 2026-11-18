@@ -136,3 +136,35 @@ Results:
 - Review and the Check page showed no finding for that address. Shots `j06-06-review`, `j06-07-check`.
 - The Simplified diff in Review showed two rows, `"Payments"` with no detail and `"Payments"` `"Added"`.
 - With an empty `"Split (shares)"`, the bar showed 100.0 %.
+
+## J07 People: make two persons from suggestions, then merge them
+
+Data: base. Screenshots: `shots/j07-*.png`. At the start, the collection has no person.
+`"Suggestions from your feeds"` shows 32 suggestions, and `"Payees with no person"` shows 71 rows.
+
+| Step | Action | Result | Evidence |
+|---|---|---|---|
+| 1 | Click `"People"`. | The People page opens. | |
+| 2 | Open `"Suggestions from your feeds"`. | The list shows each suggestion with `"Check"`. | |
+| 3 | Click `"The Doerfels"`. | The sheet `"Check: The Doerfels"` opens. `"Person"` is `"A new person"`. The sheet lists the credits in groups and the payment addresses, all selected. | Shot `j07-03-check-doerfels` |
+| 4 | Click `"Make the Person"`. | The person page `"The Doerfels"` opens. The toolbar shows `"No changes"`. | |
+| 5 | Click `"People"`, then open the suggestions again. | | |
+| 6 | Click `"Ben Doerfel"`. | The sheet `"Check: Ben Doerfel"` opens. The menu `"Person"` now also has `"The Doerfels"`. | Shot `j07-05-check-ben` |
+| 7 | Click `"Make the Person"`. | The person page `"Ben Doerfel"` opens. | |
+| 8 | Click `"Merge with a Person"`. | The sheet `"Merge with Ben Doerfel"` opens. `"Person to merge"` is already `"The Doerfels"`. The sheet lists the items of that person and the result after the merge. | Shot `j07-07-merge-sheet` |
+| 9 | Click `"Merge the People"`. | The sheet closes. The page `"Ben Doerfel"` shows two pictures. | Shot `j07-09-after-merge` |
+
+Results:
+
+- Collect two suggestions as two persons and merge them: 9 steps. Step 5 is 2 steps, so the count is 10.
+- A shorter path is in the code. In step 6, the user can select `"The Doerfels"` in `"Person"`. The button
+  then changes from `"Make the Person"` to `"Add 1 Item"` or `"Add N Items"` (`people.js:2091`). This path
+  adds the items to the person and needs no merge. **Inference:** 6 steps. No walk did this path.
+- The merge sheet showed 4 rows with the same text, `"The Doerfels"` and `"Credit name"`. A row does not
+  tell the feed of the credit (`people.js:2199`).
+- The merge sheet said `"2 wallets · 6 credit names"` and `"Name, picture and default address stay as in
+  Ben Doerfel"`.
+- After the merge, no notice told that the merge succeeded. The sheet closed and the page showed the merged
+  items.
+- A person page has `"Discard"` and `"Save"` in the toolbar. After `"Make the Person"` and after the merge,
+  the toolbar showed `"No changes"`.

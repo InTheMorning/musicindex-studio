@@ -88,6 +88,23 @@ The first tap opens the outline. The second tap opens the editor.
 
 After `"Add the Recipient"`, `"Split (shares)"` was empty and the bar showed 100.0 %.
 
+## People
+
+**O17. Rows of the merge sheet can have the same text.** Shot J07, Code.
+
+The sheet `"Merge with Ben Doerfel"` showed 4 rows `"The Doerfels"` `"Credit name"`. A row does not tell
+the feed or the role of the credit (`people.js:2199`).
+
+**O18. No notice tells that a merge succeeded.** Shot J07.
+
+After `"Merge the People"`, the sheet closes and the person page shows the merged items.
+
+**O19. Two paths join identities.** Shot J07, Code.
+
+A user can make two persons and then merge them. A user can also add a suggestion to a person that exists,
+with the menu `"Person"` of the check sheet (`people.js:2091`). The second path has fewer steps. The People page does not
+tell which path to use.
+
 ## Controls that no journey uses
 
 The inventories list the controls that no main journey reaches:

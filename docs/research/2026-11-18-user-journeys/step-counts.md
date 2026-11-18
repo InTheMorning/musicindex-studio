@@ -48,6 +48,7 @@ Each current count has a source:
 | Open a release in the narrow layout | Release list | 2 | Shot, J05 |
 | Make an artist, label or hosting page | Release list | 5 | Code, A §7 |
 | Add a person in People by hand | People | See inventory C §3 | Code, C §3 |
-| Merge two person records | People | See inventory C §15 | Code, C §15 |
+| Two suggestions to two persons, then a merge | People | 10 | Shot, J07 |
+| Add a suggestion to a person that exists | People | 6 | Code, `people.js:2091` |
 
 The count 14 is the sum of J01 (2 + 4) and J02 (8).

@@ -37,6 +37,11 @@ const FILES: &[(&str, &str, &[u8])] = &[
         include_bytes!("../ui/undohistory.js"),
     ),
     (
+        "undonotice.js",
+        "text/javascript; charset=utf-8",
+        include_bytes!("../ui/undonotice.js"),
+    ),
+    (
         "settingsdraft.js",
         "text/javascript; charset=utf-8",
         include_bytes!("../ui/settingsdraft.js"),

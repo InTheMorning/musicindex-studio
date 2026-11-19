@@ -98,6 +98,11 @@ test('a destructive confirmation shows the destructive button first and focuses 
   }
 });
 
+test('Remove from Collection warns when pending files or host operations cannot be undone', () => {
+  assert.match(CONFIRMS.removeFeed('Album', true).text, /This cannot be undone\.$/);
+  assert.doesNotMatch(CONFIRMS.removeFeed('Album').text, /This cannot be undone/);
+});
+
 test('no destructive button is a submit button', () => {
   for (const name of readdirSync(uiDir).filter((file) => file.endsWith('.js'))) {
     const text = readFileSync(new URL(name, uiDir), 'utf8');

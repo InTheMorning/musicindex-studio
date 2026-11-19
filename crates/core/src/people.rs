@@ -535,13 +535,21 @@ fn person_values_of(
 ///
 /// Gives [`CollectionErrorKind::NotFound`] for an ID that does not exist.
 pub fn remove_person(collection: &Collection, id: PersonId) -> Result<(), CollectionError> {
-    clear_merge_undo(collection.db(), id)?;
-    let changed = collection
-        .db()
-        .execute("DELETE FROM people WHERE id = ?1", [id.0])?;
+    let tx = collection.db().unchecked_transaction()?;
+    let snapshot = delete_snapshot(&tx, PERSON_DELETE_TABLES, id.0)?;
+    if snapshot["people"]["rows"]
+        .as_array()
+        .is_none_or(Vec::is_empty)
+    {
+        return Err(missing(id));
+    }
+    clear_merge_undo(&tx, id)?;
+    let changed = tx.execute("DELETE FROM people WHERE id = ?1", [id.0])?;
     if changed == 0 {
         return Err(missing(id));
     }
+    save_delete_undo(&tx, "person", &snapshot)?;
+    tx.commit()?;
     Ok(())
 }
 
@@ -3584,6 +3592,302 @@ pub fn undo_merge(collection: &Collection, kept: PersonId) -> Result<(), Collect
     Ok(())
 }
 
+// The tables that a delete of a person or a feed changes, parent first, for
+// the undo record (ADR 0227 item 16). The test
+// `delete_undo_tables_cover_each_foreign_key` compares them with the schema.
+const PERSON_DELETE_TABLES: &[(&str, &str)] = &[
+    ("people", "id"),
+    ("person_wallets", "person_id"),
+    ("person_keys", "person_id"),
+    ("person_credit_names", "person_id"),
+    ("person_support_links", "person_id"),
+    ("person_members", "person_id"),
+    ("person_address_dismissals", "person_id"),
+    ("person_pages", "person_id"),
+    ("person_values", "person_id"),
+    ("change_sets", "person_id"),
+];
+
+const FEED_DELETE_TABLES: &[(&str, &str)] = &[
+    ("feeds", "id"),
+    ("feed_items", "feed_id"),
+    ("drafts", "feed_id"),
+    ("snapshots", "feed_id"),
+    ("feed_addresses", "feed_id"),
+    ("feed_recipients", "feed_id"),
+    ("library_files", "feed_id"),
+    ("downloads", "library_file_id"),
+    ("draft_files", "feed_id"),
+    ("draft_operations", "feed_id"),
+    ("draft_feed_moves", "feed_id"),
+    ("feed_pointers", "feed_id"),
+    ("signing_plans", "feed_id"),
+    ("announcements", "feed_id"),
+    ("show_grants", "feed_id"),
+    ("grant_writes", "grant_id"),
+    ("change_set_feeds", "feed_id"),
+    ("feed_credits", "feed_id"),
+    ("draft_grants", "feed_id"),
+    ("placed_feed_files", "feed_id"),
+    ("old_copies", "feed_id"),
+    ("outside_checks", "feed_id"),
+    ("written_feed_moves", "feed_id"),
+    ("draft_feed_deletes", "feed_id"),
+    ("feed_host_deletes", "feed_id"),
+    ("feed_writes", "feed_id"),
+    ("person_members", "feed_id"),
+];
+
+fn delete_snapshot(
+    db: &Connection,
+    tables: &[(&str, &str)],
+    id: i64,
+) -> Result<serde_json::Value, CollectionError> {
+    let mut snapshot = serde_json::Map::new();
+    for (table, key) in tables {
+        let predicate = match *table {
+            "downloads" => "library_file_id IN (SELECT id FROM library_files WHERE feed_id = ?1)",
+            "grant_writes" => "grant_id IN (SELECT id FROM show_grants WHERE feed_id = ?1)",
+            _ => "",
+        };
+        let query = if predicate.is_empty() {
+            format!("SELECT * FROM {table} WHERE {key} = ?1")
+        } else {
+            format!("SELECT * FROM {table} WHERE {predicate}")
+        };
+        let mut statement = db.prepare(&query)?;
+        let columns = statement
+            .column_names()
+            .iter()
+            .map(|name| (*name).to_owned())
+            .collect::<Vec<_>>();
+        let rows = statement
+            .query_map([id], |row| {
+                let mut values = Vec::with_capacity(columns.len());
+                for index in 0..columns.len() {
+                    let value = match row.get_ref(index)? {
+                        ValueRef::Null => serde_json::Value::Null,
+                        ValueRef::Integer(value) => serde_json::json!(value),
+                        ValueRef::Real(value) => serde_json::json!(value),
+                        ValueRef::Text(value) => {
+                            serde_json::json!(String::from_utf8_lossy(value).into_owned())
+                        }
+                        ValueRef::Blob(value) => serde_json::json!(value),
+                    };
+                    values.push(value);
+                }
+                Ok(values)
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        snapshot.insert(
+            (*table).to_owned(),
+            serde_json::json!({ "columns": columns, "rows": rows }),
+        );
+    }
+    Ok(serde_json::Value::Object(snapshot))
+}
+
+fn restore_delete_snapshot(
+    tx: &rusqlite::Transaction<'_>,
+    tables: &[(&str, &str)],
+    snapshot: &serde_json::Value,
+) -> Result<(), CollectionError> {
+    for (table, _) in tables {
+        let entry = &snapshot[*table];
+        let columns = entry["columns"]
+            .as_array()
+            .ok_or_else(|| CollectionError::invalid("invalid delete undo snapshot"))?;
+        let rows = entry["rows"]
+            .as_array()
+            .ok_or_else(|| CollectionError::invalid("invalid delete undo snapshot"))?;
+        let names = columns
+            .iter()
+            .map(|value| value.as_str().unwrap_or(""))
+            .collect::<Vec<_>>();
+        if names.is_empty() || names.iter().any(|name| name.is_empty()) {
+            return Err(CollectionError::invalid("invalid delete undo snapshot"));
+        }
+        let sql = format!(
+            "INSERT INTO {table} ({}) VALUES ({})",
+            names.join(","),
+            (1..=names.len())
+                .map(|index| format!("?{index}"))
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+        for row in rows {
+            let row = row
+                .as_array()
+                .ok_or_else(|| CollectionError::invalid("invalid delete undo snapshot"))?;
+            if *table == "change_sets" {
+                let id_index = names
+                    .iter()
+                    .position(|name| *name == "id")
+                    .ok_or_else(|| CollectionError::invalid("invalid delete undo snapshot"))?;
+                let person_index = names
+                    .iter()
+                    .position(|name| *name == "person_id")
+                    .ok_or_else(|| CollectionError::invalid("invalid delete undo snapshot"))?;
+                let change_set_id = row[id_index]
+                    .as_i64()
+                    .ok_or_else(|| CollectionError::invalid("invalid delete undo snapshot"))?;
+                tx.execute(
+                    "UPDATE change_sets SET person_id = ?1 WHERE id = ?2",
+                    params![row[person_index].as_i64(), change_set_id],
+                )?;
+                continue;
+            }
+            let values = row
+                .iter()
+                .map(|value| match value {
+                    serde_json::Value::Null | serde_json::Value::Object(_) => {
+                        rusqlite::types::Value::Null
+                    }
+                    serde_json::Value::Bool(value) => {
+                        rusqlite::types::Value::Integer(i64::from(*value))
+                    }
+                    serde_json::Value::Number(value) => value
+                        .as_i64()
+                        .map(rusqlite::types::Value::Integer)
+                        .or_else(|| value.as_f64().map(rusqlite::types::Value::Real))
+                        .unwrap_or(rusqlite::types::Value::Null),
+                    serde_json::Value::String(value) => rusqlite::types::Value::Text(value.clone()),
+                    serde_json::Value::Array(values) => rusqlite::types::Value::Blob(
+                        values
+                            .iter()
+                            .filter_map(serde_json::Value::as_u64)
+                            .filter_map(|value| u8::try_from(value).ok())
+                            .collect(),
+                    ),
+                })
+                .collect::<Vec<_>>();
+            if values.len() != names.len() {
+                return Err(CollectionError::invalid("invalid delete undo snapshot"));
+            }
+            tx.execute(&sql, rusqlite::params_from_iter(values))?;
+        }
+    }
+    Ok(())
+}
+
+fn save_delete_undo(
+    tx: &rusqlite::Transaction<'_>,
+    operation: &str,
+    snapshot: &serde_json::Value,
+) -> Result<(), CollectionError> {
+    tx.execute(
+        "INSERT OR REPLACE INTO delete_undo (id, operation, snapshot) VALUES (1, ?1, ?2)",
+        params![
+            operation,
+            serde_json::to_string(snapshot)
+                .map_err(|error| { CollectionError::invalid(error.to_string()) })?
+        ],
+    )?;
+    Ok(())
+}
+
+/// Remove a feed and keep its collection rows for one undo.
+///
+/// # Errors
+///
+/// Gives [`CollectionErrorKind::NotFound`] when the feed does not exist.
+pub fn remove_feed(collection: &Collection, id: FeedId) -> Result<(), CollectionError> {
+    let pending = feed_has_pending_removal(collection, id)?;
+    let tx = collection.db().unchecked_transaction()?;
+    let snapshot = delete_snapshot(&tx, FEED_DELETE_TABLES, id.0)?;
+    if snapshot["feeds"]["rows"]
+        .as_array()
+        .is_none_or(Vec::is_empty)
+    {
+        return Err(CollectionError::with_kind(
+            CollectionErrorKind::NotFound,
+            format!("feed {} does not exist", id.0),
+        ));
+    }
+    if pending {
+        tx.execute("DELETE FROM delete_undo WHERE id = 1", [])?;
+    } else {
+        save_delete_undo(&tx, "feed", &snapshot)?;
+    }
+    tx.execute("DELETE FROM snapshots WHERE feed_id = ?1", [id.0])?;
+    tx.execute("DELETE FROM feeds WHERE id = ?1", [id.0])?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// Tell if removing a feed would delete a pending file or host operation.
+///
+/// # Errors
+///
+/// Gives the SQLite error when the collection cannot read the pending rows.
+pub fn feed_has_pending_removal(
+    collection: &Collection,
+    id: FeedId,
+) -> Result<bool, CollectionError> {
+    for (table, key) in [
+        ("draft_files", "feed_id"),
+        ("draft_operations", "feed_id"),
+        ("draft_feed_moves", "feed_id"),
+        ("draft_feed_deletes", "feed_id"),
+        ("feed_host_deletes", "feed_id"),
+    ] {
+        let count: i64 = collection.db().query_row(
+            &format!("SELECT COUNT(*) FROM {table} WHERE {key} = ?1"),
+            [id.0],
+            |row| row.get(0),
+        )?;
+        if count > 0 {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// Restore the last person or feed removal.
+///
+/// # Errors
+///
+/// Gives [`CollectionErrorKind::Invalid`] when no delete can be undone.
+pub fn undo_delete(collection: &Collection) -> Result<(), CollectionError> {
+    let tx = collection.db().unchecked_transaction()?;
+    let (operation, text): (String, String) = tx
+        .query_row(
+            "SELECT operation, snapshot FROM delete_undo WHERE id = 1",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?
+        .ok_or_else(|| CollectionError::invalid("There is no recent removal to undo."))?;
+    let snapshot =
+        serde_json::from_str(&text).map_err(|error| CollectionError::invalid(error.to_string()))?;
+    match operation.as_str() {
+        "person" => restore_delete_snapshot(&tx, PERSON_DELETE_TABLES, &snapshot)?,
+        "feed" => restore_delete_snapshot(&tx, FEED_DELETE_TABLES, &snapshot)?,
+        _ => return Err(CollectionError::invalid("invalid delete undo operation")),
+    }
+    tx.execute("DELETE FROM delete_undo WHERE id = 1", [])?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// Remove the last delete undo record when its notice ends or another
+/// immediate operation replaces it.
+///
+/// # Errors
+///
+/// Gives the SQLite error when the record cannot be removed.
+pub fn clear_delete_undo(collection: &Collection) -> Result<bool, CollectionError> {
+    let exists = collection.db().query_row(
+        "SELECT EXISTS(SELECT 1 FROM delete_undo WHERE id = 1)",
+        [],
+        |row| row.get(0),
+    )?;
+    collection
+        .db()
+        .execute("DELETE FROM delete_undo WHERE id = 1", [])?;
+    Ok(exists)
+}
+
 // ---- The suggestions of a read-only page (ADR 0159 items 7 to 10) ----
 
 /// A wallet of a page that the person does not have.
@@ -5435,6 +5739,194 @@ mod tests {
             feed_guid: guid.to_owned(),
             title: title.to_owned(),
         }
+    }
+
+    #[test]
+    fn delete_undo_tables_cover_each_foreign_key() {
+        // Each table with a foreign key to a table of a list must be in that
+        // list, or a delete loses its rows with no undo.
+        let collection = Collection::open_in_memory().unwrap();
+        let db = collection.db();
+        let tables = db
+            .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(0))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        for (name, list) in [
+            ("person", PERSON_DELETE_TABLES),
+            ("feed", FEED_DELETE_TABLES),
+        ] {
+            let listed = list.iter().map(|(table, _)| *table).collect::<Vec<_>>();
+            for table in &tables {
+                let parents = db
+                    .prepare(&format!(
+                        "SELECT \"table\" FROM pragma_foreign_key_list('{table}')"
+                    ))
+                    .unwrap()
+                    .query_map([], |row| row.get::<_, String>(0))
+                    .unwrap()
+                    .collect::<Result<Vec<_>, _>>()
+                    .unwrap();
+                // A person delete sets `change_sets.person_id` to null and
+                // deletes no change set, so a child of `change_sets` stays.
+                let child_of_list = parents
+                    .iter()
+                    .any(|parent| parent != "change_sets" && listed.contains(&parent.as_str()));
+                assert!(
+                    !child_of_list || listed.contains(&table.as_str()),
+                    "ADR 0227 item 16: a {name} delete removes the rows of {table}, \
+                     but the {name} undo record does not keep them. Add {table} to \
+                     the {name} list in crates/core/src/people.rs, after its parent."
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn undo_person_delete_restores_rows_ids_and_change_set_reference() {
+        let mut collection = Collection::open_in_memory().unwrap();
+        let ann = add_person(&collection, &fields("Ann")).unwrap();
+        let wallet = add_wallet(
+            &collection,
+            ann,
+            &key("node-undo"),
+            "node",
+            LinkEvidence::User,
+        )
+        .unwrap();
+        add_key(&collection, ann, "npub1undo").unwrap();
+        let feed = collection.add_feed(None, None).unwrap();
+        collection
+            .db()
+            .execute(
+                "UPDATE feeds SET medium = 'publisher' WHERE id = ?1",
+                [feed.0],
+            )
+            .unwrap();
+        add_member(&collection, ann, feed).unwrap();
+        collection
+            .db()
+            .execute(
+                "INSERT INTO change_sets (id, operation, recipient, made_at, person_id)
+             VALUES (81, 'remove_person', 'node-undo', 0, ?1)",
+                [ann.0],
+            )
+            .unwrap();
+
+        remove_person(&collection, ann).unwrap();
+        assert!(person(&collection, ann).is_err());
+        undo_delete(&collection).unwrap();
+
+        let restored = person(&collection, ann).unwrap();
+        assert_eq!(restored.wallets[0].id, wallet);
+        assert_eq!(restored.keys[0].npub, "npub1undo");
+        assert_eq!(restored.members, vec![feed]);
+        let reference: i64 = collection
+            .db()
+            .query_row(
+                "SELECT person_id FROM change_sets WHERE id = 81",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(reference, ann.0);
+        assert!(undo_delete(&collection).is_err());
+    }
+
+    #[test]
+    fn undo_feed_delete_restores_drafts_snapshots_and_item_ids() {
+        let mut collection = Collection::open_in_memory().unwrap();
+        let feed = collection.add_feed(None, None).unwrap();
+        collection.db().execute(
+            "INSERT INTO feed_items (feed_id, position, guid, title) VALUES (?1, 0, 'track-1', 'Track')",
+            [feed.0],
+        ).unwrap();
+        collection.db().execute(
+            "INSERT INTO snapshots (feed_id, version, xml, taken_at) VALUES (?1, 'v1', X'3C7273732F3E', 1)",
+            [feed.0],
+        ).unwrap();
+        collection
+            .db()
+            .execute(
+                "INSERT INTO drafts (feed_id, base_version, base_xml, draft_xml, updated_at)
+             VALUES (?1, 'v1', X'3C7273732F3E', X'3C7273732F3E', 2)",
+                [feed.0],
+            )
+            .unwrap();
+
+        collection
+            .db()
+            .execute(
+                "UPDATE feeds SET medium = 'publisher' WHERE id = ?1",
+                [feed.0],
+            )
+            .unwrap();
+        let ann = add_person(&collection, &fields("Ann")).unwrap();
+        add_member(&collection, ann, feed).unwrap();
+
+        remove_feed(&collection, feed).unwrap();
+        assert!(collection.feed(feed).is_err());
+        assert_eq!(
+            person(&collection, ann).unwrap().members,
+            Vec::<FeedId>::new()
+        );
+        undo_delete(&collection).unwrap();
+
+        assert_eq!(person(&collection, ann).unwrap().members, vec![feed]);
+        assert_eq!(collection.item_guids(feed).unwrap(), ["track-1"]);
+        let snapshots: i64 = collection
+            .db()
+            .query_row(
+                "SELECT COUNT(*) FROM snapshots WHERE feed_id = ?1 AND version = 'v1'",
+                [feed.0],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(snapshots, 1);
+        let drafts: i64 = collection
+            .db()
+            .query_row(
+                "SELECT COUNT(*) FROM drafts WHERE feed_id = ?1",
+                [feed.0],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(drafts, 1);
+    }
+
+    #[test]
+    fn a_pending_file_prevents_a_feed_delete_undo_record() {
+        let mut collection = Collection::open_in_memory().unwrap();
+        let feed = collection.add_feed(None, None).unwrap();
+        collection
+            .db()
+            .execute(
+                "INSERT INTO draft_files (feed_id, path, size, media_type, sha256, added_at)
+             VALUES (?1, 'new.mp3', 10, 'audio/mpeg', 'hash', 0)",
+                [feed.0],
+            )
+            .unwrap();
+
+        assert!(feed_has_pending_removal(&collection, feed).unwrap());
+        remove_feed(&collection, feed).unwrap();
+        assert!(undo_delete(&collection).is_err());
+    }
+
+    #[test]
+    fn a_second_delete_replaces_the_first_undo_record() {
+        let collection = Collection::open_in_memory().unwrap();
+        let first = add_person(&collection, &fields("First")).unwrap();
+        let second = add_person(&collection, &fields("Second")).unwrap();
+
+        remove_person(&collection, first).unwrap();
+        remove_person(&collection, second).unwrap();
+        undo_delete(&collection).unwrap();
+
+        assert!(person(&collection, first).is_err());
+        assert_eq!(person(&collection, second).unwrap().name, "Second");
+        assert!(undo_delete(&collection).is_err());
     }
 
     fn values() -> PublisherValues {

@@ -4,6 +4,7 @@
 import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
 import { useSheet, NostrKeyRow, NostrSheet, UndoButtons, useUndoKeys } from './editor.js';
 import { makeHistory, focusedField } from './undohistory.js';
+import { useUndoNotice, undoNoticeText } from './undonotice.js';
 
 // One undo history for each person. It stays when the user opens a different
 // page and comes back (ADR 0227 item 7).
@@ -191,7 +192,11 @@ export function PeoplePage({ feeds, go, sort, reversed, onOrder }) {
       // The list stays with no payees. The next load reads the recipients again.
     }
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    window.addEventListener('studio-undo-complete', load);
+    return () => window.removeEventListener('studio-undo-complete', load);
+  }, []);
 
   const titles = new Map((feeds || []).map((f) => [f.id, f.title || 'Untitled feed']));
   const order = peopleOrder(data ? filterPeople(data.people, query) : [], { sort, reversed });
@@ -865,6 +870,7 @@ function FillRow({ row, checked, onToggle }) {
 // `pageSequence('person')`.
 export function PersonPage({ id, feeds, go, view, tab: requestedTab }) {
   const { data, error, run, reload } = usePerson(id);
+  const undoNotice = useUndoNotice();
   const [suggestions, setSuggestions] = useState([]);
   const [sheet, setSheet] = useState(null);
   const [linking, setLinking] = useState(null);
@@ -1073,7 +1079,10 @@ export function PersonPage({ id, feeds, go, view, tab: requestedTab }) {
   // The delete changes no feed (ADR 0102). Then the People page opens.
   const deletePerson = () => run(async () => {
     if (!await askConfirm(CONFIRMS.deletePerson(person.name))) return;
-    await api(`/people/${id}`, { method: 'DELETE' });
+    const result = await api(`/people/${id}`, { method: 'DELETE' });
+    if (result.undoable) undoNotice.show(undoNoticeText.personDeleted(person.name), async () => {
+      await api('/undo', { method: 'POST' });
+    });
     go({ name: 'people' });
   });
   const sections = {
@@ -1233,10 +1242,17 @@ export function PersonPage({ id, feeds, go, view, tab: requestedTab }) {
   <${ValuesSheet} personId=${person.id} row=${picked} feeds=${feeds} shown=${shown}
     onBack=${() => { setPicked(null); setFinding(person.name); }} onClose=${() => setPicked(null)} onFill=${fill} />
   <${NicknameSheet} open=${nicknameOpen} value=${shown.nickname} onChange=${async (nickname) => {
+    const previousNickname = shown.nickname;
     const next = afterNicknameSave(saved, shown, nickname);
     await api(`/people/${id}`, { method: 'PATCH', body: nicknameBody(saved, nickname) });
     setSavedOverride(next.saved);
     setValues(next.shown);
+    undoNotice.show(undoNoticeText.nicknameChanged(nickname), async () => {
+      await api(`/people/${id}`, { method: 'PATCH', body: nicknameBody(next.saved, previousNickname) });
+      const restored = afterNicknameSave(next.saved, next.shown, previousNickname);
+      setSavedOverride(restored.saved);
+      setValues(restored.shown);
+    });
   }}
     onClose=${() => setNicknameOpen(false)} />
   ${offers.length > 0 && html`<${CreditSheet} key=${`${offers[0].kind}${offers[0].feedId}`} offer=${offers[0]} person=${person}

@@ -488,6 +488,24 @@ input[type="checkbox"]:disabled { opacity: .5; cursor: default; }
   border-radius: 10px;
   background: var(--fill-soft);
 }
+/* The Undo notice of the shell floats at the bottom of the window, above
+   the page (ADR 0227 item 13). */
+.undo-notice {
+  position: fixed;
+  z-index: 1000;
+  bottom: calc(16px + env(safe-area-inset-bottom));
+  left: 50%;
+  background: var(--level-2);
+  box-shadow: 0 16px 48px var(--art-shadow);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: max-content;
+  max-width: calc(var(--window-width) - 24px);
+  transform: translateX(-50%);
+}
+.undo-notice > span { flex: 1; }
 /* A notice has a fill and no border (ADR 0029). The border shows the
    error only. A warning has no border: its title has the triangle icon
    and the Warning color (ADR 0191 item 1, musicindex ADR 0025 R-STATUS-1

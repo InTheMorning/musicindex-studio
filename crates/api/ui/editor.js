@@ -3,6 +3,7 @@
 // edits the typed model of the draft. Each list entry carries its key, and
 // the draft saves automatically.
 import { html, useState, useEffect, useRef, createContext, useContext } from './vendor/htm-preact-standalone.module.js';
+import { useUndoNotice, undoNoticeText } from './undonotice.js';
 import { CONFIRMS } from './confirms.js';
 import { VIEWS, VIEW_LABELS, VIEW_HINTS, normalizeView, shownLines, localTimeNote, runs, commonIndent, stripIndent, moreLabel, fieldRows, guardRow, changeKeys, MERGE_TITLE, MERGE_INTRO, MERGE_HEADINGS, mergeRows, mergeReady, showsExamine, streamProblemRows } from './review.js';
 import { LoadErrorNotice, onSegmentKey, dropAreaClass, useFileDrop, api, saveTicket, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ChoiceSelect, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext, Icon, AddFeedRowSheet, inDesktopApp, NavContext } from './app.js';
@@ -2410,6 +2411,7 @@ export function useUndoKeys(undo, redo) {
 // the former Facts section showed, and the Remove from collection button.
 function FeedFacts({ feed, draft, onRemoved, onListChanged }) {
   const { busy, error, run } = useAction();
+  const undoNotice = useUndoNotice();
   // The announcements of the feed, the newest first (ADR 0052 item 20). The
   // list loads when the page opens, after each write, and each 5 seconds
   // while the newest one waits.
@@ -2432,9 +2434,15 @@ function FeedFacts({ feed, draft, onRemoved, onListChanged }) {
     : 'Not loaded yet.';
   const remove = async () => {
     const name = feed.title || feed.path || 'this feed';
-    if (!await askConfirm(CONFIRMS.removeFeed(name))) return;
     run(async () => {
-      await api(`/feeds/${feed.id}`, { method: 'DELETE' });
+      const info = await api(`/feeds/${feed.id}/remove-info`);
+      if (!await askConfirm(CONFIRMS.removeFeed(name, info.pending))) return;
+      const result = await api(`/feeds/${feed.id}`, { method: 'DELETE' });
+      if (result.undoable) undoNotice.show(undoNoticeText.feedRemoved(feed.title || 'Untitled feed'), async () => {
+        await api('/undo', { method: 'POST' });
+        onListChanged();
+      });
+      else undoNotice.dismiss();
       onRemoved();
     });
   };
@@ -2814,8 +2822,14 @@ function ExplicitField({ id, model, update }) {
 // of the draft (ADR 0213 items 13 and 16).
 function ReleaseKindField({ feed, onListChanged }) {
   const action = useAction();
+  const undoNotice = useUndoNotice();
   const save = (kind) => action.run(async () => {
+    const label = RELEASE_KINDS.find(([value]) => value === kind)?.[1] || 'From the tracks';
     await api(`/feeds/${feed.id}/kind`, { method: 'PUT', body: { kind: kind || null } });
+    undoNotice.show(undoNoticeText.kindChanged(label), async () => {
+      await api(`/feeds/${feed.id}/kind`, { method: 'PUT', body: { kind: feed.release_kind || null } });
+      await onListChanged();
+    });
     await onListChanged();
   });
   // No wrapper: the menu is a direct row of the group, as each other field.

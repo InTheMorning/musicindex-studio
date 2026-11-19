@@ -1708,8 +1708,28 @@ async fn a_feed_and_then_its_connector_go_out_of_the_collection() {
     assert_eq!(status, StatusCode::CONFLICT);
     assert_eq!(body["error"]["code"], "in_use");
 
-    let (status, _) = call(&app, "DELETE", &format!("/api/v1/feeds/{id}"), None).await;
-    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (status, body) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{id}/remove-info"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["pending"], false);
+    let (status, body) = call(&app, "DELETE", &format!("/api/v1/feeds/{id}"), None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["undoable"], true);
+    let (status, body) = call(&app, "POST", "/api/v1/undo", None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, body) = call(&app, "GET", "/api/v1/feeds", None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(body.as_array().unwrap().iter().any(|feed| feed["id"] == id));
+    let (status, body) = call(&app, "DELETE", &format!("/api/v1/feeds/{id}"), None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, body) = call(&app, "DELETE", "/api/v1/undo", None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["exists"], true);
     let (status, body) = call(&app, "DELETE", &format!("/api/v1/feeds/{id}"), None).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(body["error"]["code"], "not_found");
@@ -11921,8 +11941,24 @@ async fn a_person_is_added_read_changed_and_removed() {
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
     assert_eq!(body["error"]["code"], "invalid_person");
 
-    let (status, _) = call(&app, "DELETE", &format!("/api/v1/people/{id}"), None).await;
-    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (status, body) = call(&app, "DELETE", &format!("/api/v1/people/{id}"), None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["undoable"], true);
+    let (status, body) = call(&app, "POST", "/api/v1/undo", None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, body) = call(&app, "GET", &format!("/api/v1/people/{id}"), None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, body) = call(&app, "DELETE", "/api/v1/undo", None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["exists"], false);
+    let (status, body) = call(&app, "POST", "/api/v1/undo", None).await;
+    assert!(status.is_client_error(), "{status} {body}");
+    assert!(body["error"]["message"].as_str().is_some(), "{body}");
+    let (status, body) = call(&app, "DELETE", &format!("/api/v1/people/{id}"), None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, body) = call(&app, "DELETE", "/api/v1/undo", None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["exists"], true);
     for method in ["GET", "DELETE"] {
         let (status, body) = call(&app, method, &format!("/api/v1/people/{id}"), None).await;
         assert_eq!(status, StatusCode::NOT_FOUND, "{method} {body}");

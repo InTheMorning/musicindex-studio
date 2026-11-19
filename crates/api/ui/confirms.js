@@ -12,9 +12,9 @@ export const CONFIRMS = {
     `Delete ${count === 1 ? 'the old file' : `the ${count} old files`} before the move is ready?`,
     `An app that still uses an old address gets an error. You review each deletion, and ${host} keeps the files until you write.`,
     'Review the Deletion'),
-  removeFeed: (name) => destructive(
+  removeFeed: (name, cannotUndo = false) => destructive(
     `Remove “${name}” from your collection?`,
-    'The feed file on its file host does not change. You can add the feed again later.',
+    `The feed file on its file host does not change. You can add the feed again later.${cannotUndo ? ' This cannot be undone.' : ''}`,
     'Remove from Collection'),
   removeApp: (name) => destructive(
     `Remove the app “${name}”?`,

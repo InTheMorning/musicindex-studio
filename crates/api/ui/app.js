@@ -28,6 +28,7 @@ import { CONFIRMS, confirmButtons } from './confirms.js';
 import { changeTitle, afterDiscard, changeLine } from './people.js';
 import { makeSettingsDraft, changeSetting, settingsDraftView, discardSettings, saveSettings, asksSettingsLeave } from './settingsdraft.js';
 import { makeHistory } from './undohistory.js';
+import { UndoNoticeProvider, useUndoNotice, undoNoticeText } from './undonotice.js';
 
 // The undo history of the Settings draft. It stays when the user opens a
 // different page and comes back (ADR 0227 item 7).
@@ -2039,13 +2040,20 @@ export function useLeaveGuard(active, guard) {
 // before ADR 0029.
 function ReadOnlyFeed({ feed, onChanged, onRemoved }) {
   const { busy, error, run } = useAction();
+  const undoNotice = useUndoNotice();
   const kind = feedKind(feed);
   const refresh = () => run(async () => onChanged(await api(`/feeds/${feed.id}/refresh`, { method: 'POST' })));
   const remove = async () => {
     const name = feed.title || feed.path || 'this feed';
-    if (!await askConfirm(CONFIRMS.removeFeed(name))) return;
     run(async () => {
-      await api(`/feeds/${feed.id}`, { method: 'DELETE' });
+      const info = await api(`/feeds/${feed.id}/remove-info`);
+      if (!await askConfirm(CONFIRMS.removeFeed(name, info.pending))) return;
+      const result = await api(`/feeds/${feed.id}`, { method: 'DELETE' });
+      if (result.undoable) undoNotice.show(undoNoticeText.feedRemoved(feed.title || 'Untitled feed'), async () => {
+        await api('/undo', { method: 'POST' });
+        onRemoved();
+      });
+      else undoNotice.dismiss();
       onRemoved();
     });
   };
@@ -5629,7 +5637,7 @@ function App() {
       window.dispatchEvent(new Event(UNLOCKED));
     }
   };
-  return html`${body}<${ConfirmHost} />${unlockAsk && (view === 'shell' || view === 'local') && html`<${UnlockSheet} session=${session} reason=${unlockAsk.reason} onDone=${closeUnlock} />`}`;
+  return html`<${UndoNoticeProvider} api=${api}>${body}<${ConfirmHost} />${unlockAsk && (view === 'shell' || view === 'local') && html`<${UnlockSheet} session=${session} reason=${unlockAsk.reason} onDone=${closeUnlock} />`}</${UndoNoticeProvider}>`;
 }
 
 watchFileDrags(window, document.documentElement);

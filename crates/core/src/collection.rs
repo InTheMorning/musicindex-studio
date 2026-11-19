@@ -684,6 +684,14 @@ CREATE TABLE person_merge_undo (
     snapshot TEXT NOT NULL
 );
 ",
+    // ADR 0227 item 16: the last delete that the user can undo.
+    r"
+CREATE TABLE delete_undo (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    operation TEXT NOT NULL CHECK (operation IN ('person', 'feed')),
+    snapshot TEXT NOT NULL
+);
+",
 ];
 
 /// `root` as a relative path under `data_dir`, when it is a folder inside

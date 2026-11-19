@@ -137,6 +137,22 @@ pub(crate) async fn status(State(shared): State<Shared>) -> ApiResult {
     .await
 }
 
+pub(crate) async fn undo_delete(State(shared): State<Shared>) -> ApiResult {
+    blocking(shared, |w| {
+        people::undo_delete(&w.collection)?;
+        Ok(Json(json!({ "undone": true })))
+    })
+    .await
+}
+
+pub(crate) async fn clear_delete_undo(State(shared): State<Shared>) -> ApiResult {
+    blocking(shared, |w| {
+        let exists = people::clear_delete_undo(&w.collection)?;
+        Ok(Json(json!({ "exists": exists })))
+    })
+    .await
+}
+
 #[derive(Deserialize)]
 pub(crate) struct CreateVault {
     passphrase: Zeroizing<String>,
@@ -1816,6 +1832,7 @@ pub(crate) async fn set_release_kind(
         }
         w.collection
             .set_release_kind(row.id, body.kind.as_deref())?;
+        people::clear_delete_undo(&w.collection)?;
         to_json(w.collection.feed(row.id)?)
     })
     .await
@@ -2159,17 +2176,33 @@ pub(crate) async fn put_outside_setting(
     .await
 }
 
-pub(crate) async fn delete_feed(
-    State(shared): State<Shared>,
-    Path(id): Path<i64>,
-) -> Result<StatusCode, ApiError> {
+pub(crate) async fn delete_feed(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
     blocking(shared, move |w| {
         let id = FeedId(id);
-        // Remove the rows and the copies of the pending files of the feed
-        // before the feed goes out (ADR 0032 item 12).
-        pipeline::discard_draft(&w.collection, id)?;
-        w.collection.delete_feed(id)?;
-        Ok(StatusCode::NO_CONTENT)
+        let undoable = !people::feed_has_pending_removal(&w.collection, id)?;
+        if undoable {
+            people::remove_feed(&w.collection, id)?;
+        } else {
+            // Pending files and host operations cannot be restored (ADR 0227 item 17).
+            people::clear_delete_undo(&w.collection)?;
+            pipeline::discard_draft(&w.collection, id)?;
+            w.collection.delete_feed(id)?;
+        }
+        Ok(Json(json!({ "undoable": undoable })))
+    })
+    .await
+}
+
+pub(crate) async fn feed_remove_info(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let id = FeedId(id);
+        w.collection.feed(id)?;
+        Ok(Json(json!({
+            "pending": people::feed_has_pending_removal(&w.collection, id)?
+        })))
     })
     .await
 }

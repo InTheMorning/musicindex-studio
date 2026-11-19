@@ -233,6 +233,10 @@ fn workspace_router_with_shared(workspace: Workspace) -> (Router, WorkspaceHandl
     workspace::spawn_grant_sync(&shared);
     let api = Router::new()
         .route("/status", get(routes::status))
+        .route(
+            "/undo",
+            post(routes::undo_delete).delete(routes::clear_delete_undo),
+        )
         .route("/vault", post(routes::create_vault))
         .route("/vault/strength", post(routes::passphrase_strength))
         .route("/vault/unlock", post(routes::unlock_vault))
@@ -400,6 +404,7 @@ fn workspace_router_with_shared(workspace: Workspace) -> (Router, WorkspaceHandl
         .route("/feeds", get(routes::list_feeds).post(routes::add_feed))
         .route("/feeds/new", post(routes::new_album_feed))
         .route("/feeds/{id}/kind", put(routes::set_release_kind))
+        .route("/feeds/{id}/remove-info", get(routes::feed_remove_info))
         .route("/feeds/{id}", delete(routes::delete_feed))
         .route("/feeds/{id}/links", post(routes::add_link))
         .route("/feeds/{id}/links/{release}", delete(routes::remove_link))

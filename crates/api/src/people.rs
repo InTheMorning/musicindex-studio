@@ -264,6 +264,7 @@ pub(crate) async fn change_person(
 ) -> Result<StatusCode, ApiError> {
     blocking(shared, move |w| {
         people::change_person(&w.collection, PersonId(id), &fields).map_err(person_error)?;
+        people::clear_delete_undo(&w.collection)?;
         Ok(StatusCode::NO_CONTENT)
     })
     .await
@@ -297,13 +298,10 @@ pub(crate) async fn save_person(
     .await
 }
 
-pub(crate) async fn remove_person(
-    State(shared): State<Shared>,
-    Path(id): Path<i64>,
-) -> Result<StatusCode, ApiError> {
+pub(crate) async fn remove_person(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
     blocking(shared, move |w| {
         people::remove_person(&w.collection, PersonId(id))?;
-        Ok(StatusCode::NO_CONTENT)
+        Ok(Json(json!({ "undoable": true })))
     })
     .await
 }

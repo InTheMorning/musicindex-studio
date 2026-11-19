@@ -2,7 +2,7 @@
 
 Decision: [ADR 0227](../adr/0227-undo-and-redo.md) items 13 to 19.
 
-Status: Open. It needs task 196.
+Status: Done.
 
 ## Problem
 
@@ -48,3 +48,15 @@ Visual (the main session):
 - Read `/home/citizen/.agents/skills/asd-ste100/SKILL.md` before you write a comment.
 - Do not commit. Leave the change in the working tree and report the changed files and the check results.
 - Do not make an architecture decision. When this task does not answer a question, stop and report.
+
+## Result
+
+- The first delegate run stopped with no change. The second run, at effort `high`, made the core record, the routes and the notice.
+- Routes: `POST /api/v1/undo`, `DELETE /api/v1/undo` and `GET /api/v1/feeds/{id}/remove-info`. The last route tells the confirmation sheet if the feed has pending files or host operations (item 17). The schema is 45.
+- The main session corrected these defects of the delegate run:
+  - A feed delete also removes the `person_members` rows of the feed, but the feed list of the record did not keep them. After Undo, the release came back with no people. The test `delete_undo_tables_cover_each_foreign_key` now compares the two lists with each foreign key of the schema.
+  - The run moved the merge notice of the person page into the new notice, with no time limit. ADR 0227 item 16 keeps the merge undo as it is, so the merge notice is again on the person page.
+  - The notice was at the top of the window and covered the title of the bar. Now it is at the bottom center, with the `--level-2` background and a shadow.
+- Walks: `.studio-dev/walk/u197-1280.json` and `u197-390.json` with `setup-194.py`. Delete Person shows "Ann Bell is deleted.", and Undo puts Ann Bell back in People. Remove from Collection shows the notice, and Undo puts feed 18 back with its 20 tracks. After Undo, no notice shows.
+- Open: the walks do not include the notices of the menu Kind and the nickname. A UI test checks their texts.
+- Open: when the app stops during the 10 seconds, the record stays in the collection until the next operation of item 13. No notice can then use it.

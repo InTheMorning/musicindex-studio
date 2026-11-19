@@ -202,6 +202,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0223: A split in shares or percent, a release search, and one tap on a phone](adr/0223-a-split-in-shares-or-percent-a-release-search-and-one-tap-on-a-phone.md)
 - [ADR 0224: A finding that stops the write, and a new release opens Add tracks](adr/0224-a-finding-that-stops-the-write-and-a-new-release-opens-add-tracks.md)
 - [ADR 0225: The first tab of a release is Release](adr/0225-the-first-tab-of-a-release-is-release.md)
+- [ADR 0226: The typed start folder, the program name, the root order and person tabs](adr/0226-the-typed-start-folder-the-program-name-the-root-order-and-person-tabs.md)
 
 ## Plans
 

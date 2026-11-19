@@ -7,6 +7,7 @@
 - Bar: crosses repositories. musicindex ADR 0084 R-PACKAGE-5 asks each repository for its own packaging record.
 - Uses: musicindex ADR 0084 (the Linux packages of each suite app). This record cites its rules and does not write them again.
 - Uses: [ADR 0124](0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md) item 26 (the GStreamer plugins of the AppImage).
+- Changed by: [ADR 0226](0226-the-typed-start-folder-the-program-name-the-root-order-and-person-tabs.md) items 5 and 6, on 2026-11-19. The installed program is `musicindex-studio-desktop` (item 1).
 
 ## Context
 

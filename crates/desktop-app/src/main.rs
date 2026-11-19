@@ -212,7 +212,9 @@ fn finish(app: &AppHandle) {
                 app.request_restart();
                 return;
             }
-            Err(error) => eprintln!("studio-desktop-app: the collection did not change: {error}"),
+            Err(error) => {
+                eprintln!("musicindex-studio-desktop: the collection did not change: {error}");
+            }
         }
     }
     app.exit(0);
@@ -610,7 +612,7 @@ fn setup(app: &AppHandle) -> Result<(), String> {
     let serve = started.serve;
     tauri::async_runtime::spawn(async move {
         if let Err(error) = serve.await {
-            eprintln!("studio-desktop-app: the API stopped: {error}");
+            eprintln!("musicindex-studio-desktop: the API stopped: {error}");
         }
         let _ = ended_sender.send(());
     });
@@ -618,7 +620,7 @@ fn setup(app: &AppHandle) -> Result<(), String> {
     // A desktop with no tray host gives an error here. The app works without
     // an icon, and a close then quits (ADR 0124 item 29).
     if let Err(error) = build_tray(app) {
-        eprintln!("studio-desktop-app: no tray icon: {error}");
+        eprintln!("musicindex-studio-desktop: no tray icon: {error}");
     }
     Ok(())
 }
@@ -698,6 +700,31 @@ mod tests {
         assert!(
             !source.contains(&default_plugin) && source.contains(".open_js_links_on_click(false)"),
             "ADR 0124 items 2 and 5: the page has no Tauri command, so the link script of the opener plugin stops each click on a target=_blank link. Build the plugin with tauri_plugin_opener::Builder::new().open_js_links_on_click(false)."
+        );
+    }
+
+    #[test]
+    fn the_program_name_and_the_desktop_file_agree() {
+        // rc.27 check finding 6: the program had the name of the Cargo
+        // package. The window class follows the program name, so the desktop
+        // file must use the same name in two lines.
+        let name = "musicindex-studio-desktop";
+        let cargo = include_str!("../Cargo.toml");
+        let desktop = include_str!("../../../packaging/arch/musicindex-studio.desktop");
+        let fix = "ADR 0226 items 5 and 6: the [[bin]] name of crates/desktop-app/Cargo.toml, Exec and StartupWMClass of packaging/arch/musicindex-studio.desktop must all be musicindex-studio-desktop. Change the three lines together.";
+        assert!(
+            cargo.contains(&format!("[[bin]]\nname = \"{name}\"")),
+            "{fix}"
+        );
+        assert!(
+            desktop.lines().any(|line| line == format!("Exec={name}")),
+            "{fix}"
+        );
+        assert!(
+            desktop
+                .lines()
+                .any(|line| line == format!("StartupWMClass={name}")),
+            "{fix}"
         );
     }
 

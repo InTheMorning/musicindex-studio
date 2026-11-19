@@ -22,7 +22,7 @@ This runbook tells how to build and install `musicindex-studio-git` on Arch Linu
    makepkg -si
    ```
 
-3. Start "Music Index Studio" from the application menu, or run `studio-desktop-app`.
+3. Start "Music Index Studio" from the application menu, or run `musicindex-studio-desktop`.
 
 ## Optional Packages
 

@@ -53,7 +53,7 @@ pub fn restart_if_necessary() {
         .args(std::env::args_os().skip(1))
         .env(VARIABLE, "1")
         .exec();
-    eprintln!("studio-desktop-app: could not start again with {VARIABLE}: {error}");
+    eprintln!("musicindex-studio-desktop: could not start again with {VARIABLE}: {error}");
 }
 
 #[cfg(test)]

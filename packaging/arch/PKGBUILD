@@ -95,7 +95,7 @@ check() {
 package() {
   cd "${_pkgname}"
 
-  install -Dm0755 "${srcdir}/target/release/studio-desktop-app" -t "${pkgdir}/usr/bin/"
+  install -Dm0755 "${srcdir}/target/release/musicindex-studio-desktop" -t "${pkgdir}/usr/bin/"
   install -Dm0644 packaging/arch/musicindex-studio.desktop \
     "${pkgdir}/usr/share/applications/musicindex-studio.desktop"
   # The app icon is 512 x 512 pixels.

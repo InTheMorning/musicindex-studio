@@ -2,7 +2,7 @@
 
 Decision: [ADR 0226](../adr/0226-the-typed-start-folder-the-program-name-the-root-order-and-person-tabs.md) items 5 and 6.
 
-Status: Open.
+Status: Done.
 
 ## Problem
 
@@ -35,3 +35,10 @@ Mechanical:
 - A local AppImage build has `usr/bin/musicindex-studio-desktop`.
 
 Human: the operator installs the Arch package and starts Music Index Studio from the application menu. The window list shows the app icon.
+
+## Result
+
+- `cargo test -p studio-desktop-app` passes (25 tests). The new test `the_program_name_and_the_desktop_file_agree` reads `Cargo.toml` and the Arch desktop file.
+- A release build and the `package()` step of `PKGBUILD` in a temporary copy install `usr/bin/musicindex-studio-desktop`. The desktop file has the same name in `Exec` and `StartupWMClass`.
+- The release binary on Xvfb gives two windows of the class `musicindex-studio-desktop` and no window of the class `studio-desktop-app`.
+- Open: the main session did not run a full `makepkg` and did not build a local AppImage. The release build of the operator does these checks.

@@ -6403,7 +6403,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("collection.sqlite");
         let db = Connection::open(&path).unwrap();
-        let previous = MIGRATIONS.len() - 1;
+        let previous = migration_index("CREATE TABLE signing_plans");
         for migration in &MIGRATIONS[..previous] {
             db.execute_batch(migration).unwrap();
         }
@@ -6772,7 +6772,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("collection.sqlite");
         let db = Connection::open(&path).unwrap();
-        let previous = MIGRATIONS.len() - 1;
+        let previous = migration_index("CREATE TABLE draft_grants");
         for migration in &MIGRATIONS[..previous] {
             db.execute_batch(migration).unwrap();
         }

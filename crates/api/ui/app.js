@@ -4013,7 +4013,7 @@ function Shell({ vault, onLock, version }) {
   }
 
   const navValue = { coarse, canBack: canBack(nav), canForward: canForward(nav), back, forward, setLeaveGuard,
-    rootButtons: showsRootButtons(nav, narrow), toRoot };
+    rootButtons: showsRootButtons(nav, narrow), toRoot, go };
   const panelProps = { panel, draft, changedFeeds, go, showReleases, onAdding: setAdding, onImporting: setImporting, onLock: lock };
   return html`<${NavContext.Provider} value=${navValue}><${OutsideContext.Provider} value=${outsideValue}><div class="shell">
     ${!narrow && html`<nav class="sidebar" aria-label="Collection">
@@ -4915,7 +4915,7 @@ function OutsideNotices({ feed, busy, refresh, onChanged }) {
       </div>
       <${ErrorNotice} error=${error} />
     </div>`}
-    ${readOnly && html`<div class="notice" role="status">${readOnly.text}<div class="actions"><button class="button action" type="button" disabled=${busy || sending} onClick=${readOnly.use ? useHost : () => nav && nav.go({ name: 'hosts' })}>${readOnly.button}</button></div><${ErrorNotice} error=${error} /></div>`}
+    ${readOnly && html`<div class="notice" role="status">${readOnly.text}<div class="actions"><button class="button action" type="button" disabled=${busy || sending} onClick=${readOnly.use ? useHost : () => nav.go({ name: 'hosts' })}>${readOnly.button}</button></div><${ErrorNotice} error=${error} /></div>`}
     ${index && html`<div class="notice" role="status"><strong>${index.strong}</strong> <span class="mono">${index.index}</span>. Your feed is at <span class="mono">${index.own}</span>. ${index.after}</div>`}
     ${move && html`<div class="notice" role="status"><strong>${move.strong}</strong>
       <${PodpingLines} lines=${move.lines} disabled=${busy || sending} send=${sendPodping} />

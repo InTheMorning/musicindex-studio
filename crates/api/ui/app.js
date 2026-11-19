@@ -7,7 +7,7 @@ import { UI_SCALES, SCALE_KEY, normalizeScale, measureWindowUnits } from './uisc
 import { LOCK_HINT, lockChoiceText } from './vaultlock.js';
 import { serverFilesRows, sizeText, SERVER_FILES_NOTE } from './assets.js';
 import { failedLine } from './failures.js';
-import { OPEN_MERGE, OPEN_FEED_MOVE, MoveAllSheet, AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, AnnounceChoice } from './editor.js';
+import { OPEN_MERGE, OPEN_FEED_MOVE, MoveAllSheet, AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, AnnounceChoice, UndoButtons, useUndoKeys } from './editor.js';
 import {
   recipientKey,
   outcomeText, blockedText, operationLine, nameOf, writableIds, firstOpenId, initialStatuses, refreshedStatuses, startWrite,
@@ -27,6 +27,11 @@ import { appRowLines, pairingPhase, pairingNotice, doneRemovesApp } from './apps
 import { CONFIRMS, confirmButtons } from './confirms.js';
 import { changeTitle, afterDiscard, changeLine } from './people.js';
 import { makeSettingsDraft, changeSetting, settingsDraftView, discardSettings, saveSettings, asksSettingsLeave } from './settingsdraft.js';
+import { makeHistory } from './undohistory.js';
+
+// The undo history of the Settings draft. It stays when the user opens a
+// different page and comes back (ADR 0227 item 7).
+const settingsHistory = makeHistory();
 import { PeoplePage, PersonPage, CheckPage, WalletPage } from './peoplepages.js';
 import { OUTSIDE_LIMIT, OUTSIDE_SETTING_LABEL, OUTSIDE_SETTING_HINT, outsideMark, outsideNotice, readOnlyHostNotice, indexNotice, releaseMusicIndexLink, moveNotice, writeNotice, nextNoticeLoad, eachLimited, panelSet, stateMark } from './outsidecheck.js';
 import { collectionMark, collectionRow, collectionSectionActions, collectionSheet, collectionAction, CLOSED_EXPORT_HINT, COLLECTIONS_HINT, OPENING_TEXT } from './collectionlist.js';
@@ -2888,21 +2893,37 @@ function Hosts({ connectors, feeds, onChanged, onOpen, onMoved, view }) {
 // opens on General.
 function SettingsPage({ view, go, version }) {
   const [draft, setDraft] = useState(() => makeSettingsDraft({}));
+  // The draft of the last change. Two changes in one event use it, so that
+  // the second change does not lose the first.
+  const latest = useRef(null);
+  latest.current = draft;
   const [revision, setRevision] = useState(0);
   const [saving, setSaving] = useState(false);
   const [saveErrors, setSaveErrors] = useState({});
   const draftView = settingsDraftView(draft);
+  // Undo and Redo set the draft of the step (ADR 0227 item 5).
+  const step = (state) => { if (state) { latest.current = state; setDraft(state); setSaveErrors({}); } };
+  const undo = () => step(settingsHistory.undo(latest.current));
+  const redo = () => step(settingsHistory.redo(latest.current));
+  useUndoKeys(undo, redo);
+  useEffect(() => {
+    if (draft.values.scale === undefined) return;
+    document.documentElement.dataset.uiScale = draft.values.scale;
+    measureWindowUnits();
+  }, [draft.values.scale]);
   const record = (key, saved, value) => {
     setSaveErrors((old) => { const next = { ...old }; delete next[key]; return next; });
-    setDraft((old) => {
-      const seeded = Object.prototype.hasOwnProperty.call(old.saved, key) ? old : { ...old, saved: { ...old.saved, [key]: saved }, values: { ...old.values, [key]: saved } };
-      return changeSetting(seeded, key, value);
-    });
+    const old = latest.current;
+    const seeded = Object.prototype.hasOwnProperty.call(old.saved, key) ? old : { ...old, saved: { ...old.saved, [key]: saved }, values: { ...old.values, [key]: saved } };
+    settingsHistory.record(seeded, key, Date.now());
+    latest.current = changeSetting(seeded, key, value);
+    setDraft(latest.current);
   };
   const leave = async (target) => {
     const tabOnly = target && target.name === 'settings' && view.name === 'settings' && target.tab !== view.tab;
     if (!asksSettingsLeave(draft, tabOnly ? 'tab' : 'page')) return true;
     const allowed = await askConfirm(CONFIRMS.leavePerson('Your Settings changes are not saved.'));
+    if (allowed) settingsHistory.clear();
     if (allowed && Object.hasOwn(draft.saved, 'scale')) { document.documentElement.dataset.uiScale = draft.saved.scale; measureWindowUnits(); }
     return allowed;
   };
@@ -2914,6 +2935,7 @@ function SettingsPage({ view, go, version }) {
     return () => removeEventListener('beforeunload', warn);
   }, [draftView.count]);
   const discard = () => {
+    settingsHistory.clear();
     const next = discardSettings(draft);
     setDraft(next);
     setSaveErrors({});
@@ -2935,6 +2957,7 @@ function SettingsPage({ view, go, version }) {
         library: (max, min) => api('/library/limits', { method: 'PUT', body: { download_max_file_bytes: Math.round(Number(max) * 1024 * 1024), download_min_free_bytes: Math.round(Number(min) * 1024 * 1024) } }),
       };
       const result = await saveSettings(draft, routes);
+      settingsHistory.clear();
       setDraft(result.draft);
       setSaveErrors(result.errors);
     } finally { setSaving(false); }
@@ -2962,7 +2985,8 @@ function SettingsPage({ view, go, version }) {
   const barCause = draftView.pending.map((key) => draftView.causes[key]).find(Boolean);
   return html`<div>
     <${Bar}><span class="bar-title">Settings</span>
-      <div class="draft-toolbar"><span class=${barCause ? 'draft-status error' : 'draft-status'} role="status">${barCause || draftView.status}</span>
+      <div class="draft-toolbar"><${UndoButtons} canUndo=${settingsHistory.canUndo} canRedo=${settingsHistory.canRedo} undo=${undo} redo=${redo} />
+        <span class=${barCause ? 'draft-status error' : 'draft-status'} role="status">${barCause || draftView.status}</span>
         <button class="button discard" type="button" disabled=${draftView.discardDisabled || saving} onClick=${discard}>Discard</button>
         <button class="button primary" type="button" disabled=${draftView.saveDisabled || saving} onClick=${save}>Save</button></div>
 <//>
@@ -4826,8 +4850,9 @@ function ExportSheet({ onClose, folder = null }) {
 
 // The section "UI scale" of the Settings page (ADR 0134). With touch, the
 // system gives the size, so the section does not show.
-function ScalePanel({ draft, changed }) {
+function ScalePanel({ draft, draftState, changed }) {
   const [level, setLevel] = useState(() => normalizeScale(document.documentElement.dataset.uiScale));
+  useEffect(() => { if (draftState.values.scale !== undefined) setLevel(draftState.values.scale); }, [draftState.values.scale]);
   if (matchMedia('(pointer: coarse)').matches) return null;
   const change = (next) => {
     document.documentElement.dataset.uiScale = next;

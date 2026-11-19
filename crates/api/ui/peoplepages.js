@@ -2,7 +2,17 @@
 // the pages and call the API. The functions of `people.js` give each text
 // and each state, and the core applies each rule (ADR 0042, ADR 0065).
 import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
-import { useSheet, NostrKeyRow, NostrSheet } from './editor.js';
+import { useSheet, NostrKeyRow, NostrSheet, UndoButtons, useUndoKeys } from './editor.js';
+import { makeHistory, focusedField } from './undohistory.js';
+
+// One undo history for each person. It stays when the user opens a different
+// page and comes back (ADR 0227 item 7).
+const personHistories = new Map();
+function personHistory(id) {
+  const key = String(id);
+  if (!personHistories.has(key)) personHistories.set(key, makeHistory());
+  return personHistories.get(key);
+}
 import { PickerLayout, FindOneSheet, PickFold, RowList, TakenTag, useFieldList } from './pickers.js';
 import { LoadErrorNotice, api, assetMode, askConfirm, Bar, SortMenu, LetterBar, useLeaveGuard, ChoiceSelect, CopyButton, Icon, RoleMenu, ErrorNotice, FeedCheckRow, Field, SearchField, useAction, useImage, PageTabs } from './app.js';
 import { AddressRow } from './addressrow.js';
@@ -929,19 +939,42 @@ export function PersonPage({ id, feeds, go, view, tab: requestedTab }) {
   // The pending changes of the fields, the default address and the links
   // (ADR 0116 items 1 to 6). The saved values come from each read of the person.
   const [values, setValues] = useState(null);
+  const history = personHistory(id);
+  // The person of the last read. A new read of the same person, for example
+  // after a link change or a merge, clears the history (ADR 0227 items 8 and
+  // 10). The first read after the page opens keeps it (item 7).
+  const readPerson = useRef(null);
+  const latest = useRef(null);
   const [savedOverride, setSavedOverride] = useState(null);
   const [saving, setSaving] = useState(false);
   const [nicknameOpen, setNicknameOpen] = useState(false);
   const [saveFailure, setSaveFailure] = useState(null);
   // The line of each filled field. Save, Discard and a new read clear it.
   const [sources, setSources] = useState({});
-  useEffect(() => { if (data) { setValues(savedValues(data.person)); setSavedOverride(null); setSaveFailure(null); setSources({}); } }, [data]);
+  useEffect(() => {
+    if (!data) return;
+    if (readPerson.current === String(id)) history.clear();
+    readPerson.current = String(id);
+    latest.current = null;
+    setValues(savedValues(data.person)); setSavedOverride(null); setSaveFailure(null); setSources({});
+  }, [data, id]);
   const saved = data ? (savedOverride || savedValues(data.person)) : null;
   const shown = values || saved;
   const keys = saved ? pendingKeys(saved, shown) : [];
   const dirty = keys.length > 0;
-  const update = (patch) => { setSaveFailure(null); setValues((current) => ({ ...(current || saved), ...patch })); };
-  const discard = () => { setValues(saved); setSaveFailure(null); setSources({}); };
+  const update = (patch) => {
+    setSaveFailure(null);
+    const before = latest.current || values || saved;
+    history.record(before, focusedField(), Date.now());
+    latest.current = { ...before, ...patch };
+    setValues(latest.current);
+  };
+  // Undo and Redo set the pending values of the step (ADR 0227 item 5).
+  const step = (state) => { if (state) { latest.current = state; setValues(state); setSaveFailure(null); } };
+  const undo = () => step(history.undo(latest.current || values || saved));
+  const redo = () => step(history.redo(latest.current || values || saved));
+  useUndoKeys(undo, redo);
+  const discard = () => { history.clear(); latest.current = null; setValues(saved); setSaveFailure(null); setSources({}); };
   // A fill makes pending changes, and closes the values sheet (ADR 0117 item 14).
   const fill = (patch, source) => {
     update(patch);
@@ -965,6 +998,7 @@ export function PersonPage({ id, feeds, go, view, tab: requestedTab }) {
     try {
       await api(`/people/${id}/save`, { method: 'POST', body: saveBody(saved, shown) });
       saveDone = true;
+      history.clear();
       await reload();
     } catch (e) {
       setSaveFailure((e && e.message) || 'Studio could not save this person');
@@ -999,7 +1033,7 @@ export function PersonPage({ id, feeds, go, view, tab: requestedTab }) {
   const askLeave = async (target) => {
     if (!dirty || isTabChange(view, target)) return true;
     const leave = await askConfirm(CONFIRMS.leavePerson(leaveText(data.person.name, keys)));
-    if (leave) setValues(saved);
+    if (leave) { history.clear(); latest.current = null; setValues(saved); }
     return leave;
   };
   useLeaveGuard(dirty, askLeave);
@@ -1172,7 +1206,8 @@ export function PersonPage({ id, feeds, go, view, tab: requestedTab }) {
   const allSections = pageSequence('person');
   const renderSection = (section) => html`<${Fragment} key=${section.id}>${sections[section.id]()}<//>`;
   return html`<div><${Bar}><span class="bar-title">${displayName(shown || person)}</span>
-    <div class="draft-toolbar"><span class=${saveFailure ? 'draft-status field-error' : 'draft-status'} role="status">${saveFailure || pendingStatus(keys.length)}</span>
+    <div class="draft-toolbar"><${UndoButtons} canUndo=${history.canUndo} canRedo=${history.canRedo} undo=${undo} redo=${redo} />
+      <span class=${saveFailure ? 'draft-status field-error' : 'draft-status'} role="status">${saveFailure || pendingStatus(keys.length)}</span>
       <button class="button discard" type="button" disabled=${!dirty || saving} onClick=${discard}>Discard</button>
       <button class="button primary" type="button" disabled=${!dirty || saving} onClick=${save}>Save</button></div><//><section class="section">
     <${ErrorNotice} error=${error} />

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { makeHistory, undoKey } from '../ui/undohistory.js';
+import { makeHistory, undoKey, focusedField } from '../ui/undohistory.js';
 
 test('ADR 0227 item 4: field edits group and undo restores the first value', () => {
   const history = makeHistory();
@@ -52,8 +52,16 @@ test('ADR 0227 item 3: undo keys reject Alt and recognize Ctrl and Cmd forms', (
 test('ADR 0227 item 2: the toolbar puts undo and redo before draft status', async () => {
   const editor = await readFile(new URL('../ui/editor.js', import.meta.url), 'utf8');
   const toolbar = editor.slice(editor.indexOf('export function DraftToolbar'), editor.indexOf('// ---- The editor pages'));
-  assert.ok(toolbar.indexOf('aria-label="Undo"') < toolbar.indexOf('draft-status'));
-  assert.ok(toolbar.indexOf('aria-label="Redo"') < toolbar.indexOf('draft-status'));
+  assert.ok(toolbar.indexOf('<${UndoButtons}') < toolbar.indexOf('draft-status'));
+  const buttons = editor.slice(editor.indexOf('export function UndoButtons'), editor.indexOf('// The page takes undo keys'));
+  assert.ok(buttons.includes('aria-label="Undo"'));
+  assert.ok(buttons.includes('aria-label="Redo"'));
+  const app = await readFile(new URL('../ui/app.js', import.meta.url), 'utf8');
+  const settings = app.slice(app.indexOf('function SettingsPage'), app.indexOf('// The mark of a setting'));
+  assert.ok(settings.indexOf('<${UndoButtons}') < settings.indexOf('draft-status'));
+  const people = await readFile(new URL('../ui/peoplepages.js', import.meta.url), 'utf8');
+  const person = people.slice(people.indexOf('export function PersonPage'), people.indexOf('function NicknameSheet'));
+  assert.ok(person.indexOf('<${UndoButtons}') < person.indexOf('draft-status'));
 });
 
 test('ADR 0227 item 6: an edit in the same field after an undo starts a new step', () => {
@@ -62,4 +70,11 @@ test('ADR 0227 item 6: an edit in the same field after an undo starts a new step
   assert.equal(history.undo('a1'), 'a0');
   history.record('a0', 'a', 100);
   assert.equal(history.undo('a2'), 'a0');
+});
+
+test('ADR 0227 item 4: the focused text field gives the key of the step', () => {
+  assert.equal(focusedField({ tagName: 'INPUT', id: 'person-name' }), 'person-name');
+  assert.equal(focusedField({ tagName: 'TEXTAREA', id: '', name: 'bio' }), 'bio');
+  assert.equal(focusedField({ tagName: 'SELECT', id: 'kind' }), null);
+  assert.equal(focusedField(null), null);
 });

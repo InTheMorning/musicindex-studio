@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef, useCallback } from './vendor/htm-preact-standalone.module.js';
 import { api } from './app.js';
 import { withSavedCover } from './cover.js';
-import { makeHistory } from './undohistory.js';
+import { makeHistory, focusedField } from './undohistory.js';
 
 const histories = new Map();
 
@@ -285,9 +285,7 @@ export function useDraft(feedId) {
   }, [feedId]);
 
   const update = useCallback((change) => {
-    const element = document.activeElement;
-    const field = element && /^(INPUT|TEXTAREA)$/.test(element.tagName) ? (element.id || element.name || null) : null;
-    history.record(current.current, field, Date.now());
+    history.record(current.current, focusedField(), Date.now());
     current.current = change(current.current);
     setCanUndo(history.canUndo);
     setCanRedo(history.canRedo);

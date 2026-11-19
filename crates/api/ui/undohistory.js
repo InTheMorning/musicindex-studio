@@ -64,3 +64,10 @@ export function undoKey(event) {
   if (event.ctrlKey && key === 'y' && !event.metaKey && !event.shiftKey) return 'redo';
   return null;
 }
+
+// The key of the text field that has the focus, or null (ADR 0227 item 4).
+// Typing in that field is one step until a pause.
+export function focusedField(element = globalThis.document?.activeElement) {
+  if (!element || !/^(INPUT|TEXTAREA)$/.test(element.tagName)) return null;
+  return element.id || element.name || null;
+}

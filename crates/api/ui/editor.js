@@ -2348,18 +2348,7 @@ export function DraftToolbar({ feedId, feedConnectorId, draft, onWritten, connec
   const [linkedPage, setLinkedPage] = useState(null);
   // The form that makes an artist page from Review (ADR 0218 item 6).
   const [making, setMaking] = useState(false);
-  useEffect(() => {
-    // The page takes the undo keys before the script of the Linux desktop
-    // app (ADR 0227 item 9). A field in an open sheet keeps its own undo.
-    const onKeyDown = (event) => {
-      const action = undoKey(event);
-      if (!action || event.target?.closest?.('dialog[open]')) return;
-      event.preventDefault();
-      draft[action]();
-    };
-    document.addEventListener('keydown', onKeyDown, true);
-    return () => document.removeEventListener('keydown', onKeyDown, true);
-  }, [draft.undo, draft.redo]);
+  useUndoKeys(draft.undo, draft.redo);
   const madeArtist = async (page) => {
     setMaking(false);
     if (!page || !(await draft.flush())) return;
@@ -2381,8 +2370,7 @@ export function DraftToolbar({ feedId, feedConnectorId, draft, onWritten, connec
   }, []);
   const status = toolbarStatus(draft);
   return html`<div class="draft-toolbar">
-    <button class="button icon-button undo" type="button" aria-label="Undo" title="Undo (Ctrl+Z)" disabled=${!draft.canUndo} onClick=${draft.undo}><${Icon} name="undo-2" /></button>
-    <button class="button icon-button redo" type="button" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled=${!draft.canRedo} onClick=${draft.redo}><${Icon} name="undo-2" mirrored=${true} /></button>
+    <${UndoButtons} canUndo=${draft.canUndo} canRedo=${draft.canRedo} undo=${draft.undo} redo=${draft.redo} />
     <span class=${`draft-status${status.error ? ' error' : ''}`} role="status">${status.text}</span>
     <button class="button" type="button" onClick=${() => setOpen('versions')}>Versions</button>
     <button class="button primary" type="button" onClick=${() => setOpen('review')}>Review</button>
@@ -2394,6 +2382,26 @@ export function DraftToolbar({ feedId, feedConnectorId, draft, onWritten, connec
       start=${{ title: draft.model?.author || '', role: 'artist' }} onAdded=${madeArtist} onClose=${() => setMaking(false)} />`}
     <${VersionsSheet} feedId=${feedId} draft=${draft} open=${open === 'versions'} onClose=${() => setOpen(null)} />
   </div>`;
+}
+
+// The undo and redo controls shared by each editable page (ADR 0227 item 2).
+export function UndoButtons({ canUndo, canRedo, undo, redo }) {
+  return html`<button class="button icon-button undo" type="button" aria-label="Undo" title="Undo (Ctrl+Z)" disabled=${!canUndo} onClick=${undo}><${Icon} name="undo-2" /></button>
+    <button class="button icon-button redo" type="button" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled=${!canRedo} onClick=${redo}><${Icon} name="undo-2" mirrored=${true} /></button>`;
+}
+
+// The page takes undo keys before the desktop script. An open sheet keeps its own undo.
+export function useUndoKeys(undo, redo) {
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      const action = undoKey(event);
+      if (!action || event.target?.closest?.('dialog[open]')) return;
+      event.preventDefault();
+      (action === 'undo' ? undo : redo)();
+    };
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => document.removeEventListener('keydown', onKeyDown, true);
+  }, [undo, redo]);
 }
 
 // ---- The editor pages (ADR 0029 items 5 to 10) ----

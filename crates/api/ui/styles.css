@@ -1094,6 +1094,7 @@ dialog.sheet > *, .sheet .body > * { min-width: 0; }
   .bar { flex-wrap: wrap; row-gap: 6px; padding-inline: 16px; }
   .bar .draft-toolbar { flex-basis: 100%; min-width: 0; gap: 8px; }
   .bar .draft-toolbar .button { padding-inline: 14px; }
+  .bar .draft-toolbar .icon-button { padding-inline: 0; }
   .bar .draft-status { margin-right: auto; min-width: 0; white-space: normal; line-height: 1.2; }
   .hero { grid-template-columns: 1fr; padding: 32px 16px 24px; }
   .section { padding: 8px 16px 24px; }

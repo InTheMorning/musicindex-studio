@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { makeSettingsDraft, changeSetting, settingsDraftView, discardSettings, saveSettings, asksSettingsLeave, SETTING_TABS } from '../ui/settingsdraft.js';
+import { makeHistory } from '../ui/undohistory.js';
 
 test('settings draft reports no, one, and many changes', () => {
   let draft = makeSettingsDraft({ scale: 'medium', lock: 5 });
@@ -34,6 +35,23 @@ test('discard restores saved scale and save accepts pending values', async () =>
   ({ draft } = await saveSettings(draft, { scale: async () => {} }));
   assert.equal(draft.saved.scale, 'large');
   assert.equal(settingsDraftView(draft).status, 'Saved');
+});
+
+test('ADR 0227: settings undo and redo restore each draft and Save clears the history', async () => {
+  const history = makeHistory();
+  let draft = makeSettingsDraft({ scale: 'medium' });
+  history.record(draft, 'scale', 0);
+  draft = changeSetting(draft, 'scale', 'large');
+  history.record(draft, 'scale', 2000);
+  draft = changeSetting(draft, 'scale', 'small');
+  draft = history.undo(draft);
+  assert.equal(draft.values.scale, 'large');
+  draft = history.redo(draft);
+  assert.equal(draft.values.scale, 'small');
+  ({ draft } = await saveSettings(draft, { scale: async () => {} }));
+  history.clear();
+  assert.equal(history.canUndo, false);
+  assert.equal(history.canRedo, false);
 });
 
 test('invalid library limits and relay values block Save with row causes', () => {

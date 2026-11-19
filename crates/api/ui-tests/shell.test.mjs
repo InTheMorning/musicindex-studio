@@ -31,6 +31,7 @@ test('the medium kind gives the dot and the label', () => {
 test('feedKind gives the release kind and defaults to Album', () => {
   const owner = 'ADR 0213 item 14: feedKind shows kind_shown. Fix feedKind in crates/api/ui/shell.js.';
   assert.equal(feedKind({ medium: 'music', kind_shown: 'album' }).label, 'Album', owner);
+  assert.equal(feedKind({ medium: 'music', kind_shown: 'release' }).label, 'Release', owner);
   assert.equal(feedKind({ medium: 'music', kind_shown: 'ep' }).label, 'EP', owner);
   assert.equal(feedKind({ medium: 'music', kind_shown: 'single' }).label, 'Single', owner);
   assert.equal(feedKind({ medium: 'music' }).label, 'Album', owner);

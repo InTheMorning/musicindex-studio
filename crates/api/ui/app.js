@@ -1782,6 +1782,10 @@ function LibrarySheet({ defaultRoot, onDone }) {
   const [path, setPath] = useState(defaultRoot || '');
   const [report, setReport] = useState(null);
   const { busy, error, run, retry } = useAction();
+  const chooseFolder = () => run(async () => {
+    const result = await api('/choose-folder', { method: 'POST' });
+    if (result.path) setPath(result.path);
+  });
   const submit = (event) => {
     event.preventDefault();
     run(async () => {
@@ -1807,7 +1811,9 @@ function LibrarySheet({ defaultRoot, onDone }) {
     <${Brand} />
     <div><h1>Where Studio keeps your releases</h1>
       <p>Studio keeps one folder for each release here: its feed file, its images and its audio files.</p></div>
-    <${Field} id="library-path" label="Folder" required value=${path} onInput=${(e) => setPath(e.target.value)} />
+    <${Field} id="library-path" label="Folder" required value=${path} onInput=${(e) => setPath(e.target.value)}>
+      ${inDesktopApp() && html`<button class="button" type="button" onClick=${chooseFolder} disabled=${busy}>Choose Folder…</button>`}
+    </${Field}>
     <${ErrorNotice} error=${error} action="Studio could not set up the library." onRetry=${retry} />
     <div class="actions"><button class="button primary" type="submit" disabled=${busy || !path.trim()}>
       ${busy ? 'Using This Folder…' : 'Use This Folder'}</button></div>

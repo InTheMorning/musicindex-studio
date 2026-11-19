@@ -1,7 +1,7 @@
 // The model of the Add feeds page and of the form that makes a feed (ADR 0073
 // items 1 to 10, ADR 0042). The functions have no Preact and no browser
 // state. `app.js` shows the rows and the form.
-import { compareNames } from './shell.js';
+import { compareNames, feedKind } from './shell.js';
 
 // The rows of the Add feeds page, in two groups. With no connected host, the
 // group "Make a new feed" has no rows and the flag `connect`. The row
@@ -38,6 +38,16 @@ export const RELEASE_KINDS = [
   ['ep', 'EP'],
   ['single', 'Single'],
 ];
+
+// The menu "Kind": the first option names the kind that the tracks give now.
+// The label comes from feedKind, as the tag of the release does. With no track
+// and no live item, the tracks give no kind yet.
+export function releaseKindOptions(kindShown, trackCount, liveItemCount = 0) {
+  const noTracks = !trackCount && !liveItemCount;
+  const label = feedKind({ medium: 'music', kind_shown: kindShown }).label;
+  const first = noTracks ? 'From the tracks (no tracks yet)' : `From the tracks (${label})`;
+  return [['', first], ...RELEASE_KINDS.slice(1)];
+}
 
 const FIELDS = {
   album: { medium: 'music', titleLabel: 'Album title', authorLabel: 'Artist', role: false, button: 'Make the Release', busyLabel: 'Making the Release…' },

@@ -51,7 +51,7 @@ export function relLabel(rel) {
 export function feedKind(feed) {
   const kind = mediumKind(feed.medium, feed.publisher_roles, feed.roles_confirmed === true || feed.roles_linked === true);
   if ((feed.medium || '').toLowerCase() !== 'music') return kind;
-  const labels = { album: 'Album', ep: 'EP', single: 'Single' };
+  const labels = { release: 'Release', album: 'Album', ep: 'EP', single: 'Single' };
   return { ...kind, label: labels[feed.kind_shown] || 'Album' };
 }
 

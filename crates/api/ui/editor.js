@@ -32,7 +32,7 @@ import { coverOf, coverConflict } from './cover.js';
 import { platformBlocks } from './listing.js';
 import { deleteWrite } from './feeddelete.js';
 import { pageSequence } from './pages.js';
-import { RELEASE_KINDS } from './addfeeds.js';
+import { RELEASE_KINDS, releaseKindOptions } from './addfeeds.js';
 import { nextStep, firstStart, releaseAdd, releaseArtistChoices, FIRST_STEPS, HOST_STEP } from './welcome.js';
 import {
   fileState, fileStatus, canDownloadToDevice, canCopyFile, missingCount, missingNotice, reviewNotice, dayText,
@@ -2795,7 +2795,7 @@ function ReleaseKindField({ feed, onListChanged }) {
   });
   // No wrapper: the menu is a direct row of the group, as each other field.
   return html`<${ChoiceSelect} id="release-kind" label="Kind" value=${feed.release_kind || ''}
-      options=${RELEASE_KINDS} hint="Saves at once. The feed file has no tag for the kind." onChange=${save} />
+      options=${releaseKindOptions(feed.kind_shown, feed.track_count, feed.live_item_count)} hint="Saves at once. The feed file has no tag for the kind." onChange=${save} />
     <${ErrorNotice} error=${action.error} />`;
 }
 

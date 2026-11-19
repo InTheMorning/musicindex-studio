@@ -195,6 +195,42 @@ async fn only_the_desktop_app_router_has_the_system_folder_dialog_route() {
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
+/// ADR 0223 item 10: with no library folder set, the system folder dialog
+/// starts at the home folder of the user.
+#[tokio::test]
+async fn the_folder_dialog_starts_at_the_home_folder_when_no_library_is_set() {
+    let data = tempfile::tempdir().unwrap();
+    let workspace = Workspace::open(data.path()).unwrap();
+    assert_eq!(workspace.collection.library_root().unwrap(), None);
+    let starts = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let recorded = std::sync::Arc::clone(&starts);
+    let picker: crate::FolderPicker = std::sync::Arc::new(move |start| {
+        recorded.lock().unwrap().push(start);
+        Box::pin(std::future::ready(None))
+    });
+    let router = crate::local_router_with_drops_and_picker(
+        workspace,
+        Access::with_token(TOKEN, 4100),
+        crate::DroppedFiles::default(),
+        crate::WindowClose::default(),
+        None,
+        Some(picker),
+    );
+    let app = App {
+        router,
+        data,
+        feeds: tempfile::tempdir().unwrap(),
+    };
+    let (status, body) = call(&app, "POST", "/api/v1/choose-folder", None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["path"], Value::Null);
+    let home = directories::BaseDirs::new()
+        .unwrap()
+        .home_dir()
+        .to_path_buf();
+    assert_eq!(*starts.lock().unwrap(), vec![home]);
+}
+
 /// Send a request and give its raw body, for a response that is not JSON.
 async fn send_raw(
     app: &App,

@@ -448,12 +448,19 @@ impl Feed {
 
 /// Give the kind to show for a release (ADR 0213 item 11).
 #[must_use]
-pub fn release_kind_shown(kept_kind: Option<&str>, track_count: usize) -> &'static str {
+pub fn release_kind_shown(
+    kept_kind: Option<&str>,
+    track_count: usize,
+    live_item_count: usize,
+) -> &'static str {
     match kept_kind {
         Some("album") => return "album",
         Some("ep") => return "ep",
         Some("single") => return "single",
         _ => {}
+    }
+    if track_count == 0 && live_item_count == 0 {
+        return "release";
     }
     match track_count {
         1..=3 => "single",
@@ -880,18 +887,23 @@ mod tests {
     #[test]
     fn release_kind_comes_from_kept_value_or_track_count() {
         for (count, expected) in [
-            (0, "album"),
+            (0, "release"),
             (1, "single"),
             (3, "single"),
             (4, "ep"),
             (6, "ep"),
             (7, "album"),
         ] {
-            assert_eq!(release_kind_shown(None, count), expected, "{count} tracks");
+            assert_eq!(
+                release_kind_shown(None, count, 0),
+                expected,
+                "{count} tracks"
+            );
         }
-        assert_eq!(release_kind_shown(Some("single"), 4), "single");
-        assert_eq!(release_kind_shown(Some("ep"), 1), "ep");
-        assert_eq!(release_kind_shown(Some("album"), 3), "album");
+        assert_eq!(release_kind_shown(Some("single"), 4, 0), "single");
+        assert_eq!(release_kind_shown(Some("ep"), 1, 0), "ep");
+        assert_eq!(release_kind_shown(Some("album"), 3, 0), "album");
+        assert_eq!(release_kind_shown(None, 0, 1), "album");
     }
 
     fn read_dates(dates: [&str; 2]) -> Feed {

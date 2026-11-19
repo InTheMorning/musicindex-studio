@@ -1430,9 +1430,12 @@ pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
                 let track_count = feed.as_ref().map_or(0, |model| model.items.len());
                 value["track_count"] = json!(track_count);
                 value["release_kind"] = json!(row.release_kind);
+                let live_item_count = feed.as_ref().map_or(0, |model| model.live_items.len());
+                value["live_item_count"] = json!(live_item_count);
                 value["kind_shown"] = json!(studio_core::feed::release_kind_shown(
                     row.release_kind.as_deref(),
                     track_count,
+                    live_item_count,
                 ));
             } else {
                 value["track_count"] = if row.medium.as_deref() == Some("musicL") {
@@ -4707,7 +4710,13 @@ pub(crate) async fn choose_folder(
     Extension(shared): Extension<Shared>,
     Extension(picker): Extension<crate::FolderPicker>,
 ) -> ApiResult {
-    let root = blocking(shared, |w| Ok(w.library()?.root().to_path_buf())).await?;
+    let root = blocking(shared, |w| {
+        Ok(w.collection
+            .library_root()?
+            .or_else(|| directories::BaseDirs::new().map(|dirs| dirs.home_dir().to_path_buf()))
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default()))
+    })
+    .await?;
     let path = picker(root)
         .await
         .map(|path| path.to_string_lossy().into_owned());

@@ -2,7 +2,7 @@
 
 Decision: [ADR 0223](../adr/0223-a-split-in-shares-or-percent-a-release-search-and-one-tap-on-a-phone.md) items 10 to 12.
 
-Status: Open. Start it after task 188, because both change `app.js` and `shell.js`.
+Status: Done. Open: the human check of "Choose Folder…" in the desktop app.
 
 ## Problem
 

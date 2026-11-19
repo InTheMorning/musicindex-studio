@@ -12409,6 +12409,32 @@ async fn a_merge_moves_the_links_and_deletes_the_other_person() {
     assert_eq!(person["wallets"][0]["key"]["address"], "annie@example.com");
     let (status, _) = call(&app, "GET", &format!("/api/v1/people/{other}"), None).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/people/{keep}/merge/undo"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let (_, restored) = call(&app, "GET", &format!("/api/v1/people/{other}"), None).await;
+    assert_eq!(restored["name"], "Annie");
+    assert_eq!(
+        restored["wallets"][0]["key"]["address"],
+        "annie@example.com"
+    );
+    let (status, error) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/people/{keep}/merge/undo"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        error["error"]["message"],
+        "Studio cannot undo this merge, because a person changed after it."
+    );
     let (status, error) = call(
         &app,
         "POST",

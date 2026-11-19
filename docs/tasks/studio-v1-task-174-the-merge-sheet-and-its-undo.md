@@ -2,7 +2,7 @@
 
 Decision: [ADR 0217](../adr/0217-a-new-artist-sees-the-result-of-a-write-the-payment-types-and-an-undo-of-a-merge.md) items 12 to 17. [ADR 0203](../adr/0203-people.md) items 31, 32 and 52.
 
-Status: Open.
+Status: Complete.
 
 ## Problem
 
@@ -51,6 +51,20 @@ Visual, by the main session with screenshots (`.studio-dev/journeys/j07.json`, d
 
 - The merge sheet before and after a selection, at 1280 px and 390 px.
 - The notice with **Undo** after a merge, and the two persons after the undo.
+
+## Result
+
+Date: 2026-11-18. A ChatGPT `do` run made the first change. The run stopped at its time limit during its last gate. The main session examined the diff and made these corrections:
+
+- The migration of `person_merge_undo` moved to the end of `MIGRATIONS`. Three migration tests find their migration by its text, not by its position.
+- After an undo, the page removes the merged person from the map of merges. Before the correction, it removed the kept person.
+- The line of a credit name shows no empty role and no empty title.
+- New core tests examine each table of the merge, a second merge and the upgrade. New UI tests examine the line of a credit name.
+
+Checks by the main session:
+
+- `tools/gate.sh` passes. The core has 860 tests, and the UI has 845 tests.
+- Screenshots at 1280 px (`.studio-dev/journeys/v174a.json`) and at 390 px (`v174b.json`), data `base`. The sheet starts on "Select a person". After the selection, each row of a credit name tells its feed and role, or its count of feeds. After the merge, the notice "The Doerfels is merged into Ben Doerfel." shows with **Undo**. After **Undo**, the page "People" lists the two persons again, with their addresses.
 
 ## Rules for the delegate
 

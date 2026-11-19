@@ -980,11 +980,16 @@ test('the merge sheet gives the links of the other person and the result line', 
   const other = {
     id: 9, name: 'Other', keys: [{ id: 5, npub: 'npub1k' }, { id: 6, npub: 'npub1m' }],
     wallets: [{ id: 8, key: KEYP('b@x.example'), recipient_type: 'lnaddress' }],
-    credit_names: [{ id: 10, identity: 'i2', name: 'Vox' }], support_links: [],
+    credit_names: [{ id: 10, identity: 'i2', name: 'Vox' }],
+    credit_name_uses: [{ id: 10, feeds: 1, title: 'The Album', roles: ['vocals'] }], support_links: [],
   };
   const links = mergeLinks(other);
-  assert.deepEqual(links.map((l) => l.lines[0] || 'wallet'), ['wallet', 'Nostr key', 'Nostr key', 'Credit name']);
+  assert.deepEqual(links.map((l) => l.lines[0] || 'wallet'), ['wallet', 'Nostr key', 'Nostr key', 'Credit name · The Album · vocals']);
   assert.deepEqual(mergeLinks(null), []);
+  const lines = (uses) => mergeLinks({ credit_names: [{ id: 1, name: 'Vox' }], credit_name_uses: uses })[0].lines[0];
+  assert.equal(lines([{ id: 1, feeds: 1, title: 'The Album', roles: [] }]), 'Credit name · The Album');
+  assert.equal(lines([{ id: 1, feeds: 3, title: null, roles: [] }]), 'Credit name · 3 feeds');
+  assert.equal(lines([{ id: 1, feeds: 0, title: null, roles: [] }]), 'Credit name');
   const result = mergeResult(HAVING, other);
   assert.equal(result.title, 'Sir HeyCitizen');
   assert.equal(result.lines[0], '2 Nostr keys · 2 wallets · 2 credit names · 1 support link');

@@ -345,6 +345,7 @@ fn workspace_router_with_shared(workspace: Workspace) -> (Router, WorkspaceHandl
         .route("/people/{id}/items", post(people::add_items))
         .route("/people/{id}/more", get(people::more_items))
         .route("/people/{id}/merge", post(people::merge_person))
+        .route("/people/{id}/merge/undo", post(people::undo_merge_person))
         .route("/people/{id}/changes", post(people::make_changes))
         .route(
             "/people/{id}/changes/preview",

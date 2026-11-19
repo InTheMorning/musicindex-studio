@@ -11,7 +11,7 @@ use std::slice::from_ref;
 use std::thread;
 use std::time::Duration;
 
-use rusqlite::{Connection, OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, params, types::ValueRef};
 use serde::{Deserialize, Serialize};
 
 use crate::change_set::RecipientKey;
@@ -424,7 +424,16 @@ pub fn change_person(
     id: PersonId,
     fields: &PersonFields,
 ) -> Result<(), CollectionError> {
+    clear_merge_undo(collection.db(), id)?;
     update_fields(collection.db(), id, fields)
+}
+
+pub(crate) fn clear_merge_undo(db: &Connection, id: PersonId) -> Result<(), CollectionError> {
+    db.execute(
+        "DELETE FROM person_merge_undo WHERE kept_id = ?1 OR other_id = ?1",
+        [id.0],
+    )?;
+    Ok(())
 }
 
 fn update_fields(
@@ -526,6 +535,7 @@ fn person_values_of(
 ///
 /// Gives [`CollectionErrorKind::NotFound`] for an ID that does not exist.
 pub fn remove_person(collection: &Collection, id: PersonId) -> Result<(), CollectionError> {
+    clear_merge_undo(collection.db(), id)?;
     let changed = collection
         .db()
         .execute("DELETE FROM people WHERE id = ?1", [id.0])?;
@@ -865,6 +875,7 @@ pub fn add_wallet(
     recipient_type: &str,
     evidence: LinkEvidence,
 ) -> Result<i64, CollectionError> {
+    clear_merge_undo(collection.db(), id)?;
     let lookups = lookup_map(collection)?;
     insert_wallet(collection.db(), id, key, recipient_type, evidence, &lookups)
 }
@@ -945,6 +956,7 @@ pub fn remove_wallet(
     id: PersonId,
     wallet_id: i64,
 ) -> Result<(), CollectionError> {
+    clear_merge_undo(collection.db(), id)?;
     let lookups = lookup_map(collection)?;
     let tx = collection.db().unchecked_transaction()?;
     let changed = tx.execute(
@@ -983,6 +995,7 @@ pub fn change_wallet(
     key: &RecipientKey,
     recipient_type: &str,
 ) -> Result<i64, CollectionError> {
+    clear_merge_undo(collection.db(), id)?;
     let lookups = lookup_map(collection)?;
     let tx = collection.db().unchecked_transaction()?;
     let person = read_person(&tx, id)?;
@@ -1052,6 +1065,7 @@ fn insert_key(db: &Connection, id: PersonId, npub: &str) -> Result<i64, Collecti
 /// with `npub1`, and [`CollectionErrorKind::Conflict`] for the key of a
 /// different person.
 pub fn add_key(collection: &Collection, id: PersonId, npub: &str) -> Result<i64, CollectionError> {
+    clear_merge_undo(collection.db(), id)?;
     insert_key(collection.db(), id, npub)
 }
 
@@ -1065,6 +1079,7 @@ pub fn remove_key(
     id: PersonId,
     key_id: i64,
 ) -> Result<(), CollectionError> {
+    clear_merge_undo(collection.db(), id)?;
     let changed = collection.db().execute(
         "DELETE FROM person_keys WHERE id = ?1 AND person_id = ?2",
         params![key_id, id.0],
@@ -1125,6 +1140,7 @@ pub fn add_credit_name(
     href: &str,
     npub: &str,
 ) -> Result<i64, CollectionError> {
+    clear_merge_undo(collection.db(), id)?;
     insert_credit_name(collection.db(), id, name, href, npub)
 }
 
@@ -1146,6 +1162,7 @@ pub fn change_credit_name(
     href: &str,
     npub: &str,
 ) -> Result<(), CollectionError> {
+    clear_merge_undo(collection.db(), id)?;
     let db = collection.db();
     let Some(identity) = Identity::of(name, href, npub) else {
         return Err(CollectionError::invalid(
@@ -1203,6 +1220,7 @@ pub fn remove_credit_name(
     id: PersonId,
     credit_name_id: i64,
 ) -> Result<(), CollectionError> {
+    clear_merge_undo(collection.db(), id)?;
     let changed = collection.db().execute(
         "DELETE FROM person_credit_names WHERE id = ?1 AND person_id = ?2",
         params![credit_name_id, id.0],
@@ -1237,6 +1255,7 @@ pub fn change_support_link(
     label: &str,
     url: &str,
 ) -> Result<(), CollectionError> {
+    clear_merge_undo(collection.db(), id)?;
     let changed = collection.db().execute(
         "UPDATE person_support_links SET label = ?1, url = ?2 WHERE id = ?3 AND person_id = ?4",
         params![label.trim(), web_url(url)?, link_id, id.0],
@@ -1256,6 +1275,7 @@ pub fn add_support_link(
     label: &str,
     url: &str,
 ) -> Result<i64, CollectionError> {
+    clear_merge_undo(collection.db(), id)?;
     let db = collection.db();
     check_person(db, id)?;
     let url = web_url(url)?;
@@ -1282,6 +1302,7 @@ pub fn remove_support_link(
     id: PersonId,
     link_id: i64,
 ) -> Result<(), CollectionError> {
+    clear_merge_undo(collection.db(), id)?;
     let changed = collection.db().execute(
         "DELETE FROM person_support_links WHERE id = ?1 AND person_id = ?2",
         params![link_id, id.0],
@@ -1301,6 +1322,7 @@ pub fn add_member(
     id: PersonId,
     feed_id: FeedId,
 ) -> Result<(), CollectionError> {
+    clear_merge_undo(collection.db(), id)?;
     insert_member(collection.db(), id, feed_id)
 }
 
@@ -1339,6 +1361,7 @@ pub fn remove_member(
     id: PersonId,
     feed_id: FeedId,
 ) -> Result<(), CollectionError> {
+    clear_merge_undo(collection.db(), id)?;
     let changed = collection.db().execute(
         "DELETE FROM person_members WHERE person_id = ?1 AND feed_id = ?2",
         params![id.0, feed_id.0],
@@ -1358,6 +1381,7 @@ pub fn set_default_address(
     id: PersonId,
     key: Option<&RecipientKey>,
 ) -> Result<(), CollectionError> {
+    clear_merge_undo(collection.db(), id)?;
     let lookups = lookup_map(collection)?;
     write_default_address(collection.db(), id, key, &lookups)
 }
@@ -1457,6 +1481,7 @@ pub fn save_person(
     id: PersonId,
     save: &PersonSave,
 ) -> Result<(), CollectionError> {
+    clear_merge_undo(collection.db(), id)?;
     let lookups = lookup_map(collection)?;
     let tx = collection.db().unchecked_transaction()?;
     check_person(&tx, id)?;
@@ -2522,6 +2547,8 @@ pub struct CreditNameUse {
     pub id: i64,
     /// The number of feeds with a credit of this identity.
     pub feeds: usize,
+    /// The title when the credit occurs in one feed.
+    pub title: Option<String>,
     /// Each role of those credits, in sequence, with no empty role.
     pub roles: Vec<String>,
 }
@@ -2552,9 +2579,19 @@ pub fn credit_name_uses(
         .iter()
         .map(|credit| {
             let (feeds, roles) = found.get(&credit.identity).cloned().unwrap_or_default();
+            let title = if feeds.len() == 1 {
+                feeds
+                    .iter()
+                    .next()
+                    .and_then(|id| collection.feed(FeedId(*id)).ok())
+                    .and_then(|feed| feed.title)
+            } else {
+                None
+            };
             CreditNameUse {
                 id: credit.id,
                 feeds: feeds.len(),
+                title,
                 roles: roles.into_iter().collect(),
             }
         })
@@ -3321,6 +3358,8 @@ pub fn merge_people(
     let tx = collection.db().unchecked_transaction()?;
     check_person(&tx, keep)?;
     check_person(&tx, other)?;
+    tx.execute("DELETE FROM person_merge_undo", [])?;
+    let snapshot = merge_snapshot(&tx, keep, other)?;
     let keep_nickname: String = tx.query_row(
         "SELECT nickname FROM people WHERE id = ?1",
         [keep.0],
@@ -3382,6 +3421,165 @@ pub fn merge_people(
         params![keep.0, other.0],
     )?;
     tx.execute("DELETE FROM people WHERE id = ?1", [other.0])?;
+    tx.execute(
+        "INSERT INTO person_merge_undo (kept_id, other_id, snapshot) VALUES (?1, ?2, ?3)",
+        params![
+            keep.0,
+            other.0,
+            serde_json::to_string(&snapshot)
+                .map_err(|e| CollectionError::invalid(e.to_string()))?
+        ],
+    )?;
+    tx.commit()?;
+    Ok(())
+}
+
+const MERGE_TABLES: &[(&str, &str)] = &[
+    ("people", "id"),
+    ("person_wallets", "person_id"),
+    ("person_keys", "person_id"),
+    ("person_credit_names", "person_id"),
+    ("person_support_links", "person_id"),
+    ("person_members", "person_id"),
+    ("person_address_dismissals", "person_id"),
+    ("person_pages", "person_id"),
+    ("person_values", "person_id"),
+    ("change_sets", "person_id"),
+];
+
+fn merge_snapshot(
+    db: &Connection,
+    keep: PersonId,
+    other: PersonId,
+) -> Result<serde_json::Value, CollectionError> {
+    let mut tables = serde_json::Map::new();
+    for (table, key) in MERGE_TABLES {
+        let mut statement =
+            db.prepare(&format!("SELECT * FROM {table} WHERE {key} IN (?1, ?2)"))?;
+        let columns = statement
+            .column_names()
+            .iter()
+            .map(|s| (*s).to_owned())
+            .collect::<Vec<_>>();
+        let rows = statement
+            .query_map(params![keep.0, other.0], |row| {
+                let mut values = Vec::new();
+                for index in 0..columns.len() {
+                    let value = match row.get_ref(index)? {
+                        ValueRef::Null => serde_json::Value::Null,
+                        ValueRef::Integer(v) => serde_json::json!(v),
+                        ValueRef::Real(v) => serde_json::json!(v),
+                        ValueRef::Text(v) => serde_json::json!(String::from_utf8_lossy(v)),
+                        ValueRef::Blob(v) => serde_json::json!(v),
+                    };
+                    values.push(value);
+                }
+                Ok(values)
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        tables.insert(
+            (*table).to_owned(),
+            serde_json::json!({"columns": columns, "rows": rows}),
+        );
+    }
+    Ok(serde_json::Value::Object(tables))
+}
+
+/// Restore the last person merge when neither person changed afterward.
+///
+/// # Errors
+///
+/// Gives [`CollectionErrorKind::Invalid`] when the undo data is not available.
+pub fn undo_merge(collection: &Collection, kept: PersonId) -> Result<(), CollectionError> {
+    let tx = collection.db().unchecked_transaction()?;
+    let (other, snapshot): (i64, String) = tx
+        .query_row(
+            "SELECT other_id, snapshot FROM person_merge_undo WHERE kept_id = ?1",
+            [kept.0],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?
+        .ok_or_else(|| {
+            CollectionError::invalid(
+                "Studio cannot undo this merge, because a person changed after it.",
+            )
+        })?;
+    let snapshot: serde_json::Value =
+        serde_json::from_str(&snapshot).map_err(|e| CollectionError::invalid(e.to_string()))?;
+    for (table, key) in MERGE_TABLES.iter().rev() {
+        if *table == "change_sets" {
+            continue;
+        }
+        tx.execute(
+            &format!("DELETE FROM {table} WHERE {key} IN (?1, ?2)"),
+            params![kept.0, other],
+        )?;
+    }
+    for (table, _) in MERGE_TABLES {
+        let entry = &snapshot[*table];
+        let columns = entry["columns"]
+            .as_array()
+            .ok_or_else(|| CollectionError::invalid("invalid merge snapshot"))?;
+        let rows = entry["rows"]
+            .as_array()
+            .ok_or_else(|| CollectionError::invalid("invalid merge snapshot"))?;
+        let names = columns
+            .iter()
+            .map(|v| v.as_str().unwrap_or(""))
+            .collect::<Vec<_>>();
+        if *table == "change_sets" {
+            let id_column = names.iter().position(|name| *name == "id").unwrap_or(0);
+            let person_column = names
+                .iter()
+                .position(|name| *name == "person_id")
+                .unwrap_or(usize::MAX);
+            for values in rows {
+                let values = values
+                    .as_array()
+                    .ok_or_else(|| CollectionError::invalid("invalid merge snapshot"))?;
+                if person_column != usize::MAX && !values[person_column].is_null() {
+                    let person_id = values[person_column]
+                        .as_i64()
+                        .ok_or_else(|| CollectionError::invalid("invalid merge snapshot"))?;
+                    let change_set_id = values[id_column]
+                        .as_i64()
+                        .ok_or_else(|| CollectionError::invalid("invalid merge snapshot"))?;
+                    tx.execute(
+                        "UPDATE change_sets SET person_id = ?1 WHERE id = ?2",
+                        params![person_id, change_set_id],
+                    )?;
+                }
+            }
+            continue;
+        }
+        let sql = format!(
+            "INSERT INTO {table} ({}) VALUES ({})",
+            names.join(","),
+            (1..=names.len())
+                .map(|i| format!("?{i}"))
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+        for values in rows {
+            let params = values
+                .as_array()
+                .ok_or_else(|| CollectionError::invalid("invalid merge snapshot"))?
+                .iter()
+                .map(|v| match v {
+                    serde_json::Value::Bool(v) => rusqlite::types::Value::Integer(i64::from(*v)),
+                    serde_json::Value::Number(v) => v
+                        .as_i64()
+                        .map(rusqlite::types::Value::Integer)
+                        .or_else(|| v.as_f64().map(rusqlite::types::Value::Real))
+                        .unwrap_or(rusqlite::types::Value::Null),
+                    serde_json::Value::String(v) => rusqlite::types::Value::Text(v.clone()),
+                    _ => rusqlite::types::Value::Null,
+                })
+                .collect::<Vec<_>>();
+            tx.execute(&sql, rusqlite::params_from_iter(params))?;
+        }
+    }
+    tx.execute("DELETE FROM person_merge_undo", [])?;
     tx.commit()?;
     Ok(())
 }
@@ -4370,11 +4568,13 @@ mod tests {
                 CreditNameUse {
                     id: unused,
                     feeds: 0,
+                    title: None,
                     roles: vec![]
                 },
                 CreditNameUse {
                     id: keyed,
                     feeds: 2,
+                    title: None,
                     roles: vec!["composer".into(), "guitarist".into()]
                 },
             ]
@@ -6805,6 +7005,118 @@ mod tests {
         );
         let owner = collection.change_set_row(set).unwrap().map(|c| c.person_id);
         assert_eq!(owner, Some(Some(keep.0)));
+    }
+
+    #[test]
+    fn undo_merge_restores_both_people_and_the_original_link_ids() {
+        let collection = Collection::open_in_memory().unwrap();
+        let keep = add_person(&collection, &fields("Ann")).unwrap();
+        let other = add_person(&collection, &fields("Annie")).unwrap();
+        let wallet = add_wallet(
+            &collection,
+            other,
+            &key("node-undo"),
+            "node",
+            LinkEvidence::User,
+        )
+        .unwrap();
+        let before_keep = person(&collection, keep).unwrap();
+        let before_other = person(&collection, other).unwrap();
+        merge_people(&collection, keep, other).unwrap();
+        undo_merge(&collection, keep).unwrap();
+        assert_eq!(person(&collection, keep).unwrap(), before_keep);
+        assert_eq!(person(&collection, other).unwrap(), before_other);
+        assert_eq!(person(&collection, other).unwrap().wallets[0].id, wallet);
+    }
+
+    // The rows of each table of the merge for two persons, in a fixed order.
+    fn merge_rows(collection: &Collection, keep: PersonId, other: PersonId) -> Vec<String> {
+        let snapshot = merge_snapshot(collection.db(), keep, other).unwrap();
+        let mut rows = Vec::new();
+        for (table, _) in MERGE_TABLES {
+            for row in snapshot[*table]["rows"].as_array().unwrap() {
+                rows.push(format!("{table} {row}"));
+            }
+        }
+        rows.sort();
+        rows
+    }
+
+    #[test]
+    fn undo_merge_restores_each_table_and_a_second_merge_replaces_the_undo() {
+        let collection = Collection::open_in_memory().unwrap();
+        let keep = add_person(&collection, &fields("Ann")).unwrap();
+        let other = add_person(&collection, &fields("Annie")).unwrap();
+        let third = add_person(&collection, &fields("Bob")).unwrap();
+        for (id, n) in [(keep, "1"), (other, "2")] {
+            add_wallet(
+                &collection,
+                id,
+                &key(&format!("node-{n}")),
+                "node",
+                LinkEvidence::User,
+            )
+            .unwrap();
+            add_key(&collection, id, &format!("npub1undo{n}")).unwrap();
+            add_credit_name(&collection, id, &format!("Vox {n}"), "", "").unwrap();
+            add_support_link(&collection, id, "Shop", &format!("https://shop{n}.example")).unwrap();
+        }
+        let db = collection.db();
+        for id in [keep, other] {
+            db.execute(
+                "INSERT INTO person_values (person_id, kind, value, position, created_at)
+                 VALUES (?1, 'website', 'https://same.example', 0, 1)",
+                [id.0],
+            )
+            .unwrap();
+            db.execute(
+                "INSERT INTO person_pages (person_id, feed_guid, title, created_at)
+                 VALUES (?1, 'guid-same', 'Page', 1)",
+                [id.0],
+            )
+            .unwrap();
+        }
+        db.execute(
+            "INSERT INTO person_address_dismissals (person_id, address, dismissed_at)
+             VALUES (?1, 'gone@example.com', 1)",
+            [other.0],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO change_sets (operation, recipient, made_at, person_id)
+             VALUES ('add', 'r', 1, ?1)",
+            [other.0],
+        )
+        .unwrap();
+        let before = merge_rows(&collection, keep, other);
+        merge_people(&collection, keep, other).unwrap();
+        assert_ne!(merge_rows(&collection, keep, other), before);
+        undo_merge(&collection, keep).unwrap();
+        assert_eq!(merge_rows(&collection, keep, other), before);
+
+        merge_people(&collection, keep, other).unwrap();
+        merge_people(&collection, keep, third).unwrap();
+        undo_merge(&collection, keep).unwrap();
+        assert!(person(&collection, third).is_ok());
+        assert!(person(&collection, other).is_err());
+        assert!(undo_merge(&collection, keep).is_err());
+    }
+
+    #[test]
+    fn a_person_change_clears_merge_undo_but_a_third_person_change_does_not() {
+        let collection = Collection::open_in_memory().unwrap();
+        let keep = add_person(&collection, &fields("Ann")).unwrap();
+        let other = add_person(&collection, &fields("Annie")).unwrap();
+        let third = add_person(&collection, &fields("Bob")).unwrap();
+        merge_people(&collection, keep, other).unwrap();
+        change_person(&collection, third, &fields("Robert")).unwrap();
+        undo_merge(&collection, keep).unwrap();
+        merge_people(&collection, keep, other).unwrap();
+        change_person(&collection, keep, &fields("Anne")).unwrap();
+        assert_eq!(
+            undo_merge(&collection, keep).unwrap_err().kind(),
+            CollectionErrorKind::Invalid
+        );
     }
 
     #[test]

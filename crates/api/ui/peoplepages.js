@@ -863,6 +863,8 @@ export function PersonPage({ id, feeds, go }) {
   const [editing, setEditing] = useState(null);
   const [more, setMore] = useState([]);
   const [merging, setMerging] = useState(false);
+  const [mergeNotice, setMergeNotice] = useState(null);
+  useEffect(() => { setMergeNotice(null); }, [id]);
   // The search of "Find on musicindex" (its text, or null when closed), and the
   // row that the values sheet shows (ADR 0117 items 2 and 8).
   const [finding, setFinding] = useState(null);
@@ -913,6 +915,14 @@ export function PersonPage({ id, feeds, go }) {
   ]);
   // Each change of a link reads the person again (task 065 item 5).
   const act = (work) => run(async () => { try { await work(); } finally { await reload(); } });
+  const undoMerge = () => run(async () => {
+    await api(`/people/${id}/merge/undo`, { method: 'POST' });
+    merged.delete(String(mergeNotice.id));
+    setMergeNotice(null);
+    await reload();
+    loadMore();
+    loadSuggestions();
+  });
   // The pending changes of the fields, the default address and the links
   // (ADR 0116 items 1 to 6). The saved values come from each read of the person.
   const [values, setValues] = useState(null);
@@ -1153,6 +1163,8 @@ export function PersonPage({ id, feeds, go }) {
       <button class="button discard" type="button" disabled=${!dirty || saving} onClick=${discard}>Discard</button>
       <button class="button primary" type="button" disabled=${!dirty || saving} onClick=${save}>Save</button></div><//><section class="section">
     <${ErrorNotice} error=${error} />
+    ${mergeNotice && html`<div class="notice" role="status"><strong>${mergeNotice.name} is merged into ${person.name}.</strong>
+      <div class="actions"><button class="button action" type="button" onClick=${undoMerge}>Undo</button></div></div>`}
     ${pageSequence('person').map((section) => html`<${Fragment} key=${section.id}>${sections[section.id]()}<//>`)}
   </section>
   <${OperationSheet} kind=${sheet} person=${person} groups=${groups} rows=${feedRows(person.places, feeds)} feeds=${feeds}
@@ -1164,7 +1176,7 @@ export function PersonPage({ id, feeds, go }) {
   <${NostrSheet} open=${linking === 'keys'} value=${null} offerPeople=${false} onSet=${(npub) => { if (npub) addKey(npub); }}
     onClose=${() => setLinking(null)} />
   <${MergeSheet} open=${merging} person=${person} onClose=${() => setMerging(false)}
-    onMerged=${() => { setMerging(false); reload(); loadMore(); loadSuggestions(); }} />
+    onMerged=${(other) => { setMergeNotice(other); setMerging(false); reload(); loadMore(); loadSuggestions(); }} />
   <${FindSheet} open=${finding !== null && picked === null} personId=${person.id} name=${person.name} feeds=${feeds} values=${shown} query=${finding || ''}
     onQuery=${setFinding} onClose=${() => setFinding(null)} onPick=${setPicked} onLink=${update} />
   <${ValuesSheet} personId=${person.id} row=${picked} feeds=${feeds} shown=${shown}
@@ -1294,23 +1306,24 @@ function MergeSheet({ open, person, onClose, onMerged }) {
 function MergeForm({ person, onCancel, onMerged }) {
   const [people, setPeople] = useState(null);
   const [otherId, setOtherId] = useState('');
+  const [otherDetails, setOtherDetails] = useState(null);
   const { busy, error, run } = useAction();
   useEffect(() => {
     run(async () => {
       const list = await api('/people');
       setPeople(list);
-      const first = personChoices(list, person.id)[0];
-      if (first) setOtherId(first[0]);
+      setOtherId('');
     });
   }, []);
   const other = (people || []).find((p) => String(p.id) === otherId) || null;
-  const profiles = useProfiles(other ? other.keys.map((k) => k.npub) : []);
-  const links = mergeLinks(other, profiles);
-  const result = other ? mergeResult(person, other) : null;
+  const selected = otherDetails?.id === other?.id ? otherDetails : null;
+  const profiles = useProfiles(selected ? selected.keys.map((k) => k.npub) : []);
+  const links = mergeLinks(selected, profiles);
+  const result = selected ? mergeResult(person, selected) : null;
   const merge = () => run(async () => {
     await api(`/people/${person.id}/merge`, { method: 'POST', body: mergeBody(otherId) });
     merged.set(String(otherId), person.id);
-    onMerged();
+    onMerged({ id: selected.id, name: selected.name });
   });
   return html`<header>
       <h2 id="merge-title">${mergeTitle(person.name)}</h2>
@@ -1318,9 +1331,9 @@ function MergeForm({ person, onCancel, onMerged }) {
     </header>
     <div class="body">
       ${people && personChoices(people, person.id).length === 0 && html`<p class="empty">${NO_OTHER_TEXT}</p>`}
-      ${other && html`<div class="group rows"><${ChoiceSelect} id="merge-person" label="Person to merge" value=${otherId}
-        hint=${mergeHint(person.name)} options=${personChoices(people, person.id)} onChange=${setOtherId} /></div>`}
-      ${other && html`<section class="page-section"><h2>${`${other.name} has`}</h2>
+      ${people && html`<div class="group rows"><${ChoiceSelect} id="merge-person" label="Person to merge" value=${otherId}
+        placeholder="Select a person" hint=${mergeHint(person.name)} options=${personChoices(people, person.id)} onChange=${(value) => { setOtherId(value); setOtherDetails(null); if (value) run(async () => setOtherDetails(await api(`/people/${value}`))); }} /></div>`}
+      ${selected && html`<section class="page-section"><h2>${`${selected.name} has`}</h2>
         ${links.length === 0 && html`<p class="empty">This person has no link.</p>`}
         ${links.length > 0 && html`<div class="group rows">${links.map((l) => html`<div class="link-row static" key=${l.key}><span class="text">
           <span class=${l.mono ? 'label mono key-text' : 'label'}>${l.title}</span>${l.lines.map((line, i) => html`<span class="summary" key=${i}>${line}</span>`)}</span></div>`)}</div>`}</section>`}
@@ -1330,7 +1343,7 @@ function MergeForm({ person, onCancel, onMerged }) {
     </div>
     <footer>
       <button class="button" type="button" onClick=${onCancel}>Cancel</button>
-      <button class="button primary" type="button" disabled=${busy || !other} onClick=${merge}>${busy ? 'Merging the People…' : 'Merge the People'}</button>
+      <button class="button primary" type="button" disabled=${busy || !selected} onClick=${merge}>${busy ? 'Merging the People…' : 'Merge the People'}</button>
     </footer>`;
 }
 

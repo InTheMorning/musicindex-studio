@@ -1379,6 +1379,7 @@ pub fn make_person_change_set(
     operation: &PersonOperation,
     feeds: &[FeedId],
 ) -> Result<ChangeSet, PipelineError> {
+    people::clear_merge_undo(collection.db(), id)?;
     if matches!(operation, PersonOperation::CreditFeed { .. }) {
         check_credit_feed(collection, feeds)?;
         link_credit_name(collection, id)?;

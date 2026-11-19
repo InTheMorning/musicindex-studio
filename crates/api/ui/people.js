@@ -2197,7 +2197,12 @@ export function mergeLinks(other, profiles = null) {
   return [
     ...(other.wallets || []).map((w) => ({ key: `w${w.id}`, title: addressText(w.key, w.recipient_type), lines: [] })),
     ...(other.keys || []).map((k) => ({ key: `k${k.id}`, npub: k.npub, title: keyRow(k.npub, profiles).title, mono: keyRow(k.npub, profiles).mono, lines: ['Nostr key'] })),
-    ...(other.credit_names || []).map((c) => ({ key: `c${c.id}`, title: c.name || 'Credit name', lines: ['Credit name'] })),
+    ...(other.credit_names || []).map((c) => {
+      const use = (other.credit_name_uses || []).find((u) => u.id === c.id);
+      const line = use?.feeds === 1 ? ['Credit name', use.title, (use.roles || []).join(', ')].filter(Boolean).join(' · ')
+        : use?.feeds > 1 ? `Credit name · ${use.feeds} feeds` : 'Credit name';
+      return { key: `c${c.id}`, title: c.name || 'Credit name', lines: [line] };
+    }),
     ...(other.support_links || []).map((l) => ({ key: `s${l.id}`, title: l.label || l.url, lines: ['Support link'] })),
   ];
 }

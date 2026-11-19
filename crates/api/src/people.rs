@@ -565,6 +565,18 @@ pub(crate) async fn merge_person(
     .await
 }
 
+/// Undo the last merge of the person in the path.
+pub(crate) async fn undo_merge_person(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+) -> Result<StatusCode, ApiError> {
+    blocking(shared, move |w| {
+        people::undo_merge(&w.collection, PersonId(id)).map_err(person_error)?;
+        Ok(StatusCode::NO_CONTENT)
+    })
+    .await
+}
+
 #[derive(Deserialize)]
 pub(crate) struct DismissBody {
     identity: String,

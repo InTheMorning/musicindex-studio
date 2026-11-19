@@ -676,6 +676,14 @@ CREATE TABLE feed_writes (
     build_date INTEGER
 );
 ",
+    // ADR 0217 items 16 and 17: the undo data of the last merge of a person.
+    r"
+CREATE TABLE person_merge_undo (
+    kept_id INTEGER PRIMARY KEY,
+    other_id INTEGER NOT NULL,
+    snapshot TEXT NOT NULL
+);
+",
 ];
 
 /// `root` as a relative path under `data_dir`, when it is a folder inside
@@ -4986,20 +4994,31 @@ mod tests {
         assert_eq!(collection.connectors().unwrap().len(), 1);
     }
 
+    /// The index of the one migration that holds `marker`. A test of a
+    /// migration runs each migration before it. A count from the end of the
+    /// list moves when a new migration is added.
+    fn migration_index(marker: &str) -> usize {
+        let found: Vec<usize> = MIGRATIONS
+            .iter()
+            .enumerate()
+            .filter(|(_, migration)| migration.contains(marker))
+            .map(|(index, _)| index)
+            .collect();
+        assert_eq!(found.len(), 1, "one migration must hold {marker:?}");
+        found[0]
+    }
+
     #[test]
     fn new_and_previous_collections_have_the_release_kind_column() {
         let dir = tempfile::tempdir().unwrap();
         let previous_path = dir.path().join("previous.sqlite");
         let db = Connection::open(&previous_path).unwrap();
-        for migration in &MIGRATIONS[..MIGRATIONS.len() - 2] {
+        let previous = migration_index("ADD COLUMN release_kind");
+        for migration in &MIGRATIONS[..previous] {
             db.execute_batch(migration).unwrap();
         }
-        db.pragma_update(
-            None,
-            "user_version",
-            i64::try_from(SCHEMA_VERSION - 2).unwrap(),
-        )
-        .unwrap();
+        db.pragma_update(None, "user_version", i64::try_from(previous).unwrap())
+            .unwrap();
         db.execute(
             "INSERT INTO feeds (id, title, medium, created_at) VALUES (1, 'Release', 'music', 0)",
             [],
@@ -6478,7 +6497,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("collection.sqlite");
         let db = Connection::open(&path).unwrap();
-        let previous = MIGRATIONS.len() - 4;
+        let previous = migration_index("ADD COLUMN nickname");
         for migration in &MIGRATIONS[..previous] {
             db.execute_batch(migration).unwrap();
         }
@@ -6501,11 +6520,34 @@ mod tests {
     }
 
     #[test]
+    fn an_upgrade_adds_the_table_of_the_merge_undo() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("collection.sqlite");
+        let db = Connection::open(&path).unwrap();
+        let previous = migration_index("CREATE TABLE person_merge_undo");
+        for migration in &MIGRATIONS[..previous] {
+            db.execute_batch(migration).unwrap();
+        }
+        db.pragma_update(None, "user_version", i64::try_from(previous).unwrap())
+            .unwrap();
+        drop(db);
+
+        let collection = Collection::open(&path).unwrap();
+        let rows: i64 = collection
+            .db()
+            .query_row("SELECT COUNT(*) FROM person_merge_undo", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(rows, 0);
+    }
+
+    #[test]
     fn the_person_values_migration_keeps_each_default_value() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("collection.sqlite");
         let db = Connection::open(&path).unwrap();
-        let previous = MIGRATIONS.len() - 3;
+        let previous = migration_index("CREATE TABLE person_values");
         for migration in &MIGRATIONS[..previous] {
             db.execute_batch(migration).unwrap();
         }

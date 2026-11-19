@@ -4705,18 +4705,50 @@ pub(crate) async fn make_library_folder(
     .await
 }
 
+#[derive(Deserialize)]
+pub(crate) struct ChooseFolder {
+    /// The text of the folder field (ADR 0226 item 4).
+    #[serde(default)]
+    start: String,
+}
+
+/// The folder where the dialog starts (ADR 0226 items 1 to 3): the typed
+/// folder, else its nearest parent folder that exists. A text that is empty
+/// or not an absolute path, or a path with no existing folder, gives `None`.
+fn typed_start_folder(text: &str) -> Option<std::path::PathBuf> {
+    let typed = std::path::Path::new(text.trim());
+    if !typed.is_absolute() {
+        return None;
+    }
+    typed
+        .ancestors()
+        .find(|folder| folder.is_dir())
+        .map(std::path::Path::to_path_buf)
+}
+
 /// Open the system folder dialog through the desktop app (ADR 0180 item 8).
+/// The dialog starts at the typed folder. With no typed folder, it starts at
+/// the library folder, else at the home folder (ADR 0226 items 1 to 3).
 pub(crate) async fn choose_folder(
     Extension(shared): Extension<Shared>,
     Extension(picker): Extension<crate::FolderPicker>,
+    body: Option<Json<ChooseFolder>>,
 ) -> ApiResult {
-    let root = blocking(shared, |w| {
-        Ok(w.collection
-            .library_root()?
-            .or_else(|| directories::BaseDirs::new().map(|dirs| dirs.home_dir().to_path_buf()))
-            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default()))
-    })
-    .await?;
+    let typed = body.and_then(|Json(body)| typed_start_folder(&body.start));
+    let root = match typed {
+        Some(folder) => folder,
+        None => {
+            blocking(shared, |w| {
+                Ok(w.collection
+                    .library_root()?
+                    .or_else(|| {
+                        directories::BaseDirs::new().map(|dirs| dirs.home_dir().to_path_buf())
+                    })
+                    .unwrap_or_else(|| std::env::current_dir().unwrap_or_default()))
+            })
+            .await?
+        }
+    };
     let path = picker(root)
         .await
         .map(|path| path.to_string_lossy().into_owned());

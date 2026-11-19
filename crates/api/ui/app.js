@@ -1783,7 +1783,8 @@ function LibrarySheet({ defaultRoot, onDone }) {
   const [report, setReport] = useState(null);
   const { busy, error, run, retry } = useAction();
   const chooseFolder = () => run(async () => {
-    const result = await api('/choose-folder', { method: 'POST' });
+    // The dialog starts at the typed folder (ADR 0226 items 1 to 4).
+    const result = await api('/choose-folder', { method: 'POST', body: { start: path } });
     if (result.path) setPath(result.path);
   });
   const submit = (event) => {

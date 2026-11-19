@@ -2,7 +2,7 @@
 
 Decision: [ADR 0226](../adr/0226-the-typed-start-folder-the-program-name-the-root-order-and-person-tabs.md) items 1 to 4.
 
-Status: Open.
+Status: Done.
 
 ## Problem
 
@@ -33,3 +33,8 @@ Mechanical:
 - `cargo test -p studio-api` and `bash tools/gate.sh` pass.
 
 Human: the operator types a folder in the first-run sheet of the desktop app and selects "Choose Folder…". The dialog of the system shows that folder.
+
+## Result
+
+- The API tests of `/choose-folder` pass: a typed folder that exists, a typed folder that does not exist, an empty text, blanks, a relative path, and each case with and without a library folder.
+- Open: the human check of "Choose Folder…" in the desktop app.

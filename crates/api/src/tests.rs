@@ -195,14 +195,17 @@ async fn only_the_desktop_app_router_has_the_system_folder_dialog_route() {
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
-/// ADR 0223 item 10: with no library folder set, the system folder dialog
-/// starts at the home folder of the user.
-#[tokio::test]
-async fn the_folder_dialog_starts_at_the_home_folder_when_no_library_is_set() {
+type Starts = std::sync::Arc<std::sync::Mutex<Vec<std::path::PathBuf>>>;
+
+/// A desktop app router with a folder picker that records each start folder
+/// and selects nothing.
+fn app_with_recording_picker(library: Option<&std::path::Path>) -> (App, Starts) {
     let data = tempfile::tempdir().unwrap();
     let workspace = Workspace::open(data.path()).unwrap();
-    assert_eq!(workspace.collection.library_root().unwrap(), None);
-    let starts = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    if let Some(library) = library {
+        workspace.set_library_root(library).unwrap();
+    }
+    let starts: Starts = std::sync::Arc::default();
     let recorded = std::sync::Arc::clone(&starts);
     let picker: crate::FolderPicker = std::sync::Arc::new(move |start| {
         recorded.lock().unwrap().push(start);
@@ -221,14 +224,81 @@ async fn the_folder_dialog_starts_at_the_home_folder_when_no_library_is_set() {
         data,
         feeds: tempfile::tempdir().unwrap(),
     };
-    let (status, body) = call(&app, "POST", "/api/v1/choose-folder", None).await;
-    assert_eq!(status, StatusCode::OK, "{body}");
-    assert_eq!(body["path"], Value::Null);
+    (app, starts)
+}
+
+/// The start folder of one request to the dialog route.
+async fn dialog_start(app: &App, starts: &Starts, body: Option<Value>) -> std::path::PathBuf {
+    let (status, answer) = call(app, "POST", "/api/v1/choose-folder", body).await;
+    assert_eq!(status, StatusCode::OK, "{answer}");
+    assert_eq!(answer["path"], Value::Null);
+    starts.lock().unwrap().pop().unwrap()
+}
+
+/// ADR 0226 item 3: with no typed folder and no library folder set, the
+/// system folder dialog starts at the home folder of the user.
+#[tokio::test]
+async fn the_folder_dialog_starts_at_the_home_folder_when_no_library_is_set() {
+    let (app, starts) = app_with_recording_picker(None);
     let home = directories::BaseDirs::new()
         .unwrap()
         .home_dir()
         .to_path_buf();
-    assert_eq!(*starts.lock().unwrap(), vec![home]);
+    let fix = "ADR 0226 item 3: with no usable typed folder, the dialog starts at the home folder. Fix choose_folder in crates/api/src/routes.rs.";
+    assert_eq!(dialog_start(&app, &starts, None).await, home, "{fix}");
+    for text in ["", "   ", "Music/Studio"] {
+        assert_eq!(
+            dialog_start(&app, &starts, Some(json!({ "start": text }))).await,
+            home,
+            "{fix} Text: {text:?}"
+        );
+    }
+}
+
+/// ADR 0226 items 1 and 2: the dialog starts at the typed folder, else at
+/// its nearest parent folder that exists.
+#[tokio::test]
+async fn the_folder_dialog_starts_at_the_typed_folder_or_its_nearest_parent() {
+    // rc.27 check finding 1: the dialog started at the home folder with a
+    // typed folder in the field.
+    let typed = tempfile::tempdir().unwrap();
+    let (app, starts) = app_with_recording_picker(None);
+    let fix = "Fix choose_folder in crates/api/src/routes.rs.";
+    let folder = typed.path().to_path_buf();
+    assert_eq!(
+        dialog_start(
+            &app,
+            &starts,
+            Some(json!({ "start": folder.to_str().unwrap() }))
+        )
+        .await,
+        folder,
+        "ADR 0226 item 1: the dialog starts at the typed folder. {fix}"
+    );
+    let missing = folder.join("New Artist").join("First Album");
+    assert_eq!(
+        dialog_start(
+            &app,
+            &starts,
+            Some(json!({ "start": missing.to_str().unwrap() }))
+        )
+        .await,
+        folder,
+        "ADR 0226 item 2: the dialog starts at the nearest parent folder that exists. {fix}"
+    );
+}
+
+/// ADR 0226 item 3: with no usable typed folder, the dialog starts at the
+/// library folder when it is set.
+#[tokio::test]
+async fn the_folder_dialog_starts_at_the_library_folder_with_no_typed_folder() {
+    let library = tempfile::tempdir().unwrap();
+    let (app, starts) = app_with_recording_picker(Some(library.path()));
+    assert_eq!(
+        dialog_start(&app, &starts, Some(json!({ "start": "" }))).await,
+        library.path(),
+        "ADR 0226 item 3: an empty field starts the dialog at the library folder. Fix choose_folder in crates/api/src/routes.rs."
+    );
 }
 
 /// Send a request and give its raw body, for a response that is not JSON.

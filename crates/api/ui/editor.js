@@ -4571,7 +4571,8 @@ function LibraryFolderSheet({ open, path, defaultPath, onMove, onClose }) {
     });
   }, [open, path, parent]);
   const choose = () => action.run(async () => {
-    const answer = await api('/choose-folder', { method: 'POST' });
+    // The dialog starts at the typed folder (ADR 0226 items 1 to 4).
+    const answer = await api('/choose-folder', { method: 'POST', body: { start: target } });
     if (answer.path) setTarget(answer.path);
   });
   const makeFolder = () => action.run(async () => {

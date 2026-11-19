@@ -215,3 +215,11 @@ Operator choices of 2026-11-19. [ADR 0218](../../adr/0218-a-page-link-in-review-
   the artist page stays separate, and the result panel tells it.
 - T6: the menu "Person" of a suggestion starts on "Select a person". The note of the fold tells the user to add
   a name to a person that exists.
+
+More operator choices of 2026-11-19. [ADR 0219](../../adr/0219-a-release-checklist-and-a-check-of-the-address-type.md) owns them.
+
+- T7: the page of a release shows a checklist of what it still needs. The same rows are findings on the Check
+  tab.
+- O2: an address in the format of the other type gives a finding, and its button changes the type in the
+  draft.
+- The payment form keeps the menu "Type". The menu shows a different address field for each type.

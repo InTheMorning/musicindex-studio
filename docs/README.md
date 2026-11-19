@@ -196,6 +196,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0216: The Linux packages of the desktop app](adr/0216-the-linux-packages-of-the-desktop-app.md)
 - [ADR 0217: A new artist sees the result of a write, the payment types and an undo of a merge](adr/0217-a-new-artist-sees-the-result-of-a-write-the-payment-types-and-an-undo-of-a-merge.md)
 - [ADR 0218: A page link in Review, and a suggestion starts with no person](adr/0218-a-page-link-in-review-and-a-suggestion-starts-with-no-person.md)
+- [ADR 0219: A release checklist, and a check of the address type](adr/0219-a-release-checklist-and-a-check-of-the-address-type.md)
 
 ## Plans
 

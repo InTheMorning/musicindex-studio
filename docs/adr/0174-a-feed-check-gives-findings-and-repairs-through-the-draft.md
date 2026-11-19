@@ -6,6 +6,7 @@
 - Proposed: 2026-11-11 by the planning model, on the operator decision of 2026-11-11 that lifts the stop on F1. The orchestrator session gave that decision.
 - Accepted: 2026-11-11 by the operator. The operator confirmed item 17 on 2026-11-11 on the mockup of packet 109c in `.studio-dev/task-109/out/`. On 2026-11-11 the operator amended item 19: a read-only feed does not show the text of Form A.
 - Technical choices: items 4, 9, 13, 15 and 18 are choices of the planning model.
+- Changed by: [ADR 0219](0219-a-release-checklist-and-a-check-of-the-address-type.md) items 1 to 5, on 2026-11-19. Item 7: five new finding kinds for an incomplete release and a wrong address type.
 - Source: [research request on a feed check with repairs](../plans/research-feed-check-request.md), item F1 and the section "A Self Link In Each Feed". Research note `research_notes/studio/improving-the-state-of-feeds.md` in `../musicindex-research`, recommendation 1.
 - Uses: [ADR 0007](0007-draft-diff-write-and-announce.md), [ADR 0008](0008-feed-types-and-feed-identity.md), [ADR 0021](0021-public-address-of-a-feed.md), [ADR 0023](0023-web-addresses-and-audio-file-facts.md), [ADR 0065](0065-the-core-applies-each-feed-rule.md), [ADR 0126](0126-studio-refuses-a-bad-move-link.md), [ADR 0130](0130-the-facts-of-an-audio-file-stay-locked.md), [ADR 0135](0135-the-panel-holds-the-content-and-the-page-has-tabs.md).
 

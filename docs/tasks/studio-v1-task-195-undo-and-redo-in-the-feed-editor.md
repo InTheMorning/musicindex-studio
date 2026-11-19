@@ -2,7 +2,7 @@
 
 Decision: [ADR 0227](../adr/0227-undo-and-redo.md) items 1 to 12.
 
-Status: Open.
+Status: Done.
 
 ## Problem
 
@@ -66,3 +66,14 @@ Human:
 - Read `/home/citizen/.agents/skills/asd-ste100/SKILL.md` before you write a comment.
 - Do not commit. Leave the change in the working tree and report the changed files and the check results.
 - Do not make an architecture decision. When this task does not answer a question, stop and report.
+
+## Result
+
+- The delegate run made the module, the toolbar buttons and the key handler. It also added `undohistory.js` to the file list of `crates/api/src/ui.rs`.
+- The main session corrected four defects of the delegate run:
+  - Each load of the draft cleared the history, also the first load when the user came back to the feed. Now only a load after Write, Discard or a different route clears it (ADR 0227 item 7).
+  - After an Undo, typing in the same field within 1 second added no step. Now Undo and Redo start a new step.
+  - The key handler also took Ctrl+Z in a field of an open sheet. Now a field in an open sheet keeps its own undo.
+  - The Redo icon used the `transform` attribute of the outer `svg`. Now it uses a CSS transform. The two buttons use the class `icon-button`, as the back and forward buttons of the bar do.
+- Walks: `.studio-dev/walk/u195-1280.json`, `u195-390.json` and `u195b-1280.json` with `setup-none.py`. Two edits in the title are one step. Undo gives the old artist, Ctrl+Z gives the old title, Redo gives the new title. After a visit to Releases, Undo still works.
+- Open: the human check in the Linux desktop app.

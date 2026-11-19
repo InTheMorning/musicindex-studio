@@ -4,6 +4,15 @@
 import { useState, useEffect, useRef, useCallback } from './vendor/htm-preact-standalone.module.js';
 import { api } from './app.js';
 import { withSavedCover } from './cover.js';
+import { makeHistory } from './undohistory.js';
+
+const histories = new Map();
+
+// Get the persistent edit history for one feed (ADR 0227 item 7).
+function historyFor(feedId) {
+  if (!histories.has(feedId)) histories.set(feedId, makeHistory());
+  return histories.get(feedId);
+}
 
 // ---- Client IDs and keys ----
 // Each list entry gets a client ID (`_cid`) for the life of the page. After a
@@ -118,6 +127,9 @@ const badFields = (answer) => [...(answer.bad_addresses || []), ...(answer.bad_k
 // needs no draft now, for example a feed that is not an album (ADR 0029
 // item 4: the shell holds one draft and gives it to the editor).
 export function useDraft(feedId) {
+  const history = feedId === null ? null : historyFor(feedId);
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
   const [model, setModel] = useState(null);
   const [changed, setChanged] = useState(false);
   // Whether the core says that the feed is hidden from apps (ADR 0065 item 9).
@@ -175,11 +187,18 @@ export function useDraft(feedId) {
     setError(null);
   };
 
-  const load = useCallback(async () => {
+  // A load after Write, Discard or a route other than the draft save clears
+  // the undo history (ADR 0227 items 8 and 10). The first load of the page
+  // gives `keepHistory` true, so that the history stays when the user comes
+  // back to the feed (ADR 0227 item 7).
+  const load = useCallback(async (keepHistory = false) => {
     if (feedId === null) {
       setStatus('idle');
       return;
     }
+    if (keepHistory !== true) history.clear();
+    setCanUndo(history.canUndo);
+    setCanRedo(history.canRedo);
     setStatus('loading');
     try {
       const draft = await api(`/feeds/${feedId}/draft`);
@@ -189,7 +208,7 @@ export function useDraft(feedId) {
       setError(e);
       setStatus('failed');
     }
-  }, [feedId]);
+  }, [feedId, history]);
 
   useEffect(() => {
     // A new feed ID means a different draft, or no draft at all. Clear the
@@ -209,7 +228,7 @@ export function useDraft(feedId) {
     setBad([]);
     setError(null);
     setEdits(0);
-    load();
+    load(true);
     return () => clearTimeout(timer.current);
   }, [load]);
 
@@ -266,14 +285,47 @@ export function useDraft(feedId) {
   }, [feedId]);
 
   const update = useCallback((change) => {
+    const element = document.activeElement;
+    const field = element && /^(INPUT|TEXTAREA)$/.test(element.tagName) ? (element.id || element.name || null) : null;
+    history.record(current.current, field, Date.now());
     current.current = change(current.current);
+    setCanUndo(history.canUndo);
+    setCanRedo(history.canRedo);
     dirty.current = true;
     setModel(current.current);
     setEdits((n) => n + 1);
     setStatus('waiting');
     clearTimeout(timer.current);
     timer.current = setTimeout(flush, SAVE_DELAY);
-  }, [flush]);
+  }, [flush, history]);
 
-  return { model, changed, hidden, op3Tracks, grantBlocked, liveProblems, streamTypes, hasHost, draftState, bad, status, error, edits, update, flush, load, show };
+  // Restore the prior model and save it (ADR 0227 items 5 and 9).
+  const undo = useCallback(() => {
+    const previous = history.undo(current.current);
+    if (previous === null) return;
+    current.current = previous;
+    setModel(previous);
+    setCanUndo(history.canUndo);
+    setCanRedo(history.canRedo);
+    dirty.current = true;
+    setStatus('waiting');
+    clearTimeout(timer.current);
+    timer.current = setTimeout(flush, SAVE_DELAY);
+  }, [flush, history]);
+
+  // Restore the next model and save it (ADR 0227 items 5 and 9).
+  const redo = useCallback(() => {
+    const next = history.redo(current.current);
+    if (next === null) return;
+    current.current = next;
+    setModel(next);
+    setCanUndo(history.canUndo);
+    setCanRedo(history.canRedo);
+    dirty.current = true;
+    setStatus('waiting');
+    clearTimeout(timer.current);
+    timer.current = setTimeout(flush, SAVE_DELAY);
+  }, [flush, history]);
+
+  return { model, changed, hidden, op3Tracks, grantBlocked, liveProblems, streamTypes, hasHost, draftState, bad, status, error, edits, update, flush, load, show, undo, redo, canUndo, canRedo };
 }

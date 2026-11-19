@@ -50,6 +50,7 @@ import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary, artwo
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, addsAsTrackFile, refusedText, wrongKindText, replacedAddresses, selectedFacts, TRACK_FILES_ACCEPT } from './picker.js';
 import { deleteChoices, deleteButtonEnabled, retireSteps, retireActions, domainLine, DELETE_POINTS, operationNote, refusedDelete } from './feeddelete.js';
 import { writeResult } from './writeresult.js';
+import { undoKey } from './undohistory.js';
 
 // A text where only each web address can break inside a word (musicindex ADR
 // 0065 R-FIT-3 item 3).
@@ -2347,6 +2348,18 @@ export function DraftToolbar({ feedId, feedConnectorId, draft, onWritten, connec
   const [linkedPage, setLinkedPage] = useState(null);
   // The form that makes an artist page from Review (ADR 0218 item 6).
   const [making, setMaking] = useState(false);
+  useEffect(() => {
+    // The page takes the undo keys before the script of the Linux desktop
+    // app (ADR 0227 item 9). A field in an open sheet keeps its own undo.
+    const onKeyDown = (event) => {
+      const action = undoKey(event);
+      if (!action || event.target?.closest?.('dialog[open]')) return;
+      event.preventDefault();
+      draft[action]();
+    };
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => document.removeEventListener('keydown', onKeyDown, true);
+  }, [draft.undo, draft.redo]);
   const madeArtist = async (page) => {
     setMaking(false);
     if (!page || !(await draft.flush())) return;
@@ -2368,6 +2381,8 @@ export function DraftToolbar({ feedId, feedConnectorId, draft, onWritten, connec
   }, []);
   const status = toolbarStatus(draft);
   return html`<div class="draft-toolbar">
+    <button class="button icon-button undo" type="button" aria-label="Undo" title="Undo (Ctrl+Z)" disabled=${!draft.canUndo} onClick=${draft.undo}><${Icon} name="undo-2" /></button>
+    <button class="button icon-button redo" type="button" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled=${!draft.canRedo} onClick=${draft.redo}><${Icon} name="undo-2" mirrored=${true} /></button>
     <span class=${`draft-status${status.error ? ' error' : ''}`} role="status">${status.text}</span>
     <button class="button" type="button" onClick=${() => setOpen('versions')}>Versions</button>
     <button class="button primary" type="button" onClick=${() => setOpen('review')}>Review</button>

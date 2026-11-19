@@ -635,7 +635,15 @@ fn main() {
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             show_window(app);
         }))
-        .plugin(tauri_plugin_opener::init())
+        // The default plugin adds a page script that catches a click on a
+        // link with `target="_blank"` and calls a Tauri command. The window
+        // has no command (ADR 0124 item 2), so the click did nothing. Without
+        // the script, `on_new_window` gets the link (ADR 0124 item 5).
+        .plugin(
+            tauri_plugin_opener::Builder::new()
+                .open_js_links_on_click(false)
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             if let Err(error) = setup(app.handle()) {
@@ -678,6 +686,18 @@ mod tests {
             close_step(Some(OnClose::Tray), false),
             CloseStep::Quit,
             "{message}"
+        );
+    }
+
+    #[test]
+    fn the_opener_plugin_adds_no_link_script() {
+        // rc.27 check finding 5: the link script of the plugin stopped each
+        // click on "Open on musicindex.org".
+        let source = include_str!("main.rs");
+        let default_plugin = ["tauri_plugin_opener", "::init()"].concat();
+        assert!(
+            !source.contains(&default_plugin) && source.contains(".open_js_links_on_click(false)"),
+            "ADR 0124 items 2 and 5: the page has no Tauri command, so the link script of the opener plugin stops each click on a target=_blank link. Build the plugin with tauri_plugin_opener::Builder::new().open_js_links_on_click(false)."
         );
     }
 

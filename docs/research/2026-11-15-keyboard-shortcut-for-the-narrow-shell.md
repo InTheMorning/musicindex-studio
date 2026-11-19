@@ -17,7 +17,7 @@ The shortcut selects the root page. The root page shows the destinations and the
 
 ### Evidence
 
-Studio uses the narrow layout at 760 px or below (`crates/api/ui/app.js`, commit `10815f35246e2f96c5088a46d4bbbc80e1dab249`, lines 1843–1845, read 2026-11-15). The shell has no sidebar in that layout (same commit, lines 3973–3978). The root page shows the destinations and footer (same commit, lines 3324–3335).
+Studio uses the narrow layout at 760 px or below (`crates/api/ui/app.js`, commit `033c89c2910447c8af075b19c353b047ac41321b`, lines 1843–1845, read 2026-11-15). The shell has no sidebar in that layout (same commit, lines 3973–3978). The root page shows the destinations and footer (same commit, lines 3324–3335).
 
 The narrow stack starts with the root page. Studio navigation can select a stack entry through its navigation record (`crates/api/ui/shell.js`, same commit, lines 806–828, read 2026-11-15). Inference: a shortcut can select the root entry without adding a new view.
 
@@ -45,7 +45,7 @@ The shortcut performs the current Back step. The user sees the prior page in the
 
 ### Evidence
 
-Studio ADR 0088 item 7 says each level is a stack page and Back opens the level above. Studio code builds those pages in `narrowStack` and `levelPages` (`crates/api/ui/shell.js`, commit `10815f35246e2f96c5088a46d4bbbc80e1dab249`, lines 804–834, read 2026-11-15). The Back step uses browser history when its entry matches Studio navigation (`crates/api/ui/app.js`, same commit, lines 3721–3734, read 2026-11-15).
+Studio ADR 0088 item 7 says each level is a stack page and Back opens the level above. Studio code builds those pages in `narrowStack` and `levelPages` (`crates/api/ui/shell.js`, commit `033c89c2910447c8af075b19c353b047ac41321b`, lines 804–834, read 2026-11-15). The Back step uses browser history when its entry matches Studio navigation (`crates/api/ui/app.js`, same commit, lines 3721–3734, read 2026-11-15).
 
 musicindex ADR 0069 R-SHELL-2 item 3 says that Back pops the stack. It also says the device Back button and browser Back button act like the back control. The record was read on 2026-11-15 from `/home/citizen/build/musicindex/docs/adr/0069-the-interface-rules-and-the-shell-of-the-three-apps.md`, musicindex commit `f4e8ca35f627fe3587f4feb73c2f85fa08fe0394`.
 
@@ -71,7 +71,7 @@ A panel appears above the current page. The current page remains below it. A sec
 
 ### Evidence
 
-Studio makes the sidebar only when the layout is not narrow (`crates/api/ui/app.js`, commit `10815f35246e2f96c5088a46d4bbbc80e1dab249`, lines 3973–3978, read 2026-11-15). The narrow stack maps each level to a page (`crates/api/ui/shell.js`, same commit, lines 806–834).
+Studio makes the sidebar only when the layout is not narrow (`crates/api/ui/app.js`, commit `033c89c2910447c8af075b19c353b047ac41321b`, lines 3973–3978, read 2026-11-15). The narrow stack maps each level to a page (`crates/api/ui/shell.js`, same commit, lines 806–834).
 
 musicindex ADR 0069 R-SHELL-1 item 6 says that no other second pane exists. R-SHELL-2 item 1 says the narrow shell has no menu button and no drawer. These items were read on 2026-11-15 from the record and commit named in Selection 2.
 

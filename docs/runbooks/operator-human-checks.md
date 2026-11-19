@@ -29,7 +29,7 @@ Necessary: a person in the desktop app with a read-only link to a Music Index pa
 
 These checks need a candidate after `0.1.0-rc.22`:
 
-1. Step 11 of the findings of 0.1.0-rc.22: ADR 0175 in the AppImage. The AppImage of `0.1.0-rc.22` does not have commit 8a23157.
+1. Step 11 of the findings of 0.1.0-rc.22: ADR 0175 in the AppImage. The AppImage of `0.1.0-rc.22` does not have commit 02bac0e.
 2. Step 9 of the notes of 0.1.0-rc.22, on the server: a person with two linked pages shows the host of each page row and the source of each value. In `0.1.0-rc.22` it failed, as expected. Task 138 corrects it on local `main`.
 
 ## What Only The Operator Can Supply

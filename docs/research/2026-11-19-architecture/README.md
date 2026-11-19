@@ -1,6 +1,6 @@
 # Studio Architecture, 2026-11-19
 
-This record is advisory. It describes the code at commit d4e8a14. It does not
+This record is advisory. It describes the code at commit 5f15240. It does not
 make a rule. The ADRs in `docs/adr/` own each rule.
 
 `architecture.html` has five drawings. Open it in a browser. Each drawing shows

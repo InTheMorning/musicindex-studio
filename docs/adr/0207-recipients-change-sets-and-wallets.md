@@ -207,7 +207,7 @@ Mechanical. The tests of the superseded ADRs enforce these items, and this ADR a
 
 Visual: no new visual check. The archived ADR 0027, ADR 0091 and ADR 0095 keep their visual checks.
 
-The human check of item 58 passed on 2026-11-15, on commit `88161d9`. The hover text of the short address gives the full address. At about 1200 px, the address row shows the same short form as at 390 px.
+The human check of item 58 passed on 2026-11-15, on commit `9bd3efd`. The hover text of the short address gives the full address. At about 1200 px, the address row shows the same short form as at 390 px.
 
 Human, on `studio.musicindex.org`: the human test of ADR 0095 is open.
 

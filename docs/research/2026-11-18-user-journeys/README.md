@@ -1,8 +1,8 @@
-# Studio user journeys at commit a64637d
+# Studio user journeys at commit 73828c0
 
 Date: 2026-11-18. Status: research record. This record is advisory. It states no rule.
 
-This record gives the user journeys of Studio as they are in the code at commit `a64637d`.
+This record gives the user journeys of Studio as they are in the code at commit `73828c0`.
 It is the data for a subsequent UX analysis. It does not give design proposals.
 
 The previous study is in the research repository, at
@@ -28,7 +28,7 @@ Three steps made the record.
 2. **Examination of the inventories.** The main session compared each quoted label of the three inventories
    with the sources. All 1,098 labels exist in the code, or the code makes them from a template. The main
    session also read a sample of the `file:line` references. They are correct, or one or two lines off.
-3. **Walks.** The main session operated the desktop binary of commit `a64637d` in headless Chromium and
+3. **Walks.** The main session operated the desktop binary of commit `73828c0` in headless Chromium and
    made screenshots. The walks examine the most frequent journeys. A walk result is stronger evidence than
    the code reading. Where the two disagree, `walks.md` says so.
 

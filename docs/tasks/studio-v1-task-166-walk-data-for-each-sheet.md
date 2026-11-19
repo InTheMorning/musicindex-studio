@@ -134,7 +134,7 @@ ChatGPT made the setup files and the `open` steps in two runs. The main session 
 
 Faults that the walk found, corrected by the main session:
 
-1. "Review" and "Versions" closed at 390 px. `Bar` (`crates/api/ui/app.js`) put the children after the title in a different place when the narrow root buttons show. Preact then mounted the draft toolbar again, and its open sheet closed. Commit `55ef457` added this after ADR 0214. The children now keep one place at each width.
+1. "Review" and "Versions" closed at 390 px. `Bar` (`crates/api/ui/app.js`) put the children after the title in a different place when the narrow root buttons show. Preact then mounted the draft toolbar again, and its open sheet closed. Commit `06440b0` added this after ADR 0214. The children now keep one place at each width.
 2. "Release Folder": a folder name with no break point broke inside a word (musicindex ADR 0065 R-FIT-3). The selected folder and each folder row of the sheet now have the break attribute, as the folder path of a file host has (ADR 0214, section "Consequences").
 
 Checks by the main session:

@@ -1,8 +1,8 @@
-<!-- Recorded output of ChatGPT inventory run C at commit a64637d. Kept unchanged as evidence. It is not edited to STE. See ../README.md. -->
+<!-- Recorded output of ChatGPT inventory run C at commit 73828c0. Kept unchanged as evidence. It is not edited to STE. See ../README.md. -->
 
 **Run C: People inventory**
 
-The checked commit is `a64637d38f70bde5920b49880bd7c7d308246430`. No files were changed. No repository-changing git commands were run.
+The checked commit is `73828c03a543f401d47fa29dd3a6ed4b9b68b19c`. No files were changed. No repository-changing git commands were run.
 
 All JavaScript references below are under `crates/api/ui/`, unless another path is given.
 

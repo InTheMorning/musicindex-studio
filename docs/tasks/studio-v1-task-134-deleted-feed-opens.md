@@ -2,7 +2,7 @@
 
 Decision: [ADR 0131](../adr/0131-delete-a-feed-from-its-file-host.md) item 14. This task corrects a defect. It makes no new rule.
 
-Status: Complete. The mechanical criteria pass. The human check passed on 2026-11-13 with a local build that has commit `51dc619`. "HeyCitizen's Test Feed" opened as read-only with its tracks and no error, and the Retire block showed the three steps as done.
+Status: Complete. The mechanical criteria pass. The human check passed on 2026-11-13 with a local build that has commit `f775c21`. "HeyCitizen's Test Feed" opened as read-only with its tracks and no error, and the Retire block showed the three steps as done.
 
 ## Goal
 

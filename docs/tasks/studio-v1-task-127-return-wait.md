@@ -4,7 +4,7 @@ Decision: [ADR 0190](../adr/0190-review-gives-the-return-wait-of-music-index.md)
 
 Status: Complete on 2026-11-12, with packet 127b. The mechanical checks, the screenshot visual check and the human gate passed. Packet 127a is complete.
 
-The human gate ran on 2026-11-12 in a release build of `3900135`, against Stophammer `v0.20.0-rc.1`. A loop read `GET /v1/feeds/7ea30e6c-c7ba-5b81-a7be-6465c1591b7a` each 10 seconds. The times are EST:
+The human gate ran on 2026-11-12 in a release build of `a322ec0`, against Stophammer `v0.20.0-rc.1`. A loop read `GET /v1/feeds/7ea30e6c-c7ba-5b81-a7be-6465c1591b7a` each 10 seconds. The times are EST:
 
 | Time | Address of Music Index | `return_wait_until` |
 | --- | --- | --- |

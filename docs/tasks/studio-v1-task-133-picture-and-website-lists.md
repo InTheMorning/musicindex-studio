@@ -2,7 +2,7 @@
 
 Decision: [ADR 0196](../adr/0196-a-person-keeps-a-list-of-pictures-and-websites-with-a-default.md).
 
-Status: Complete on 2026-11-13. The human check of ADR 0196 passed on 2026-11-13. In the desktop app, the page of Prosperous Soul listed the values of both pages, and the default values did not change. The operator asked for the Default tag in the column of **Make Default**, so that each **Remove** is in one column (commit `f76554f`). That layout passed. A second "Update from Linked Pages" did not show the values of the first update again.
+Status: Complete on 2026-11-13. The human check of ADR 0196 passed on 2026-11-13. In the desktop app, the page of Prosperous Soul listed the values of both pages, and the default values did not change. The operator asked for the Default tag in the column of **Make Default**, so that each **Remove** is in one column (commit `ef0e72d`). That layout passed. A second "Update from Linked Pages" did not show the values of the first update again.
 
 Part 133b: the mechanical checks passed, with 752 Node tests. The main session restored the import of `hasLinkedPages`, because the People page uses it and no test found its removal. The main session also removed the `.form` wrapper of the add form, because the field touched the edge of the group.
 
@@ -64,7 +64,7 @@ The four checks: `cargo fmt --all --check`, `cargo clippy --workspace --all-targ
 
 ## Part 133b: The Page Of A Person
 
-Part 133a is commit `ad88d13`. Read its diff (`git show ad88d13 -- crates/api/ui`) first. This part changes only `crates/api/ui/people.js`, `crates/api/ui/peoplepages.js`, the CSS of `crates/api/ui/` if a row needs it, and the Node tests in `crates/api/ui-tests/`. Do not change the core or the API.
+Part 133a is commit `36b7e84`. Read its diff (`git show 36b7e84 -- crates/api/ui`) first. This part changes only `crates/api/ui/people.js`, `crates/api/ui/peoplepages.js`, the CSS of `crates/api/ui/` if a row needs it, and the Node tests in `crates/api/ui-tests/`. Do not change the core or the API.
 
 1. Pending state (`people.js`, ADR 0196 items 7 and 12):
    - `savedValues` gives `pictures` and `websites`: copies of `person.pictures` and `person.websites` (`{ value, source }`), or `[]`. `img` and `href` stay the defaults.

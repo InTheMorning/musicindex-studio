@@ -17,7 +17,7 @@ Status: Complete on 2026-11-14, with its screenshot visual check. The human gate
 - The 390 px fit check gave one overlap of "Versions" with "Move Artist X up". The walk ended with the page scrolled down, as in task 139. This change does not cause it.
 - The walk `steps-142-held.json` with `setup-131.py` showed the choice sheet with two rows at 1280 px light and 390 px dark, with no finding.
 - After the write of the restore, a walk showed "Hide from apps is on in the draft." in step 1 of the Retire block. This comes from the walk data, which has no release folders. The API test `after_a_restore_write_the_retire_state_names_the_last_write` proves that the state is "written" after a restore write.
-- The walk `steps-texts.json` showed the texts of d2fb0aa in the UI. They are the line of a hidden draft on the tab **Check**, the notice of the review and the confirm of a discard. The walk `steps-texts2.json` showed "＋ Add a Release" on the page of an artist.
+- The walk `steps-texts.json` showed the texts of ebfdb43 in the UI. They are the line of a hidden draft on the tab **Check**, the notice of the review and the confirm of a discard. The walk `steps-texts2.json` showed "＋ Add a Release" on the page of an artist.
 
 ## Goal
 

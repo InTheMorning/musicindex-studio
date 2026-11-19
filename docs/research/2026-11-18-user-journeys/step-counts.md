@@ -1,6 +1,6 @@
 # Step counts
 
-This table gives the step count of each journey of the previous study (A1 to A25), at commit `a64637d`.
+This table gives the step count of each journey of the previous study (A1 to A25), at commit `73828c0`.
 The previous counts come from `02-as-is.md` of the study at Studio commit `563cce6`.
 The step method is in `README.md`.
 

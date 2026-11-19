@@ -13,7 +13,7 @@ and it is private. The request is
 This document binds nothing in Studio. Studio records its decision in
 [ADR 0188](../adr/0188-the-readme-is-a-landing-page-for-an-artist.md).
 
-The research examined Studio at commit `ba8efbd`.
+The research examined Studio at commit `75472d4`.
 
 ## Purpose
 
@@ -21,7 +21,7 @@ Studio is the first repository to apply the README contract (`readme-contract.md
 Its primary reader is an artist or a label that publishes music feeds.
 Studio has a complete user guide, so the work is a landing page in front of that guide.
 
-## Findings At Studio `ba8efbd`
+## Findings At Studio `75472d4`
 
 - `README.md` has 32 lines: one sentence and 26 guide links.
 - The README has no link to `docs/user-guide/feed-check.md`. The guide index `docs/user-guide/README.md` groups the pages by task.

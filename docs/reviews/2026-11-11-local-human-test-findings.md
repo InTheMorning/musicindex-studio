@@ -2,7 +2,7 @@
 
 Date: 2026-11-11.
 
-Status: advisory. This review records the results of the human tests of local `main` at `19371ce`. It states no rule. The ADRs that it names own the decisions.
+Status: advisory. This review records the results of the human tests of local `main` at `d59838b`. It states no rule. The ADRs that it names own the decisions.
 
 The operator built `studio-desktop-app` in the release profile from local `main` and ran it on Linux. The data was the real collection of the operator.
 
@@ -14,9 +14,9 @@ The operator built `studio-desktop-app` in the release profile from local `main`
 | Settings: Discard with the real lock and close settings | ADR 0166, task 099 | Passed. After a tab change, the two changes stayed. Discard gave back the saved values, and the close followed the saved value. |
 | Settings: Save with the real lock and close settings | ADR 0166, task 099 | Passed. Save showed "Saved". The close followed the new value, the values stayed after a restart, and the vault locked after the lock time. |
 | Move with "Only the release files" | ADR 0177 | Passed. The media files went from `bastone` to `heycitizen`, at `https://music.cancelbandcamp.com/TestAlbum/test/`. Each new address answered `200`. The feed file stayed on `bastone` at its address. |
-| Move with "Only the feed file", on `7e66e56` | ADR 0177, ADR 0178 | Passed. The old copy at `TestAlbum/test.xml` on `heycitizen` did not stop the move. After the write at 11:37 UTC on 2026-11-12, the new address gave the feed. The old address gave the same feed, with `itunes:new-feed-url` set to the new address. Music Index still gave the old address after the write. |
+| Move with "Only the feed file", on `3cc10e5` | ADR 0177, ADR 0178 | Passed. The old copy at `TestAlbum/test.xml` on `heycitizen` did not stop the move. After the write at 11:37 UTC on 2026-11-12, the new address gave the feed. The old address gave the same feed, with `itunes:new-feed-url` set to the new address. Music Index still gave the old address after the write. |
 | Move with "The feed file and the release files", back to `bastone` | ADR 0177, ADR 0179 | Stopped before the write. Review showed duplicate uploads (finding 9). |
-| The same move again, on `7c581a8` | ADR 0177, ADR 0179 | Passed. The **Files** page showed no " 2" names. Review showed the return warning and no upload, because each media file had a copy on `bastone`. After the write at 13:47 UTC on 2026-11-12, both addresses gave the feed with `itunes:new-feed-url` set to the `bastone` address. Each media address in the feed was on `bastone` and answered. |
+| The same move again, on `75bb66e` | ADR 0177, ADR 0179 | Passed. The **Files** page showed no " 2" names. Review showed the return warning and no upload, because each media file had a copy on `bastone`. After the write at 13:47 UTC on 2026-11-12, both addresses gave the feed with `itunes:new-feed-url` set to the `bastone` address. Each media address in the feed was on `bastone` and answered. |
 | Keys of the left panel and of the Credits page, with a real keyboard | ADR 0172, task 108 | Passed in the release build of local `main`, not in the AppImage. Up, Down, Home, End, Tab, Shift+Tab, Enter and Left acted as the task gives. Right, Left, Enter and Tab acted on a credit row. The focus ring had defects (finding 11). |
 | A repair from the **Check** tab | ADR 0174, task 109 | Passed in the release build of local `main`, not in the AppImage. "HeyCitizen's Test Album" showed the notice "No self link". **Add the Link** put the Atom namespace, a new `lastBuildDate` and `<atom:link rel="self">` with the `bastone` address in Review. After the write at 14:03 UTC on 2026-11-12, the hosted feed had the link, and **Check Again** showed no problem. |
 | Move of a real release folder | ADR 0167, task 105 | Passed. **Move to Standard Folder** moved `library/test` to `library/HeyCitizen/HeyCitizen's Test Album`. The new folder held the seven files with their sizes, and the old folder was not there. After **Scan the Library Folder**, the **Files** page showed the same six media files, with no new name. |
@@ -164,7 +164,7 @@ The plan in `release_move_plan` also makes a copy operation for record 13. But `
 
 ### Finding 10: Review Stays Open After A Discard
 
-Fix: commit `7c581a8`. No decision is necessary.
+Fix: commit `75bb66e`. No decision is necessary.
 
 Owner: [ADR 0007](../adr/0007-draft-diff-write-and-announce.md).
 
@@ -172,7 +172,7 @@ After **Discard the Draft**, the sheet "Review changes" stayed open. It showed "
 
 ### Finding 11: The Focus Ring Of The First Row Of The Left Panel
 
-Fix: commit `dea1bb3`. No decision is necessary.
+Fix: commit `37e2d6e`. No decision is necessary.
 
 Owner: [ADR 0172](../adr/0172-a-list-is-one-tab-stop.md).
 

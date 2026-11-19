@@ -7,7 +7,7 @@
 
 ## Goal
 
-On `c7aaab4`, `check_adr_links.py --counts .` of the `project-baseline` skill gives 11 failures of the limit check. Eleven current ADRs have more than three "Changed by" lines. This plan puts them into areas and gives one consolidated ADR to each area. The last commit removes `--skip limit` from the gate in `AGENTS.md`.
+On `e3b0f6c`, `check_adr_links.py --counts .` of the `project-baseline` skill gives 11 failures of the limit check. Eleven current ADRs have more than three "Changed by" lines. This plan puts them into areas and gives one consolidated ADR to each area. The last commit removes `--skip limit` from the gate in `AGENTS.md`.
 
 ## How The Areas Are Made
 
@@ -34,7 +34,7 @@ The links that stay between areas:
 
 ## Steps
 
-1. Add the ADR link guard to the gate with `--skip limit`. Done in `e2eb2b7`.
+1. Add the ADR link guard to the gate with `--skip limit`. Done in `3419713`.
 2. Write this plan.
 3. Write one consolidated ADR for each area, in the sequence of the table. Each one has these parts:
     - The status Accepted, and an "Accepted:" line that cites musicindex-research `df7b823`.
@@ -51,9 +51,9 @@ If a restatement needs a change of a rule, the work stops, and the orchestrator 
 
 | Area | New ADR | Condition | Commit |
 | --- | --- | --- | --- |
-| Gate | — | Done | `e2eb2b7` |
-| Feed files, moves and the server | 0204 | Done | `5750c54` |
-| Publisher feeds, announcements and grants | 0205 | Done | `805491b` |
-| The shell and the editor pages | 0206 | Done | `ea1e1cc` |
-| Recipients | 0207 | Done | `5382986` |
+| Gate | — | Done | `3419713` |
+| Feed files, moves and the server | 0204 | Done | `b9caddc` |
+| Publisher feeds, announcements and grants | 0205 | Done | `7fc3ba6` |
+| The shell and the editor pages | 0206 | Done | `ae7f363` |
+| Recipients | 0207 | Done | `539f328` |
 | Limit check in the gate | — | Done | This commit |

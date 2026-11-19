@@ -603,7 +603,7 @@ Each release candidate after 0.1.0-rc.8 has one notes file ([ADR 0100](adr/0100-
 - [Examples of a default among many addresses, 2026-11-06](research/2026-11-06-default-address-examples.md)
 - [Vault unlock at the start of the desktop app, 2026-11-15](research/2026-11-15-vault-unlock-at-the-start-of-the-desktop-app.md)
 - [A keyboard shortcut for the narrow shell, 2026-11-15](research/2026-11-15-keyboard-shortcut-for-the-narrow-shell.md)
-- [Studio user journeys at commit a64637d, 2026-11-18](research/2026-11-18-user-journeys/README.md)
+- [Studio user journeys at commit 73828c0, 2026-11-18](research/2026-11-18-user-journeys/README.md)
 
 ## Notes
 

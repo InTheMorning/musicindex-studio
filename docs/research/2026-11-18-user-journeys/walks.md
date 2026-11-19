@@ -1,6 +1,6 @@
 # Walks
 
-Each walk operated the desktop binary of commit `a64637d` (`studio-desktop`, release build) in headless
+Each walk operated the desktop binary of commit `73828c0` (`studio-desktop`, release build) in headless
 Chromium. The window was 1280 × 860 px, or 390 × 844 px for the narrow walk. No network was available.
 
 Two data sets were used:

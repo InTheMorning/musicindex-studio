@@ -4,7 +4,7 @@ Date: 2026-11-13.
 
 Status: advisory. This review records the results of the first part of the human test of `0.1.0-rc.22`. It states no rule. The ADRs that it names own the decisions.
 
-The operator ran the test on a Linux x86-64 computer. Steps 1 to 10 used the AppImage `musicindex-studio-v0.1.0-rc.22-linux-x86_64.AppImage`. Steps 11 to 19 used the local build `target/release/studio-desktop-app` from 02:06 on 2026-11-13. Tasks 110 and 111 came after the tag `v0.1.0-rc.22` (`e032486`). The agent read the hosts and the Music Index API at each step that names a read.
+The operator ran the test on a Linux x86-64 computer. Steps 1 to 10 used the AppImage `musicindex-studio-v0.1.0-rc.22-linux-x86_64.AppImage`. Steps 11 to 19 used the local build `target/release/studio-desktop-app` from 02:06 on 2026-11-13. Tasks 110 and 111 came after the tag `v0.1.0-rc.22` (`727d93a`). The agent read the hosts and the Music Index API at each step that names a read.
 
 ## Results
 
@@ -18,7 +18,7 @@ The steps of "What to test" in the [notes of 0.1.0-rc.22](../releases/0.1.0-rc.2
 | 6 | 5 | **Update from Linked Pages** with a cleared check box | Passed. The sheet had one value, so a cleared box turned **Update** off, and a selected box added the value with its source. |
 | 7 | 6 | The same values do not show again | Passed. The sheet said "The linked pages have no new values for your people." |
 | 8–10 | 7 | **Add a Person** from a live page, a nickname, and a new credit | Passed, with finding 8. A new credit got the name "Haleen", not the nickname. |
-| 11 | — | ADR 0175 in the AppImage | Open. The AppImage does not have the rows of 8a23157. The local build was not used for this step. |
+| 11 | — | ADR 0175 in the AppImage | Open. The AppImage does not have the rows of 02bac0e. The local build was not used for this step. |
 | 12–18 | — | ADR 0131: retire and delete a test feed on a real file host | The delete passed, with findings 3 to 5 |
 | 19 | — | ADR 0131 item 14: the feed after the delete | Failed. Finding 6. Passed after task 134. |
 
@@ -61,7 +61,7 @@ The probable cause comes from the code. A test has not proved it yet:
 - The `last_version` of a feed on an S3 or R2 host is the ETag of the host (`crates/core/src/connector/s3.rs`). The facts of the test feed showed the version `d4de5b7a46da010a1e6…`, with no `sha256:` prefix. The SHA-256 of the feed before the delete was `c4a7042c…`.
 - So the two values cannot agree after a delete on an S3 or R2 host. `start_restore_draft` (`crates/core/src/feed_delete.rs`) makes the same comparison, so a restore possibly fails too.
 
-Task 134 (`51dc619`) proved this cause with a test host that gives ETag versions. A deleted feed now opens from the snapshot of its delete. The human check of task 134 passed on 2026-11-13: the test feed opened as read-only with its tracks, and the Retire block showed the three steps as done.
+Task 134 (`f775c21`) proved this cause with a test host that gives ETag versions. A deleted feed now opens from the snapshot of its delete. The human check of task 134 passed on 2026-11-13: the test feed opened as read-only with its tracks, and the Retire block showed the three steps as done.
 
 Two observations from that check, not verified in the code:
 

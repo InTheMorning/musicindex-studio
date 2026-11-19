@@ -38,4 +38,4 @@ Visual, by the main session. The walk data is that of ADR 0075, with a long name
 - Visual 2: at 1280 px, the columns are "7px 208px 64px 104px 105px", as before the change.
 - Visual 3: at 390 px, the page width is 390 px and the row is 358 px wide. No finding from `$edges()` or `$overflow()` in the four views.
 - The gate passed on the tree with this change.
-- Human check, passed by the operator on 2026-11-15 with commits `4162348` and `88161d9`: at about 390 px, the wallet row of the section Payment of a person shows the address on a second line, in the short form of musicindex ADR 0076. The right edge does not cut it.
+- Human check, passed by the operator on 2026-11-15 with commits `6acd0e2` and `9bd3efd`: at about 390 px, the wallet row of the section Payment of a person shows the address on a second line, in the short form of musicindex ADR 0076. The right edge does not cut it.

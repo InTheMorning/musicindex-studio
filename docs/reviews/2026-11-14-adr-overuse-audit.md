@@ -14,7 +14,7 @@ The format of each ADR is good. Each ADR names the choices of the operator and t
 
 ## Evidence
 
-All counts come from `grep` and `git log` on `main` at `2430128`.
+All counts come from `grep` and `git log` on `main` at `880b1ae`.
 
 | Measure | Value |
 | --- | --- |

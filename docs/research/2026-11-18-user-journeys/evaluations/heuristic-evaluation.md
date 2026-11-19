@@ -1,7 +1,7 @@
 # Heuristic evaluation of two Studio journeys
 
 Method: heuristic evaluation with the 10 heuristics of Nielsen (H1 to H10).
-Data: the walks at commit `a64637d`, the shots `j01-*`, `j02-*`, `j04*-*`, `j06-*` and `j07-*`, and the code in `crates/api/ui/`.
+Data: the walks at commit `73828c0`, the shots `j01-*`, `j02-*`, `j04*-*`, `j06-*` and `j07-*`, and the code in `crates/api/ui/`.
 User: a new independent artist who does not know RSS, Nostr, Lightning, podping, LNURL, node addresses, feeds, value splits or hosts.
 
 Marks: "Shot" means a screenshot shows the fact. "Code" means the code shows the fact and no walk examined it. "Inference" means the finding is a conclusion from other facts.

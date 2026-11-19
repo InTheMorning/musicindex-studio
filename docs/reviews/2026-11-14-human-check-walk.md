@@ -15,7 +15,7 @@ The operator uses the local release build `target/release/studio-desktop-app` fr
 | 3 | Check E: pictures and the network, items 1 to 3 | ADR 0159, notes of 0.1.0-rc.21, step 28 | Desktop app, the network | Item 2 passed. Items 1 and 3 open |
 | 4 | Check D: a release move and a return between two real file hosts | Notes of 0.1.0-rc.21, steps 24 to 26, ADR 0128, task 091 | Desktop app, two real file hosts | Passed |
 | 5 | A timed **Play** in an AppImage after 0.1.0-rc.19 | Finding 18 of the local use findings of 2026-11-06 | The AppImage of 0.1.0-rc.22 | Passed |
-| 6 | ADR 0175 in the AppImage | Step 11 of the findings of 0.1.0-rc.22 | An AppImage with 8a23157 | Open. Blocked until the next candidate |
+| 6 | ADR 0175 in the AppImage | Step 11 of the findings of 0.1.0-rc.22 | An AppImage with 02bac0e | Open. Blocked until the next candidate |
 | 7 | The server: an account stays, and two linked pages show their sources | Notes of 0.1.0-rc.22, steps 8 and 9 | The server | Step 8 passed. Step 9 failed in 0.1.0-rc.22, as expected. Open for the next candidate |
 | 8 | The iPhone: the rows of a person fit, and each tab of Settings opens | Notes of 0.1.0-rc.22, steps 10 and 11 | The iPhone, the server | Passed |
 | 9 | The stream checks: a paste in the stream address field on the desktop and the iPhone, and **Check Stream** on the server | Notes of 0.1.0-rc.21, task 100, ADR 0173 | A real Icecast mount, the server, the iPhone | Passed |

@@ -1,8 +1,8 @@
-<!-- Recorded output of ChatGPT inventory run B at commit a64637d. Kept unchanged as evidence. It is not edited to STE. See ../README.md. -->
+<!-- Recorded output of ChatGPT inventory run B at commit 73828c0. Kept unchanged as evidence. It is not edited to STE. See ../README.md. -->
 
 # Current feed-editor journey inventory
 
-Source: commit `a64637d`, as specified.
+Source: commit `73828c0`, as specified.
 
 All file references below are relative to `crates/api/ui/`. No files were changed. No repository-changing Git commands ran.
 

@@ -191,7 +191,7 @@ function Recipients({ id, recipients, defaultType, onChange, openAdd = false, on
           <span class="mono address" title=${r.address || null}>${r.address ? (r.recipient_type === 'lnaddress' ? r.address : shortKey(r.address)) : 'No address'}</span>
         </summary>
         <div class="form">
-        <${TextField} id=${`${rid}-split`} label='Split (shares)' inputmode="numeric" value=${r.split} onChange=${change('split')} />
+        <${TextField} id=${`${rid}-split`} label='Split (shares)' inputmode="numeric" hint="A recipient gets its shares divided by the total shares of the block." value=${r.split} onChange=${change('split')} />
         <label class="check"><input type="checkbox" checked=${isFee(r)}
           onChange=${(e) => change('fee')(e.target.checked ? 'true' : null)} />
           Fee</label>

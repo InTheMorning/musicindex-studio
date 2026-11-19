@@ -1857,8 +1857,11 @@ function AnnounceFooterChoice({ choice, skip }) {
   if (skip) return html`<div class="announce-footer-row"><span class="hint">${skip}</span></div>`;
   if (choice.enabled === null) return null;
   return html`<div class="announce-footer-row">
-    <label class="check"><input type="checkbox" checked=${choice.enabled} disabled=${choice.busy} onChange=${(e) => choice.change(e.target.checked)} />
-      <span>${ANNOUNCE_FOOTER_LABEL}</span></label>
+    <div>
+      <label class="check"><input type="checkbox" checked=${choice.enabled} disabled=${choice.busy} onChange=${(e) => choice.change(e.target.checked)} />
+        <span>${ANNOUNCE_FOOTER_LABEL}</span></label>
+      <p class="hint">Tells podcast apps that the feed changed, so that they show the change in minutes.</p>
+    </div>
   </div>`;
 }
 
@@ -2743,7 +2746,7 @@ function ChannelFields({ feedId, draft, model, update, bad, artistLabel, onArtwo
   const shown = {
     title: () => html`<${TextField} id="ch-title" label="Title" value=${model.title} onChange=${field('title')} />`,
     kind: () => kindField,
-    author: () => html`<${TextField} id="ch-author" label=${artistLabel} hint="The itunes:author of the feed." value=${model.author} onChange=${field('author')} />`,
+    author: () => html`<${TextField} id="ch-author" label=${artistLabel} hint="The artist name that podcast apps show." value=${model.author} onChange=${field('author')} />`,
     nostr: () => html`<${FeedKeyRow} feedId=${feedId} model=${model} update=${update} bad=${bad} />`,
     description: () => html`<${TextArea} id="ch-description" label="Description" value=${model.description} onChange=${field('description')} />`,
     artwork: () => html`<${ArtworkRow} summary=${artworkSummary(model, 'feed')} image=${artworkPreview(model, 'feed')} onOpen=${() => onArtwork({ kind: 'feed' })} />`,
@@ -3305,7 +3308,7 @@ function CreditsPage({ model, update, bad }) {
 // (task 014c step 3, ADR 0029 item 9). The page is at most 560 px wide
 // (ADR 0039 item 12).
 function RecipientsPage({ model, update, openAdd, onAddOpened, wrongAddresses }) {
-  return html`<div class="value-routes"><${AlbumPayments} model=${model} update=${update} openAdd=${openAdd} onAddOpened=${onAddOpened} wrongAddresses=${wrongAddresses} /></div>`;
+  return html`<div class="value-routes"><p class="hint">Value Routes tell podcast apps where to send the payments of listeners.</p><${AlbumPayments} model=${model} update=${update} openAdd=${openAdd} onAddOpened=${onAddOpened} wrongAddresses=${wrongAddresses} /></div>`;
 }
 
 // The media types of a lyrics file. A feed can have another value, and the
@@ -3981,7 +3984,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
       <div class="group">
         ${showEach(s.fields, {
           title: () => html`<${TextField} id="pub-title" label="Title" value=${model.title} onChange=${field('title')} />`,
-          author: () => html`<${TextField} id="pub-author" label="Name" hint="The itunes:author of the feed." value=${model.author} onChange=${field('author')} />`,
+          author: () => html`<${TextField} id="pub-author" label="Name" hint="The name that podcast apps show for this page." value=${model.author} onChange=${field('author')} />`,
           nostr: () => html`<${FeedKeyRow} feedId=${feed.id} model=${model} update=${update} bad=${bad} />`,
           description: () => html`<${TextArea} id="pub-description" label="Description" value=${model.description} onChange=${field('description')} />`,
           artwork: () => html`<${ArtworkRow} summary=${artworkSummary(model, 'feed')} image=${artworkPreview(model, 'feed')} onOpen=${() => onArtwork({ kind: 'feed' })} />`,

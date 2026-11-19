@@ -236,7 +236,7 @@ export function PeoplePage({ feeds, go, sort, reversed, onOrder }) {
           await load();
         })}>Show Again</button></div>`;
     })} />`,
-    payees: () => html`<${PickFold} id="people-payees" title="Payees with no person" forceOpen=${query.trim() !== ''} rows=${payees.map((recipient) => {
+    payees: () => html`<${PickFold} id="people-payees" title="Payees with no person" note="Wallets in your payments that no person in People has." forceOpen=${query.trim() !== ''} rows=${payees.map((recipient) => {
       const row = recipientRow(recipient);
       return html`<${ListRow} key=${JSON.stringify(recipientKey(recipient))} title=${row.title} lines=${row.lines} count=${row.count} roving=${true}
         onClick=${() => go({ name: 'wallet', recipient })} />`;

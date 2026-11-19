@@ -4,6 +4,11 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* Each svg element has a size (musicindex ADR 0065 R-FIT-7 item 2). The rule has
+   zero specificity, so each other rule that sizes an svg element wins. */
+:where(svg:not([width])) { width: 1em; }
+:where(svg:not([height])) { height: 1em; }
+
 /* Figtree (SIL OFL, /ui/assets/Figtree-OFL.txt). */
 @font-face {
   font-family: "Figtree";
@@ -381,7 +386,7 @@ code, .mono {
 .field input[aria-invalid="true"] { border: 1px solid var(--error); }
 .field-error { color: var(--error); font-size: var(--text-callout); font-weight: 500; }
 .type-panel { display: grid; grid-template-columns: 20px 1fr; gap: 4px 10px; align-items: start; padding: 10px 16px; color: var(--muted); }
-.type-panel > .icon { grid-row: 1 / span 3; }
+.type-panel > .icon { grid-row: 1 / span 3; width: 20px; height: 20px; }
 .type-panel p { margin: 0; color: var(--text); }
 .type-panel code { color: var(--text); }
 /* The button that changes the type of an address (ADR 0217 item 11). */

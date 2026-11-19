@@ -1923,6 +1923,9 @@ const ICONS = {
   ellipsis: () => html`<circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" />`,
 };
 
+// The svg element has no width or height attribute. Its size comes from a CSS
+// rule of its place, or from the default rule at the top of styles.css
+// (musicindex ADR 0065 R-FIT-7 item 2).
 export function Icon({ name }) {
   return html`<svg class="icon" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor"
     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]?.()}</svg>`;

@@ -33,11 +33,12 @@
 // The page has these helpers: $set(selector, value), $click(text),
 // $text() and $small() (the controls lower than 44 px, except a control in
 // a label of 44 px or more, and a control that is hidden on purpose).
-// $edges(), $overflow(), $overlaps() and $wordBreaks() are edgeCuts,
-// overflows, overlaps and wordBreaks of tools/fit-check.mjs (musicindex ADR 0065 R-FIT-5). Each gives
+// $edges(), $overflow(), $overlaps(), $wordBreaks() and $unsized() are edgeCuts,
+// overflows, overlaps, wordBreaks and unsizedIcons of tools/fit-check.mjs (musicindex ADR 0065
+// R-FIT-5 and R-FIT-7). Each gives
 // a list of findings { fault, text, detail }. $edges() opens each disclosure
 // in a group.
-// A step {"fit": true} runs the four helpers on the current page at 390 px
+// A step {"fit": true} runs the five helpers on the current page at 390 px
 // and at 761 px (musicindex ADR 0065 R-FIT-2). Then it sets the earlier size
 // again. When no step has "fit", the script runs this check after the last
 // step. A text that must break inside a word, such as a URL or a GUID, has the
@@ -46,7 +47,7 @@
 // file in the out dir.
 // A step {"sheet": "name"} runs the sheet check of musicindex ADR 0077
 // R-SHEET-2 on the open sheet, dialog or popover at 390 px and at 761 px. It
-// runs the four helpers and sheetFits. The overflow and overlap helpers
+// runs the five helpers and sheetFits. The overflow and overlap helpers
 // examine only the controls in the sheet. sheetFits finds a sheet that is
 // wider than the window less the window margin, content in the 16 px inner
 // padding of a bottom sheet, content that goes past an edge of the sheet,
@@ -71,7 +72,7 @@ import { spawn } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { edgeCuts, overflows, overlaps, wordBreaks, fitMessage } from './fit-check.mjs';
+import { edgeCuts, overflows, overlaps, wordBreaks, unsizedIcons, fitMessage } from './fit-check.mjs';
 
 const [url, out] = process.argv.slice(2);
 const port = Number(process.env.DRIVE_UI_PORT || 9333);
@@ -132,6 +133,7 @@ const helpers = `
   window.$overflow = ${overflows};
   window.$overlaps = ${overlaps};
   window.$wordBreaks = ${wordBreaks};
+  window.$unsized = ${unsizedIcons};
   window.$fieldText = () => [...document.querySelectorAll('input, select, textarea')].filter((e) => !['checkbox', 'radio', 'range', 'file', 'hidden', 'color'].includes(e.type) && (e.checkVisibility ? e.checkVisibility() : e.offsetParent) && parseFloat(getComputedStyle(e).fontSize) < 16).map((e) => getComputedStyle(e).fontSize + ' ' + e.outerHTML.slice(0, 70));
   window.$small = () => [...document.querySelectorAll('button, input, select, a')].filter((e) => !e.classList.contains('visually-hidden') && (e.checkVisibility ? e.checkVisibility() : e.offsetParent) && e.getBoundingClientRect().height < 44 && !(e.closest('label') && e.closest('label').getBoundingClientRect().height >= 44)).map((e) => e.outerHTML.slice(0, 70));
 `;
@@ -271,6 +273,7 @@ const fit = async (sheet = null, widths = fitWidths, panel = 'dialog[open], .sor
       ...await evaluate(`(${overflows})(${scope})`),
       ...await evaluate(`(${overlaps})(${pairs})`),
       ...await evaluate(`(${wordBreaks})()`),
+      ...await evaluate(`(${unsizedIcons})()`),
       ...await evaluate(`(${edgeCuts})()`),
     ];
     for (const f of sheetFound) fitFindings.push(sheetMessage(f, sheet, width));

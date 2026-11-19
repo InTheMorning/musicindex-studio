@@ -1,14 +1,14 @@
-// The fit check of the Music Index web apps (musicindex ADR 0065 R-FIT-3 and R-FIT-5).
+// The fit check of the Music Index web apps (musicindex ADR 0065 R-FIT-3, R-FIT-5 and R-FIT-7).
 //
 // The website and Studio each keep a copy of this file from one musicindex-lib
 // commit. A check in each app compares the bytes of the copy with that commit.
 // The module runs in a browser with no build step and no dependency.
 //
-// edgeCuts, overflows, overlaps and wordBreaks run in the page. Each returns a list of
+// edgeCuts, overflows, overlaps, wordBreaks and unsizedIcons run in the page. Each returns a list of
 // findings and does not exit. The walk script of the app exits with a status
 // that is not zero when a list has a finding (R-FIT-5 item 2).
 //
-// Each of the four helpers uses no name from outside its own body. Thus a walk
+// Each of the five helpers uses no name from outside its own body. Thus a walk
 // script can send the source of a helper to the page through the DevTools protocol:
 //
 //   import { edgeCuts } from './fit-check.mjs';
@@ -17,9 +17,9 @@
 // A page can also import the module and call the helpers directly.
 //
 // Each finding is an object { fault, text, detail }. The fault is 'edge-cut',
-// 'overflow', 'overlap' or 'word-break'. An overflow finding also has `box`: 'window'
-// or 'control'. fitMessage runs in the walk script and gives the
-// failure message of R-FIT-3 item 4.
+// 'overflow', 'overlap', 'word-break' or 'unsized-icon'. An overflow finding also has
+// `box`: 'window' or 'control'. fitMessage runs in the walk script and gives the
+// failure message of R-FIT-3 item 4 or R-FIT-7 item 6.
 
 // The attribute for a text that the app must break inside a word, for example a
 // URL or a GUID (R-FIT-3 item 3). wordBreaks does not count a break in an element
@@ -224,10 +224,43 @@ export function wordBreaks({ allow = '[data-fit-allow-break]' } = {}) {
   return found;
 }
 
-// Gives the failure message of R-FIT-3 item 4 for one finding at one window width.
+// Gives each visible svg element whose width or height has no author value
+// (R-FIT-7 item 3). An author value comes from a width or height attribute or from a
+// CSS rule. An svg element in an other svg element is not in the list.
+// The helper reads the computed value with computedStyleMap(). Chromium gives the
+// keyword `auto` when no attribute and no CSS rule sets the size (R-FIT-7 item 4).
+// getComputedStyle() gives the drawn size in pixels, and cannot show the cause.
+// `text` is the class of the element, or `svg`. `detail` is the start of the text of
+// the nearest ancestor with text.
+export function unsizedIcons() {
+  const shown = (e) => (e.checkVisibility ? e.checkVisibility() : !!e.offsetParent);
+  const found = [];
+  for (const e of document.querySelectorAll('svg')) {
+    if (e.parentElement?.closest('svg') || !shown(e)) continue;
+    if (!e.computedStyleMap) {
+      throw new Error('musicindex ADR 0065 R-FIT-7 item 4: unsizedIcons needs computedStyleMap(). Run the walk in Chromium.');
+    }
+    const style = e.computedStyleMap();
+    if (String(style.get('width')) !== 'auto' && String(style.get('height')) !== 'auto') continue;
+    let near = e.parentElement;
+    while (near && !near.textContent.trim()) near = near.parentElement;
+    found.push({
+      fault: 'unsized-icon',
+      text: (e.getAttribute('class') || '').trim() || 'svg',
+      detail: near ? near.textContent.trim().replace(/\s+/g, ' ').slice(0, 60) : '',
+    });
+  }
+  return found;
+}
+
+// Gives the failure message of R-FIT-3 item 4 or R-FIT-7 item 6 for one finding at
+// one window width.
 export function fitMessage(finding, width) {
   const head = `musicindex ADR 0065 R-FIT-3: at ${width} px`;
   switch (finding.fault) {
+    case 'unsized-icon':
+      return `musicindex ADR 0065 R-FIT-7: at ${width} px the svg "${finding.text}" in "${finding.detail}" has no width or height.\n`
+        + 'Give it a size in CSS or with the width and height attributes.';
     case 'word-break':
       return `${head} the text "${finding.text}" breaks inside a word (in "${finding.detail}").\n`
         + 'Give the text more width, make the text shorter, or let the row wrap between the controls (ADR 0020 R-FIT-1 item 2). '

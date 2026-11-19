@@ -12,11 +12,11 @@ Finding 14 of the [rc.27 human check](../reviews/2026-11-19-rc27-human-check.md)
 
 | Component | Status | Location | Reason |
 | --- | --- | --- | --- |
-| Undo history | new | crates/api/ui/undohistory.js | Searched crates/api/ui: task 195 makes this module. Use it with no copy. |
+| Undo history | reuse | crates/api/ui/undohistory.js | `makeHistory` from task 195 (579fb40). |
 | Person values | extend | crates/api/ui/peoplepages.js | `PersonPage` keeps the pending values in `values` near line 929. Save near line 943, Discard and the bar near line 1174. |
 | Settings draft | extend | crates/api/ui/settingsdraft.js | `changeSetting`, `discardSettings` and `saveSettings`. `SettingsPage` in app.js near line 2886 holds the draft, and its bar is near line 2960. |
-| Bar buttons | reuse | crates/api/ui/editor.js | The Undo and Redo buttons of `DraftToolbar` from task 195. Move them into one exported component if two pages render them. |
-| Key handler | new | crates/api/ui/undohistory.js | Searched crates/api/ui: task 195 makes `undoKey`. Use it with no copy. |
+| Bar buttons | extend | crates/api/ui/editor.js | The two buttons of `DraftToolbar` (class `button icon-button undo` and `redo`). Move them into one exported component, for example `UndoButtons({ canUndo, canRedo, undo, redo })`, and use it in the three bars. |
+| Key handler | extend | crates/api/ui/editor.js | The `useEffect` with `undoKey` in `DraftToolbar`. Move it into one exported hook, for example `useUndoKeys(undo, redo)`, and use it in the three bars. Keep the test for a field in an open sheet. |
 
 ## Changes
 
@@ -30,7 +30,7 @@ Finding 14 of the [rc.27 human check](../reviews/2026-11-19-rc27-human-check.md)
 - `crates/api/ui/peoplepages.js`
 - `crates/api/ui/settingsdraft.js`
 - `crates/api/ui/app.js`
-- `crates/api/ui/editor.js` (only for one shared button component)
+- `crates/api/ui/editor.js` (the shared button component and key hook)
 - `crates/api/ui-tests/people.test.mjs` and `crates/api/ui-tests/settings*.test.mjs`
 
 ## Checks

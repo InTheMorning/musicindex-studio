@@ -496,30 +496,48 @@ export function walletSheet(kind, uses) {
 export function walletSheetStart(kind, entry) {
   const type = startType(entry, kind);
   const start = memberStart(entry, type);
+  // Only a node address has the custom pair, so the pair starts at the node
+  // member also when the menu starts at "LNURL Address".
+  const node = memberStart(entry, 'node');
   return {
     type,
-    address: kind === 'use_lnaddress' ? lnaddressOf(entry) || '' : start.address,
-    custom_key: start.custom_key,
-    custom_value: start.custom_value,
+    address_lnaddress: memberStart(entry, 'lnaddress').address || '',
+    address_node: memberStart(entry, 'node').address || '',
+    ...(kind === 'use_lnaddress' ? { address: lnaddressOf(entry) || '' } : {}),
+    custom_key: type === 'node' ? start.custom_key : node.custom_key,
+    custom_value: type === 'node' ? start.custom_value : node.custom_value,
     name: entry.name || '',
     percent: '',
     owner: '',
   };
 }
 
-// A change of the type puts the member of the new type in the fields, when
-// the user did not change the address.
+// A change of the type changes only the menu. Each address field keeps its
+// text (ADR 0219 item 12).
 export function walletTypeChange(entry, fields, next) {
-  if (fields.address !== memberStart(entry, fields.type).address) return { ...fields, type: next };
-  const member = memberStart(entry, next);
-  return { ...fields, type: next, address: member.address, custom_key: member.custom_key, custom_value: member.custom_value };
+  return { ...fields, type: next };
 }
+
+export const addressField = (type) => type === 'lnaddress' ? 'address_lnaddress' : 'address_node';
+
+// The correction of a type (ADR 0219 item 12). It moves the text to the
+// address field of the other type and changes the menu. `typeKey` is the
+// name of the type value in `fields`.
+export function takeOtherType(fields, typeKey, next) {
+  const from = addressField(fields[typeKey]);
+  const to = addressField(next);
+  return { ...fields, [to]: fields[from], [from]: '', [typeKey]: next };
+}
+
+// The hint of the address field of each type (ADR 0219 item 11).
+export const ADDRESS_HINTS = { lnaddress: 'An LNURL address, for example name@example.com.', node: 'The public key of the Lightning node, 66 hexadecimal characters.' };
 
 // The summary line of the collapsed entry with the details of the new
 // recipient (ADR 0099 item 10).
 export function walletDetailsLine(fields) {
   const type = (WALLET_TYPES.find(([value]) => value === fields.type) || [null, ''])[1];
-  const address = fields.address.trim() === '' ? 'No address yet' : fields.type === 'node' ? shortKey(fields.address.trim()) : fields.address.trim();
+  const value = String(fields[addressField(fields.type)] ?? fields.address ?? '').trim();
+  const address = value === '' ? 'No address yet' : fields.type === 'node' ? shortKey(value) : value;
   return `${type} · ${address}`;
 }
 
@@ -528,25 +546,27 @@ const optional = (text) => (String(text ?? '').trim() === '' ? null : String(tex
 // The `operation` of `POST /change-sets`. A Lightning address has no custom
 // pair (ADR 0095 item 11). The core checks each value.
 export function walletSheetBody(kind, fields) {
+  const address = String(kind === 'use_lnaddress' ? fields.address : (fields[addressField(fields.type)] ?? fields.address) ?? '').trim();
   const custom = fields.type === 'lnaddress'
     ? { custom_key: null, custom_value: null }
     : { custom_key: optional(fields.custom_key), custom_value: optional(fields.custom_value) };
   switch (kind) {
     case 'change_address':
-      return { kind, address: fields.address.trim(), ...custom, recipient_type: fields.type || null };
+      return { kind, address, ...custom, recipient_type: fields.type || null };
     case 'rename': return { kind, name: fields.name };
     case 'remove': return { kind };
     case 'use_lnaddress': return { kind, address: fields.address.trim() };
     default:
-      return { kind, name: optional(fields.name), recipient_type: fields.type || null, address: fields.address.trim(), ...custom, percent: Number(fields.percent) };
+      return { kind, name: optional(fields.name), recipient_type: fields.type || null, address, ...custom, percent: Number(fields.percent) };
   }
 }
 
 // True when the primary button works: one feed is selected and the fields
 // that the operation needs have a value.
 export function walletSheetReady(kind, fields, ids) {
+  const address = String(fields[addressField(fields.type)] ?? fields.address ?? '').trim();
   return ids.length > 0
-    && (kind === 'rename' || kind === 'remove' || fields.address.trim() !== '')
+    && (kind === 'rename' || kind === 'remove' || (kind === 'use_lnaddress' ? String(fields.address ?? '').trim() !== '' : address !== ''))
     && (kind !== 'add' || fields.percent !== '');
 }
 
@@ -582,7 +602,9 @@ export function splitOrder(recipients) {
 // The fields of a recipient that the sheet "Add a Recipient" edits (ADR 0144
 // item 2). The split and the fee mark belong to the row.
 export const recipientFields = (r) => ({
-  name: r.name ?? '', recipient_type: r.recipient_type ?? 'node', address: r.address ?? '',
+  name: r.name ?? '', recipient_type: r.recipient_type ?? 'node',
+  address_lnaddress: (r.recipient_type ?? 'node') === 'lnaddress' ? r.address ?? '' : '',
+  address_node: (r.recipient_type ?? 'node') === 'node' ? r.address ?? '' : '',
   custom_key: r.custom_key ?? '', custom_value: r.custom_value ?? '',
 });
 
@@ -591,7 +613,7 @@ export const recipientFields = (r) => ({
 export function recipientFromFields(fields) {
   const text = (value) => (String(value ?? '').trim() === '' ? null : String(value).trim());
   const node = fields.recipient_type !== 'lnaddress';
-  return { name: text(fields.name), recipient_type: fields.recipient_type, address: text(fields.address),
+  return { name: text(fields.name), recipient_type: fields.recipient_type, address: text(fields[addressField(fields.recipient_type)] ?? fields.address),
     custom_key: node ? text(fields.custom_key) : null, custom_value: node ? text(fields.custom_value) : null };
 }
 

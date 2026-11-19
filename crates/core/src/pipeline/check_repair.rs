@@ -124,7 +124,11 @@ pub fn repair_step(inputs: &CheckInputs, finding: &Finding) -> Result<Step, Pipe
                 guid: links.feed.podcast_guid.clone(),
             })
         }
-        Some(RepairKind::UseTheHttpsAddress) => Ok(Step::Nothing),
+        Some(
+            RepairKind::UseTheHttpsAddress
+            | RepairKind::UseLnurlAddress
+            | RepairKind::UseNodeAddress,
+        ) => Ok(Step::Nothing),
         Some(RepairKind::ReadTheSize) => {
             let url = item_of(&links.feed, finding.entry.as_deref())
                 .and_then(|item| item.enclosure.as_ref())
@@ -230,6 +234,10 @@ enum Plan {
     Image { url: String },
     /// Set the length of an enclosure.
     Length { guid: String, length: u64 },
+    RecipientType {
+        address: String,
+        recipient_type: &'static str,
+    },
 }
 
 impl Plan {
@@ -273,6 +281,32 @@ impl Plan {
                     .and_then(|e| e.value.enclosure.as_mut())
                 {
                     enclosure.length = Some(length.to_string());
+                }
+            }
+            Self::RecipientType {
+                address,
+                recipient_type,
+            } => {
+                let change = |recipients: &mut [crate::feed::Entry<crate::feed::Recipient>]| {
+                    for recipient in recipients {
+                        if recipient.value.address.as_deref() == Some(address.as_str())
+                            && ((*recipient_type == "lnaddress"
+                                && recipient.value.recipient_type.as_deref() == Some("node"))
+                                || (*recipient_type == "node"
+                                    && recipient.value.recipient_type.as_deref()
+                                        == Some("lnaddress")))
+                        {
+                            recipient.value.recipient_type = Some((*recipient_type).to_owned());
+                        }
+                    }
+                };
+                for block in &mut feed.values {
+                    change(&mut block.value.recipients);
+                }
+                for item in &mut feed.items {
+                    for block in &mut item.value.values {
+                        change(&mut block.value.recipients);
+                    }
                 }
             }
         }
@@ -356,8 +390,48 @@ fn plan_of(
                 length: *length,
             })
         }
+        Some(RepairKind::UseLnurlAddress | RepairKind::UseNodeAddress) => {
+            recipient_type_plan(feed, finding)
+        }
         _ => Err(invalid("this finding has no repair that changes the draft")),
     }
+}
+
+fn recipient_type_plan(feed: &Feed, finding: &Finding) -> Result<Plan, PipelineError> {
+    let address = finding
+        .url
+        .clone()
+        .ok_or_else(|| invalid("the finding names no recipient address"))?;
+    let target = if finding.repair == Some(RepairKind::UseLnurlAddress) {
+        "lnaddress"
+    } else {
+        "node"
+    };
+    let old = if target == "lnaddress" {
+        "node"
+    } else {
+        "lnaddress"
+    };
+    let matches = feed
+        .values
+        .iter()
+        .flat_map(|v| &v.value.recipients)
+        .chain(
+            feed.items
+                .iter()
+                .flat_map(|i| i.value.values.iter().flat_map(|v| &v.value.recipients)),
+        )
+        .any(|r| {
+            r.value.address.as_deref() == Some(address.as_str())
+                && r.value.recipient_type.as_deref() == Some(old)
+        });
+    if !matches {
+        return Err(invalid("this repair does not apply to the draft"));
+    }
+    Ok(Plan::RecipientType {
+        address,
+        recipient_type: target,
+    })
 }
 
 /// The address that a read confirmed, when it is the URL of the draft.

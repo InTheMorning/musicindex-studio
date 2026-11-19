@@ -332,14 +332,16 @@ test('each sheet of a wallet lists the feeds, each selected, and counts them in 
 test('the fields of a wallet sheet start at the member with the type and give the body of the route', () => {
   const fields = walletSheetStart('change_address', wallet);
   assert.equal(fields.type, 'node');
-  assert.equal(fields.address, '02ab12cd34ef5678');
-  assert.deepEqual(walletSheetBody('change_address', { ...fields, address: ' 03ff ', custom_value: '' }),
+  assert.equal(fields.address_node, '02ab12cd34ef5678');
+  assert.equal(fields.address_lnaddress, 'tj@getalby.com');
+  assert.deepEqual(walletSheetBody('change_address', { ...fields, address_node: ' 03ff ', custom_value: '' }),
     { kind: 'change_address', address: '03ff', custom_key: '906608', custom_value: null, recipient_type: 'node' });
   const toAddress = walletTypeChange(wallet, fields, 'lnaddress');
-  assert.equal(toAddress.address, 'tj@getalby.com');
+  assert.equal(toAddress.address_node, fields.address_node);
+  assert.equal(toAddress.address_lnaddress, fields.address_lnaddress);
   assert.deepEqual(walletSheetBody('change_address', toAddress),
     { kind: 'change_address', address: 'tj@getalby.com', custom_key: null, custom_value: null, recipient_type: 'lnaddress' });
-  assert.equal(walletTypeChange(wallet, { ...fields, address: 'typed' }, 'lnaddress').address, 'typed');
+  assert.equal(walletTypeChange(wallet, { ...fields, address_node: 'typed' }, 'lnaddress').address_node, 'typed');
   assert.equal(walletSheetStart('use_lnaddress', wallet).address, 'tj@getalby.com');
   assert.deepEqual(walletSheetBody('remove', fields), { kind: 'remove' });
 });
@@ -374,4 +376,12 @@ test('the review of a change set opens the first changed feed', async () => {
   assert.equal(firstOpenId({ feeds: [feed(1, 'not_changed'), feed(2, 'changed'), feed(3, 'changed')] }), 2);
   assert.equal(firstOpenId({ feeds: [feed(1, 'not_changed')] }), null);
   assert.equal(firstOpenId({ feeds: [] }), null);
+});
+
+test('the correction of a type moves the text to the field of the other type (ADR 0219 item 12)', async () => {
+  const { takeOtherType } = await import('../ui/recipients.js');
+  assert.deepEqual(takeOtherType({ type: 'node', address_node: 'a@b.example', address_lnaddress: '' }, 'type', 'lnaddress'),
+    { type: 'lnaddress', address_node: '', address_lnaddress: 'a@b.example' });
+  assert.deepEqual(takeOtherType({ recipient_type: 'lnaddress', address_lnaddress: '03ab', address_node: '' }, 'recipient_type', 'node'),
+    { recipient_type: 'node', address_lnaddress: '', address_node: '03ab' });
 });

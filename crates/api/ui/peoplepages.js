@@ -11,7 +11,7 @@ import { pageSequence } from './pages.js';
 import { shortKey } from './nostrkey.js';
 import { onListKey } from './listkeys.js';
 import {
-  recipientKey, recipientRow, addWalletSections, walletBodyOf, PERSON_SECTION_TITLE, PERSON_SECTION_LINE, breakParts, addressLines, lnaddressOf, suggestionField, OTHER_ADDRESS, walletActions, WALLET_TYPES, addressProblem, refreshLookups,
+  recipientKey, recipientRow, addWalletSections, walletBodyOf, PERSON_SECTION_TITLE, PERSON_SECTION_LINE, breakParts, addressLines, lnaddressOf, suggestionField, OTHER_ADDRESS, walletActions, WALLET_TYPES, addressProblem, addressField, takeOtherType, ADDRESS_HINTS, refreshLookups,
   CUSTOM_KEY_HINT, removeWalletHint, walletSheet, walletSheetStart, walletTypeChange, walletDetailsLine, walletSheetBody,
   walletSheetReady, recipientTitle,
 } from './recipients.js';
@@ -548,14 +548,15 @@ function LinkForm({ kind, personId, edit = null, onCancel, onAdded }) {
       onAdded();
     });
   };
-  const addressIssue = kind === 'wallets' && String(values.address || '').trim() !== '' && addressProblem(values.recipient_type, values.address);
+  const addressId = addressField(values.recipient_type);
+  const addressIssue = kind === 'wallets' && String(values[addressId] || '').trim() !== '' && addressProblem(values.recipient_type, values[addressId]);
   const fields = html`<div class="group rows">${linkFields(kind, values).map((f) => (f.select
     ? html`<${ChoiceSelect} key=${f.id} id=${`link-${f.id}`} label=${f.label} value=${values[f.id]} options=${f.select}
         onChange=${(v) => set(f.id, v)} />${kind === 'wallets' && html`<${TypePanel} type=${values.recipient_type} />`}`
     : html`<${Field} key=${f.id} id=${`link-${f.id}`} label=${f.label} hint=${f.hint} required=${!!f.required}
-        error=${f.id === 'address' && addressIssue ? addressIssue.reason : null}
-        value=${values[f.id]} onInput=${(e) => set(f.id, e.target.value)}>${f.id === 'address' && html`<${UseTypeButton} problem=${addressIssue}
-        onUse=${(next) => set('recipient_type', next)} />`}</${Field}>`))}
+        error=${f.id === addressId && addressIssue ? addressIssue.reason : null}
+        value=${values[f.id]} onInput=${(e) => set(f.id, e.target.value)}>${f.id === addressId && html`<${UseTypeButton} problem=${addressIssue}
+        onUse=${(next) => setValues((current) => takeOtherType(current, 'recipient_type', next))} />`}</${Field}>`))}
     ${form.nostrKey && html`<${NostrKeyRow} label="Nostr key" name=${values.name} value=${values.npub}
       onOpen=${() => setKeyOpen(true)} />`}</div>
     ${editing && (edit.note || walletEditNote(edit.others)) && html`<p class="hint" role="status">${edit.note || walletEditNote(edit.others)}</p>`}`;
@@ -1549,20 +1550,23 @@ function WalletForm({ kind, recipient, uses, feeds, go }) {
   const ids = rows ? checkedIds(rows) : [];
   const ready = walletSheetReady(kind, fields, ids);
   // Only the sheets with the type menu check the address against the type.
-  const addressIssue = (kind === 'change_address' || adding) && String(fields.address || '').trim() !== ''
-    && addressProblem(fields.type, fields.address);
+  const selectedAddressField = addressField(fields.type);
+  const selectedAddress = String(fields[selectedAddressField] ?? '').trim();
+  const addressIssue = (kind === 'change_address' || adding) && selectedAddress !== ''
+    && addressProblem(fields.type, selectedAddress);
   const submit = () => run(async () => {
     const made = await api('/change-sets', { method: 'POST', body: { recipient: key, operation: walletSheetBody(kind, fields), feed_ids: ids } });
     go({ name: 'change-set', id: made.id });
   });
   const typeMenu = html`<${ChoiceSelect} id="op-type" label="Type" value=${fields.type}
     onChange=${(next) => setFields(walletTypeChange(recipient, fields, next))} options=${WALLET_TYPES} /><${TypePanel} type=${fields.type} />`;
-  const addressFields = html`<${Field} id="op-address" label=${fields.type === 'lnaddress' ? 'LNURL address' : 'Node address key'} required
-      error=${addressIssue ? addressIssue.reason : null} value=${fields.address} onInput=${(e) => set({ address: e.target.value })}>
-      <${UseTypeButton} problem=${addressIssue} onUse=${(next) => set({ type: next })} /></${Field}>
-    ${fields.type !== 'lnaddress' && html`<${Field} id="op-custom-key" label="Custom key" hint=${CUSTOM_KEY_HINT}
+  const addressFields = html`<${Field} id="op-address" label=${fields.type === 'lnaddress' ? 'LNURL address' : 'Node address'} required
+      hint=${ADDRESS_HINTS[fields.type]}
+      error=${addressIssue ? addressIssue.reason : null} value=${fields[selectedAddressField] ?? ''} onInput=${(e) => set({ [selectedAddressField]: e.target.value })}>
+      <${UseTypeButton} problem=${addressIssue} onUse=${(next) => setFields((current) => takeOtherType(current, 'type', next))} /></${Field}>
+    ${fields.type !== 'lnaddress' && html`<${Field} id="op-custom-key" label="Custom key (optional)" hint=${CUSTOM_KEY_HINT}
         value=${fields.custom_key} onInput=${(e) => set({ custom_key: e.target.value })} />
-      <${Field} id="op-custom-value" label="Account" value=${fields.custom_value} onInput=${(e) => set({ custom_value: e.target.value })} />`}`;
+      <${Field} id="op-custom-value" label="Account (optional)" value=${fields.custom_value} onInput=${(e) => set({ custom_value: e.target.value })} />`}`;
   return html`<div class="body">
       ${kind === 'remove' && html`<p class="hint">${removeWalletHint(recipientTitle(recipient))}</p>`}
       ${kind === 'rename' && html`<div class="group rows"><${Field} id="op-name" label="Name" value=${fields.name}

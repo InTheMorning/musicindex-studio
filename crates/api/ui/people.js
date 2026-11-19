@@ -6,7 +6,7 @@
 import { shortKey } from './nostrkey.js';
 import { titleCase } from './casing.js';
 import { feedKind, isPublisher, isReadOnly, roleWord, compareNames, letterGroups } from './shell.js';
-import { placesText, recipientTitle, percentText, WALLET_TYPES } from './recipients.js';
+import { placesText, recipientTitle, percentText, WALLET_TYPES, ADDRESS_HINTS, addressField } from './recipients.js';
 
 // The actions of one saved wallet address (ADR 0207 items 53 and 54).
 export function addressMenu(isDefault, hasAddress) {
@@ -851,9 +851,10 @@ export const LINK_FORMS = {
     editButton: 'Save the Wallet',
     fields: [
       { id: 'recipient_type', label: 'Type', select: true, start: 'lnaddress' },
-      { id: 'address', label: 'Address', required: true },
-      { id: 'custom_key', label: 'Custom key', node: true, hint: 'Some nodes need a custom key and an account to find the wallet.' },
-      { id: 'custom_value', label: 'Account', node: true },
+      { id: 'address_lnaddress', label: 'LNURL address', required: true, type: 'lnaddress' },
+      { id: 'address_node', label: 'Node address', required: true, type: 'node' },
+      { id: 'custom_key', label: 'Custom key (optional)', node: true, hint: 'Some nodes need a custom key and an account to find the wallet.' },
+      { id: 'custom_value', label: 'Account (optional)', node: true },
     ],
   },
   'credit-names': {
@@ -882,8 +883,8 @@ export const LINK_FORMS = {
 
 // The fields of a link form that show, from the type of a wallet.
 export const linkFields = (kind, values) => LINK_FORMS[kind].fields
-  .filter((f) => !f.node || values.recipient_type === 'node')
-  .map((f) => f.select === true ? { ...f, select: WALLET_TYPES } : f);
+  .filter((f) => (!f.node || values.recipient_type === 'node') && (!f.type || f.type === values.recipient_type))
+  .map((f) => f.select === true ? { ...f, select: WALLET_TYPES } : f.type ? { ...f, hint: ADDRESS_HINTS[f.type] } : f);
 
 export const linkStart = (kind) => ({
   ...Object.fromEntries(LINK_FORMS[kind].fields.map((f) => [f.id, f.start ?? ''])),
@@ -896,7 +897,13 @@ export function linkBody(kind, values) {
   const body = {};
   for (const f of linkFields(kind, values)) {
     const text = String(values[f.id] ?? '').trim();
-    body[f.id] = f.node && text === '' ? null : text;
+    if (f.type) body.address = text;
+    else body[f.id] = f.node && text === '' ? null : text;
+  }
+  if (kind === 'wallets') {
+    body.recipient_type = values.recipient_type;
+    body.custom_key = values.recipient_type === 'node' ? String(values.custom_key ?? '').trim() || null : null;
+    body.custom_value = values.recipient_type === 'node' ? String(values.custom_value ?? '').trim() || null : null;
   }
   if (LINK_FORMS[kind].nostrKey) body.npub = String(values.npub ?? '').trim() || null;
   return body;
@@ -904,16 +911,22 @@ export function linkBody(kind, values) {
 
 // The values of the form "Add a Wallet" from a payee row (ADR 0141 item 2). The
 // type follows the address when the payee gives none.
-export const walletValues = (body) => ({
-  recipient_type: body.recipient_type || (String(body.address ?? '').includes('@') ? 'lnaddress' : 'node'),
-  address: body.address ?? '', custom_key: body.custom_key ?? '', custom_value: body.custom_value ?? '',
-});
+export function walletValues(body) {
+  const type = body.recipient_type || (String(body.address ?? '').includes('@') ? 'lnaddress' : 'node');
+  return {
+    recipient_type: type,
+    address_lnaddress: type === 'lnaddress' ? body.address ?? '' : '',
+    address_node: type === 'node' ? body.address ?? '' : '',
+    custom_key: body.custom_key ?? '', custom_value: body.custom_value ?? '',
+  };
+}
 
 // True when the form "Add a Wallet" holds the values of this payee row, so the
 // row stays selected. A change of a field ends the selection (ADR 0141 item 5).
 export function walletSelected(values, body) {
   const given = walletValues(body);
-  return ['address', 'custom_key', 'custom_value'].every((id) => String(values[id] ?? '').trim() === String(given[id]).trim());
+  const addressId = addressField(values.recipient_type);
+  return [addressId, 'custom_key', 'custom_value'].every((id) => String(values[id] ?? '').trim() === String(given[id]).trim());
 }
 
 // The start of the sheet "Edit a Credit Name" (ADR 0146 item 6).

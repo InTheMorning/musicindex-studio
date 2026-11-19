@@ -47,6 +47,17 @@ test('the model gives one row for each finding with its level and its button', (
   assert.equal(rows[4].action, null, owner);
 });
 
+test('the new finding buttons use their required actions', () => {
+  const rows = checkRows(check([
+    finding('no_tracks', 'add_tracks'), finding('no_cover', 'add_a_cover'),
+    finding('no_recipient', 'add_a_recipient'), finding('wrong_address_type', 'use_lnurl_address', { url: 'name@example.com' }),
+  ]));
+  assert.deepEqual(rows.map((row) => [row.button, row.action]), [
+    ['Add Tracks', 'open-tracks'], ['Add a Cover', 'open-cover'],
+    ['Add a Recipient', 'open-recipient'], ['Use LNURL Address', 'repair'],
+  ]);
+});
+
 test('a read-only feed gives rows with no button', () => {
   const owner = 'ADR 0174 item 20: check checkRows in feedcheck.js.';
   const rows = checkRows(check([finding('no_self_link', null), finding('no_language', null, { level: 'question' })], { read_only: true }));

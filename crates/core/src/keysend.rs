@@ -30,6 +30,28 @@ pub const REFRESH_AFTER: i64 = 86_400;
 /// The age in seconds after which a `Failed` lookup is due.
 pub const RETRY_AFTER: i64 = 3_600;
 
+/// The address format that Studio can infer without a network request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AddressFormat {
+    /// A `name@example.com` LNURL address.
+    Lnurl,
+    /// A 66-character hexadecimal node address.
+    Node,
+}
+
+/// Give the supported format of an address, or none when it matches neither.
+#[must_use]
+pub fn address_format(address: &str) -> Option<AddressFormat> {
+    let address = address.trim();
+    if lookup_url("https", address).is_some() {
+        return Some(AddressFormat::Lnurl);
+    }
+    if address.len() == 66 && address.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Some(AddressFormat::Node);
+    }
+    None
+}
+
 /// The largest body of a lookup response, in bytes.
 const MAX_BODY: u64 = 16 * 1024;
 

@@ -2,7 +2,7 @@
 
 Decision: [ADR 0219](../adr/0219-a-release-checklist-and-a-check-of-the-address-type.md) items 11 to 13. [ADR 0217](../adr/0217-a-new-artist-sees-the-result-of-a-write-the-payment-types-and-an-undo-of-a-merge.md) items 7 to 11.
 
-Status: Open.
+Status: Done.
 
 ## Problem
 
@@ -47,6 +47,13 @@ Mechanical:
 - Check each changed `.js` file: copy it to a `.mjs` file and run `tools/node --check` on the copy.
 
 Visual, by the main session with screenshots: the form "Add a Recipient" with each type, and the wallet form of a person, at 1280 px and 390 px.
+
+## Result
+
+Done on 2026-11-19. A ChatGPT run made the change. The main session corrected it: one move function `takeOtherType`, one `addressField`, one hint table `ADDRESS_HINTS`, and the custom pair of a wallet that starts on LNURL.
+
+- Mechanical: 849 UI tests and `bash tools/gate.sh` pass. The syntax check of each changed `.js` file passes.
+- Visual, from screenshots at 1280 px and 390 px: with "LNURL Address", the form "Add a Recipient" shows only "LNURL address". With "Node Address", it shows "Node address", "Custom key (optional)" and "Account (optional)".
 
 ## Rules for the delegate
 

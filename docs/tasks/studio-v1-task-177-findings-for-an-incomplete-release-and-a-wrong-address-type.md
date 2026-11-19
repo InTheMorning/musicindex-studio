@@ -2,7 +2,7 @@
 
 Decision: [ADR 0219](../adr/0219-a-release-checklist-and-a-check-of-the-address-type.md) items 1 to 5 and 9. [ADR 0174](../adr/0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md) items 1 to 7.
 
-Status: Open.
+Status: Done.
 
 ## Problem
 
@@ -46,6 +46,15 @@ Mechanical:
 - `cargo test -p studio-core`, `tools/node --test crates/api/ui-tests/*.test.mjs` and `bash tools/gate.sh` pass.
 
 Visual, by the main session with screenshots: the Check tab of a release with the new findings, at 1280 px and 390 px.
+
+## Result
+
+Done on 2026-11-19. A ChatGPT run made the change. The main session read the diff and ran the checks.
+
+- Mechanical: `cargo test -p studio-core`, 849 UI tests and `bash tools/gate.sh` pass.
+- Changed test: the API test of the check route now expects `no_cover` and `no_recipient` for its fixture.
+- Visual, from screenshots at 1280 px and 390 px: the Check tab shows "No tracks", "No cover image" and "No payment recipient" with their buttons. A draft with `payee@example.com` and the type `node` shows "Payee has the wrong address type". **Use LNURL Address** removes the finding, and the tab label changes from "Check 5" to "Check 4".
+- Open: the button "Add recipients" of the Value Routes page changes the header from "No changes" to "Saved, not written" before a save. **Add a Recipient** opens the same form, so it does the same. This task did not cause it.
 
 ## Rules for the delegate
 

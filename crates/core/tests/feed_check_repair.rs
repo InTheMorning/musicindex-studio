@@ -161,6 +161,42 @@ fn add_the_link_with_a_body_that_has_another_guid_changes_no_draft_and_gives_the
 }
 
 #[test]
+fn address_type_repair_changes_matching_feed_and_track_recipients_only() {
+    let xml = feed_xml(Some(URL), None)
+        .replace("<channel>", "<channel><podcast:value type=\"lightning\" method=\"keysend\"><podcast:valueRecipient name=\"Feed payee\" type=\"node\" address=\"alice@example.com\" split=\"70\"/></podcast:value>")
+        .replace("<title>One</title>", "<title>One</title><podcast:value type=\"lightning\" method=\"keysend\"><podcast:valueRecipient name=\"Track payee\" type=\"node\" address=\"alice@example.com\" split=\"30\"/></podcast:value>");
+    let e = env(&xml);
+    let (result, revision) = e.result(&none());
+    assert_eq!(
+        result
+            .findings
+            .iter()
+            .filter(|f| f.kind == FindingKind::WrongAddressType)
+            .count(),
+        1
+    );
+    let finding = result
+        .findings
+        .into_iter()
+        .find(|f| f.kind == FindingKind::WrongAddressType)
+        .unwrap();
+    assert_eq!(finding.repair, Some(RepairKind::UseLnurlAddress));
+    let inputs = pipeline::check_inputs(&e.collection, &e.hosts, e.feed).unwrap();
+    let step = pipeline::repair_step(&inputs, &finding).unwrap();
+    let proof =
+        pipeline::run_step(&step, &ScriptedReader::empty(), &ScriptedFileReads::empty()).unwrap();
+    pipeline::apply_check_repair(&e.collection, &e.hosts, e.feed, &finding, &revision, &proof)
+        .unwrap();
+    let text = e.text();
+    assert!(text.contains(
+        "name=\"Feed payee\" type=\"lnaddress\" address=\"alice@example.com\" split=\"70\""
+    ));
+    assert!(text.contains(
+        "name=\"Track payee\" type=\"lnaddress\" address=\"alice@example.com\" split=\"30\""
+    ));
+}
+
+#[test]
 fn add_the_link_with_the_right_body_adds_the_link_with_the_exact_address() {
     let e = env(&feed_xml(None, None));
     let before = e.text();

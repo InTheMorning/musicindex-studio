@@ -104,7 +104,13 @@ async fn the_check_route_gives_the_local_findings_and_the_reads_add_the_network_
     assert_eq!(status, StatusCode::OK, "{check}");
     assert_eq!(
         kinds(&check),
-        ["no_artist_page", "no_self_link", "no_file_size"]
+        [
+            "no_artist_page",
+            "no_self_link",
+            "no_cover",
+            "no_recipient",
+            "no_file_size",
+        ]
     );
     assert_eq!(check["read"], false);
     assert_eq!(check["read_only"], false);

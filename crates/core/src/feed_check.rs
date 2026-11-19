@@ -48,6 +48,16 @@ pub enum FindingKind {
     NoArtistPage,
     /// The playlist or show has no publisher page (ADR 0213 item 18).
     NoPublisherPage,
+    /// A music release has no tracks or live items.
+    NoTracks,
+    /// A music release has no cover image.
+    NoCover,
+    /// A track has no enclosure.
+    NoAudioFile,
+    /// A music release has no payment recipient.
+    NoRecipient,
+    /// A recipient address matches the other recipient type.
+    WrongAddressType,
 }
 
 /// How a finding asks for action (ADR 0174 item 3, ADR 0175 item 6).
@@ -80,6 +90,16 @@ pub enum RepairKind {
     SelectALanguage,
     /// **Link a Page** (ADR 0213 item 19).
     LinkAPage,
+    /// **Add Tracks**.
+    AddTracks,
+    /// **Add a Cover**.
+    AddACover,
+    /// **Add a Recipient**.
+    AddARecipient,
+    /// **Use LNURL Address**.
+    UseLnurlAddress,
+    /// **Use Node Address**.
+    UseNodeAddress,
 }
 
 /// The reason why a feed cannot be written under ADR 0213 item 21.
@@ -222,10 +242,12 @@ pub fn check(feed: &Feed, facts: &Facts) -> Vec<Finding> {
         });
     }
     check_links(feed, facts, &mut found);
+    check_release(feed, &mut found);
     check_move(feed, facts, &mut found);
     for entry in &feed.items {
         check_item(&entry.value, facts, &mut found);
     }
+    check_recipient_types(feed, &mut found);
     check_images(feed, facts, &mut found);
     index::check_index(facts, &mut found);
     if feed.language.as_deref().is_none_or(|l| l.trim().is_empty()) {
@@ -257,6 +279,105 @@ fn notice(
         entry,
         repair,
         url: None,
+    }
+}
+
+fn check_release(feed: &Feed, found: &mut Vec<Finding>) {
+    if feed.medium.as_deref() != Some("music") {
+        return;
+    }
+    if feed.items.is_empty() && feed.live_items.is_empty() {
+        found.push(notice(
+            FindingKind::NoTracks,
+            "No tracks".into(),
+            "Listeners have nothing to play.".into(),
+            None,
+            Some(RepairKind::AddTracks),
+        ));
+    }
+    if feed.image.as_deref().is_none_or(str::is_empty)
+        && feed
+            .rss_image
+            .as_ref()
+            .and_then(|i| i.url.as_deref())
+            .is_none_or(str::is_empty)
+    {
+        found.push(notice(
+            FindingKind::NoCover,
+            "No cover image".into(),
+            "Apps show a blank square in place of the cover.".into(),
+            None,
+            Some(RepairKind::AddACover),
+        ));
+    }
+    let has_recipient = feed.values.iter().any(|v| !v.value.recipients.is_empty())
+        || feed.items.iter().any(|i| {
+            i.value
+                .values
+                .iter()
+                .any(|v| !v.value.recipients.is_empty())
+        });
+    if !has_recipient {
+        found.push(notice(
+            FindingKind::NoRecipient,
+            "No payment recipient".into(),
+            "Listeners cannot pay you.".into(),
+            None,
+            Some(RepairKind::AddARecipient),
+        ));
+    }
+}
+
+fn check_recipient_types(feed: &Feed, found: &mut Vec<Finding>) {
+    use crate::keysend::{AddressFormat, address_format};
+    let mut seen = HashSet::new();
+    let mut recipients = feed.values.iter().flat_map(|v| &v.value.recipients).chain(
+        feed.items
+            .iter()
+            .flat_map(|i| i.value.values.iter().flat_map(|v| &v.value.recipients)),
+    );
+    for recipient in &mut recipients {
+        let Some(address) = recipient.value.address.as_deref() else {
+            continue;
+        };
+        let Some(format) = address_format(address) else {
+            continue;
+        };
+        let is_wrong = matches!(
+            (recipient.value.recipient_type.as_deref(), format),
+            (Some("node"), AddressFormat::Lnurl) | (Some("lnaddress"), AddressFormat::Node)
+        );
+        if !is_wrong {
+            continue;
+        }
+        if !seen.insert(address) {
+            continue;
+        }
+        let (type_name, article, repair) = match format {
+            AddressFormat::Lnurl => ("LNURL address", "an", RepairKind::UseLnurlAddress),
+            AddressFormat::Node => ("Node address", "a", RepairKind::UseNodeAddress),
+        };
+        let current = if format == AddressFormat::Lnurl {
+            "Node address"
+        } else {
+            "LNURL address"
+        };
+        let name = recipient
+            .value
+            .name
+            .as_deref()
+            .filter(|n| !n.is_empty())
+            .unwrap_or("This recipient");
+        found.push(
+            notice(
+                FindingKind::WrongAddressType,
+                format!("{name} has the wrong address type"),
+                format!("{address} is {article} {type_name}. The type is {current}."),
+                None,
+                Some(repair),
+            )
+            .naming(address),
+        );
     }
 }
 
@@ -333,15 +454,22 @@ fn check_move(feed: &Feed, facts: &Facts, found: &mut Vec<Finding>) {
 
 /// The findings about one item (items 7 and 14).
 fn check_item(item: &crate::feed::Item, facts: &Facts, found: &mut Vec<Finding>) {
-    let Some(enclosure) = &item.enclosure else {
-        return;
-    };
     let track = item
         .title
         .as_deref()
         .filter(|t| !t.trim().is_empty())
         .unwrap_or("A track");
     let entry = item.guid.clone();
+    let Some(enclosure) = &item.enclosure else {
+        found.push(notice(
+            FindingKind::NoAudioFile,
+            format!("{track} has no audio file"),
+            "Listeners cannot play this track.".into(),
+            entry,
+            Some(RepairKind::OpenTheTrack),
+        ));
+        return;
+    };
     let length = enclosure.length.as_deref().map(str::trim);
     let size = length.and_then(|l| l.parse::<u64>().ok()).unwrap_or(0);
     if length.is_none_or(|l| l.is_empty() || l == "0") {
@@ -746,10 +874,79 @@ mod tests {
             "Apps cannot show the length of this track."
         );
         assert_eq!(found[0].repair, Some(RepairKind::OpenTheTrack));
-        // An item with no enclosure is not a track.
+        // An item with no enclosure gives the audio file finding.
         let mut feed = clean();
         feed.items.push(Entry::new(Item::default()));
-        assert_eq!(kinds(&check(&feed, &facts())), []);
+        let found = check(&feed, &facts());
+        assert_eq!(kinds(&found), [FindingKind::NoAudioFile]);
+        assert_eq!(found[0].entry, None);
+        assert_eq!(found[0].repair, Some(RepairKind::OpenTheTrack));
+    }
+
+    #[test]
+    fn release_findings_apply_only_to_music_releases() {
+        let mut feed = clean();
+        feed.medium = Some("music".into());
+        let found = check(&feed, &facts());
+        assert!(found.iter().any(|f| f.kind == FindingKind::NoTracks));
+        assert!(found.iter().any(|f| f.kind == FindingKind::NoCover));
+        assert!(found.iter().any(|f| f.kind == FindingKind::NoRecipient));
+        feed.live_items.push(Entry::new(LiveItem::default()));
+        assert!(
+            !check(&feed, &facts())
+                .iter()
+                .any(|f| f.kind == FindingKind::NoTracks)
+        );
+        feed.medium = Some("podcast".into());
+        assert!(!check(&feed, &facts()).iter().any(|f| matches!(
+            f.kind,
+            FindingKind::NoTracks | FindingKind::NoCover | FindingKind::NoRecipient
+        )));
+    }
+
+    #[test]
+    fn recipient_type_finding_uses_the_inferred_format() {
+        let mut feed = clean();
+        let recipient = Recipient {
+            name: Some("Payee".into()),
+            recipient_type: Some("node".into()),
+            address: Some("alice@example.com".into()),
+            ..Recipient::default()
+        };
+        feed.values.push(Entry::new(ValueBlock {
+            recipients: vec![Entry::new(recipient)],
+            ..ValueBlock::default()
+        }));
+        let found = check(&feed, &facts());
+        let finding = found
+            .iter()
+            .find(|f| f.kind == FindingKind::WrongAddressType)
+            .unwrap();
+        assert_eq!(finding.title, "Payee has the wrong address type");
+        assert_eq!(
+            finding.reason,
+            "alice@example.com is an LNURL address. The type is Node address."
+        );
+        assert_eq!(finding.repair, Some(RepairKind::UseLnurlAddress));
+    }
+
+    #[test]
+    fn recipient_with_no_recognized_address_format_gives_no_type_finding() {
+        let mut feed = clean();
+        let recipient = Recipient {
+            recipient_type: Some("lnaddress".into()),
+            address: Some("not an address".into()),
+            ..Recipient::default()
+        };
+        feed.values.push(Entry::new(ValueBlock {
+            recipients: vec![Entry::new(recipient)],
+            ..ValueBlock::default()
+        }));
+        assert!(
+            !check(&feed, &facts())
+                .iter()
+                .any(|finding| finding.kind == FindingKind::WrongAddressType)
+        );
     }
 
     #[test]

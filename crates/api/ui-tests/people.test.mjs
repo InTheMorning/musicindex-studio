@@ -638,9 +638,11 @@ test('the forms of a link give the fields and the body', () => {
   assert.deepEqual(Object.keys(LINK_FORMS), ['wallets', 'credit-names', 'support-links']);
   const start = linkStart('wallets');
   assert.equal(start.recipient_type, 'lnaddress');
-  assert.deepEqual(linkFields('wallets', start).map((f) => f.id), ['recipient_type', 'address']);
-  assert.deepEqual(linkFields('wallets', { recipient_type: 'node' }).map((f) => f.id), ['recipient_type', 'address', 'custom_key', 'custom_value']);
-  assert.deepEqual(linkBody('wallets', { recipient_type: 'node', address: ' 02ab ', custom_key: '', custom_value: 'a' }),
+  assert.deepEqual(linkFields('wallets', start).map((f) => f.id), ['recipient_type', 'address_lnaddress']);
+  assert.deepEqual(linkFields('wallets', { recipient_type: 'node' }).map((f) => f.id), ['recipient_type', 'address_node', 'custom_key', 'custom_value']);
+  assert.deepEqual(linkBody('wallets', { recipient_type: 'lnaddress', address_lnaddress: ' a@b.example ', address_node: '02ab', custom_key: 'key', custom_value: 'acct' }),
+    { recipient_type: 'lnaddress', address: 'a@b.example', custom_key: null, custom_value: null });
+  assert.deepEqual(linkBody('wallets', { recipient_type: 'node', address_lnaddress: 'old@example.com', address_node: ' 02ab ', custom_key: '', custom_value: 'a' }),
     { recipient_type: 'node', address: '02ab', custom_key: null, custom_value: 'a' });
   assert.ok(linkReady('support-links', { label: '', url: 'https://x.example' }));
   assert.deepEqual(linkBody('support-links', { label: ' L ', url: 'u' }), { label: 'L', url: 'u' });
@@ -1654,9 +1656,9 @@ test('a credit name row gives one labeled attribute for each value and joins its
 test('a payee fills the form of Add a Wallet', async () => {
   const { walletValues, linkReady } = await import('../ui/people.js');
   assert.deepEqual(walletValues({ address: 'a@b.example', custom_key: null, custom_value: null, recipient_type: '' }),
-    { recipient_type: 'lnaddress', address: 'a@b.example', custom_key: '', custom_value: '' });
+    { recipient_type: 'lnaddress', address_lnaddress: 'a@b.example', address_node: '', custom_key: '', custom_value: '' });
   const node = walletValues({ address: '03a', custom_key: '696969', custom_value: '2', recipient_type: 'node' });
-  assert.deepEqual(node, { recipient_type: 'node', address: '03a', custom_key: '696969', custom_value: '2' });
+  assert.deepEqual(node, { recipient_type: 'node', address_lnaddress: '', address_node: '03a', custom_key: '696969', custom_value: '2' });
   assert.equal(linkReady('wallets', node), true);
 });
 
@@ -1674,7 +1676,7 @@ test('a payee row stays selected while the form holds its values', async () => {
   const body = { address: '03a', custom_key: '696969', custom_value: '2', recipient_type: 'node' };
   assert.equal(walletSelected(walletValues(body), body), true);
   assert.equal(walletSelected({ ...walletValues(body), custom_value: '3' }, body), false);
-  assert.equal(walletSelected({ recipient_type: 'lnaddress', address: '' }, body), false);
+  assert.equal(walletSelected({ recipient_type: 'lnaddress', address_lnaddress: '' }, body), false);
 });
 
 test('the sheet Edit a Wallet starts with the address and names the other addresses', async () => {
@@ -1683,7 +1685,7 @@ test('the sheet Edit a Wallet starts with the address and names the other addres
   const ln = { key: { address: 'a@b.example', custom_key: null, custom_value: null }, member: { recipient_type: 'lnaddress' } };
   const edit = walletEdit({ id: 4, members: [node, ln] }, node);
   assert.equal(edit.walletId, 4);
-  assert.deepEqual(edit.start, { recipient_type: 'node', address: '03a', custom_key: '696969', custom_value: '2' });
+  assert.deepEqual(edit.start, { recipient_type: 'node', address_lnaddress: '', address_node: '03a', custom_key: '696969', custom_value: '2' });
   assert.deepEqual(edit.others, ['a@b.example']);
   assert.match(walletEditNote(edit.others), /also holds a@b\.example\. A saved change replaces the wallet and removes that address/);
   assert.equal(walletEditNote([]), null);
@@ -1706,10 +1708,10 @@ test('a feed row names the tracks of a payment and of a credit', async () => {
 test('the rows sort by split and the sheet keeps the fields of a recipient', async () => {
   const { splitOrder, recipientFields, recipientFromFields } = await import('../ui/recipients.js');
   assert.deepEqual(splitOrder([{ split: '1' }, { split: '99' }, { split: '' }, { split: '99' }, { split: 'x' }]), [1, 3, 0, 2, 4]);
-  assert.deepEqual(recipientFields({ recipient_type: 'node' }), { name: '', recipient_type: 'node', address: '', custom_key: '', custom_value: '' });
-  assert.deepEqual(recipientFromFields({ name: ' ', recipient_type: 'lnaddress', address: ' a@b.example ', custom_key: 'k', custom_value: 'v' }),
+  assert.deepEqual(recipientFields({ recipient_type: 'node' }), { name: '', recipient_type: 'node', address_lnaddress: '', address_node: '', custom_key: '', custom_value: '' });
+  assert.deepEqual(recipientFromFields({ name: ' ', recipient_type: 'lnaddress', address_lnaddress: ' a@b.example ', address_node: 'stale', custom_key: 'k', custom_value: 'v' }),
     { name: null, recipient_type: 'lnaddress', address: 'a@b.example', custom_key: null, custom_value: null });
-  assert.deepEqual(recipientFromFields({ name: 'A', recipient_type: 'node', address: '03a', custom_key: '696969', custom_value: '2' }),
+  assert.deepEqual(recipientFromFields({ name: 'A', recipient_type: 'node', address_node: '03a', address_lnaddress: 'stale@example.com', custom_key: '696969', custom_value: '2' }),
     { name: 'A', recipient_type: 'node', address: '03a', custom_key: '696969', custom_value: '2' });
 });
 

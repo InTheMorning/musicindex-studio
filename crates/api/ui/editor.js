@@ -3304,8 +3304,8 @@ function CreditsPage({ model, update, bad }) {
 // The Value routes page: the album recipients, with no details around them
 // (task 014c step 3, ADR 0029 item 9). The page is at most 560 px wide
 // (ADR 0039 item 12).
-function RecipientsPage({ model, update }) {
-  return html`<div class="value-routes"><${AlbumPayments} model=${model} update=${update} /></div>`;
+function RecipientsPage({ model, update, openAdd, onAddOpened }) {
+  return html`<div class="value-routes"><${AlbumPayments} model=${model} update=${update} openAdd=${openAdd} onAddOpened=${onAddOpened} /></div>`;
 }
 
 // The media types of a lyrics file. A feed can have another value, and the
@@ -4927,7 +4927,7 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
 // from the core. A repair button asks the repair route, and the answer puts
 // the new draft in the editor. The reads run when the page opens and at
 // "Check Again".
-function CheckPage({ feed, model, check, go }) {
+function CheckPage({ feed, model, check, go, onAdding, onArtwork, onRecipient }) {
   // The row whose sheet is open (ADR 0175 items 5 and 8), or null.
   const [sheet, setSheet] = useState(null);
   const [copied, setCopied] = useState(false);
@@ -4972,6 +4972,9 @@ function CheckPage({ feed, model, check, go }) {
     else if (row.action === 'open-track') go({ name: 'feed', id: feed.id, page: 'track', track: row.track });
     else if (row.action === 'open-language') openLanguage();
     else if (row.action === 'open-pages') openLinkedPages();
+    else if (row.action === 'open-tracks') onAdding(true);
+    else if (row.action === 'open-cover') onArtwork({ kind: 'feed' });
+    else if (row.action === 'open-recipient') { onRecipient(); go({ name: 'feed', id: feed.id, page: 'recipients' }); }
     else if (row.action === 'show-copy' || row.action === 'show-ways') { setCopied(false); setSheet(row); }
   };
   const closeSheet = () => setSheet(null);
@@ -5043,6 +5046,7 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
   const liveIndex = model && page === 'live' ? (model.live_items || []).findIndex((live) => isLiveItem(live, view.track)) : -1;
   const addLive = useAction();
   const [feedMove, setFeedMove] = useState(null);
+  const [addRecipient, setAddRecipient] = useState(false);
   useEffect(() => {
     // The detail is the feed ID, or the feed ID with the file host that the
     // sheet starts with (ADR 0211 item 17).
@@ -5091,7 +5095,7 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
   // write that gave each item a new client ID, the editor shows the album
   // page (task 014c, Architecture).
   if (page === 'check') {
-    body = html`<${CheckPage} feed=${feed} model=${model} check=${check} go=${go} />`;
+    body = html`<${CheckPage} feed=${feed} model=${model} check=${check} go=${go} onAdding=${onAdding} onArtwork=${onArtwork} onRecipient=${() => setAddRecipient(true)} />`;
   } else if (page === 'settings') {
     body = html`<${SettingsPage} model=${model} update=${update} album=${!publisher && !playlist}
       op3Tracks=${draft.op3Tracks} />`;
@@ -5113,7 +5117,7 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
   } else if (page === 'credits') {
     body = html`<${CreditsPage} model=${model} update=${update} bad=${draft.bad} />`;
   } else if (page === 'recipients') {
-    body = html`<${RecipientsPage} model=${model} update=${update} />`;
+    body = html`<${RecipientsPage} model=${model} update=${update} openAdd=${addRecipient} onAddOpened=${() => setAddRecipient(false)} />`;
   } else if (page === 'files') {
     body = html`<${FilesPage} feed=${feed} connectors=${connectors} onOpsChanged=${onOpsChanged} reloadKey=${filesReloadKey}
       differences=${differences} onRescan=${onRescan} />`;

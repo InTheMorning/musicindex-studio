@@ -55,6 +55,11 @@ const REPAIRS = {
   open_the_track: 'Open the Track',
   select_a_language: 'Select a Language',
   link_a_page: 'Link a Page',
+  add_tracks: 'Add Tracks',
+  add_a_cover: 'Add a Cover',
+  add_a_recipient: 'Add a Recipient',
+  use_lnurl_address: 'Use LNURL Address',
+  use_node_address: 'Use Node Address',
 };
 
 // What a button does. A repair calls the repair route. The two other
@@ -67,6 +72,11 @@ const ACTIONS = {
   open_the_track: 'open-track',
   select_a_language: 'open-language',
   link_a_page: 'open-pages',
+  add_tracks: 'open-tracks',
+  add_a_cover: 'open-cover',
+  add_a_recipient: 'open-recipient',
+  use_lnurl_address: 'repair',
+  use_node_address: 'repair',
 };
 
 export const PAGE_FINDING_TEXT = {

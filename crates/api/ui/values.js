@@ -3,7 +3,7 @@
 import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
 import { TextField, set, setAt, withCids, startOpen, openOnce, useSheet } from './editor.js';
 import { CONFIRMS } from './confirms.js';
-import { percentText, lookupHint, WALLET_TYPES, addressProblem, CUSTOM_KEY_HINT, percentages, feeLine, isFee, shares, shareParts, splitOrder, recipientFields, recipientFromFields } from './recipients.js';
+import { percentText, lookupHint, WALLET_TYPES, ADDRESS_HINTS, addressField, takeOtherType, addressProblem, CUSTOM_KEY_HINT, percentages, feeLine, isFee, shares, shareParts, splitOrder, recipientFields, recipientFromFields } from './recipients.js';
 import { recipientPickRows, recipientChoices, recipientIdentity, personKeys, memberText, addRecipientsLabel, trackHeading, recipientAddressMenu } from './people.js';
 import { PickerLayout, PickFillRow, FindOneSheet, PickFold, SearchResults, TakenTag, useFieldList } from './pickers.js';
 import { PersonArt, TypePanel, UseTypeButton, useLookup } from './peoplepages.js';
@@ -62,7 +62,7 @@ function fresh(value) {
 // Studio keeps the values of the fields that the editor does not show.
 
 const TYPES = WALLET_TYPES.map(([value, label]) => ({ value, label,
-  hint: value === 'node' ? 'The public key of the Lightning node, 66 hexadecimal characters.' : 'An LNURL address, for example name@example.com.' }));
+  hint: ADDRESS_HINTS[value] }));
 
 // One load of `GET /recipients` for the page. Each `Recipients` shares it. The
 // map goes from the lowercase address to its keysend lookup. A failed load
@@ -130,7 +130,7 @@ function RecipientAddressActions({ recipient, onChange }) {
 // own inset separator (review of task 014c, defect 3). The rows form two
 // groups: "Recipients", then "Fees" (ADR 0039 item 12). A recipient with
 // fee "true" is in "Fees". The screen sorts each group by split (ADR 0144).
-function Recipients({ id, recipients, defaultType, onChange }) {
+function Recipients({ id, recipients, defaultType, onChange, openAdd = false, onAddOpened }) {
   const percent = percentages(recipients);
   // The sheet of a new recipient or of one address: null when closed, else
   // `{ cid }` with the `_cid` of the row to change, or `{}` for a new row.
@@ -138,6 +138,9 @@ function Recipients({ id, recipients, defaultType, onChange }) {
   const [copying, setCopying] = useState(false);
   const [current, setCurrent] = useState(0);
   const [expandedRows, setExpandedRows] = useState({});
+  useEffect(() => {
+    if (openAdd) { setSheet({}); onAddOpened?.(); }
+  }, [openAdd]);
   const blank = { name: null, recipient_type: defaultType, address: null, split: '', custom_key: null, custom_value: null, fee: null };
   const changing = sheet && recipients.find((r) => r._cid === sheet.cid);
   const save = (values) => {
@@ -239,7 +242,8 @@ function RecipientForm({ recipient, recipients, onSave, onCopy, onCancel }) {
   }, []);
   const set = (name) => (value) => setFields((current) => ({ ...current, [name]: value ?? '' }));
   const type = TYPES.find((t) => t.value === fields.recipient_type);
-  const address = fields.address.trim();
+  const addressId = addressField(fields.recipient_type);
+  const address = String(fields[addressId] ?? '').trim();
   const problem = address === '' ? null : addressProblem(fields.recipient_type, address);
   const others = new Set(recipients.filter((r) => r !== recipient).map(identityOf));
   const values = recipientFromFields(fields);
@@ -261,15 +265,15 @@ function RecipientForm({ recipient, recipients, onSave, onCopy, onCancel }) {
       fields=${html`<div class="group rows">
         <${Choice} id="recipient-type" label="Type" value=${fields.recipient_type} options=${TYPES} onChange=${set('recipient_type')} />
         <${TypePanel} type=${fields.recipient_type} />
-        <${TextField} id="recipient-address" label="Address" required
+        <${TextField} id="recipient-address" label=${fields.recipient_type === 'lnaddress' ? 'LNURL address' : 'Node address'} required
           hint=${fields.recipient_type === 'lnaddress' && address && lookups && lookups.get(address.toLowerCase()) === 'none'
             ? lookupHint(address) : type ? type.hint : ''}
-          error=${problem ? problem.reason : null} value=${fields.address} onChange=${set('address')}>
-          <${UseTypeButton} problem=${problem} onUse=${set('recipient_type')} /></${TextField}>
+          error=${problem ? problem.reason : null} value=${fields[addressId] ?? ''} onChange=${set(addressId)}>
+          <${UseTypeButton} problem=${problem} onUse=${(next) => setFields((current) => takeOtherType(current, 'recipient_type', next))} /></${TextField}>
         <${TextField} id="recipient-name" label="Name" required value=${fields.name} onChange=${set('name')} />
         ${fields.recipient_type !== 'lnaddress' && html`
-          <${TextField} id="recipient-key" label="Custom key" required hint=${CUSTOM_KEY_HINT} value=${fields.custom_key} onChange=${set('custom_key')} />
-          <${TextField} id="recipient-account" label="Account" required hint="The account on that node." value=${fields.custom_value} onChange=${set('custom_value')} />`}
+          <${TextField} id="recipient-key" label="Custom key (optional)" hint=${CUSTOM_KEY_HINT} value=${fields.custom_key} onChange=${set('custom_key')} />
+          <${TextField} id="recipient-account" label="Account (optional)" hint="The account on that node." value=${fields.custom_value} onChange=${set('custom_value')} />`}
       </div>${taken && html`<p class="field-error">This address is already in this list.</p>`}`}
       notice=${html`<${ErrorNotice} error=${loading.error} />
         ${list === null && !loading.error && html`<p class="hint" role="status">Loading your people…</p>`}`}
@@ -504,12 +508,13 @@ const BLANK_BLOCK = { value_type: 'lightning', method: 'keysend', suggested: nul
 // No wrapper: Recipients already returns its rows with no wrapper, and the
 // hints here join them as direct rows of the group (review of task 014c,
 // defect 2 and 3).
-function Payments({ id, blocks, onChange }) {
+function Payments({ id, blocks, onChange, openAdd = false, onAddOpened }) {
   const block = blocks[0];
   const change = (name) => (value) => onChange(setAt(blocks, 0, set(block, name, value)));
   const splits = block.time_splits.length;
   return html`<${Recipients} id=${id} recipients=${block.recipients}
-      defaultType=${block.method === 'lnaddress' ? 'lnaddress' : 'node'} onChange=${change('recipients')} />
+      defaultType=${block.method === 'lnaddress' ? 'lnaddress' : 'node'} onChange=${change('recipients')}
+      openAdd=${openAdd} onAddOpened=${onAddOpened} />
     ${splits > 0 && html`<p class="hint">This payment block has ${splits} value time split${splits === 1 ? '' : 's'}. Studio keeps ${splits === 1 ? 'it' : 'them'} with no change.</p>`}
     ${blocks.length > 1 && html`<p class="hint">This feed has ${blocks.length - 1} more payment block${blocks.length === 2 ? '' : 's'} here. Studio keeps ${blocks.length === 2 ? 'it' : 'them'} with no change.</p>`}`;
 }
@@ -518,8 +523,11 @@ function Payments({ id, blocks, onChange }) {
 // disclosure group (ADR 0029 item 9). `editor.js` puts this behind the Value
 // routes link row. A publisher feed has no tracks, so it shows no track hint
 // (ADR 0075).
-export function AlbumPayments({ model, update }) {
+export function AlbumPayments({ model, update, openAdd = false, onAddOpened }) {
   const onChange = (values) => update((m) => set(m, 'values', values));
+  useEffect(() => {
+    if (openAdd && model.values.length === 0) onChange(withCids([BLANK_BLOCK]));
+  }, [openAdd, model.values.length]);
   return html`<section class="page-section">
     <div class="section-head"><h2>Value routes</h2>
       ${model.values.length > 0 && html`<${ShareStack} recipients=${model.values[0].recipients} />`}</div>
@@ -529,7 +537,7 @@ export function AlbumPayments({ model, update }) {
         ? html`<p class="hint">This feed has no recipients.</p>
           <button class="link-row add" type="button"
             onClick=${() => onChange(withCids([BLANK_BLOCK]))}><span class="num">＋</span><span class="title">Add recipients</span></button>`
-        : html`<${Payments} id="ch-pay" blocks=${model.values} onChange=${onChange} />`}
+        : html`<${Payments} id="ch-pay" blocks=${model.values} onChange=${onChange} openAdd=${openAdd} onAddOpened=${onAddOpened} />`}
     </div>
   </section>`;
 }

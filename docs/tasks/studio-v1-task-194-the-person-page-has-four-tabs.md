@@ -2,7 +2,7 @@
 
 Decision: [ADR 0226](../adr/0226-the-typed-start-folder-the-program-name-the-root-order-and-person-tabs.md) items 9 to 12.
 
-Status: Open.
+Status: Done.
 
 ## Problem
 
@@ -64,3 +64,9 @@ Visual, by the main session with screenshots at 1280 px and 390 px:
 - Use the exact texts of this task. Do not write a new interface text.
 - Do not commit. Leave the change in the working tree and report the changed files and the check results.
 - Do not make an architecture decision. When this task does not answer a question, stop and report.
+
+## Result
+
+- The delegate run mapped the pending changes to the wrong tabs. The main session corrected the map in `pendingTabs` and its test.
+- The delegate run did not stop the leave question on a tab change. The main session added `isTabChange` in `shell.js`. The person page and the history handler of the shell use it (ADR 0226 item 12).
+- Walks: `.studio-dev/walk/p194-1280.json` and `p194-390.json`, with `setup-194.py`. Each tab shows its sections below the head. A change of the name on Feeds marks Feeds (a pencil at 1280 px, "Feeds (Not saved)" in the select menu at 390 px). A change to Payment and a back step keep the draft and open no leave sheet.

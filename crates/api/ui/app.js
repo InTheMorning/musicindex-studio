@@ -48,7 +48,7 @@ import {
   mediumKind, feedKind, FIRST_CLASS_ROLES, roleWord, kindGlow, isEditable, isReadOnly, isPublisher, trackKey, isTrack,
   leftPanel, releasesList, listQuery, queryText, sortLabel, sortEntries, mosaicCells, otherFeedText, feedCover,
   startNav, pushNav, backNav, forwardNav, releasesView, canBack, canForward, setScroll,
-  isFeedView, openFeedView, navAtWidth, pageTabs, tabsFit, showsRootButtons, rootNav, segmentKey, levelFeedSet } from './shell.js';
+  isFeedView, openFeedView, navAtWidth, pageTabs, tabsFit, showsRootButtons, rootNav, segmentKey, levelFeedSet, isTabChange } from './shell.js';
 import {
   eventsToSign, signErrorText,
   npubOf, addressLines, linesText, invalidConfigField, blossomDefaultName, siteAddress, siteNameFromGuid, isNsec,
@@ -2220,7 +2220,7 @@ function useTabsFit(labelKey) {
 // are a segmented control when each segment can hold its longest label on one
 // line. Else they are one select menu, so that no label breaks (ADR 0197).
 // At 760 px or less they are always the menu.
-function PageTabs({ feed, view, go, checkCount = 0, tabs: suppliedTabs, current: selected, onSelect, label = 'Pages of this feed' }) {
+export function PageTabs({ feed, view, go, checkCount = 0, tabs: suppliedTabs, current: selected, onSelect, label = 'Pages of this feed' }) {
   const narrow = useNarrow();
   const settings = suppliedTabs !== undefined;
   const tabs = settings
@@ -3894,8 +3894,7 @@ function Shell({ vault, onLock, version }) {
       const targetIndex = event.state && event.state.scope === 'shell' ? event.state.index : 0;
       const currentView = navRef.current.entries[navRef.current.index];
       const targetView = navRef.current.entries[targetIndex];
-      if (currentView && targetView && currentView.name === 'settings' && targetView.name === 'settings'
-        && currentView.tab !== targetView.tab) {
+      if (isTabChange(currentView, targetView)) {
         applyPop(event);
         return;
       }
@@ -4066,7 +4065,7 @@ function Shell({ vault, onLock, version }) {
     main = html`<${PeoplePage} feeds=${feeds} go=${go} sort=${view.sort} reversed=${view.reversed === true}
       onOrder=${(order) => go({ ...view, ...order }, { replace: true })} />`;
   } else if (view.name === 'person') {
-    main = html`<${PersonPage} key=${view.id} id=${view.id} feeds=${feeds} go=${go} pick=${view.pick} />`;
+    main = html`<${PersonPage} key=${view.id} id=${view.id} feeds=${feeds} go=${go} view=${view} pick=${view.pick} tab=${view.tab} />`;
   } else if (view.name === 'check') {
     main = html`<${CheckPage} key=${view.id} id=${view.id} feeds=${feeds} go=${go} />`;
   } else if (view.name === 'wallet') {

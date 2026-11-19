@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import {
   changeSetView, peopleSections, PEOPLE_EMPTY, PEOPLE_SERVER_NOTE, suggestionRow, personRow, displayName, makePersonStart, makePersonBody, sheetFeeds,
-  checkedIds, toggledRow, reviewLabel, operationBody, addResultLine,
+  checkedIds, toggledRow, reviewLabel, operationBody, addResultLine, pendingTabs,
   lookupAddress, showFindEmpty,
   addressMenu, recipientAddressMenu,
   nicknameBody, afterNicknameSave,
@@ -553,6 +553,20 @@ test('the saved values and the pending changes of a person (ADR 0116 items 1 to 
   });
 });
 
+test('pending person changes identify their tabs (ADR 0226 item 12)', () => {
+  const fix = 'Fix PENDING_TABS in crates/api/ui/people.js.';
+  const tabOf = {
+    member: 'profile', page: 'profile',
+    name: 'feeds', usual_role: 'feeds', img: 'feeds', href: 'feeds', picture: 'feeds', website: 'feeds', npub: 'feeds',
+    default_address: 'payment', wallet: 'payment',
+  };
+  for (const [key, tab] of Object.entries(tabOf)) {
+    assert.deepEqual(pendingTabs([key]), [tab], `ADR 0226 item 12: the tab of the section that edits ${key} is ${tab}. ${fix}`);
+  }
+  assert.deepEqual(pendingTabs(['nickname']), [], `ADR 0226 item 10: the nickname is in the head, above the tabs. ${fix}`);
+  assert.deepEqual(pendingTabs(['wallet', 'member', 'npub', 'wallet']), ['payment', 'profile', 'feeds']);
+});
+
 test('the leave sheet names each pending control (ADR 0116 item 8)', () => {
   assert.equal(leaveText('DuhLaurien', ['img', 'href']),
     'DuhLaurien has 2 changes that are not saved: the picture address and the information address.');
@@ -897,7 +911,7 @@ test('a wallet gives each member, and the menu offers each one', () => {
 
 test('ADR 0102: the person page ends with the delete, the confirmation and the sheet title', () => {
   const sections = pageSequence('person');
-  assert.deepEqual(sections[sections.length - 1], { id: 'delete', tier: 'limits' });
+  assert.deepEqual(sections[sections.length - 1], { id: 'delete', tier: 'limits', tab: 'settings' });
   const confirm = CONFIRMS.deletePerson('Mary Kate');
   assert.equal(confirm.title, 'Delete Mary Kate from People?');
   assert.equal(confirm.text, 'Studio deletes this person and its links. Studio changes no feed.');

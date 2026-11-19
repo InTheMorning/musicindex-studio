@@ -4,10 +4,11 @@
 import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
 import { useSheet, NostrKeyRow, NostrSheet } from './editor.js';
 import { PickerLayout, FindOneSheet, PickFold, RowList, TakenTag, useFieldList } from './pickers.js';
-import { LoadErrorNotice, api, assetMode, askConfirm, Bar, SortMenu, LetterBar, useLeaveGuard, ChoiceSelect, CopyButton, Icon, RoleMenu, ErrorNotice, FeedCheckRow, Field, SearchField, useAction, useImage } from './app.js';
+import { LoadErrorNotice, api, assetMode, askConfirm, Bar, SortMenu, LetterBar, useLeaveGuard, ChoiceSelect, CopyButton, Icon, RoleMenu, ErrorNotice, FeedCheckRow, Field, SearchField, useAction, useImage, PageTabs } from './app.js';
 import { AddressRow } from './addressrow.js';
 import { CONFIRMS } from './confirms.js';
-import { pageSequence } from './pages.js';
+import { pageSequence, personTabs } from './pages.js';
+import { isTabChange } from './shell.js';
 import { shortKey } from './nostrkey.js';
 import { onListKey } from './listkeys.js';
 import {
@@ -30,7 +31,7 @@ import {
   walletToPersonLabel, correctCount, correctButtonLabel, correctTitle, correctFeedIds, correctStart, correctKeyStart, correctOptions,
   correctKeyChoices, correctBody, correctAnySelected, correctRows, CORRECT_OMITTED, CORRECT_EMPTY,
   moreRows, NO_OTHER_TEXT, mergeTitle, mergeHint, mergeLinks, mergeResult, mergeBody, afterMissing,
-  detailList, LINK_HINT, LINK_EMPTY, linkChoices, linkRows, pickLink, pageSuggestions, addAllPageSuggestions, hasPageSuggestions, hasLinkedPages, linkedPageChanges, linkedPageSelection, linkedPageChangeLines, linkedPageBody, creditPosition, afterCredits, savedValues, pendingKeys, pendingStatus, isPending, saveBody, nicknameBody, afterNicknameSave, leaveText, checkGroups, checkFeedLines, checkKeys, checkIntro, CHANGE_ROWS, CHANGE_NOTE,
+  detailList, LINK_HINT, LINK_EMPTY, linkChoices, linkRows, pickLink, pageSuggestions, addAllPageSuggestions, hasPageSuggestions, hasLinkedPages, linkedPageChanges, linkedPageSelection, linkedPageChangeLines, linkedPageBody, creditPosition, afterCredits, savedValues, pendingKeys, pendingTabs, pendingStatus, isPending, saveBody, nicknameBody, afterNicknameSave, leaveText, checkGroups, checkFeedLines, checkKeys, checkIntro, CHANGE_ROWS, CHANGE_NOTE,
   addPersonValue, removePersonValue, personValueLine, addressMenu,
   CHECK_TITLE, checkSummary, differenceBlocks, openLabel, useValuesLabel,
   recipientChoices, creditChoices, fundingChoices, ALREADY_VALUE, FIND_HINT, FIND_EMPTY, FIND_WAIT, FILL_NOTE, lookupGroups, lookupKind, hasLine, fillRows, splitFillRows, linkName, linkRow, linkFillButton, VALUES_WAIT, ALREADY_LINKED, fillPatch, fillSource, musicindexFeedUrl,
@@ -852,7 +853,7 @@ function FillRow({ row, checked, onToggle }) {
 
 // The page of a person (ADR 0099 item 4). The sections come from
 // `pageSequence('person')`.
-export function PersonPage({ id, feeds, go }) {
+export function PersonPage({ id, feeds, go, view, tab: requestedTab }) {
   const { data, error, run, reload } = usePerson(id);
   const [suggestions, setSuggestions] = useState([]);
   const [sheet, setSheet] = useState(null);
@@ -994,8 +995,9 @@ export function PersonPage({ id, feeds, go }) {
   };
   // Asks before the page leaves with a pending change (ADR 0116 items 8 and 11).
   // "Discard Changes" puts back the saved values, and gives true.
-  const askLeave = async () => {
-    if (!dirty) return true;
+  // A change of the tab keeps the draft (ADR 0226 item 12).
+  const askLeave = async (target) => {
+    if (!dirty || isTabChange(view, target)) return true;
     const leave = await askConfirm(CONFIRMS.leavePerson(leaveText(data.person.name, keys)));
     if (leave) setValues(saved);
     return leave;
@@ -1163,6 +1165,12 @@ export function PersonPage({ id, feeds, go }) {
       <button class="button destructive" type="button" onClick=${() => withLeave(deletePerson)}>Delete Person</button>
       <button class="button" type="button" onClick=${() => withLeave(() => setMerging(true))}>Merge with a Person</button></div></section>`,
   };
+  const tabs = personTabs();
+  const current = tabs.some((item) => item.id === requestedTab) ? requestedTab : 'profile';
+  const tabSections = tabs.find((item) => item.id === current)?.sections || [];
+  const tabPending = pendingTabs(keys);
+  const allSections = pageSequence('person');
+  const renderSection = (section) => html`<${Fragment} key=${section.id}>${sections[section.id]()}<//>`;
   return html`<div><${Bar}><span class="bar-title">${displayName(shown || person)}</span>
     <div class="draft-toolbar"><span class=${saveFailure ? 'draft-status field-error' : 'draft-status'} role="status">${saveFailure || pendingStatus(keys.length)}</span>
       <button class="button discard" type="button" disabled=${!dirty || saving} onClick=${discard}>Discard</button>
@@ -1170,7 +1178,10 @@ export function PersonPage({ id, feeds, go }) {
     <${ErrorNotice} error=${error} />
     ${mergeNotice && html`<div class="notice" role="status"><strong>${mergeNotice.name} is merged into ${person.name}.</strong>
       <div class="actions"><button class="button action" type="button" onClick=${undoMerge}>Undo</button></div></div>`}
-    ${pageSequence('person').map((section) => html`<${Fragment} key=${section.id}>${sections[section.id]()}<//>`)}
+    ${allSections.filter((section) => !section.tab).map(renderSection)}
+    <div class="settings-tabs"><${PageTabs} tabs=${tabs.map((item) => ({ ...item, pending: tabPending.includes(item.id) }))}
+      current=${current} onSelect=${(tab) => go({ ...view, tab })} label="Person tabs" /></div>
+    ${tabSections.map(renderSection)}
   </section>
   <${OperationSheet} kind=${sheet} person=${person} groups=${groups} rows=${feedRows(person.places, feeds)} feeds=${feeds}
     go=${go} onClose=${() => setSheet(null)} />

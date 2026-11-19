@@ -263,6 +263,14 @@ export function isFeedView(view) {
 // item 17).
 export const PEOPLE_VIEWS = ['people', 'person', 'check', 'wallet', 'change-set'];
 
+// Is the move from `current` to `target` only a change of the tab of one
+// page with tabs in its view? A tab change keeps the draft and does not ask
+// the leave question (ADR 0166 item 10, ADR 0226 item 12).
+export function isTabChange(current, target) {
+  if (!current || !target || target.name !== current.name || target.id !== current.id) return false;
+  return ['settings', 'person'].includes(current.name) && (current.tab ?? null) !== (target.tab ?? null);
+}
+
 const inHosts = (view) => view.name === 'hosts' || (view.name === 'change-set' && view.area === 'hosts');
 
 // The left panel (ADR 0039 items 1, 5 and 6). With no open feed it gives the

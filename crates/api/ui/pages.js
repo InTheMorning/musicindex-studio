@@ -56,16 +56,16 @@ const PAGES = {
   person: () => [
     { id: 'profile', tier: 'identity' },
     // Linked pages give the suggestions below (ADR 0182 item 10).
-    { id: 'member', tier: 'identity' },
-    { id: 'credits', tier: 'identity' },
+    { id: 'member', tier: 'identity', tab: 'profile' },
+    { id: 'credits', tier: 'identity', tab: 'feeds' },
     // Where the feeds pay and credit the person (ADR 0156 item 1).
-    { id: 'where', tier: 'identity' },
-    { id: 'check', tier: 'identity' },
-    { id: 'more', tier: 'content' },
-    { id: 'payment', tier: 'content' },
-    { id: 'support', tier: 'details' },
-    { id: 'change', tier: 'setup' },
-    { id: 'delete', tier: 'limits' },
+    { id: 'where', tier: 'identity', tab: 'feeds' },
+    { id: 'check', tier: 'identity', tab: 'profile' },
+    { id: 'more', tier: 'content', tab: 'feeds' },
+    { id: 'payment', tier: 'content', tab: 'payment' },
+    { id: 'support', tier: 'details', tab: 'payment' },
+    { id: 'change', tier: 'setup', tab: 'settings' },
+    { id: 'delete', tier: 'limits', tab: 'settings' },
   ],
   'studio-settings': ({ server, holdAssets = true, collections = true }) => [
     { id: 'scale', tier: 'setup', tab: 'general' },
@@ -102,10 +102,23 @@ export function pageSequence(name, options = {}) {
 // The Settings tabs and their sections, in the sequence of ADR 0166 items 1
 // and 2. Each section of `studio-settings` names its tab.
 export function settingsTabs(options = {}) {
-  const labels = { general: 'General', account: 'Account', nostr: 'Nostr', apps: 'Apps', data: 'Data' };
-  const sections = pageSequence('studio-settings', options);
   const order = options.server ? ['general', 'account', 'nostr', 'apps', 'data'] : ['general', 'nostr', 'apps', 'data'];
+  return sectionTabs('studio-settings', order, { general: 'General', account: 'Account', nostr: 'Nostr', apps: 'Apps', data: 'Data' }, options);
+}
+
+// The tabs of the page `page` in the sequence `order`, each with its label
+// and its sections. Each section names its tab, and the sections keep the
+// sequence of the page. A section with no tab is not in a tab.
+function sectionTabs(page, order, labels, options = {}) {
+  const sections = pageSequence(page, options);
   return order.map((id) => ({ id, label: labels[id], sections: sections.filter((section) => section.tab === id) }));
+}
+
+// The tabs of the person page (ADR 0226 item 9). The head has no tab and
+// shows above the tabs (item 10).
+export function personTabs(options = {}) {
+  return sectionTabs('person', ['profile', 'feeds', 'payment', 'settings'],
+    { profile: 'Profile', feeds: 'Feeds', payment: 'Payment', settings: 'Settings' }, options);
 }
 
 // The names of the pages that `pageSequence` knows.

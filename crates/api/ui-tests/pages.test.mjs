@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { pageSequence, settingsTabs, pageNames, tierError, TIERS } from '../ui/pages.js';
+import { pageSequence, settingsTabs, personTabs, pageNames, tierError, TIERS } from '../ui/pages.js';
 
 const FEED_FIELDS = ['title', 'author', 'nostr', 'artwork', 'description', 'link', 'listing', 'explicit'];
 test('pageSequence gives a new copy at each call', () => {
@@ -161,4 +161,26 @@ test('the person page follows ADR 0182 item 10', () => {
   assert.deepEqual(seq.map((s) => s.tier), ['identity', 'identity', 'identity', 'identity', 'identity', 'content', 'content', 'details', 'setup', 'limits'],
     'ADR 0182 item 10: set each section tier. Fix the person page in crates/api/ui/pages.js.');
   assert.equal(tierError('person', seq), null);
+});
+
+test('Person tabs group the sections by ADR 0226 items 9 to 12', () => {
+  const tabs = personTabs();
+  assert.deepEqual(tabs.map(({ id, label }) => [id, label]), [
+    ['profile', 'Profile'], ['feeds', 'Feeds'], ['payment', 'Payment'], ['settings', 'Settings'],
+  ]);
+  assert.deepEqual(tabs.map(({ sections }) => sections.map(({ id }) => id)), [
+    ['member', 'check'], ['credits', 'where', 'more'], ['payment', 'support'], ['change', 'delete'],
+  ]);
+  for (const tab of tabs) assert.equal(tierError(`person ${tab.label}`, tab.sections), null);
+});
+
+test('a tab change of Settings or of one person page does not ask the leave question', async () => {
+  const { isTabChange } = await import('../ui/shell.js');
+  const fix = 'ADR 0166 item 10 and ADR 0226 item 12: a tab change keeps the draft. Fix isTabChange in crates/api/ui/shell.js.';
+  assert.equal(isTabChange({ name: 'person', id: 4 }, { name: 'person', id: 4, tab: 'payment' }), true, fix);
+  assert.equal(isTabChange({ name: 'settings', tab: 'general' }, { name: 'settings', tab: 'data' }), true, fix);
+  assert.equal(isTabChange({ name: 'person', id: 4, tab: 'feeds' }, { name: 'person', id: 5, tab: 'payment' }), false,
+    `ADR 0116 item 8: a different person is a leave. ${fix}`);
+  assert.equal(isTabChange({ name: 'person', id: 4, tab: 'feeds' }, { name: 'people' }), false, fix);
+  assert.equal(isTabChange({ name: 'person', id: 4, tab: 'feeds' }, undefined), false, fix);
 });

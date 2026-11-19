@@ -1035,6 +1035,19 @@ export const pendingKeys = (saved, values) => CONTROLS.flatMap((control) => {
   return isPending(saved, values, control) ? [control] : [];
 });
 
+// The tabs of the person page with a pending change, from the entries of
+// `pendingKeys` (ADR 0226 item 12). Each entry belongs to the tab of the
+// section that edits it. The nickname is in the head, above the tabs, and
+// **Change** saves it at once (ADR 0194), so it has no tab.
+const PENDING_TABS = {
+  member: 'profile', page: 'profile',
+  name: 'feeds', usual_role: 'feeds', img: 'feeds', href: 'feeds', picture: 'feeds', website: 'feeds', npub: 'feeds',
+  default_address: 'payment', wallet: 'payment',
+};
+export function pendingTabs(keys) {
+  return [...new Set(keys.map((key) => PENDING_TABS[key]).filter(Boolean))];
+}
+
 // The status of the toolbar of the page (ADR 0116 item 3).
 export const pendingStatus = (count) => (count === 0 ? 'No changes' : plural(count, 'change not saved', 'changes not saved'));
 

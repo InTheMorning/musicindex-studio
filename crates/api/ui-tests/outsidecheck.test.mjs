@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { outsideMark, outsideNotice, readOnlyHostNotice, indexNotice, releaseMusicIndexLink, moveNotice, writeNotice, nextNoticeLoad, LATE_NOTICE_LOAD, eachLimited, OUTSIDE_LIMIT, panelSet, stateMark } from '../ui/outsidecheck.js';
 import { pageSequence, tierError } from '../ui/pages.js';
+import { INDEX_READ_AGAIN_MS } from '../ui/releasemove.js';
 
 test('A tile has a mark for a change and a move, and none for an index difference (ADR 0150 items 2, 3 and 5)', () => {
   assert.equal(outsideMark({ state: 'changed' }).text, 'Changed outside Studio');
@@ -111,6 +112,20 @@ test('ADR 0175 item 1: a write notice gives its states and suppresses inapplicab
   assert.equal(writeNotice({ index_is_move_source: true, last_move: {}, last_write: check.last_write }, { reads: 1, nowSeconds: 120, confirmedHere: false }), null, 'ADR 0175 item 1: a move suppresses the write notice. Fix: return null.');
   assert.equal(writeNotice({ ...check, last_write: { ...check.last_write, index_read: true } }, { reads: 2, nowSeconds: 120, confirmedHere: false }), null, 'ADR 0175 item 1: a first-load confirmation stays hidden. Fix: require confirmedHere.');
   assert.match(writeNotice(check, { reads: 1, nowSeconds: 401, confirmedHere: false }).strong, /^Music Index has not read/, 'ADR 0175 item 1: an old write shows no reply. Fix: use the five-minute limit.');
+});
+
+test('ADR 0175 item 1: after a sent podping, a feed that Music Index does not hold yet keeps the notice and the reads', () => {
+  // rc.27 check finding 7: the index held the test album only 172 seconds
+  // after the podping. Before that time, the route gave index_read null.
+  const notHeld = { own_url: 'https://x/feed.xml', last_write: {
+    written_at: 100, index_read: null,
+    announcements: [{ url: 'https://x/feed.xml', state: 'sent', send_at: 130, finished_at: 131 }],
+  } };
+  const notice = writeNotice(notHeld, { reads: 2, nowSeconds: 140, confirmedHere: false });
+  assert.equal(notice?.kind, 'waiting', 'ADR 0175 item 1: the notice stays until Music Index has read the write. Fix: treat index_read null after a podping as not read.');
+  assert.equal(nextNoticeLoad(notHeld, 140, 2), INDEX_READ_AGAIN_MS, 'ADR 0175 item 1: the reads go on until Music Index has read the write. Fix: treat index_read null after a podping as not read.');
+  assert.equal(writeNotice(notHeld, { reads: 15, nowSeconds: 140, confirmedHere: false })?.kind, 'no_reply', 'ADR 0175 item 1: the read limit gives Check Again. Fix: treat index_read null after a podping as not read.');
+  assert.equal(nextNoticeLoad({ last_write: { ...notHeld.last_write, announcements: [] } }, 140, 2), null, 'ADR 0175 item 1: a write with no podping gives no reads. Fix: read again only after a podping.');
 });
 
 test('ADR 0189 item 6: a waiting podping loads again five seconds after its send time', () => {

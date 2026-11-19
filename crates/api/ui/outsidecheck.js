@@ -137,20 +137,25 @@ export function moveNotice(check) {
 export const WRITE_NOTICE_AGE = 300;
 const writeAge = (write, nowSeconds, since = 0) => nowSeconds - Math.max(write.written_at, since);
 
+// True when Music Index has not read a write with a podping (ADR 0175 item
+// 1). The route gives `index_read` null also when the index does not hold the
+// feed yet. After a podping, that is a write that Music Index did not read.
+const writeNotRead = (write) => Boolean(write) && (write.index_read === false
+  || (write.index_read === null && (write.announcements || []).length > 0));
+
 // The notice after a write with a podping (ADR 0175 item 1). `kind` is
 // 'waiting', 'confirmed' or 'no_reply'. The confirmation shows only when the
 // page showed a different kind before (`confirmedHere`).
 export function writeNotice(check, { reads, nowSeconds, confirmedHere, since = 0 }) {
   const write = check && check.last_write;
   if (!write || moveNotice(check)) return null;
-  const waiting = (write.announcements || []).some((announcement) => announcement.state === 'waiting');
-  if (write.index_read === null && !waiting) return null;
+  if (write.index_read !== true && !writeNotRead(write)) return null;
   const time = localTime(write.written_at);
   if (write.index_read === true) {
     return confirmedHere ? { kind: 'confirmed', tone: 'plain', strong: `Music Index has your write of ${time}.`, lines: [] } : null;
   }
   const lines = podpingLines(write.announcements, check.own_url);
-  if (write.index_read === false && (reads >= INDEX_READ_AGAIN_MAX || writeAge(write, nowSeconds, since) > WRITE_NOTICE_AGE)) {
+  if (writeNotRead(write) && (reads >= INDEX_READ_AGAIN_MAX || writeAge(write, nowSeconds, since) > WRITE_NOTICE_AGE)) {
     return { kind: 'no_reply', tone: 'plain', strong: `Music Index has not read your write of ${time} yet.`, lines, action: 'Check Again' };
   }
   return {
@@ -176,7 +181,7 @@ export function nextNoticeLoad(check, nowSeconds, reads = 0, since = 0) {
     const delay = (Math.min(...waiting) + 5 - nowSeconds) * 1000;
     return delay < 1000 ? LATE_NOTICE_LOAD : delay;
   }
-  if (check.last_write?.index_read === false && reads < INDEX_READ_AGAIN_MAX) {
+  if (writeNotRead(check.last_write) && reads < INDEX_READ_AGAIN_MAX) {
     return writeAge(check.last_write, nowSeconds, since) > WRITE_NOTICE_AGE ? null : INDEX_READ_AGAIN_MS;
   }
   return null;

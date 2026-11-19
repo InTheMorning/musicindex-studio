@@ -2,7 +2,7 @@
 
 Decision: none. This task corrects a defect.
 
-Status: Open.
+Status: Done.
 
 Operator choice of 2026-11-19: correct the defect first, and then make the mockups for O8 and O6. The operator agreed to this order in the review of the open observations.
 
@@ -49,6 +49,15 @@ Visual, by the main session with screenshots at 1280 px and 390 px:
 - **Add recipients** on a feed with no recipients: the toolbar keeps "No changes" while the form is open.
 - Close the form: the toolbar keeps "No changes".
 - Save a recipient: the toolbar shows "Saved, not written", and the row shows.
+
+## Result
+
+Done on 2026-11-19. A ChatGPT run made the change. The main session corrected it: **Add recipients** and **Give This Track Its Own Recipients** now open the form "Add a Recipient" at once, as change 1 says.
+
+- Core, change 5: the core writes a block with no recipients. `Feed::write_hosted` writes each value block (`crates/core/src/feed.rs:260`), and `ValueBlock::apply` writes its attributes and children (`crates/core/src/feed/value.rs:42`). This task does not change it.
+- Tests: `crates/api/ui-tests/values.test.mjs` (new).
+- Mechanical: 857 UI tests and `bash tools/gate.sh` pass. The syntax check of `values.js` passes.
+- Visual, from screenshots at 1280 px and 390 px (walk `v180a.json`): the form opens, and the toolbar shows "No changes". After a close, the page shows "This feed has no recipients." and "No changes". After a save, the row shows, and the toolbar shows "Saved, not written".
 
 ## Rules for the delegate
 

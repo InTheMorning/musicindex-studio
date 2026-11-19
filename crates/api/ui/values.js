@@ -130,7 +130,7 @@ function RecipientAddressActions({ recipient, onChange }) {
 // own inset separator (review of task 014c, defect 3). The rows form two
 // groups: "Recipients", then "Fees" (ADR 0039 item 12). A recipient with
 // fee "true" is in "Fees". The screen sorts each group by split (ADR 0144).
-function Recipients({ id, recipients, defaultType, onChange, openAdd = false, onAddOpened, wrongAddresses = new Set() }) {
+function Recipients({ id, recipients, defaultType, onChange, openAdd = false, onAddOpened, onEmptyClose, wrongAddresses = new Set() }) {
   const percent = percentages(recipients);
   // The sheet of a new recipient or of one address: null when closed, else
   // `{ cid }` with the `_cid` of the row to change, or `{}` for a new row.
@@ -138,6 +138,7 @@ function Recipients({ id, recipients, defaultType, onChange, openAdd = false, on
   const [copying, setCopying] = useState(false);
   const [current, setCurrent] = useState(0);
   const [expandedRows, setExpandedRows] = useState({});
+  const preserveEmpty = useRef(false);
   useEffect(() => {
     if (openAdd) { setSheet({}); onAddOpened?.(); }
   }, [openAdd]);
@@ -214,8 +215,15 @@ function Recipients({ id, recipients, defaultType, onChange, openAdd = false, on
     ${!recipients.some(isFee) && html`<p class="hint">No fees.</p>`}
     ${feeLine(recipients) && html`<p class="hint">${feeLine(recipients)}</p>`}
     <${RecipientSheet} open=${sheet !== null} recipient=${changing || null} recipients=${recipients}
-      onSave=${save} onCopy=${() => { setSheet(null); setCopying(true); }} onClose=${() => setSheet(null)} />
-    <${PickerSheet} open=${copying} recipients=${recipients} onAdd=${addCopied} onClose=${() => setCopying(false)} />`;
+      onSave=${save} onCopy=${() => { preserveEmpty.current = true; setSheet(null); setCopying(true); }} onClose=${() => {
+        setSheet(null);
+        if (preserveEmpty.current) preserveEmpty.current = false;
+        else if (recipients.length === 0) onEmptyClose?.();
+      }} />
+    <${PickerSheet} open=${copying} recipients=${recipients} onAdd=${addCopied} onClose=${() => {
+      setCopying(false);
+      if (recipients.length === 0) onEmptyClose?.();
+    }} />`;
 }
 
 // The sheet "Add a Recipient", or "Change the Address" of a row (ADR 0144). It
@@ -509,13 +517,13 @@ const BLANK_BLOCK = { value_type: 'lightning', method: 'keysend', suggested: nul
 // No wrapper: Recipients already returns its rows with no wrapper, and the
 // hints here join them as direct rows of the group (review of task 014c,
 // defect 2 and 3).
-function Payments({ id, blocks, onChange, openAdd = false, onAddOpened, wrongAddresses }) {
+function Payments({ id, blocks, onChange, openAdd = false, onAddOpened, onEmptyClose, wrongAddresses }) {
   const block = blocks[0];
   const change = (name) => (value) => onChange(setAt(blocks, 0, set(block, name, value)));
   const splits = block.time_splits.length;
   return html`<${Recipients} id=${id} recipients=${block.recipients}
       defaultType=${block.method === 'lnaddress' ? 'lnaddress' : 'node'} onChange=${change('recipients')}
-      openAdd=${openAdd} onAddOpened=${onAddOpened} wrongAddresses=${wrongAddresses} />
+      openAdd=${openAdd} onAddOpened=${onAddOpened} onEmptyClose=${onEmptyClose} wrongAddresses=${wrongAddresses} />
     ${splits > 0 && html`<p class="hint">This payment block has ${splits} value time split${splits === 1 ? '' : 's'}. Studio keeps ${splits === 1 ? 'it' : 'them'} with no change.</p>`}
     ${blocks.length > 1 && html`<p class="hint">This feed has ${blocks.length - 1} more payment block${blocks.length === 2 ? '' : 's'} here. Studio keeps ${blocks.length === 2 ? 'it' : 'them'} with no change.</p>`}`;
 }
@@ -525,19 +533,25 @@ function Payments({ id, blocks, onChange, openAdd = false, onAddOpened, wrongAdd
 // routes link row. A publisher feed has no tracks, so it shows no track hint
 // (ADR 0075).
 export function AlbumPayments({ model, update, openAdd = false, onAddOpened, wrongAddresses }) {
+  const [adding, setAdding] = useState(false);
+  const temporary = useState(() => withCids([BLANK_BLOCK]))[0];
   const onChange = (values) => update((m) => set(m, 'values', values));
   useEffect(() => {
-    if (openAdd && model.values.length === 0) onChange(withCids([BLANK_BLOCK]));
+    if (openAdd && model.values.length === 0) setAdding(true);
   }, [openAdd, model.values.length]);
+  const showTemporary = model.values.length === 0 && (adding || openAdd);
+  const saveTemporary = (values) => { setAdding(false); onChange(values); };
   return html`<section class="page-section">
     <div class="section-head"><h2>Value routes</h2>
       ${model.values.length > 0 && html`<${ShareStack} recipients=${model.values[0].recipients} />`}</div>
     <div class="group">
       ${model.items.length > 0 && html`<p class="hint">These recipients get the payments for each track that has no recipients of its own.</p>`}
-      ${model.values.length === 0
+      ${showTemporary
+        ? html`<${Payments} id="ch-pay" blocks=${temporary} onChange=${saveTemporary} openAdd=${openAdd || adding} onAddOpened=${onAddOpened} onEmptyClose=${() => setAdding(false)} wrongAddresses=${wrongAddresses} />`
+        : model.values.length === 0
         ? html`<p class="hint">This feed has no recipients.</p>
           <button class="link-row add" type="button"
-            onClick=${() => onChange(withCids([BLANK_BLOCK]))}><span class="num">＋</span><span class="title">Add recipients</span></button>`
+            onClick=${() => setAdding(true)}><span class="num">＋</span><span class="title">Add recipients</span></button>`
         : html`<${Payments} id="ch-pay" blocks=${model.values} onChange=${onChange} openAdd=${openAdd} onAddOpened=${onAddOpened} wrongAddresses=${wrongAddresses} />`}
     </div>
   </section>`;
@@ -549,8 +563,14 @@ export function AlbumPayments({ model, update, openAdd = false, onAddOpened, wro
 // `noun` names the item in the texts: "track", or "show" for a live item.
 export function TrackPayments({ id, item, albumBlocks, onChange, noun = 'track' }) {
   const blocks = item.values;
+  const [adding, setAdding] = useState(false);
+  const temporary = useState(() => withCids([BLANK_BLOCK]))[0];
   const shown = blocks.length > 0 ? blocks : albumBlocks;
-  const copy = () => onChange(withCids(fresh(albumBlocks.length > 0 ? [albumBlocks[0]] : [BLANK_BLOCK]).map((b) => ({ ...b, time_splits: [] }))));
+  const copy = () => {
+    if (albumBlocks.length === 0) { setAdding(true); return; }
+    onChange(withCids(fresh([albumBlocks[0]]).map((b) => ({ ...b, time_splits: [] }))));
+  };
+  const saveTemporary = (values) => { setAdding(false); onChange(values); };
   const useAlbum = async () => {
     if (await askConfirm(CONFIRMS.removeRecipients(noun))) onChange([]);
   };
@@ -558,7 +578,9 @@ export function TrackPayments({ id, item, albumBlocks, onChange, noun = 'track' 
     <div class="section-head"><h2>Value routes</h2>
       ${shown.length > 0 && html`<${ShareStack} recipients=${shown[0].recipients} />`}</div>
     <div class="group">
-      ${blocks.length === 0
+      ${blocks.length === 0 && adding
+        ? html`<${Payments} id=${`${id}-pay`} blocks=${temporary} onChange=${saveTemporary} openAdd=${true} onEmptyClose=${() => setAdding(false)} />`
+        : blocks.length === 0
         ? html`<p class="hint">This ${noun} uses the album recipients.</p>
           <div class="actions"><button class="button" type="button" onClick=${copy}>
             Give This ${noun.charAt(0).toUpperCase() + noun.slice(1)} Its Own Recipients</button></div>`

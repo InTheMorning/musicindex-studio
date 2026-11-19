@@ -201,6 +201,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0222: Errors give a step, terms get a hint, and the first run has two stages](adr/0222-errors-give-a-step-terms-get-a-hint-and-the-first-run-has-two-stages.md)
 - [ADR 0223: A split in shares or percent, a release search, and one tap on a phone](adr/0223-a-split-in-shares-or-percent-a-release-search-and-one-tap-on-a-phone.md)
 - [ADR 0224: A finding that stops the write, and a new release opens Add tracks](adr/0224-a-finding-that-stops-the-write-and-a-new-release-opens-add-tracks.md)
+- [ADR 0225: The first tab of a release is Release](adr/0225-the-first-tab-of-a-release-is-release.md)
 
 ## Plans
 

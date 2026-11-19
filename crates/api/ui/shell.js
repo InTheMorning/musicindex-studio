@@ -222,7 +222,10 @@ export function pageTabs(feed, view, checkCount = 0) {
   if (!isEditable(feed) || view.name !== 'feed') return [];
   const page = view.page || 'album';
   if (page === 'track') return [];
-  const first = { page: 'album', label: feedKind(feed).label };
+  // The first tab of a release is "Release". Its first section names the
+  // kind (ADR 0225 item 1).
+  const release = (feed.medium || '').toLowerCase() === 'music';
+  const first = { page: 'album', label: release ? 'Release' : feedKind(feed).label };
   const routes = { page: 'recipients', label: 'Value Routes' };
   const credits = { page: 'credits', label: 'Credits' };
   const files = { page: 'files', label: 'Files' };

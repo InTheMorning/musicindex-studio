@@ -692,8 +692,10 @@ export function NostrRow({ label, name, value, feedId, bad, person, onSet }) {
 export function NostrKeyRow({ label, name, value, bad, onOpen }) {
   const profiles = useProfiles(value && !bad ? [value] : []);
   const { summary, art } = keyRowView(name, value, profiles);
+  // A key keeps the place of its picture while the profile loads, so the
+  // row does not grow when the picture comes.
   const row = html`<button class="link-row" type="button" onClick=${onOpen}>
-      ${art && !bad && html`<${PersonArt} person=${art} small />`}
+      ${art && !bad ? html`<${PersonArt} person=${art} small />` : value && !bad && html`<span class="person-art small" aria-hidden="true"></span>`}
       <span class="label">${label}</span>
       <span class=${bad ? 'summary field-error' : 'summary'}>${bad ? 'Not a Nostr key' : summary}</span>
       <span class="go" aria-hidden="true">›</span>
@@ -2726,7 +2728,7 @@ function CoverField({ id, model, update, bad }) {
 function ArtworkRow({ summary, image, onOpen }) {
   const { src } = useImage(image || null);
   return html`<button class="link-row" type="button" onClick=${onOpen}>
-      ${src && html`<img class="row-preview" src=${src} alt="" />`}
+      ${src ? html`<img class="row-preview" src=${src} alt="" />` : image && html`<span class="row-preview" aria-hidden="true"></span>`}
       <span class="label">Artwork</span><span class="summary">${summary}</span>
       <span class="go" aria-hidden="true">›</span>
     </button>`;
@@ -2917,7 +2919,8 @@ function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImp
   // No wrapper: each section is a direct row of .page, with the gap of
   // .page between sections (review of task 014c, defect 2).
   const shown = {
-    album: (s) => html`<section class="page-section"><h2>Album</h2>
+    // The heading of a release is its kind (ADR 0225 item 2).
+    album: (s) => html`<section class="page-section"><h2>${release ? feedKind(feed).label : 'Album'}</h2>
       <div class="group">
         <${ChannelFields} feedId=${feed.id} draft=${draft} model=${model} update=${update} bad=${bad} artistLabel="Artist" onArtwork=${onArtwork} fields=${s.fields}
           kindField=${release ? html`<${ReleaseKindField} feed=${feed} onListChanged=${onListChanged} />` : null} />

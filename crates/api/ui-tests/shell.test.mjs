@@ -430,7 +430,8 @@ test('each tab segment has the width of the longest label', () => {
 test('the page of a feed gives the tabs of its type', () => {
   const tabs = (feed, view) => pageTabs(feed, { name: 'feed', id: feed.id, ...view }).map((tab) => tab.label);
   const owner = 'ADR 0135 item 2: check pageTabs in shell.js.';
-  assert.deepEqual(tabs(album), ['Album', 'Live Shows', 'Value Routes', 'Credits', 'Files', 'Check', 'Settings'], owner);
+  assert.deepEqual(tabs(album), ['Release', 'Live Shows', 'Value Routes', 'Credits', 'Files', 'Check', 'Settings'], 'ADR 0225 item 1: the first tab of a release is "Release". Check pageTabs in shell.js.');
+  assert.equal(tabs({ ...album, kind_shown: 'single' })[0], 'Release', 'ADR 0225 item 1: the first tab does not show the kind. Check pageTabs in shell.js.');
   const artist = { ...publisher, publisher_roles: ['artist'], roles_confirmed: true };
   assert.deepEqual(tabs(artist), ['Artist', 'Value Routes', 'Credits', 'Files', 'Check', 'Settings'], owner);
   assert.deepEqual(tabs({ ...album, medium: 'musicL' }), ['Playlist', 'Tracks', 'Value Routes', 'Files', 'Check', 'Settings'], owner);

@@ -85,6 +85,7 @@ test('Use server type changes only the matching live item in the draft model', (
 // ---- What changes (task 077c) ----
 import { readFileSync } from 'node:fs';
 import { fieldRows, guardRow, changeRow, KEY_WORDS, pathWord, inSentence, mergeRows, mergeReady } from '../ui/review.js';
+import { shortKey } from '../ui/nostrkey.js';
 
 const KEY = 'npub1' + 'q'.repeat(58);
 const credit = (role) => ({ op: 'changed', path: 'npub', entry: role, old: null, new: KEY });
@@ -112,6 +113,46 @@ test('a title, an added entry and a removed entry have a line', () => {
   assert.deepEqual([add.label, add.text], ['mixer', 'Added']);
   const gone = changeRow({ kind: 'track', name: 'T', position: 1 }, { op: 'removed', path: 'persons', entry: null, old: { name: 'Zed' }, new: null });
   assert.deepEqual([gone.label, gone.text], ['Credits', 'Removed: Zed']);
+});
+
+test('a payment block change shows one row for each recipient (task 182)', () => {
+  // The core gives a channel payment list the kind `list`, with an empty path.
+  const block = (recipients) => ({ value_type: 'lightning', method: 'keysend', suggested: null, recipients, time_splits: [] });
+  const groups = [{ kind: 'list', name: 'values', changes: [{ op: 'added', path: '', new: block([
+    { name: 'LN payer', recipient_type: 'lnaddress', address: 'pay@example.com', split: '90' },
+    { name: 'Node payer', recipient_type: 'node', address: `02${'ab'.repeat(32)}`, split: '10' },
+  ]) }] }];
+  const [added] = fieldRows(groups);
+  assert.equal(added.label, 'Payments');
+  assert.deepEqual(added.rows.map(({ label, text }) => [label, text]), [
+    ['Added: LN payer', 'pay@example.com · LNURL Address · 90.0 %'],
+    ['Added: Node payer', `${shortKey(`02${'ab'.repeat(32)}`)} · Node Address · 10.0 %`],
+  ]);
+  // A track block has the path `values` in the track group.
+  const [track] = fieldRows([{ kind: 'track', name: 'One', position: 1, changes: [{ op: 'removed', path: 'values', old: block([
+    { name: 'Gone', recipient_type: 'lnaddress', address: 'gone@example.com', split: '1', fee: 'true' },
+  ]) }] }]);
+  assert.deepEqual([track.rows[0].label, track.rows[0].text], ['Removed: Gone', 'gone@example.com · LNURL Address · 100.0 % fee']);
+  // A recipient with no name has its address as the title, as on the Value Routes page.
+  const [noName] = fieldRows([{ kind: 'list', name: 'values', changes: [{ op: 'added', path: '', new: block([
+    { name: '', recipient_type: 'lnaddress', address: 'a@example.com', split: '1' },
+  ]) }] }]);
+  assert.equal(noName.rows[0].label, 'Added: a@example.com');
+  const [empty] = fieldRows([{ kind: 'list', name: 'values', changes: [{ op: 'added', path: '', new: block([]) }] }]);
+  assert.deepEqual(empty.rows.map((r) => r.text), ['Added']);
+});
+
+test('an added recipient in a block that stays shows its share (task 182)', () => {
+  const [group] = fieldRows([{ kind: 'list', name: 'values', changes: [{ op: 'added', path: 'recipients', entry: 'Wallet',
+    new: { name: 'Wallet', recipient_type: 'lnaddress', address: 'wallet@example.com', split: '25' } }] }]);
+  assert.equal(group.rows[0].label, 'Wallet');
+  assert.match(group.rows[0].text, /Added: wallet@example\.com · LNURL Address · share 25$/);
+});
+
+test('the Simplified view does not show a placeholder GUID (task 182)', () => {
+  const group = { kind: 'field', name: 'podcast_guid' };
+  assert.equal(changeRow(group, { op: 'changed', path: '', old: null, new: 'pending-60384c23-abc' }).text, 'Set when the feed has a public address');
+  assert.equal(changeRow(group, { op: 'changed', path: '', old: 'pending-60384c23-abc', new: 'guid-1' }).text, 'none → guid-1');
 });
 
 test('added and removed live items show their status and local times', async () => {

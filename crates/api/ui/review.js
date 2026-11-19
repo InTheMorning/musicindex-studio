@@ -6,6 +6,7 @@
 
 import { shortKey } from './nostrkey.js';
 import { profileName, keyWarning } from './people.js';
+import { percentages, percentText, isFee, recipientTitle, WALLET_TYPES } from './recipients.js';
 
 const rowText = (row) => row.parts.map((part) => part.text).join('');
 
@@ -232,6 +233,41 @@ export function valueText(value, path, profiles, short = false) {
   return String(value);
 }
 
+// A placeholder GUID of a feed with no public address (ADR 0122 item 5).
+// The Simplified view does not show it (task 182).
+const isPlaceholder = (path, value) => ['podcast_guid', 'feed_guid'].includes(lastKey(path))
+  && typeof value === 'string' && value.startsWith('pending-');
+
+// A payment block and a recipient, found by the form of the value. The core
+// gives the payment lists the kinds `list` and `track`, so the group name is
+// not sufficient.
+const isBlock = (value) => Boolean(value) && typeof value === 'object' && Array.isArray(value.recipients) && 'method' in value;
+const isRecipient = (value) => Boolean(value) && typeof value === 'object' && 'recipient_type' in value;
+const typeWord = (type) => (WALLET_TYPES.find(([key]) => key === type) || [null, type || ''])[1];
+
+// The address, the type and the amount of a recipient, as on the Value
+// Routes page: a node address shows as a short key.
+function recipientText(recipient, amount) {
+  const address = !recipient.address ? 'No address'
+    : recipient.recipient_type === 'node' ? shortKey(recipient.address) : recipient.address;
+  return `${address} · ${typeWord(recipient.recipient_type)} · ${amount}${isFee(recipient) ? ' fee' : ''}`;
+}
+
+// The rows of one change. A change that adds or removes a payment block with
+// recipients gives one row for each recipient, with its percentage (task 182).
+// The title is the title of the row on the Value Routes page.
+function rowsOf(group, change, profiles) {
+  const value = change.op === 'added' ? change.new : change.op === 'removed' ? change.old : null;
+  if (!isBlock(value) || value.recipients.length === 0) return [changeRow(group, change, profiles)];
+  const verb = change.op === 'added' ? 'Added' : 'Removed';
+  const percent = percentages(value.recipients);
+  return value.recipients.map((recipient, i) => ({
+    label: `${verb}: ${recipientTitle(recipient) || 'No name'}`,
+    text: recipientText(recipient, percentText(percent[i])),
+    warning: null,
+  }));
+}
+
 // The row of one change: its label, its text and its warning or null.
 export function changeRow(group, change, profiles, zone) {
   const field = group.kind === 'field';
@@ -242,14 +278,18 @@ export function changeRow(group, change, profiles, zone) {
   const valuePath = field && !change.path ? group.name : change.path;
   let text;
   if (change.op === 'changed') {
-    text = `${valueText(change.old, valuePath, profiles)} → ${valueText(change.new, valuePath, profiles)}`;
+    const oldText = isPlaceholder(valuePath, change.old) ? 'none' : valueText(change.old, valuePath, profiles);
+    text = isPlaceholder(valuePath, change.new)
+      ? 'Set when the feed has a public address'
+      : `${oldText} → ${valueText(change.new, valuePath, profiles)}`;
   } else {
     const verb = change.op === 'added' ? 'Added' : 'Removed';
     const value = change.op === 'added' ? change.new : change.old;
     const isWholeLiveItem = group.kind === 'live' && !change.entry && !change.path;
     const parts = isWholeLiveItem ? liveParts(value, zone) : [];
     const shown = brief(value);
-    text = parts.length
+    text = isRecipient(value) ? `${verb}: ${recipientText(value, `share ${value.split ?? '—'}`)}`
+      : parts.length
       ? `${verb}: ${parts.join(', ')}`
       : shown && !change.entry && !isWholeLiveItem ? `${verb}: ${shown}` : verb;
   }
@@ -293,9 +333,10 @@ function cluster(group) {
 export function fieldRows(groups, profiles) {
   return (groups || []).map((group) => {
     const label = groupLabel(group);
+    const rowsFor = (change) => rowsOf(group, change, profiles);
     const set = cluster(group);
     if (!set) {
-      return { label, summary: null, more: null, rows: group.changes.map((c) => changeRow(group, c, profiles)) };
+      return { label, summary: null, more: null, rows: group.changes.flatMap(rowsFor) };
     }
     const first = group.changes[set[0]];
     const covered = new Set(set);
@@ -311,12 +352,12 @@ export function fieldRows(groups, profiles) {
     const moreNoun = group.kind === 'credits' ? plural(rest.length, 'credit', 'credits') : plural(rest.length, 'entry', 'entries');
     const moreSummary = `${rest.length} more ${moreNoun}${names.length === rest.length ? `: ${names.join(', ')}` : ''}`;
     const rows = [
-      ...set.slice(0, 2).map((i) => changeRow(group, group.changes[i], profiles)),
-      ...group.changes.filter((_, i) => !covered.has(i)).map((c) => changeRow(group, c, profiles)),
+      ...set.slice(0, 2).flatMap((i) => rowsFor(group.changes[i])),
+      ...group.changes.filter((_, i) => !covered.has(i)).flatMap(rowsFor),
     ];
     return {
       label, summary, rows,
-      more: { summary: moreSummary, rows: rest.map((c) => changeRow(group, c, profiles)) },
+      more: { summary: moreSummary, rows: rest.flatMap(rowsFor) },
     };
   });
 }

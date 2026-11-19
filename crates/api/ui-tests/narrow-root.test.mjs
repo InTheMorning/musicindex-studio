@@ -1,4 +1,5 @@
-// Task 188, ADR 0223 items 7 and 8: the narrow root page and one tap to a release.
+// Task 188, ADR 0223 item 8, and task 193, ADR 0226 items 7 and 8: the narrow
+// root page and one tap to a release.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -27,11 +28,15 @@ test('the outline view keeps its wide mapping to the feed view', () => {
   assert.deepEqual(widthNav({ name: 'outline', id: 5 }, false).entries, [{ name: 'feed', id: 5 }]);
 });
 
-test('ADR 0223 item 7: RootPage renders People, File hosts and Settings before destinationRows. Move the fixed rows in RootPage of app.js.', () => {
+test('ADR 0226 items 7 and 8: RootPage gives the full panel to LeftPanelFooter, as the wide panel does', () => {
+  // rc.27 check finding 12: the narrow root page put People, File hosts and
+  // Settings above the feed groups.
   const start = app.indexOf('function RootPage');
   const body = app.slice(start, app.indexOf('\n}\n', start));
-  const fixed = body.indexOf("['people', 'hosts', 'settings']");
-  assert.ok(fixed > -1 && fixed < body.indexOf('destinationRows('));
+  const fix = 'Render destinationRows(panel.top, go), then LeftPanelFooter with panel=${panel}, in RootPage of app.js.';
+  assert.ok(body.indexOf('destinationRows(panel.top, go)') > -1, `ADR 0226 item 7: ${fix}`);
+  assert.ok(body.indexOf('destinationRows(') < body.indexOf('<${LeftPanelFooter} panel=${panel}'), `ADR 0226 item 7: ${fix}`);
+  assert.ok(!body.includes('panel.bottom'), `ADR 0226 item 8: RootPage must not split panel.bottom. ${fix}`);
 });
 
 test('ADR 0223 item 8: the bar of the feed page has the button Sections. Add it in EditableFeed of app.js.', () => {

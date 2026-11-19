@@ -2,7 +2,7 @@
 
 Decision: [ADR 0226](../adr/0226-the-typed-start-folder-the-program-name-the-root-order-and-person-tabs.md) items 7 and 8.
 
-Status: Open.
+Status: Done.
 
 ## Problem
 
@@ -30,3 +30,7 @@ Mechanical:
 - `tools/node --test crates/api/ui-tests/*.test.mjs` and `bash tools/gate.sh` pass.
 
 Visual, by the main session with screenshots at 390 px and 1280 px: the root page and the left panel have Releases, the feed groups, then People, File hosts and Settings.
+
+## Result
+
+- Walks: `.studio-dev/walk/p193-390.json` (the end of the narrow root page) and the first steps of `p194-1280.json` (the wide left panel), with `setup-194.py`. Both layouts give Releases, the feed groups, then People, File hosts and Settings.

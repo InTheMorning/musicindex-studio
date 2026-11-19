@@ -3244,7 +3244,7 @@ function DestinationRow({ item, open }) {
 // opens its destination when `opens` is true. A row below Releases shows the
 // dot of the feed and the number of its releases.
 // `between` is a node that shows after the plain rows and before the groups.
-function destinationRows(top, go, between = null) {
+function destinationRows(top, go) {
   const open = (item) => {
     if (!item.opens) return;
     go(item.group === undefined ? { name: item.id } : { name: 'releases', group: item.group });
@@ -3252,7 +3252,6 @@ function destinationRows(top, go, between = null) {
   const row = (item) => html`<${DestinationRow} item=${item} open=${open} />`;
   const groups = top.filter((item) => item.group !== undefined);
   return html`${top.filter((item) => item.group === undefined).map(row)}
-    ${between}
     ${groups.length > 0 && html`<div class="destination-group">${groups.map((item) => html`
       ${item.heading && html`<h2 class="panel-heading">${item.heading}</h2>`}${row(item)}`)}</div>`}`;
 }
@@ -3413,19 +3412,17 @@ function panelRows(items, go, onLock) {
           onClick=${() => { if (item.opens ?? !item.current) go({ name: item.id }); }}><${Icon} name=${item.icon} />${item.label}</button>`))}`;
 }
 
-// The root page of a narrow window (ADR 0223 item 7): the row Releases, then
-// People, File hosts and Settings, then the feed groups, then the collection
-// mark and Lock Studio. It has no back control.
+// The root page of a narrow window has the order of the wide left panel
+// (ADR 0226 items 7 and 8): the row Releases, then the feed groups, then
+// People, File hosts and Settings, then the collection mark and Lock Studio.
+// It has no back control.
 function RootPage({ panel, go, onLock }) {
-  const fixed = ['people', 'hosts', 'settings'];
-  const fixedRows = panelRows(panel.bottom.filter((item) => fixed.includes(item.id)), go, onLock);
-  const lastRows = html`<${LeftPanelFooter} panel=${{ ...panel, bottom: panel.bottom.filter((item) => !fixed.includes(item.id)) }} go=${go} onLock=${onLock} />`;
   return html`<div class="panel-page">
     <${Bar} back=${false}><span class="bar-title">Studio</span><//>
     <div class="stack-page">
       <header><${Brand} /><${ThemeToggle} /></header>
-      ${destinationRows(panel.top, go, fixedRows)}
-      ${lastRows}
+      ${destinationRows(panel.top, go)}
+      <${LeftPanelFooter} panel=${panel} go=${go} onLock=${onLock} />
     </div>
   </div>`;
 }

@@ -169,7 +169,11 @@ function Recipients({ id, recipients, defaultType, onChange, openAdd = false, on
   const order = useRef({ at: -1, cids: [] });
   const same = order.current.cids.length === recipients.length && recipients.every((r) => order.current.cids.includes(r._cid));
   if (order.current.at !== sortAt || !same) {
-    order.current = { at: sortAt, cids: splitOrder(recipients).map((i) => recipients[i]._cid) };
+    const cids = splitOrder(recipients).map((i) => recipients[i]._cid);
+    // The group of a row also changes only at a sort, so that the check box
+    // Fee does not move its own row (ADR 0144 item 4).
+    const fees = new Set(recipients.filter(isFee).map((r) => r._cid));
+    order.current = { at: sortAt, cids, fees };
   }
   let rowIndex = 0;
   const row = (r, i) => {
@@ -249,16 +253,24 @@ function Recipients({ id, recipients, defaultType, onChange, openAdd = false, on
   // A group holds the rows of one kind. Each row keeps its index in the list.
   const ofGroup = (fee) => order.current.cids.map((cid) => {
     const i = recipients.findIndex((r) => r._cid === cid);
-    return i >= 0 && isFee(recipients[i]) === fee ? row(recipients[i], i) : null;
-  });
-  return html`<h3 class="value-group">Recipients</h3>
-    ${ofGroup(false)}
-    ${!recipients.some((r) => !isFee(r)) && html`<p class="hint">No recipients.</p>`}
-    <button class="link-row add" type="button" onClick=${() => setSheet({})}><span class="num">＋</span><span class="title">Add a recipient</span></button>
-    <h3 class="value-group">Fees</h3>
-    ${ofGroup(true)}
-    ${!recipients.some(isFee) && html`<p class="hint">No fees.</p>`}
-    ${feeLine(recipients) && html`<p class="hint">${feeLine(recipients)}</p>`}
+    return i >= 0 && order.current.fees.has(cid) === fee ? row(recipients[i], i) : null;
+  }).filter(Boolean);
+  const recipientRows = ofGroup(false);
+  const feeRows = ofGroup(true);
+  // One keyed list, so that a row that changes group keeps its element and its
+  // open state. "Add a recipient" comes after the fees (operator choice in the
+  // rc.27 human check, finding 11).
+  const list = [
+    html`<h3 class="value-group" key="group-recipients">Recipients</h3>`,
+    ...recipientRows,
+    recipientRows.length === 0 && !recipients.some((r) => !isFee(r)) && html`<p class="hint" key="no-recipients">No recipients.</p>`,
+    html`<h3 class="value-group" key="group-fees">Fees</h3>`,
+    ...feeRows,
+    feeRows.length === 0 && !recipients.some(isFee) && html`<p class="hint" key="no-fees">No fees.</p>`,
+    feeLine(recipients) && html`<p class="hint" key="fee-line">${feeLine(recipients)}</p>`,
+    html`<button class="link-row add" type="button" key="add" onClick=${() => setSheet({})}><span class="num">＋</span><span class="title">Add a recipient</span></button>`,
+  ].filter(Boolean);
+  return html`${list}
     <${RecipientSheet} open=${sheet !== null} recipient=${changing || null} recipients=${recipients}
       onSave=${save} onCopy=${() => { preserveEmpty.current = true; setSheet(null); setCopying(true); }} onClose=${() => {
         setSheet(null);

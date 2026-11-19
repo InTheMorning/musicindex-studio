@@ -2,7 +2,7 @@
 
 Decision: [ADR 0222](../adr/0222-errors-give-a-step-terms-get-a-hint-and-the-first-run-has-two-stages.md) items 1, 2, 4 and 5.
 
-Status: Open.
+Status: Done.
 
 ## Problem
 

@@ -4,7 +4,7 @@
 import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
 import { useSheet, NostrKeyRow, NostrSheet } from './editor.js';
 import { PickerLayout, FindOneSheet, PickFold, RowList, TakenTag, useFieldList } from './pickers.js';
-import { api, assetMode, askConfirm, Bar, SortMenu, LetterBar, useLeaveGuard, ChoiceSelect, CopyButton, Icon, RoleMenu, ErrorNotice, FeedCheckRow, Field, useAction, useImage } from './app.js';
+import { LoadErrorNotice, api, assetMode, askConfirm, Bar, SortMenu, LetterBar, useLeaveGuard, ChoiceSelect, CopyButton, Icon, RoleMenu, ErrorNotice, FeedCheckRow, Field, useAction, useImage } from './app.js';
 import { AddressRow } from './addressrow.js';
 import { CONFIRMS } from './confirms.js';
 import { pageSequence } from './pages.js';
@@ -529,11 +529,10 @@ function LinkForm({ kind, personId, edit = null, onCancel, onAdded }) {
   // The payees with no person of the sheet "Add a Wallet" (ADR 0141). `null`
   // while the list loads.
   const [recipients, setRecipients] = useState(kind === 'wallets' ? null : []);
+  const [recipientsError, setRecipientsError] = useState(null);
   const { busy, error, run } = useAction();
-  useEffect(() => {
-    if (kind !== 'wallets') return;
-    api('/recipients').then(setRecipients, () => setRecipients([]));
-  }, []);
+  const loadRecipients = () => api('/recipients').then((r) => { setRecipients(r); setRecipientsError(null); }, (e) => { setRecipients([]); setRecipientsError(e); });
+  useEffect(() => { if (kind === 'wallets') loadRecipients(); }, []);
   // A functional update keeps the value of each field that changed last.
   const set = (id, value) => setValues((current) => ({ ...current, [id]: value }));
   // The sheet "Find a Nostr profile" of a form with a Nostr key (ADR 0123).
@@ -567,6 +566,7 @@ function LinkForm({ kind, personId, edit = null, onCancel, onAdded }) {
       <h2 id="link-title">${editing ? form.editTitle : form.title}</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${onCancel}>✕</button>
     </header>
+    ${recipientsError && html`<${LoadErrorNotice} list="the wallets" onRetry=${loadRecipients} />`}
     <${PickerLayout} id="link-form" onSubmit=${add} fields=${fields} notice=${html`<${ErrorNotice} error=${error} />`}
       musicindex=${{ title: 'Find on Music Index', summary: find.summary, onOpen: () => setFinding(true) }}
       lists=${[{ title: 'Payees with no person', rows: payees }]} />
@@ -863,6 +863,9 @@ export function PersonPage({ id, feeds, go }) {
   // `supportLinkEdit` (ADR 0141, ADR 0146).
   const [editing, setEditing] = useState(null);
   const [more, setMore] = useState([]);
+  const [moreError, setMoreError] = useState(null);
+  const [suggestionsError, setSuggestionsError] = useState(null);
+  const [pageNotesError, setPageNotesError] = useState(null);
   const [merging, setMerging] = useState(false);
   const [mergeNotice, setMergeNotice] = useState(null);
   useEffect(() => { setMergeNotice(null); }, [id]);
@@ -878,7 +881,7 @@ export function PersonPage({ id, feeds, go }) {
   const [offers, setOffers] = useState([]);
   const [offerTotal, setOfferTotal] = useState(0);
   const made = useRef([]);
-  const loadMore = () => api(`/people/${id}/more`).then((r) => setMore(r.items || []), () => setMore([]));
+  const loadMore = () => api(`/people/${id}/more`).then((r) => { setMore(r.items || []); setMoreError(null); }, (e) => { setMore([]); setMoreError(e); });
   // "Add a Nostr Key" adds the key that the sheet "Find a Nostr profile" picks (ADR 0123).
   const addKey = (npub) => act(async () => {
     await api(`/people/${id}/keys`, { method: 'POST', body: { npub } });
@@ -886,7 +889,7 @@ export function PersonPage({ id, feeds, go }) {
     loadMore();
   });
   useEffect(() => { loadMore(); }, [id]);
-  const loadSuggestions = () => api(`/people/${id}/profile-addresses`).then((r) => setSuggestions(r.suggestions || []), () => setSuggestions([]));
+  const loadSuggestions = () => api(`/people/${id}/profile-addresses`).then((r) => { setSuggestions(r.suggestions || []); setSuggestionsError(null); }, (e) => { setSuggestions([]); setSuggestionsError(e); });
   useEffect(() => { loadSuggestions(); }, [id]);
   // The suggestions of the picture and the information address (ADR 0113).
   // They load after the person and again after each save.
@@ -903,7 +906,7 @@ export function PersonPage({ id, feeds, go }) {
   useEffect(() => {
     if (!data || (data.person.pages || []).length === 0) { setPageNotes([]); return undefined; }
     let live = true;
-    api(`/people/${id}/page-suggestions`).then((r) => { if (live) setPageNotes(r.pages || []); }, () => { if (live) setPageNotes([]); });
+    api(`/people/${id}/page-suggestions`).then((r) => { if (live) { setPageNotes(r.pages || []); setPageNotesError(null); } }, (e) => { if (live) { setPageNotes([]); setPageNotesError(e); } });
     return () => { live = false; };
   }, [data]);
   const known = data ? data.person : null;
@@ -1065,7 +1068,8 @@ export function PersonPage({ id, feeds, go }) {
       })}</div></section>`,
     check: () => html`<div class="group"><${ListRow} title=${check.title} lines=${check.lines} count=${check.count} roving=${true}
       onClick=${() => go({ name: 'check', id: person.id })} /></div>`,
-    more: () => more.length > 0 && html`<section class="page-section"><h2>More from your feeds</h2>
+    more: () => (more.length > 0 || moreError) && html`<section class="page-section"><h2>More from your feeds</h2>
+      ${moreError && html`<${LoadErrorNotice} list="the suggestions" onRetry=${loadMore} />`}
       <p class="hint">${MORE_HINT}</p>
       <div class="group">${moreRows(more, titles, profiles, person.name, feeds).map((row) => html`<div class="link-row static key-line more-row" key=${row.key}>
           ${row.npub && html`<${PersonArt} person=${{ img: row.picture, name: row.title }} />`}<${KeyText} row=${row} />
@@ -1093,6 +1097,7 @@ export function PersonPage({ id, feeds, go }) {
         <div class="actions"><button class="button destructive" type="button" onClick=${() => remove('wallets', g.id)}>Remove Wallet</button></div></div>`)}
       ${shown.wallets.length > 0 && html`<div class="group">${shown.wallets.map((w) => html`<div class="link-row static" key=${`p${keyValue(w.key)}`}>
         <span class="text"><span class="label">Wallet</span><span class="summary mono address-text" data-fit-allow-break>${w.key.address}</span><span class="summary">Not saved yet</span></span></div>`)}</div>`}
+      ${suggestionsError && html`<${LoadErrorNotice} list="the suggestions" onRetry=${loadSuggestions} />`}
       ${suggestions.map((s) => html`<div class="group" key=${s.address}><${AddressRow} member=${{ address: s.address, recipient_type: 'lnaddress' }} CopyButtonComponent=${CopyButton}
         note=${profileAddressNote(s.npub, profiles)} />
         <div class="actions"><button class="button action" type="button" onClick=${() => act(async () => {
@@ -1140,6 +1145,7 @@ export function PersonPage({ id, feeds, go }) {
     member: () => {
       const rows = linkRows(shown, saved, feeds, person.linked_credits, pageNotes);
       return html`<section class="page-section"><h2>Linked artist and label pages</h2><p class="hint">${LINK_HINT}</p>
+      ${pageNotesError && html`<${LoadErrorNotice} list="the suggestions" onRetry=${() => api(`/people/${id}/page-suggestions`).then((r) => { setPageNotes(r.pages || []); setPageNotesError(null); }, setPageNotesError)} />`}
       <div class="group">${rows.length === 0
         ? html`<div class="link-row static"><span class="text"><span class="summary">${LINK_EMPTY}</span></span></div>`
         : rows.map((row) => html`<div class="link-row static" key=${row.id}><span class=${`dot ${row.dot}`} aria-hidden="true"></span>

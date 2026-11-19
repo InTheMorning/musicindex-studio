@@ -5,7 +5,7 @@
 import { html, useState, useEffect, useRef, createContext, useContext } from './vendor/htm-preact-standalone.module.js';
 import { CONFIRMS } from './confirms.js';
 import { VIEWS, VIEW_LABELS, VIEW_HINTS, normalizeView, shownLines, localTimeNote, runs, commonIndent, stripIndent, moreLabel, fieldRows, guardRow, changeKeys, MERGE_TITLE, MERGE_INTRO, MERGE_HEADINGS, mergeRows, mergeReady, showsExamine, streamProblemRows } from './review.js';
-import { onSegmentKey, dropAreaClass, useFileDrop, api, saveTicket, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ChoiceSelect, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext, Icon, AddFeedRowSheet, inDesktopApp } from './app.js';
+import { LoadErrorNotice, onSegmentKey, dropAreaClass, useFileDrop, api, saveTicket, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ChoiceSelect, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext, Icon, AddFeedRowSheet, inDesktopApp } from './app.js';
 import { AlbumPayments, TrackPayments } from './values.js';
 import { PickerLayout, PickFillRow, FindOneSheet, PickFold, TakenTag, useFieldList } from './pickers.js';
 import { PersonArt, useProfiles } from './peoplepages.js';
@@ -1241,7 +1241,7 @@ function FileRows({ facts, role }) {
   </ul>`;
 }
 
-function ImportRow({ row, audioOptions, onRemove, onImageUseChange }) {
+function ImportRow({ row, audioOptions, onRemove, onRetry, onImageUseChange }) {
   const kind = row.facts ? row.facts.kind : guessKind(row.file);
   const failed = row.state === 'failed';
   return html`<div class="import-row">
@@ -1253,6 +1253,7 @@ function ImportRow({ row, audioOptions, onRemove, onImageUseChange }) {
       </span>
       <button class="button destructive" type="button" disabled=${row.state === 'sending'}
         aria-label=${`Remove ${row.file.name}`} onClick=${() => onRemove(row)}>Remove</button>
+      ${failed && html`<button class="button action" type="button" aria-label=${`Try again: ${row.file.name}`} onClick=${() => onRetry(row)}>Try Again</button>`}
     </div>
     ${row.state === 'sending' && html`<progress class="import-progress" max=${row.file.size} value=${row.sent || 0}
       aria-label=${`Progress of ${row.file.name}`}></progress>`}
@@ -1494,7 +1495,7 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd, onAddress })
       ${rows.length === 0 && html`<p class="hint">Select the files to import.</p>`}
       ${rows.length > 0 && html`<div class="group">
         ${rows.map((row) => html`<${ImportRow} key=${row.id} row=${row} audioOptions=${audioOptions}
-          onRemove=${removeRow} onImageUseChange=${changeImageUse} />`)}
+          onRemove=${removeRow} onRetry=${(failed) => { updateRow(failed.id, { state: 'waiting', error: null }); sendQueue(); }} onImageUseChange=${changeImageUse} />`)}
       </div>`}
     </div>
     <footer>
@@ -1963,7 +1964,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
   const ref = useSheet(open);
   const [diff, setDiff] = useState(null);
   const returnWait = useReturnWait(feedId, diff && diff.feed_move);
-  const { busy, error, run } = useAction();
+  const { busy, error, run, retry } = useAction();
   // The progress of the signer while a write signs the planned events.
   const [progress, setProgress] = useState(null);
   const [result, setResult] = useState(null);
@@ -2182,7 +2183,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
         ? html`<div class="notice error" role="alert"><strong>The draft changed in a different window.</strong>
             Load the draft again to continue. The changes in this window since the last save go out.
             <div class="actions"><button class="button" type="button" onClick=${draft.load}>Load the Draft Again</button></div></div>`
-        : html`<${ErrorNotice} error=${draft.error} />`}
+        : html`<${ErrorNotice} error=${draft.error} action="Studio could not save the change." onRetry=${() => draft.flush()} />`}
       ${merge
         ? html`<${MergePanel} merge=${merge} busy=${busy} onApply=${applyMerge}
             onChoose=${(id, side) => setMerge((m) => {
@@ -2201,7 +2202,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
           ? null
           : signErrorText(error && error.code)
             ? html`<div class="notice error" role="alert"><strong>${signErrorText(error.code)}</strong></div>`
-            : html`<${ErrorNotice} error=${error} />`}
+            : html`<${ErrorNotice} error=${error} action=${isPublisher(feeds.find((f) => f.id === feedId) || {}) ? 'Studio could not write the page.' : 'Studio could not write the release.'} onRetry=${retry} />`}
       ${addressesBlocked && html`<div class="notice error" role="alert">
         <strong>Studio cannot write while an address is not correct.</strong>
         Correct the fields with red text. Each address starts with https:// or http://.
@@ -2286,11 +2287,13 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
 function VersionsSheet({ feedId, draft, open, onClose }) {
   const ref = useSheet(open);
   const [list, setList] = useState(null);
+  const [loadError, setLoadError] = useState(null);
+  const load = () => { setLoadError(null); return api(`/feeds/${feedId}/snapshots`).then(setList, (e) => { setList([]); setLoadError(e); }); };
   const { busy, error, run } = useAction();
   useEffect(() => {
     if (!open) return;
     setList(null);
-    api(`/feeds/${feedId}/snapshots`).then(setList, () => setList([]));
+    load();
   }, [feedId, open]);
   const restore = async (snapshot) => {
     if (draft.changed && !await askConfirm(CONFIRMS.replaceDraft())) return;
@@ -2308,7 +2311,8 @@ function VersionsSheet({ feedId, draft, open, onClose }) {
     <div class="body">
       <p class="hint">Before each write, Studio keeps the file that the write replaces. To go back, put an earlier version in the draft, examine the changes and write them.</p>
       <${ErrorNotice} error=${error} />
-      ${list && list.length === 0 && html`<p class="hint">No earlier versions yet.</p>`}
+      ${loadError && html`<${LoadErrorNotice} list="the snapshots" onRetry=${load} />`}
+      ${list && list.length === 0 && !loadError && html`<p class="hint">No earlier versions yet.</p>`}
       ${list && list.length > 0 && html`<div class="group"><ul class="snapshots">${list.map((s) => html`<li key=${s.id}>
         <span><span class="when">${new Date(s.taken_at * 1000).toLocaleString()}</span>
           <span class="mono sub">${versionLabel(s.version)}</span></span>
@@ -3912,11 +3916,15 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
   const [releaseStart, setReleaseStart] = useState(null);
   // The members of this feed, from `GET /feeds/{id}/members` (ADR 0118 item 9).
   const [members, setMembers] = useState([]);
-  useEffect(() => {
-    let live = true;
-    api(`/feeds/${feed.id}/members`).then((r) => { if (live) setMembers(r.members || []); }, () => { if (live) setMembers([]); });
-    return () => { live = false; };
-  }, [feed.id]);
+  const [membersError, setMembersError] = useState(null);
+  const memberLoad = useRef(0);
+  const loadMembers = () => {
+    const request = ++memberLoad.current;
+    return api(`/feeds/${feed.id}/members`).then((r) => {
+      if (request === memberLoad.current) { setMembers(r.members || []); setMembersError(null); }
+    }, (e) => { if (request === memberLoad.current) { setMembers([]); setMembersError(e); } });
+  };
+  useEffect(() => { loadMembers(); }, [feed.id]);
   const items = model.remote_items;
   // The releases in the sequence of the model (ADR 0041 item 10).
   const rows = items
@@ -3994,7 +4002,8 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
         })}
       </div>
     </section>`,
-    members: () => members.length > 0 && html`<section class="page-section"><h2>People</h2>
+    members: () => (members.length > 0 || membersError) && html`<section class="page-section"><h2>People</h2>
+      ${membersError && html`<${LoadErrorNotice} list="the members" onRetry=${loadMembers} />`}
       <p class="hint">${memberSectionNote(feedWord(feed))}</p>
       <div class="group">${members.map((m) => html`<button class="link-row" type="button" key=${m.person_id}
         onClick=${() => go({ name: 'person', id: m.person_id })}>
@@ -4604,7 +4613,7 @@ function LibraryFolderSheet({ open, path, defaultPath, onMove, onClose }) {
           })}
           ${!parent && folders.length === 0 && html`<p class="hint">The library folder has no folders.</p>`}
         </div></section>`}
-      <${ErrorNotice} error=${action.error} />
+      <${ErrorNotice} error=${action.error} action="Studio could not set up the library." onRetry=${action.retry} />
     </div>
     <footer><button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
       <button class="button primary" type="button" disabled=${action.busy || !target.trim()} onClick=${move}>Move the Folder</button></footer>
@@ -4627,8 +4636,9 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
   const scan = useAction();
   // The moves that wait (ADR 0148 item 8), and the sheet of a release move.
   const [moves, setMoves] = useState([]);
+  const [movesError, setMovesError] = useState(null);
   const [moving, setMoving] = useState(null);
-  const loadMoves = () => api(`/feeds/${feed.id}/moves`).then((r) => setMoves(r.moves), () => setMoves([]));
+  const loadMoves = () => api(`/feeds/${feed.id}/moves`).then((r) => { setMoves(r.moves); setMovesError(null); }, (e) => { setMoves([]); setMovesError(e); });
   useEffect(() => { loadMoves(); }, [feed.id, reloadKey]);
   // The row "Music Index" of a move reads again until the index follows
   // the new address.
@@ -4884,6 +4894,7 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
         Scan the Library Folder</button></div>
     </section>`}
 
+    ${movesError && html`<${LoadErrorNotice} list="the moves" onRetry=${loadMoves} />`}
     ${moves.length > 0 && html`<section class="page-section"><h2>Old files to delete</h2>
       ${moves.map((move) => html`<${WaitingMoveEntry} key=${move.records[0]} move=${move} connectors=${connectors} busy=${busy}
         onDelete=${deleteOldFiles} onDeleteNow=${deleteOldFilesNow} onKeep=${keepOldFiles} />`)}
@@ -5083,7 +5094,7 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
   useEffect(() => { if (staleArtwork) onArtwork(null); }, [staleArtwork]);
   if (!model) {
     return html`<div class="page"><p class="hint" role="status">${STATUS[draft.status]}</p>
-      <${ErrorNotice} error=${draft.error} /></div>`;
+      <${ErrorNotice} error=${draft.error} action="Studio could not save the change." onRetry=${() => draft.flush()} /></div>`;
   }
   // A publisher feed has the publisher page and the Files page only (ADR
   // 0041 item 3).

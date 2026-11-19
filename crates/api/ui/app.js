@@ -39,6 +39,7 @@ import { dropHandlers, watchFileDrags, accountDropResult } from './filedrop.js';
 import { useDraft } from './draft.js';
 import { roleChoice, fromChoice, roleOptions, ROLE_PLACEHOLDER, OTHER_ROLE, OTHER_HINT, NO_ROLE_HINT } from './roles.js';
 import { RETRY_DELAYS, findUpload, missingParts, partCount, partRange, receivedBytes } from './upload.js';
+import { canTryAgain, errorStep, retryHelps } from './errors.js';
 import {
   exportView, exportTitle, EXPORT_DONE, RECOVERY_KEY_TEXT, importedNotice, showsImportNotice, sendingText, CHECKING_TEXT,
   importFacts, importOpenView, importErrorText, importSelectText, IMPORT_HINT, DESKTOP_IMPORT_HINT,
@@ -205,12 +206,6 @@ export function api(path, options = {}) {
 
 // ---- Uploads in parts (ADR 0059 items 1 to 6) ----
 
-// A part is sent again only after a failure that a new try can fix: no
-// answer, or an error of the server.
-function canTryAgain(error) {
-  return error.status === 0 || error.status >= 500;
-}
-
 const wait = (milliseconds) => new Promise((resolve) => { setTimeout(resolve, milliseconds); });
 
 // Send one file to a feed in parts, and finish the upload. The result is the
@@ -237,6 +232,7 @@ export async function sendInParts(feedId, file, { replace = false, onProgress = 
         onRetry(false);
         break;
       } catch (error) {
+        // A part is sent again only after a failure that a new try can fix.
         if (!canTryAgain(error) || attempt >= RETRY_DELAYS.length) throw error;
         onRetry(true);
         await wait(RETRY_DELAYS[attempt]);
@@ -438,9 +434,19 @@ export function dropAreaClass(over, busy) {
   return `import-pick drop-area${busy ? '' : ' drop-target'}${over ? ' drop-over' : ''}`;
 }
 
-export function ErrorNotice({ error }) {
+export function ErrorNotice({ error, action, onRetry }) {
   if (!error) return null;
-  return html`<div class="notice error" role="alert"><strong>${title(error)}</strong>${error.message}</div>`;
+  const step = errorStep(error);
+  const details = error.message && error.message !== step;
+  return html`<div class="notice error" role="alert"><strong>${action || title(error)}</strong><p>${step}</p>
+    ${details && html`<details class="disclosure"><summary class="link-row"><span class="summary">Details</span></summary><p>${error.message}</p></details>`}
+    ${onRetry && retryHelps(error) && html`<div class="actions"><button class="button action" type="button" onClick=${onRetry}>Try Again</button></div>`}</div>`;
+}
+
+// A list that cannot load: one line in the place of the list, and "Try
+// Again" (ADR 0222 item 5).
+export function LoadErrorNotice({ list, onRetry }) {
+  return html`<div class="notice error" role="alert">Studio could not load ${list}.<div class="actions"><button class="button action" type="button" onClick=${onRetry}>Try Again</button></div></div>`;
 }
 
 // The message of an API error that belongs to one field (ADR 0018). The
@@ -478,7 +484,7 @@ function title(error) {
     case 'query_field': return 'This search cannot run.';
     case 'index_answer': return 'Music Index gave a bad answer.';
     case 'stream_not_live': return 'Go Live refused.';
-    default: return 'Something went wrong.';
+    default: return 'Studio could not finish this.';
   }
 }
 
@@ -617,7 +623,9 @@ function FailedLine({ failed }) {
 export function useAction() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const lastWork = useRef(null);
   const run = useCallback(async (work) => {
+    lastWork.current = work;
     setBusy(true);
     setError(null);
     try {
@@ -629,7 +637,8 @@ export function useAction() {
       setBusy(false);
     }
   }, []);
-  return { busy, error, run };
+  const retry = useCallback(() => lastWork.current && run(lastWork.current), [run]);
+  return { busy, error, run, retry };
 }
 
 // The source of a feed address (ADR 0021). `editor.js` uses this for the
@@ -765,7 +774,7 @@ function LocalHostForm({ onAdded, startRoot = '', submitLabel = 'Add the Folder'
   useEffect(() => {
     if (startRoot) setRoot((current) => current || startRoot);
   }, [startRoot]);
-  const { busy, error, run } = useAction();
+  const { busy, error, run, retry } = useAction();
   const submit = (event) => {
     event.preventDefault();
     run(async () => {
@@ -788,7 +797,7 @@ function LocalHostForm({ onAdded, startRoot = '', submitLabel = 'Add the Folder'
       placeholder="https://music.example.com/feeds"
       hint="When a web server publishes this folder, Studio uses this address for each feed."
       value=${baseUrl} onInput=${(e) => setBaseUrl(e.target.value)} />
-    <${ErrorNotice} error=${hostError.other} />
+    <${ErrorNotice} error=${hostError.other} action="Studio could not connect the file host." onRetry=${retry} />
     <div class="actions"><button class="button primary" type="submit" disabled=${busy || !root}>${busy ? busyLabel : submitLabel}</button></div>
   </form>`;
 }
@@ -802,7 +811,7 @@ function S3HostForm({ onAdded, submitLabel = 'Add the Bucket', busyLabel = 'Test
   });
   const [needVault, setNeedVault] = useState(false);
   const [recoveryKey, setRecoveryKey] = useState(null);
-  const { busy, error, run } = useAction();
+  const { busy, error, run, retry } = useAction();
   // A functional update, so that two input events before the next render
   // keep both values, as when a password manager fills the form.
   const set = (key) => (e) => {
@@ -860,7 +869,7 @@ function S3HostForm({ onAdded, submitLabel = 'Add the Bucket', busyLabel = 'Test
         notice = html`<div class="notice error" role="alert"><strong>Unlock the vault first.</strong></div>`;
         break;
       default:
-        notice = html`<${ErrorNotice} error=${error} />`;
+        notice = html`<${ErrorNotice} error=${error} action="Studio could not connect the file host." onRetry=${retry} />`;
     }
   }
 
@@ -916,7 +925,7 @@ function SftpHostForm({ onAdded, submitLabel = 'Accept and Add the Server', busy
   const [fingerprint, setFingerprint] = useState('');
   const [needVault, setNeedVault] = useState(false);
   const [recoveryKey, setRecoveryKey] = useState(null);
-  const { busy, error, run } = useAction();
+  const { busy, error, run, retry } = useAction();
   // A functional update, so that two input events before the next render
   // keep both values, as when a password manager fills the form.
   const set = (key) => (e) => {
@@ -985,7 +994,7 @@ function SftpHostForm({ onAdded, submitLabel = 'Accept and Add the Server', busy
         notice = html`<div class="notice error" role="alert"><strong>Unlock the vault first.</strong></div>`;
         break;
       default:
-        notice = html`<${ErrorNotice} error=${error} />`;
+        notice = html`<${ErrorNotice} error=${error} action="Studio could not connect the file host." onRetry=${retry} />`;
     }
   }
 
@@ -1427,7 +1436,7 @@ function MakeFeedForm({ connectors, feeds, startType, start = {}, onAdded, onKin
   const [from, setFrom] = useState('');
   const [authorTyped, setAuthorTyped] = useState(false);
   const [pathOpen, setPathOpen] = useState(false);
-  const { busy, error, run } = useAction();
+  const { busy, error, run, retry } = useAction();
   const authorTypedRef = useRef(false);
   authorTypedRef.current = authorTyped;
   useEffect(() => { if (onKind) onKind({ type, role }); }, [type, role]);
@@ -1502,7 +1511,7 @@ function MakeFeedForm({ connectors, feeds, startType, start = {}, onAdded, onKin
           error=${formError.field} value=${path} onInput=${(e) => setTypedPath(e.target.value)} />
       </div>
     </details></div>
-    <${ErrorNotice} error=${formError.other} />
+    <${ErrorNotice} error=${formError.other} action="Studio could not add the feed." onRetry=${retry} />
     <div class="actions"><button class="button primary" type="submit" disabled=${busy || !ready}>
       ${busy ? fields.busyLabel : fields.button}</button></div>
   </form>`;
@@ -1516,7 +1525,7 @@ function AddFeedForm({ connectors, onAdded }) {
   const [selected, setSelected] = useState('');
   const [typing, setTyping] = useState(false);
   const [path, setPath] = useState('');
-  const { busy, error, run } = useAction();
+  const { busy, error, run, retry } = useAction();
 
   useEffect(() => {
     if (connectorId === null) return;
@@ -1580,7 +1589,7 @@ function AddFeedForm({ connectors, onAdded }) {
           error=${feedError.field} value=${path} onInput=${(e) => setPath(e.target.value)} />`
       : html`<button class="button link" type="button" onClick=${() => setTyping(true)}>The Feed Is Not in the List</button>`}
     ${typing && available.length > 0 && html`<button class="button link" type="button" onClick=${() => setTyping(false)}>Select from the List</button>`}
-    <${ErrorNotice} error=${feedError.other} />
+    <${ErrorNotice} error=${feedError.other} action="Studio could not add the feed." onRetry=${retry} />
     <div class="actions"><button class="button primary" type="submit" disabled=${busy || !target}>${busy ? 'Reading the Feed…' : 'Add the Feed'}</button></div>
   </form>`;
 }
@@ -1765,7 +1774,7 @@ function MspImport({ onAdded }) {
 function LibrarySheet({ defaultRoot, onDone }) {
   const [path, setPath] = useState(defaultRoot || '');
   const [report, setReport] = useState(null);
-  const { busy, error, run } = useAction();
+  const { busy, error, run, retry } = useAction();
   const submit = (event) => {
     event.preventDefault();
     run(async () => {
@@ -1792,7 +1801,7 @@ function LibrarySheet({ defaultRoot, onDone }) {
     <div><h1>Where Studio keeps your releases</h1>
       <p>Studio keeps one folder for each release here: its feed file, its images and its audio files.</p></div>
     <${Field} id="library-path" label="Folder" required value=${path} onInput=${(e) => setPath(e.target.value)} />
-    <${ErrorNotice} error=${error} />
+    <${ErrorNotice} error=${error} action="Studio could not set up the library." onRetry=${retry} />
     <div class="actions"><button class="button primary" type="submit" disabled=${busy || !path.trim()}>
       ${busy ? 'Using This Folder…' : 'Use This Folder'}</button></div>
   </form></main>`;
@@ -2353,6 +2362,7 @@ function FeedDetail({ feed, feeds, draft, view, go, adding, onAdding, importing,
 // blocked test feed, is not missed (ADR 0019).
 function FolderFeeds({ connector, onAdded }) {
   const [found, setFound] = useState(null);
+  const [loadError, setLoadError] = useState(null);
   const [chosen, setChosen] = useState([]);
   const [result, setResult] = useState(null);
   const { busy, error, run } = useAction();
@@ -2360,13 +2370,12 @@ function FolderFeeds({ connector, onAdded }) {
   useEffect(() => {
     if (found && found.length > 0 && panelRef.current) panelRef.current.scrollIntoView({ block: 'nearest' });
   }, [found]);
-  useEffect(() => {
-    api(`/connectors/${connector.id}/feeds`).then((list) => {
-      const others = list.feeds.filter((f) => !f.in_collection);
-      setFound(others);
-      setChosen(others.map((f) => f.path));
-    }, () => setFound([]));
-  }, [connector.id]);
+  const loadFeeds = () => api(`/connectors/${connector.id}/feeds`).then((list) => {
+    const others = list.feeds.filter((f) => !f.in_collection);
+    setFound(others); setChosen(others.map((f) => f.path)); setLoadError(null);
+  }, (e) => { setFound([]); setLoadError(e); });
+  useEffect(() => { loadFeeds(); }, [connector.id]);
+  if (loadError) return html`<${LoadErrorNotice} list="the feeds of this folder" onRetry=${loadFeeds} />`;
   if (!found || found.length === 0) return null;
   if (result) return html`<div class="notice" role="status">Studio added ${result} feed${result === 1 ? '' : 's'} from “${connector.name}”.</div>`;
   const toggle = (path) => setChosen(chosen.includes(path) ? chosen.filter((p) => p !== path) : [...chosen, path]);

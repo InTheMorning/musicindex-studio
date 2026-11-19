@@ -1000,7 +1000,7 @@ test('the merge sheet gives the links of the other person and the result line', 
 
 // ---- Task 075c: the sheets Check, Correct the Feeds and Add to a Person ----
 import {
-  NEW_PERSON, checkSheetTitle, checkSheetStart, checkSheetChoices, checkSheetHint, checkSheetPerson, checkSheetLabel, checkSheetReady,
+  NEW_PERSON, SELECT_PERSON, checkSheetTitle, checkSheetStart, checkSheetChoices, checkSheetHint, checkSheetPerson, checkSheetLabel, checkSheetReady,
   walletToPersonStart, walletToPersonReady, walletToPersonLabel, correctCount, correctButtonLabel, correctFeedIds,
   correctStart, correctKeyStart, correctOptions, otherPayeesLine, otherWalletCount, correctKeyChoices, correctBody, correctAnySelected, correctRows, correctFindingLines,
 } from '../ui/people.js';
@@ -1013,9 +1013,9 @@ const CHECK_SUGGESTION = {
 };
 const CHECK_PEOPLE = [{ id: 9, name: 'Mary', credit_names: [], keys: [], wallets: [] }, { id: 4, name: 'Anna', credit_names: [], keys: [], wallets: [] }];
 
-test('the sheet Check starts on the person with the name, else on a new person', () => {
+test('the sheet Check starts on the person with the name, else asks for a person', () => {
   assert.equal(checkSheetTitle('Mary'), 'Check: Mary');
-  assert.equal(checkSheetStart(CHECK_SUGGESTION).personId, NEW_PERSON);
+  assert.equal(checkSheetStart(CHECK_SUGGESTION).personId, SELECT_PERSON);
   const match = checkSheetStart({ ...CHECK_SUGGESTION, person_id: 9 });
   assert.equal(match.personId, '9');
   assert.deepEqual(checkSheetChoices(CHECK_PEOPLE), [[NEW_PERSON, 'A new person'], ['4', 'Anna'], ['9', 'Mary']]);
@@ -1024,12 +1024,15 @@ test('the sheet Check starts on the person with the name, else on a new person',
   assert.equal(checkSheetHint(CHECK_SUGGESTION, NEW_PERSON), undefined);
 });
 
-test('the primary button of the sheet Check follows the person', () => {
+test('the primary button of the sheet Check follows the person selection', () => {
   const fresh = checkSheetStart(CHECK_SUGGESTION);
   assert.equal(checkSheetPerson(fresh, CHECK_PEOPLE), null);
-  assert.equal(checkSheetLabel(fresh, null), 'Make the Person');
-  assert.equal(checkSheetReady(fresh, null), true);
-  assert.equal(checkSheetReady({ ...fresh, name: '  ' }, null), false);
+  assert.equal(checkSheetLabel(fresh, null), 'Add the Items');
+  assert.equal(checkSheetReady(fresh, null), false);
+  const newPerson = { ...fresh, personId: NEW_PERSON };
+  assert.equal(checkSheetLabel(newPerson, null), 'Make the Person');
+  assert.equal(checkSheetReady(newPerson, null), true);
+  assert.equal(checkSheetReady({ ...newPerson, name: '  ' }, null), false);
   const match = checkSheetStart({ ...CHECK_SUGGESTION, person_id: 9 });
   const person = checkSheetPerson(match, CHECK_PEOPLE);
   assert.equal(person.name, 'Mary');
@@ -1040,7 +1043,7 @@ test('the primary button of the sheet Check follows the person', () => {
   assert.equal(checkSheetLabel(one, person), 'Add 1 Item');
   assert.equal(checkSheetReady({ ...one, recipients: [] }, person), false);
   // A new person shows no flag on its rows.
-  assert.ok(!addToRows(fresh, null).flatMap((g) => g.rows).some((r) => r.lines.includes('New')));
+  assert.ok(!addToRows(newPerson, null).flatMap((g) => g.rows).some((r) => r.lines.includes('New')));
 });
 
 const CORRECT_PERSON = {
@@ -1101,11 +1104,14 @@ test('the change line of a correction names the selected changes', () => {
   assert.equal(changeLine({ operation: op, feeds: [{}, {}] }, 'Hey'), 'Correct the Nostr key, the payment address and the picture and the information address of Hey in 2 feeds');
 });
 
-test('the sheet Add to a Person of a payee starts on a new person with the name of the payee', () => {
+test('the sheet Add to a Person of a payee asks for a person first', () => {
   const start = walletToPersonStart('DuhLaurien');
-  assert.deepEqual(start, { personId: NEW_PERSON, name: 'DuhLaurien' });
-  assert.equal(walletToPersonLabel(start), 'Make the Person');
-  assert.equal(walletToPersonReady({ ...start, name: ' ' }), false);
+  assert.deepEqual(start, { personId: SELECT_PERSON, name: 'DuhLaurien' });
+  assert.equal(walletToPersonLabel(start), 'Add the Wallet');
+  assert.equal(walletToPersonReady(start), false);
+  const newPerson = { ...start, personId: NEW_PERSON };
+  assert.equal(walletToPersonLabel(newPerson), 'Make the Person');
+  assert.equal(walletToPersonReady({ ...newPerson, name: ' ' }), false);
   assert.equal(walletToPersonLabel({ ...start, personId: '4' }), 'Add the Wallet');
   assert.equal(walletToPersonReady({ ...start, personId: '4', name: '' }), true);
 });

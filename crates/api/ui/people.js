@@ -2056,6 +2056,8 @@ export function addItemsBody(state, person) {
 
 // The value of the menu entry "A new person".
 export const NEW_PERSON = 'new';
+// The value of the placeholder "Select a person" (ADR 0218 item 10).
+export const SELECT_PERSON = '';
 
 export const checkSheetTitle = (name) => `Check: ${name}`;
 
@@ -2070,9 +2072,9 @@ export const NEW_MEMBER_HINT = 'The artist or label page of this person. Studio 
 export const NEW_PERSON_HINT = 'Select the items that are this person. Studio changes no feed.';
 
 // The start state of the sheet. The menu starts on `person_id` of the
-// suggestion, else on "A new person". The core finds `person_id`.
+// suggestion, else on "Select a person".
 export function checkSheetStart(suggestion, profiles = null) {
-  const personId = suggestion.person_id === null || suggestion.person_id === undefined ? NEW_PERSON : String(suggestion.person_id);
+  const personId = suggestion.person_id === null || suggestion.person_id === undefined ? SELECT_PERSON : String(suggestion.person_id);
   return { ...makePersonStart(suggestion, profiles), personId };
 }
 
@@ -2083,27 +2085,29 @@ export const checkSheetChoices = (people) => [[NEW_PERSON, 'A new person'], ...p
 export const checkSheetHint = (suggestion, personId) => (
   suggestion.person_id !== null && suggestion.person_id !== undefined && String(suggestion.person_id) === personId ? MATCH_HINT : undefined);
 
-// The person of the menu, or null for "A new person".
-export const checkSheetPerson = (state, people) => (state.personId === NEW_PERSON ? null
+// The person of the menu, or null for "A new person" and "Select a person".
+export const checkSheetPerson = (state, people) => (state.personId === NEW_PERSON || state.personId === SELECT_PERSON ? null
   : (people || []).find((p) => String(p.id) === state.personId) || null);
 
 // The label of the primary button: "Add 1 Item" or "Add N Items" for a person,
-// else "Make the Person".
-export const checkSheetLabel = (state, person) => (person ? addItemsLabel(addSelectedCount(state, person)) : 'Make the Person');
+// "Add the Items" with no selection, else "Make the Person".
+export const checkSheetLabel = (state, person) => (person ? addItemsLabel(addSelectedCount(state, person))
+  : state.personId === SELECT_PERSON ? 'Add the Items' : 'Make the Person');
 
 // True when the primary button works: a person with one new selected item,
-// or a new person with a name.
-export const checkSheetReady = (state, person) => (person ? addSelectedCount(state, person) > 0 : trimmed(state.name) !== '');
+// or a new person with a name. With no selection, it is false.
+export const checkSheetReady = (state, person) => (person ? addSelectedCount(state, person) > 0
+  : state.personId === SELECT_PERSON ? false : trimmed(state.name) !== '');
 
 // ---- The sheet "Add to a Person: {name}" of a payee (ADR 0111 item 8) ----
 
 export const WALLET_TO_PERSON_HINT = 'Studio keeps this wallet with the person. Studio changes no feed.';
 
-// The start state: "A new person" with the name of the payee.
-export const walletToPersonStart = (name) => ({ personId: NEW_PERSON, name: String(name ?? '') });
+// The start state: "Select a person", with the name of the payee for a new person.
+export const walletToPersonStart = (name) => ({ personId: SELECT_PERSON, name: String(name ?? '') });
 
 // True when the primary button works.
-export const walletToPersonReady = (state) => state.personId !== NEW_PERSON || trimmed(state.name) !== '';
+export const walletToPersonReady = (state) => state.personId !== SELECT_PERSON && (state.personId !== NEW_PERSON || trimmed(state.name) !== '');
 
 // The label of the primary button.
 export const walletToPersonLabel = (state) => (state.personId === NEW_PERSON ? 'Make the Person' : 'Add the Wallet');

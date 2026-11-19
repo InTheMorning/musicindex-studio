@@ -2,7 +2,7 @@
 
 Decision: [ADR 0218](../adr/0218-a-page-link-in-review-and-a-suggestion-starts-with-no-person.md) items 10 to 14. [ADR 0203](../adr/0203-people.md) items 38 to 42.
 
-Status: Open.
+Status: Complete.
 
 ## Problem
 
@@ -52,3 +52,11 @@ Visual, by the main session with screenshots (`.studio-dev/journeys/j07.json` as
 - Write each comment and text in Simplified Technical English: `/home/citizen/.agents/skills/asd-ste100/SKILL.md`.
 - Do not commit. Leave the change in the working tree and report the changed files and the check results.
 - Do not make an architecture decision. When the ADR does not answer a question, stop and report.
+
+## Result
+
+- ChatGPT (`gpt-6-luna`, effort `medium`) did the change. The main session corrected four comments in `people.js`.
+- `people.js` has the value `SELECT_PERSON` (the empty text). The check sheet and the payee sheet start on it, as items 10 and 13 of ADR 0218 tell.
+- With "Select a person", the check sheet shows the menu and **Hide This Suggestion** only. **Add the Items** is disabled.
+- The tests in `people.test.mjs` examine the start, the label and the ready state of the two sheets.
+- Screenshots of the main session use `.studio-dev/journeys/v176a.json` with the data `base`. They show the note of the fold. They also show the sheet "Check: The Doerfels" on "Select a person" and after "A new person", at 1280 px and 390 px.

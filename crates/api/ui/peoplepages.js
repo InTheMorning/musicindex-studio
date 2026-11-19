@@ -26,7 +26,7 @@ import {
   changeSetView, linkReady, profileLine, resolveBody, profileMap, withProfiles, keyRow, profileAddressNote,
   personChoices, addToTitle, ADD_TO_HINT, addToRows, addItemsBody, MORE_HINT,
   NEW_MEMBER_HINT, NEW_PERSON_HINT, checkSheetTitle, checkSheetStart, checkSheetChoices, checkSheetHint, checkSheetPerson,
-  checkSheetLabel, checkSheetReady, NEW_PERSON, WALLET_TO_PERSON_HINT, walletToPersonStart, walletToPersonReady,
+  checkSheetLabel, checkSheetReady, NEW_PERSON, SELECT_PERSON, WALLET_TO_PERSON_HINT, walletToPersonStart, walletToPersonReady,
   walletToPersonLabel, correctCount, correctButtonLabel, correctTitle, correctFeedIds, correctStart, correctKeyStart, correctOptions,
   correctKeyChoices, correctBody, correctAnySelected, correctRows, CORRECT_OMITTED, CORRECT_EMPTY,
   moreRows, NO_OTHER_TEXT, mergeTitle, mergeHint, mergeLinks, mergeResult, mergeBody, afterMissing,
@@ -208,7 +208,7 @@ export function PeoplePage({ feeds, go, sort, reversed, onOrder }) {
     })}<//></section>`,
     // Each list folds (ADR 0146 item 10). A search opens the lists that it filters.
     suggestions: () => html`<${PickFold} id="people-suggestions" title="Suggestions from your feeds"
-      note="Studio found these names in your feeds. Check each one, then make a person."
+      note="Each name is a credit in your feeds. Add it to a person that you have. Make a new person only for a person that is not in the list."
       rows=${data.suggestions.map((suggestion) => {
         const row = suggestionRow(suggestion);
         return html`<${ListRow} key=${suggestion.identity} title=${row.title} lines=${row.lines} count="Check" roving=${true}
@@ -342,16 +342,16 @@ function CheckSuggestionForm({ suggestion, people, feeds, titles, go, onCancel, 
     </header>
     <div class="body">
       <div class="group rows">
-        <${ChoiceSelect} id="check-person" label="Person" value=${state.personId} options=${checkSheetChoices(people)}
+        <${ChoiceSelect} id="check-person" label="Person" value=${state.personId} placeholder="Select a person" options=${checkSheetChoices(people)}
           hint=${checkSheetHint(suggestion, state.personId)} onChange=${(personId) => setState({ ...state, personId })} />
-        ${!person && html`<${Field} id="check-name" label="Name" required value=${state.name}
+        ${state.personId === NEW_PERSON && html`<${Field} id="check-name" label="Name" required value=${state.name}
           onInput=${(e) => setState({ ...state, name: e.target.value })} />
           <${ChoiceSelect} id="check-member" label="Link to an artist or label page" value=${state.memberOf} placeholder="None"
             hint=${NEW_MEMBER_HINT} options=${linkChoices(feeds)} onChange=${(memberOf) => setState({ ...state, memberOf })} />`}
       </div>
-      ${groups.map((g) => html`<section class="page-section" key=${g.group}><h2>${g.title}</h2>
+      ${state.personId !== SELECT_PERSON && groups.map((g) => html`<section class="page-section" key=${g.group}><h2>${g.title}</h2>
         <div class="group rows">${g.rows.map(rowView)}</div></section>`)}
-      <p class="hint">${person ? ADD_TO_HINT : NEW_PERSON_HINT}</p>
+      ${state.personId !== SELECT_PERSON && html`<p class="hint">${person ? ADD_TO_HINT : NEW_PERSON_HINT}</p>`}
       <${ErrorNotice} error=${error} />
     </div>
     <footer>
@@ -1654,7 +1654,7 @@ function WalletPersonForm({ recipient, go, onCancel }) {
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${onCancel}>✕</button>
     </header>
     <div class="body">
-      <div class="group rows"><${ChoiceSelect} id="wallet-person" label="Person" value=${state.personId}
+      <div class="group rows"><${ChoiceSelect} id="wallet-person" label="Person" value=${state.personId} placeholder="Select a person"
           options=${checkSheetChoices(people || [])} onChange=${(personId) => setState({ ...state, personId })} />
         ${state.personId === NEW_PERSON && html`<${Field} id="wallet-person-name" label="Name" required value=${state.name}
           onInput=${(e) => setState({ ...state, name: e.target.value })} />`}</div>

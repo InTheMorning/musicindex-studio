@@ -23,7 +23,7 @@ export const CHECK_UNREADABLE = 'Studio could not read this address.';
 // The text of the page before the first answer.
 export const CHECK_READING = 'Studio is reading the addresses of this feed.';
 
-const LEVELS = { warning: 'Warning', notice: 'Notice', question: 'Question' };
+const LEVELS = { stop: 'Stops the write', warning: 'Warning', notice: 'Notice', question: 'Question' };
 
 // The texts of the sheet of **Show What to Do** (ADR 0175 item 8).
 export const COPY_SHEET_TEXT = {
@@ -122,7 +122,7 @@ export const OPEN_ACTIONS = ['open-track', 'open-tracks', 'open-cover', 'open-re
 // (ADR 0219 items 6 to 8).
 export function releaseChecklist(check) {
   if (!check || !Array.isArray(check.findings)) return null;
-  const kinds = ['no_tracks', 'no_cover', 'no_audio_file', 'no_recipient'];
+  const kinds = ['no_tracks', 'no_cover', 'no_audio_file', 'no_recipient', 'no_artist_page'];
   const findings = check.findings.filter((finding) => kinds.includes(finding.kind));
   if (findings.length === 0) return null;
   const first = (kind) => findings.find((finding) => finding.kind === kind);
@@ -132,6 +132,7 @@ export function releaseChecklist(check) {
     { label: 'Cover image', finding: first('no_cover') },
     { label: noAudio > 1 ? `${noAudio} tracks have no audio file` : 'Audio file of each track', finding: first('no_audio_file') },
     { label: 'Payment recipient', finding: first('no_recipient') },
+    { label: 'Artist page', finding: first('no_artist_page') },
   ].map(({ label, finding }) => ({
     label,
     mark: finding ? 'cross' : 'check',
@@ -169,7 +170,7 @@ export function findingKey(finding) {
 export function checkRows(check) {
   if (!check || !Array.isArray(check.findings)) return [];
   return check.findings.map((finding, index) => ({ finding, index })).sort((a, b) => {
-    const rank = { warning: 0, notice: 1, question: 2 };
+    const rank = { stop: 0, warning: 1, notice: 2, question: 3 };
     return (rank[a.finding.level] ?? 1) - (rank[b.finding.level] ?? 1) || a.index - b.index;
   }).map(({ finding }) => {
     if (finding.kind === 'copy_other_recipients') return {
@@ -189,6 +190,7 @@ export function checkRows(check) {
       key: findingKey(finding),
       level: LEVELS[finding.level] || finding.level,
       warning: finding.level === 'warning',
+      stop: finding.level === 'stop',
       title: finding.title,
       reason: finding.reason,
       button: usable ? label : null,

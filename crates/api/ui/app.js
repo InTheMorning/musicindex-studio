@@ -20,7 +20,7 @@ import {
   prfOutputOf, passkeyBrowserCode, defaultPasskeyName,
   nip46State, nip46ErrorText, isBunkerAddress, qrSource, UNLOCK_AGAIN_TEXT, needsRecentUnlock,
 } from './account.js';
-import { addChoices, MAKE_TYPES, RELEASE_KINDS, makeFields, makeTitle, feedFileStart, startChoices } from './addfeeds.js';
+import { addChoices, MAKE_TYPES, RELEASE_KINDS, makeFields, makeTitle, feedFileStart, startChoices, shouldAddTracksAfterNewRelease } from './addfeeds.js';
 import { WELCOME, HOST_STEP, showWelcome, welcomeSteps, pathTexts, hostStepModel, welcomeBody, releaseAdd, libraryResult } from './welcome.js';
 import { isLiveItem } from './live.js';
 import { appRowLines, pairingPhase, pairingNotice, doneRemovesApp } from './apps.js';
@@ -1482,7 +1482,7 @@ function MakeFeedForm({ connectors, feeds, startType, start = {}, onAdded, onKin
         body.publisher_id = start.publisher_id;
       }
       if (showFrom && from) body.from = Number(from);
-      onAdded(await api('/feeds/new', { method: 'POST', body }));
+      onAdded(await api('/feeds/new', { method: 'POST', body }), { type, from });
     });
   };
   const ready = connectorId !== null && path.trim() && title.trim()
@@ -1872,7 +1872,7 @@ function useNarrow() {
 }
 
 // The back and forward state of the shell, for each Bar (ADR 0039 item 9).
-const NavContext = createContext(null);
+export const NavContext = createContext(null);
 
 // The toolbar of a screen. Each screen gives its own content, such as a
 // title or a breadcrumb, after the back control. The root page has no back
@@ -2301,7 +2301,10 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
   // The open actions of a finding, for the checklist and for the Check page
   // (ADR 0219 items 3 and 7). `row` is a row of `checkRows`.
   const openFinding = (row) => {
-    if (row.action === 'open-tracks') onAdding(true);
+    if (row.action === 'open-pages') {
+      go({ name: 'feed', id: feed.id, page: 'album' });
+      setTimeout(() => document.getElementById('linked-artist-and-label-pages')?.scrollIntoView({ block: 'center' }), 50);
+    } else if (row.action === 'open-tracks') onAdding(true);
     else if (row.action === 'open-cover') setArtwork({ kind: 'feed' });
     else if (row.action === 'open-track') go({ name: 'feed', id: feed.id, page: 'track', track: row.track });
     else if (row.action === 'open-recipient') {
@@ -3488,9 +3491,9 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
   const headFeed = inGroup && head && head.id !== null ? feeds.find((f) => f.id === head.id) : null;
   const more = releaseAdd(headFeed, headFeed && headFeed.title);
   const [adding, setAdding] = useState(false);
-  const addedRelease = (f) => {
+  const addedRelease = (f, makeInfo) => {
     setAdding(false);
-    onAddedFeed(f);
+    onAddedFeed(f, makeInfo);
   };
   // A feed group keeps its own sort and direction (ADR 0085 item 8).
   const pickSort = (id, reversed) => {
@@ -3758,6 +3761,7 @@ function Shell({ vault, onLock, version }) {
   const [adding, setAdding] = useState(false);
   // The import sheet, by the left panel and by the album page (task 018d).
   const [importing, setImporting] = useState(false);
+  const [pendingAddTracks, setPendingAddTracks] = useState(null);
   const coarse = useMedia('(pointer: coarse)');
   // The scroll area of the page. Each new view starts at its own scroll.
   const mainRef = useRef(null);
@@ -4019,7 +4023,16 @@ function Shell({ vault, onLock, version }) {
   }, [draftFeedId, draft.draftState]);
   // A different feed closes the Add a track sheet and the import sheet of
   // the feed before it.
-  useEffect(() => { setAdding(false); setImporting(false); }, [draftFeedId]);
+  useEffect(() => {
+    setAdding(false);
+    setImporting(false);
+    // A new release with no track opens the import sheet "Add tracks"
+    // (ADR 0224 item 7).
+    if (pendingAddTracks === draftFeedId) {
+      setImporting(true);
+      setPendingAddTracks(null);
+    }
+  }, [draftFeedId]);
   const collection = useCollectionMark();
   // The Releases page checks again each time it opens (ADR 0165 item 5).
   const releasesOpened = useRef({ shown: false, count: 0 });
@@ -4033,7 +4046,11 @@ function Shell({ vault, onLock, version }) {
   });
 
   // A new feed opens its page. The list is loaded before the page opens.
-  const addedFeed = async (f) => { await load(); go(f ? { name: 'feed', id: f.id } : { name: 'releases' }); };
+  const addedFeed = async (f, makeInfo) => {
+    await load();
+    if (f && makeInfo && shouldAddTracksAfterNewRelease(makeInfo.type, makeInfo.from)) setPendingAddTracks(f.id);
+    go(f ? { name: 'feed', id: f.id } : { name: 'releases' });
+  };
   let main;
   // A screen with no bar of its own gets one.
   const withBar = (content) => html`<div><${Bar}><span class="bar-title">Studio</span><//>${content}</div>`;
@@ -4086,7 +4103,9 @@ function Shell({ vault, onLock, version }) {
   }
 
   const navValue = { coarse, canBack: canBack(nav), canForward: canForward(nav), back, forward, setLeaveGuard,
-    rootButtons: showsRootButtons(nav, narrow), toRoot, go };
+    rootButtons: showsRootButtons(nav, narrow), toRoot, go,
+    // A new release opens with the import sheet "Add tracks" (ADR 0224 item 7).
+    addTracksNext: setPendingAddTracks };
   const panelProps = { panel, draft, changedFeeds, go, showReleases, onAdding: setAdding, onImporting: setImporting, onLock: lock };
   return html`<${NavContext.Provider} value=${navValue}><${OutsideContext.Provider} value=${outsideValue}><div class="shell">
     ${!narrow && html`<nav class="sidebar" aria-label="Collection">

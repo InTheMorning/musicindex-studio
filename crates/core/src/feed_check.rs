@@ -64,6 +64,8 @@ pub enum FindingKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FindingLevel {
+    /// Review refuses the write until the user repairs it.
+    Stop,
     /// Money can go to other people. The user cannot repair it.
     Warning,
     /// The finding has a repair or a button that opens the field.
@@ -233,7 +235,7 @@ pub fn check(feed: &Feed, facts: &Facts) -> Vec<Finding> {
         };
         found.push(Finding {
             kind,
-            level: FindingLevel::Notice,
+            level: FindingLevel::Stop,
             title: title.to_owned(),
             reason: reason.to_owned(),
             entry: None,
@@ -667,7 +669,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             finding.level,
-            FindingLevel::Notice,
+            FindingLevel::Stop,
             "ADR 0213 item 19: show Link a Page as a repair"
         );
         assert_eq!(
@@ -709,6 +711,7 @@ mod tests {
             Some(PageRefusal::NoPublisherPage),
             "ADR 0213 item 17: a show without a publisher link needs one"
         );
+        assert_eq!(check(&show, &Facts::default())[0].level, FindingLevel::Stop);
         show.publisher = Some(Publisher {
             remote_items: vec![publisher_link("label")],
         });
@@ -724,6 +727,10 @@ mod tests {
             page_refusal(&playlist),
             Some(PageRefusal::NoPublisherPage),
             "ADR 0213 item 17: musicL without a publisher link needs one"
+        );
+        assert_eq!(
+            check(&playlist, &Facts::default())[0].level,
+            FindingLevel::Stop
         );
         playlist.publisher = Some(Publisher {
             remote_items: vec![publisher_link("hosting")],

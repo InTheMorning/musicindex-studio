@@ -2,7 +2,7 @@
 
 Decision: [ADR 0224](../adr/0224-a-finding-that-stops-the-write-and-a-new-release-opens-add-tracks.md) items 1 to 8.
 
-Status: Open.
+Status: Done. The screenshot visual checks passed.
 
 ## Problem
 
@@ -62,3 +62,10 @@ Visual, by the main session with screenshots at 1280 px and 390 px:
 - Use the exact texts of this task. Do not write a new interface text.
 - Do not commit. Leave the change in the working tree and report the changed files and the check results.
 - Do not make an architecture decision. When this task does not answer a question, stop and report.
+
+## Result
+
+- The delegate run opened the sheet "Add a track from an address" (`adding`). The main session changed it to the import sheet "Add tracks" (`importing`).
+- The artist page has its own `addedFeed` in `editor.js`, and the delegate run did not change it. The main session added `addTracksNext` to the navigation context. The shell and the artist page call it before they open the new release.
+- Walks: `.studio-dev/journeys/v190a.json` and `v190b.json` (mode `fresh`, 1280 px and 390 px), and `v190c.json` (mode `base`, release "Loose Single").
+

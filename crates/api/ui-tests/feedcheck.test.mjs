@@ -12,14 +12,14 @@ const finding = (kind, repair, extra = {}) => ({
   kind, level: 'notice', title: `T ${kind}`, reason: `R ${kind}`, entry: null, repair, url: null, ...extra,
 });
 
-test('the release checklist uses the four finding kinds and their existing actions', () => {
+test('the release checklist uses the five finding kinds and their existing actions', () => {
   const owner = 'ADR 0219 items 6 to 8: check releaseChecklist in feedcheck.js.';
   assert.equal(releaseChecklist(check([])), null, owner);
   const one = releaseChecklist(check([finding('no_tracks', 'add_tracks')]));
   assert.equal(one.title, 'This release needs 1 thing', owner);
   assert.deepEqual(one.rows.map((row) => [row.label, row.mark, row.open?.button ?? null]), [
     ['Tracks', 'cross', 'Add Tracks'], ['Cover image', 'check', null],
-    ['Audio file of each track', 'check', null], ['Payment recipient', 'check', null],
+    ['Audio file of each track', 'check', null], ['Payment recipient', 'check', null], ['Artist page', 'check', null],
   ], owner);
   const many = releaseChecklist(check([
     finding('no_tracks', 'add_tracks'), finding('no_cover', 'add_a_cover'),
@@ -30,9 +30,18 @@ test('the release checklist uses the four finding kinds and their existing actio
   assert.equal(many.title, 'This release needs 4 things', owner);
   assert.deepEqual(many.rows.map((row) => [row.label, row.mark, row.open?.button ?? null]), [
     ['Tracks', 'cross', 'Add Tracks'], ['Cover image', 'cross', 'Add a Cover'],
-    ['2 tracks have no audio file', 'cross', 'Open the Track'], ['Payment recipient', 'cross', 'Add a Recipient'],
+    ['2 tracks have no audio file', 'cross', 'Open the Track'], ['Payment recipient', 'cross', 'Add a Recipient'], ['Artist page', 'check', null],
   ], owner);
   assert.equal(many.rows[2].open.track, 'track-1', owner);
+});
+
+test('an artist page finding adds a checklist row', () => {
+  const checklist = releaseChecklist(check([finding('no_artist_page', 'link_a_page')]));
+  assert.equal(checklist.title, 'This release needs 1 thing');
+  assert.deepEqual(checklist.rows.map((row) => [row.label, row.mark, row.open?.button ?? null]), [
+    ['Tracks', 'check', null], ['Cover image', 'check', null], ['Audio file of each track', 'check', null],
+    ['Payment recipient', 'check', null], ['Artist page', 'cross', 'Link a Page'],
+  ]);
 });
 
 test('the payment page address mark uses wrong address findings', () => {
@@ -109,6 +118,14 @@ test('warning rows come first and the count includes them', () => {
   ]));
   assert.deepEqual(rows.map((row) => row.level), ['Warning', 'Notice', 'Notice', 'Question'], owner);
   assert.equal(checkCount(check([finding('copy_other_recipients', null, { level: 'warning' })])), 1, owner);
+});
+
+test('stop findings come first and stop the write', () => {
+  const rows = checkRows(check([
+    finding('no_self_link', 'add_the_link'),
+    finding('no_artist_page', 'link_a_page', { level: 'stop' }),
+  ]));
+  assert.deepEqual([rows[0].level, rows[0].stop, rows[0].button], ['Stops the write', true, 'Link a Page']);
 });
 
 test('read-only index findings keep their two sheet actions', () => {

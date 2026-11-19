@@ -2139,6 +2139,7 @@ button.outline-feed {
 .host-op-row { display: flex; align-items: center; gap: 12px; min-height: var(--row); padding: 10px 16px; flex-wrap: wrap; }
 .host-op-row .kind { flex: none; width: 5.5rem; font-weight: 600; }
 .host-op-row .kind.warning { color: var(--error); }
+.kind.stop { color: var(--error); }
 .host-op-row.warning { color: var(--warning); }
 .host-op-row.warning .kind { color: var(--warning); width: auto; white-space: nowrap; }
 .host-op-row.warning .kind svg { width: 16px; height: 16px; vertical-align: -3px; margin-inline-end: 4px; }

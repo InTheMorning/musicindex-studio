@@ -5,7 +5,7 @@
 import { html, useState, useEffect, useRef, createContext, useContext } from './vendor/htm-preact-standalone.module.js';
 import { CONFIRMS } from './confirms.js';
 import { VIEWS, VIEW_LABELS, VIEW_HINTS, normalizeView, shownLines, localTimeNote, runs, commonIndent, stripIndent, moreLabel, fieldRows, guardRow, changeKeys, MERGE_TITLE, MERGE_INTRO, MERGE_HEADINGS, mergeRows, mergeReady, showsExamine, streamProblemRows } from './review.js';
-import { LoadErrorNotice, onSegmentKey, dropAreaClass, useFileDrop, api, saveTicket, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ChoiceSelect, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext, Icon, AddFeedRowSheet, inDesktopApp } from './app.js';
+import { LoadErrorNotice, onSegmentKey, dropAreaClass, useFileDrop, api, saveTicket, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ChoiceSelect, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext, Icon, AddFeedRowSheet, inDesktopApp, NavContext } from './app.js';
 import { AlbumPayments, TrackPayments } from './values.js';
 import { PickerLayout, PickFillRow, FindOneSheet, PickFold, TakenTag, useFieldList } from './pickers.js';
 import { PersonArt, useProfiles } from './peoplepages.js';
@@ -32,7 +32,7 @@ import { coverOf, coverConflict } from './cover.js';
 import { platformBlocks } from './listing.js';
 import { deleteWrite } from './feeddelete.js';
 import { pageSequence } from './pages.js';
-import { RELEASE_KINDS, releaseKindOptions } from './addfeeds.js';
+import { RELEASE_KINDS, releaseKindOptions, shouldAddTracksAfterNewRelease } from './addfeeds.js';
 import { nextStep, firstStart, releaseAdd, releaseArtistChoices, FIRST_STEPS, HOST_STEP } from './welcome.js';
 import {
   fileState, fileStatus, canDownloadToDevice, canCopyFile, missingCount, missingNotice, reviewNotice, dayText,
@@ -3906,6 +3906,7 @@ const PUBLISHER_ROLE_TEXT = 'Select the role of this feed first.';
 // so the page loads both drafts and names each release that changed.
 function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChanged, onArtwork, onRemoved, connectors }) {
   const field = (name) => (value) => update((m) => set(m, name, value));
+  const nav = useContext(NavContext);
   const roleAction = useAction();
   const linkAction = useAction();
   // The feeds whose draft the last link or role change altered.
@@ -4086,7 +4087,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
   // of this feed before its page opens (ADR 0164 item 3). When the link
   // fails, this page stays and shows the error.
   const first = nextStep(feed);
-  const addedFeed = async (f) => {
+  const addedFeed = async (f, makeInfo) => {
     const linkedByNewFeedRoute = addOpen === 'release-form' || (addOpen === 'album' && first === 'album');
     if (f && !readOnly && !linkedByNewFeedRoute && ['music', 'musicl'].includes(mediumOf(f))) {
       const done = await twoDrafts(linkAction, async () => (await api(`/feeds/${feed.id}/links`, {
@@ -4097,6 +4098,8 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
     } else {
       await onListChanged();
     }
+    // A new release with no track opens the import sheet (ADR 0224 item 7).
+    if (f && makeInfo && nav && shouldAddTracksAfterNewRelease(makeInfo.type, makeInfo.from)) nav.addTracksNext(f.id);
     go(f ? { name: 'feed', id: f.id } : { name: 'releases' });
   };
   const artistChoices = releaseArtistChoices(feeds);
@@ -4977,15 +4980,10 @@ function CheckPage({ feed, model, check, go, onOpenFinding }) {
     };
     setTimeout(focus, 0);
   };
-  const openLinkedPages = () => {
-    go({ name: 'feed', id: feed.id, page: 'album' });
-    setTimeout(() => document.getElementById('linked-artist-and-label-pages')?.scrollIntoView({ block: 'center' }), 50);
-  };
   const press = (row) => {
     if (row.action === 'repair') check.repair(row);
     else if (row.action === 'open-language') openLanguage();
-    else if (row.action === 'open-pages') openLinkedPages();
-    else if (OPEN_ACTIONS.includes(row.action)) onOpenFinding(row);
+    else if (row.action === 'open-pages' || OPEN_ACTIONS.includes(row.action)) onOpenFinding(row);
     else if (row.action === 'show-copy' || row.action === 'show-ways') { setCopied(false); setSheet(row); }
   };
   const closeSheet = () => setSheet(null);
@@ -5003,7 +5001,7 @@ function CheckPage({ feed, model, check, go, onOpenFinding }) {
       ${texts.none && html`<p class="hint">${texts.none}</p>`}
       ${rows.length > 0 && html`<div class="group host-ops">
         ${rows.map((row) => html`<div class="host-op-row" key=${row.key}>
-          <span class=${`kind${row.warning ? ' warning' : ''}`}>${row.level}</span>
+          <span class=${`kind${row.warning ? ' warning' : ''}${row.stop ? ' stop' : ''}`}>${row.level}</span>
           <span class="text">
             <span class="title">${row.title}</span>
             <span class="sub">${breakableText(row.reason)}</span>

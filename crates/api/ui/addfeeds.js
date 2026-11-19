@@ -98,3 +98,8 @@ export function startChoices(feeds) {
   albums.sort((a, b) => compareNames(a[1], b[1]));
   return [['', 'Empty album'], ...albums];
 }
+
+// A new album with no source needs its first track at once.
+export function shouldAddTracksAfterNewRelease(type, from) {
+  return type === 'album' && !from;
+}

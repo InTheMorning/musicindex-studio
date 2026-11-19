@@ -223,3 +223,7 @@ More operator choices of 2026-11-19. [ADR 0219](../../adr/0219-a-release-checkli
 - O2: an address in the format of the other type gives a finding, and its button changes the type in the
   draft.
 - The payment form keeps the menu "Type". The menu shows a different address field for each type.
+
+More operator choices of 2026-11-19. [ADR 0220](../../adr/0220-a-release-page-links-its-page-on-music-index.md) owns them.
+
+- O8: the header of a release page links the release on musicindex.org when Music Index holds the feed.

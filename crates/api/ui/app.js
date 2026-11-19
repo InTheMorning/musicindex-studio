@@ -2261,6 +2261,7 @@ function Crumb({ feed, view, draft }) {
 // The toolbar stays in view at each scroll position (ADR 0029 item 1).
 function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importing, onImporting, onChanged, onListChanged, onRemoved, connectors, differences, onRescan }) {
   const { busy, error, run } = useAction();
+  const narrow = useNarrow();
   const [outsideCheck, setOutsideCheck] = useState(null);
   const kind = feedKind(feed);
   // The core moves a draft with no edits to the file that it reads, so the
@@ -2305,6 +2306,7 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
   return html`<div>
     <${Bar}>
       <${Crumb} feed=${feed} view=${view} draft=${draft} />
+      ${narrow && html`<button class="button" type="button" onClick=${() => go({ name: 'outline', id: feed.id, ...(view.from ? { from: view.from } : {}) })}>Sections</button>`}
       <${DraftToolbar} key=${feed.id} feedId=${feed.id} feedConnectorId=${feed.connector_id} draft=${draft} onWritten=${onChanged} connectors=${connectors} feeds=${feeds} onListChanged=${onListChanged}
         onOpenHosts=${() => go({ name: 'hosts' })}
         onOpsChanged=${() => { opsChanged(); reloadFiles(); }} onOpsCleared=${reloadFiles} go=${go} />
@@ -3224,7 +3226,8 @@ function DestinationRow({ item, open }) {
 // roles, then "Not linked" (ADR 0072 item 1, ADR 0085 items 1 and 3). A row
 // opens its destination when `opens` is true. A row below Releases shows the
 // dot of the feed and the number of its releases.
-function destinationRows(top, go) {
+// `between` is a node that shows after the plain rows and before the groups.
+function destinationRows(top, go, between = null) {
   const open = (item) => {
     if (!item.opens) return;
     go(item.group === undefined ? { name: item.id } : { name: 'releases', group: item.group });
@@ -3232,6 +3235,7 @@ function destinationRows(top, go) {
   const row = (item) => html`<${DestinationRow} item=${item} open=${open} />`;
   const groups = top.filter((item) => item.group !== undefined);
   return html`${top.filter((item) => item.group === undefined).map(row)}
+    ${between}
     ${groups.length > 0 && html`<div class="destination-group">${groups.map((item) => html`
       ${item.heading && html`<h2 class="panel-heading">${item.heading}</h2>`}${row(item)}`)}</div>`}`;
 }
@@ -3376,27 +3380,35 @@ function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImp
 // Studio when the vault is open. On a server with a locked vault, Unlock Studio
 // opens the unlock sheet.
 function LeftPanelFooter({ panel, go, onLock }) {
-  return html`<footer>
-    ${panel.bottom.map((item) => (item.id === 'lock'
+  return html`<footer>${panelRows(panel.bottom, go, onLock)}</footer>`;
+}
+
+// The rows of the bottom of the panel: Lock or Unlock Studio, the collection
+// mark and the plain destinations.
+function panelRows(items, go, onLock) {
+  return html`${items.map((item) => (item.id === 'lock'
       ? html`<button class="row" type="button" onClick=${onLock}><${Icon} name=${item.icon} />Lock Studio</button>`
       : item.id === 'unlock'
       ? html`<button class="row" type="button" onClick=${() => { askUnlock(); }}><${Icon} name=${item.icon} />Unlock Studio</button>`
       : item.id === 'collection'
       ? html`<button class="row collection-mark" type="button" onClick=${() => go({ name: 'settings' })}><${Icon} name=${item.icon} /><span class="row-label">${item.label}</span></button>`
       : html`<button class="row" type="button" aria-current=${currentAttr(item)}
-          onClick=${() => { if (item.opens ?? !item.current) go({ name: item.id }); }}><${Icon} name=${item.icon} />${item.label}</button>`))}
-  </footer>`;
+          onClick=${() => { if (item.opens ?? !item.current) go({ name: item.id }); }}><${Icon} name=${item.icon} />${item.label}</button>`))}`;
 }
 
-// The root page of a narrow window (ADR 0039 item 11): the destinations, with
-// Hosts, Settings and Lock Studio at its bottom. It has no back control.
+// The root page of a narrow window (ADR 0223 item 7): the row Releases, then
+// People, File hosts and Settings, then the feed groups, then the collection
+// mark and Lock Studio. It has no back control.
 function RootPage({ panel, go, onLock }) {
+  const fixed = ['people', 'hosts', 'settings'];
+  const fixedRows = panelRows(panel.bottom.filter((item) => fixed.includes(item.id)), go, onLock);
+  const lastRows = html`<${LeftPanelFooter} panel=${{ ...panel, bottom: panel.bottom.filter((item) => !fixed.includes(item.id)) }} go=${go} onLock=${onLock} />`;
   return html`<div class="panel-page">
     <${Bar} back=${false}><span class="bar-title">Studio</span><//>
     <div class="stack-page">
       <header><${Brand} /><${ThemeToggle} /></header>
-      ${destinationRows(panel.top, go)}
-      <${LeftPanelFooter} panel=${panel} go=${go} onLock=${onLock} />
+      ${destinationRows(panel.top, go, fixedRows)}
+      ${lastRows}
     </div>
   </div>`;
 }

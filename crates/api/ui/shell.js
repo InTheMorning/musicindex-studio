@@ -827,10 +827,15 @@ export function narrowStack(view) {
     case 'wallet':
     case 'change-set': return [root, { name: inHosts(view) ? 'hosts' : 'people' }, view];
     case 'check': return [root, { name: 'people' }, { name: 'person', id: view.id }, view];
-    case 'outline': return view.from ? [root, ...levelPages([...view.from.trail, view.from.group]), view] : [root, releases, view];
+    // The feed page is the page below Releases. The outline page is below the
+    // feed page (ADR 0223 item 8).
+    case 'outline': {
+      const feed = { name: 'feed', id: view.id, ...(view.from ? { from: view.from } : {}) };
+      return [...narrowStack(feed), view];
+    }
     case 'feed': return view.from
-      ? [root, ...levelPages([...view.from.trail, view.from.group]), { name: 'outline', id: view.id, from: view.from }, view]
-      : [root, releases, { name: 'outline', id: view.id }, view];
+      ? [root, ...levelPages([...view.from.trail, view.from.group]), view]
+      : [root, releases, view];
     default: return [root, view];
   }
 }
@@ -841,10 +846,10 @@ function levelPages(trail) {
   return list.map((group, i) => ({ name: 'releases', group, trail: list.slice(0, i) }));
 }
 
-// The view of a feed on Releases. At narrow width the selection opens the
-// outline of the feed first (ADR 0039 item 11a).
+// The view of a feed on Releases. It is the feed view at each width
+// (ADR 0223 item 8). The narrow page of the feed has the button Sections.
 export function openFeedView(id, narrow, from) {
-  const view = narrow ? { name: 'outline', id } : { name: 'feed', id };
+  const view = { name: 'feed', id };
   return from ? { ...view, from } : view;
 }
 

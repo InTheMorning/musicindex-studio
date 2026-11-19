@@ -340,13 +340,13 @@ test('the narrow stack gives the root page below each view (ADR 0039 item 11)', 
   assert.deepEqual(narrowStack({ name: 'change-set', id: 3 }), [root, { name: 'people' }, { name: 'change-set', id: 3 }]);
   assert.deepEqual(narrowStack({ name: 'hosts' }), [root, { name: 'hosts' }]);
   assert.deepEqual(narrowStack({ name: 'add-feed' }), [root, releases, { name: 'add-feed' }]);
-  assert.deepEqual(narrowStack({ name: 'outline', id: 1 }), [root, releases, { name: 'outline', id: 1 }]);
+  assert.deepEqual(narrowStack({ name: 'outline', id: 1 }), [root, releases, { name: 'feed', id: 1 }, { name: 'outline', id: 1 }]);
   const feed = { name: 'feed', id: 1, page: 'track', track: 'g-1' };
-  assert.deepEqual(narrowStack(feed), [root, releases, { name: 'outline', id: 1 }, feed]);
+  assert.deepEqual(narrowStack(feed), [root, releases, feed]);
 });
 
-test('a selection on Releases opens the outline at narrow width and the feed at wide width', () => {
-  assert.deepEqual(openFeedView(4, true), { name: 'outline', id: 4 });
+test('a selection on Releases opens the feed at narrow width and at wide width (ADR 0223 item 8)', () => {
+  assert.deepEqual(openFeedView(4, true), { name: 'feed', id: 4 });
   assert.deepEqual(openFeedView(4, false), { name: 'feed', id: 4 });
 });
 
@@ -370,9 +370,9 @@ test('the root page has no current destination, and gives People, File hosts and
 });
 
 test('Back from the outline marks the feed on Releases, and Back from a part keeps no mark', () => {
-  let nav = { entries: narrowStack({ name: 'feed', id: 1 }), index: 3 };
+  let nav = { entries: narrowStack({ name: 'outline', id: 1 }), index: 3 };
   nav = backNav(nav);
-  assert.equal(nav.entries[nav.index].name, 'outline');
+  assert.equal(nav.entries[nav.index].name, 'feed');
   assert.equal(nav.entries[nav.index - 1].marked, undefined);
   nav = backNav(nav);
   assert.deepEqual(nav.entries[nav.index], { name: 'releases', marked: 1 });
@@ -384,13 +384,13 @@ test('Back from the outline marks the feed on Releases, and Back from a part kee
 test('the root page has no Back, and the outline and the feed have Back', () => {
   assert.equal(canBack({ entries: [{ name: 'root' }], index: 0 }), false);
   assert.equal(canBack({ entries: [{ name: 'outline', id: 1 }], index: 0 }), true);
-  assert.equal(canBack({ entries: narrowStack({ name: 'outline', id: 1 }), index: 2 }), true);
+  assert.equal(canBack({ entries: narrowStack({ name: 'outline', id: 1 }), index: 3 }), true);
 });
 
 test('a width change gives the stack, or the view at wide width', () => {
   const wideNav = startNav({ name: 'feed', id: 2 });
   assert.deepEqual(navAtWidth(wideNav, true), widthNav({ name: 'feed', id: 2 }, true));
-  const narrowNav = { entries: narrowStack({ name: 'feed', id: 2 }), index: 3 };
+  const narrowNav = { entries: narrowStack({ name: 'feed', id: 2 }), index: 2 };
   assert.deepEqual(navAtWidth(narrowNav, false), startNav({ name: 'feed', id: 2 }));
   assert.deepEqual(navAtWidth(narrowNav, true), narrowNav);
   assert.deepEqual(wideView({ name: 'outline', id: 5 }), { name: 'feed', id: 5 });
@@ -699,8 +699,8 @@ test('each level is a page of the narrow stack', () => {
   assert.deepEqual(narrowStack(level), [root, { name: 'releases', group: 40, trail: [] }, { name: 'releases', group: 41, trail: [40] }, level], message);
   const from = { group: 41, trail: [40] };
   const feed = { name: 'feed', id: 51, from };
-  assert.deepEqual(narrowStack(feed), [root, { name: 'releases', group: 40, trail: [] }, { name: 'releases', group: 41, trail: [40] }, { name: 'outline', id: 51, from }, feed], message);
-  assert.deepEqual(openFeedView(51, true, from), { name: 'outline', id: 51, from });
+  assert.deepEqual(narrowStack(feed), [root, { name: 'releases', group: 40, trail: [] }, { name: 'releases', group: 41, trail: [40] }, feed], message);
+  assert.deepEqual(openFeedView(51, true, from), { name: 'feed', id: 51, from });
 });
 
 test('the note of a release leaves out the feeds above and below the level', () => {

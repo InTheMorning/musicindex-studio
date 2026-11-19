@@ -2,7 +2,7 @@
 
 Decision: [ADR 0219](../adr/0219-a-release-checklist-and-a-check-of-the-address-type.md) items 6 to 8 and 10.
 
-Status: Open. It needs task 177.
+Status: Done.
 
 ## Problem
 
@@ -44,6 +44,19 @@ Visual, by the main session with screenshots:
 
 - The release page with the checklist at 1280 px and 390 px, and each button.
 - The payment page with the mark.
+
+## Result
+
+Done on 2026-11-19. A ChatGPT run made the change. The main session corrected it:
+
+- One function `openFinding` in `app.js` opens a finding for the checklist and for the Check page. `OPEN_ACTIONS` in `feedcheck.js` names its four actions.
+- The marks of the checklist have the accessible names "Done" and "Not done".
+- The warning mark is in the name cell of a recipient row. As a fifth cell, it moved the meter and the percentage in the row grid.
+
+Main-session choice: {n} in the checklist title counts the rows with a cross, not the findings. Three tracks with no audio file are one row.
+
+- Mechanical: 851 UI tests and `bash tools/gate.sh` pass. The syntax check of each changed `.js` file passes.
+- Visual, from screenshots at 1280 px and 390 px: the release page shows "This release needs 2 things" with the four rows. **Add a Cover** opens the artwork sheet. **Add Tracks** opens "Add a track from an address". **Add a Recipient** opens the form "Add a Recipient". The payment page shows the warning mark next to the name.
 
 ## Rules for the delegate
 

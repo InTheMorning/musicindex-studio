@@ -1,6 +1,6 @@
 // Music Index Studio UI (ADR 0016). Preact and htm, with no build step.
 import { html, render, useState, useEffect, useLayoutEffect, useCallback, useRef, useContext, createContext } from './vendor/htm-preact-standalone.module.js';
-import { checkCount } from './feedcheck.js';
+import { checkCount, releaseChecklist } from './feedcheck.js';
 import { pageSequence, settingsTabs } from './pages.js';
 import { useFieldList, RowList } from './pickers.js';
 import { UI_SCALES, SCALE_KEY, normalizeScale, measureWindowUnits } from './uiscale.js';
@@ -2268,6 +2268,19 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
   const [artwork, setArtwork] = useState(null);
   // The findings of the check of this feed (ADR 0174).
   const check = useFeedCheck(feed.id, draft);
+  const [addRecipient, setAddRecipient] = useState(false);
+  const checklist = releaseChecklist(check.check);
+  // The open actions of a finding, for the checklist and for the Check page
+  // (ADR 0219 items 3 and 7). `row` is a row of `checkRows`.
+  const openFinding = (row) => {
+    if (row.action === 'open-tracks') onAdding(true);
+    else if (row.action === 'open-cover') setArtwork({ kind: 'feed' });
+    else if (row.action === 'open-track') go({ name: 'feed', id: feed.id, page: 'track', track: row.track });
+    else if (row.action === 'open-recipient') {
+      setAddRecipient(true);
+      go({ name: 'feed', id: feed.id, page: 'recipients' });
+    }
+  };
   return html`<div>
     <${Bar}>
       <${Crumb} feed=${feed} view=${view} draft=${draft} />
@@ -2298,13 +2311,22 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
       </div>`}
       <${AddressDifferences} feed=${feed} />
       <${OutsideNotices} feed=${feed} busy=${busy} refresh=${refresh} onChanged=${onChanged} />
+      ${checklist && html`<section class="release-checklist" aria-labelledby="release-checklist-title">
+        <h2 id="release-checklist-title">${checklist.title}</h2>
+        <ul>${checklist.rows.map((row) => html`<li key=${row.label}>
+          <span class=${`checklist-mark ${row.mark}`} role="img" aria-label=${row.mark === 'check' ? 'Done' : 'Not done'}>${row.mark === 'check' ? '✓' : '×'}</span>
+          <span>${row.label}</span>
+          ${row.open && html`<button class="button" type="button" onClick=${() => openFinding(row.open)}>${row.open.button}</button>`}
+        </li>`)}</ul>
+      </section>`}
     </div>
     <${PageTabs} feed=${feed} view=${view} go=${go} checkCount=${check.count} />
     <${AlbumEditor} key=${feed.id} feed=${feed} feeds=${feeds} draft=${draft} view=${view} go=${go}
       adding=${adding} onAdding=${onAdding} importing=${importing} onImporting=${onImporting} onRemoved=${onRemoved}
       connectors=${connectors} onOpsChanged=${opsChanged} filesReloadKey=${filesReloadKey}
       differences=${differences} onRescan=${onRescan} onListChanged=${onListChanged}
-      artwork=${artwork} onArtwork=${setArtwork} check=${check} />
+      artwork=${artwork} onArtwork=${setArtwork} check=${check} addRecipient=${addRecipient}
+      onAddRecipientOpened=${() => setAddRecipient(false)} onOpenFinding=${openFinding} />
   </div>`;
 }
 

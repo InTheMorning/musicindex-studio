@@ -114,6 +114,43 @@ export function checkCount(check) {
   return check && Array.isArray(check.findings) ? check.findings.length : 0;
 }
 
+// The actions that open a field, a page or a sheet of the release (ADR 0219
+// item 3). The shell does them for the checklist and for the Check page.
+export const OPEN_ACTIONS = ['open-track', 'open-tracks', 'open-cover', 'open-recipient'];
+
+// The four release checklist rows come from the findings of the draft
+// (ADR 0219 items 6 to 8).
+export function releaseChecklist(check) {
+  if (!check || !Array.isArray(check.findings)) return null;
+  const kinds = ['no_tracks', 'no_cover', 'no_audio_file', 'no_recipient'];
+  const findings = check.findings.filter((finding) => kinds.includes(finding.kind));
+  if (findings.length === 0) return null;
+  const first = (kind) => findings.find((finding) => finding.kind === kind);
+  const noAudio = findings.filter((finding) => finding.kind === 'no_audio_file').length;
+  const rows = [
+    { label: 'Tracks', finding: first('no_tracks') },
+    { label: 'Cover image', finding: first('no_cover') },
+    { label: noAudio > 1 ? `${noAudio} tracks have no audio file` : 'Audio file of each track', finding: first('no_audio_file') },
+    { label: 'Payment recipient', finding: first('no_recipient') },
+  ].map(({ label, finding }) => ({
+    label,
+    mark: finding ? 'cross' : 'check',
+    // The row of the Check page for this finding, with its button and its
+    // action, or null (ADR 0219 item 7).
+    open: finding ? checkRows({ findings: [finding] })[0] : null,
+  }));
+  // The title counts the rows with a cross, not the findings: three tracks
+  // with no audio file are one thing that the release needs.
+  const count = rows.filter((row) => row.open).length;
+  return { title: `This release needs ${count} ${count === 1 ? 'thing' : 'things'}`, rows };
+}
+
+// Addresses with a type finding get a warning mark in the payment page.
+export function wrongAddressSet(check) {
+  if (!check || !Array.isArray(check.findings)) return new Set();
+  return new Set(check.findings.filter((finding) => finding.kind === 'wrong_address_type').map((finding) => finding.url));
+}
+
 // The button label of a repair, or null.
 export function repairLabel(repair) {
   return REPAIRS[repair] || null;

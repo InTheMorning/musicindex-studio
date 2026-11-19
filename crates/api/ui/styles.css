@@ -1281,6 +1281,7 @@ select option { background: var(--level-3); color: var(--text); }
   list-style: none;
 }
 .recipient > summary:hover { background: var(--fill-soft); }
+.recipient > summary .title-cell { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .recipient > summary .title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recipient > summary .share { color: var(--muted); font-variant-numeric: tabular-nums; }
 .recipient > summary .address { grid-column: 2 / -1; grid-row: 2; color: var(--muted); font-size: var(--text-callout); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1646,6 +1647,14 @@ select.position:focus { background: var(--fill); }
   .field.setting-row select { grid-column: 2; grid-row: 1 / span 2; margin-top: 0; }
 }
 .feed-head { padding: 16px 32px 20px; max-width: 880px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.release-checklist { padding: 14px 16px; border-radius: 10px; background: var(--fill-soft); }
+.release-checklist h2 { margin: 0 0 8px; font-size: var(--text-body); }
+.release-checklist ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.release-checklist li { display: flex; align-items: center; gap: 8px; min-height: 36px; }
+.release-checklist li .button { margin-left: auto; }
+.checklist-mark { flex: none; width: 20px; text-align: center; font-weight: 700; }
+.checklist-mark.check { color: var(--success); }
+.checklist-mark.cross { color: var(--error); }
 @media (max-width: 760px) {
   .feed-head { padding: 16px 16px 20px; }
 }

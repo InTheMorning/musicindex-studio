@@ -130,7 +130,7 @@ function RecipientAddressActions({ recipient, onChange }) {
 // own inset separator (review of task 014c, defect 3). The rows form two
 // groups: "Recipients", then "Fees" (ADR 0039 item 12). A recipient with
 // fee "true" is in "Fees". The screen sorts each group by split (ADR 0144).
-function Recipients({ id, recipients, defaultType, onChange, openAdd = false, onAddOpened }) {
+function Recipients({ id, recipients, defaultType, onChange, openAdd = false, onAddOpened, wrongAddresses = new Set() }) {
   const percent = percentages(recipients);
   // The sheet of a new recipient or of one address: null when closed, else
   // `{ cid }` with the `_cid` of the row to change, or `{}` for a new row.
@@ -183,7 +183,8 @@ function Recipients({ id, recipients, defaultType, onChange, openAdd = false, on
         onfocusin=${() => setCurrent(listIndex)} onKeyDown=${(event) => onListKey(event, currentIndex, setCurrent)}
         onfocusout=${(e) => { if (!e.currentTarget.contains(e.relatedTarget)) setTimeout(() => setSortAt((n) => n + 1), 200); }}>
         <summary data-list-row="true" tabindex=${currentIndex === listIndex ? 0 : -1} aria-expanded=${String(open)}>
-          <span class="title">${r.name || r.address || 'New recipient'}</span>
+          <span class="title-cell"><span class="title">${r.name || r.address || 'New recipient'}</span>
+            ${r.address && wrongAddresses.has(r.address) && html`<span class="state-mark warning" role="img" aria-label="Wrong address type" title="Wrong address type"><${Icon} name="alert" /></span>`}</span>
           <${Meter} percent=${percent[i]} />
           <span class="share">${percentText(percent[i])}${isFee(r) ? ' fee' : ''}</span>
           <span class="mono address" title=${r.address || null}>${r.address ? (r.recipient_type === 'lnaddress' ? r.address : shortKey(r.address)) : 'No address'}</span>
@@ -508,13 +509,13 @@ const BLANK_BLOCK = { value_type: 'lightning', method: 'keysend', suggested: nul
 // No wrapper: Recipients already returns its rows with no wrapper, and the
 // hints here join them as direct rows of the group (review of task 014c,
 // defect 2 and 3).
-function Payments({ id, blocks, onChange, openAdd = false, onAddOpened }) {
+function Payments({ id, blocks, onChange, openAdd = false, onAddOpened, wrongAddresses }) {
   const block = blocks[0];
   const change = (name) => (value) => onChange(setAt(blocks, 0, set(block, name, value)));
   const splits = block.time_splits.length;
   return html`<${Recipients} id=${id} recipients=${block.recipients}
       defaultType=${block.method === 'lnaddress' ? 'lnaddress' : 'node'} onChange=${change('recipients')}
-      openAdd=${openAdd} onAddOpened=${onAddOpened} />
+      openAdd=${openAdd} onAddOpened=${onAddOpened} wrongAddresses=${wrongAddresses} />
     ${splits > 0 && html`<p class="hint">This payment block has ${splits} value time split${splits === 1 ? '' : 's'}. Studio keeps ${splits === 1 ? 'it' : 'them'} with no change.</p>`}
     ${blocks.length > 1 && html`<p class="hint">This feed has ${blocks.length - 1} more payment block${blocks.length === 2 ? '' : 's'} here. Studio keeps ${blocks.length === 2 ? 'it' : 'them'} with no change.</p>`}`;
 }
@@ -523,7 +524,7 @@ function Payments({ id, blocks, onChange, openAdd = false, onAddOpened }) {
 // disclosure group (ADR 0029 item 9). `editor.js` puts this behind the Value
 // routes link row. A publisher feed has no tracks, so it shows no track hint
 // (ADR 0075).
-export function AlbumPayments({ model, update, openAdd = false, onAddOpened }) {
+export function AlbumPayments({ model, update, openAdd = false, onAddOpened, wrongAddresses }) {
   const onChange = (values) => update((m) => set(m, 'values', values));
   useEffect(() => {
     if (openAdd && model.values.length === 0) onChange(withCids([BLANK_BLOCK]));
@@ -537,7 +538,7 @@ export function AlbumPayments({ model, update, openAdd = false, onAddOpened }) {
         ? html`<p class="hint">This feed has no recipients.</p>
           <button class="link-row add" type="button"
             onClick=${() => onChange(withCids([BLANK_BLOCK]))}><span class="num">＋</span><span class="title">Add recipients</span></button>`
-        : html`<${Payments} id="ch-pay" blocks=${model.values} onChange=${onChange} openAdd=${openAdd} onAddOpened=${onAddOpened} />`}
+        : html`<${Payments} id="ch-pay" blocks=${model.values} onChange=${onChange} openAdd=${openAdd} onAddOpened=${onAddOpened} wrongAddresses=${wrongAddresses} />`}
     </div>
   </section>`;
 }

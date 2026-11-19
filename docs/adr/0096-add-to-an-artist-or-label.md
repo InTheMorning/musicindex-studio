@@ -6,7 +6,7 @@
 - Accepted: 2026-10-31 by the operator.
 - Changed by: [ADR 0099](../archive/adr/0099-the-people-destination-and-the-page-of-a-person.md). Item 18: the operation is "Add to All Releases".
 - Changes: [ADR 0091](../archive/adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md) items 4 and 9, and [ADR 0095](../archive/adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md) items 10 and 14, for the name of the operation "Add to a level".
-- Uses: musicindex ADR 0023 R-CASE-1 (title case on a button) and musicindex ADR 0033 R-WORD-3 (the role words).
+- Uses: musicindex ADR 0085 R-CASE-1 (title case on a button) and musicindex ADR 0033 R-WORD-3 (the role words).
 
 ## Context
 
@@ -43,6 +43,6 @@ The user does not know the meaning of the word "level" on this sheet.
 Mechanical:
 
 - A Node test: `operationTitle({ kind: 'add' })` gives "Add to an artist or label".
-- The test of musicindex ADR 0023 R-CASE-1 accepts the button label "Add to an Artist or Label".
+- The test of musicindex ADR 0085 R-CASE-1 accepts the button label "Add to an Artist or Label".
 
 Visual: the recipient page and the sheet "Add to an artist or label", at 390 px with touch.

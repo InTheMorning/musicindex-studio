@@ -1,4 +1,4 @@
-// The words for a feed that Studio could not read (musicindex ADR 0023
+// The words for a feed that Studio could not read (musicindex ADR 0085
 // R-MSG-1).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -15,7 +15,7 @@ const kinds = [...body.matchAll(/^\s{4}([A-Z][A-Za-z]+),$/gm)]
 test('each kind of the core has a text', () => {
   assert.ok(kinds.length >= 10, `found ${kinds.length} kinds`);
   for (const kind of kinds) {
-    assert.ok(FAIL_TEXT[kind], `musicindex ADR 0023 R-MSG-1: the failure kind ${kind} has no text. Add it to FAIL_TEXT in failures.js.`);
+    assert.ok(FAIL_TEXT[kind], `musicindex ADR 0085 R-MSG-1: the failure kind ${kind} has no text. Add it to FAIL_TEXT in failures.js.`);
   }
 });
 
@@ -36,7 +36,7 @@ test('no line shows the raw message of the core', () => {
   for (const kind of [...kinds, 'a_new_kind']) {
     const line = failedLine({ source: 'https://x.example/f.xml', kind, title: null, url: null, message: 'RAW-LIBRARY-TEXT' });
     assert.ok(!JSON.stringify(line).includes('RAW-LIBRARY-TEXT'),
-      `musicindex ADR 0023 R-MSG-1 item 4: the line of ${kind} shows the raw message.`);
+      `musicindex ADR 0085 R-MSG-1 item 4: the line of ${kind} shows the raw message.`);
   }
 });
 

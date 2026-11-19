@@ -216,7 +216,7 @@ function outlineItems(feed, view, model, narrow, feeds) {
 
 // The tabs of the page of a feed (ADR 0135 items 2 to 6). A track page has no
 // tabs. The page of one live show keeps the tab "Live Shows". The labels use
-// title case (musicindex ADR 0023 R-CASE-1). The tab Check comes before
+// title case (musicindex ADR 0085 R-CASE-1). The tab Check comes before
 // Settings, and its label has the count of the findings (ADR 0174 item 17).
 export function pageTabs(feed, view, checkCount = 0) {
   if (!isEditable(feed) || view.name !== 'feed') return [];

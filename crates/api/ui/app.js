@@ -606,7 +606,7 @@ export function SecretText({ id, name, value, className, label }) {
 }
 
 // One feed that Studio could not read: its name, its site and the reason
-// (musicindex ADR 0023 R-MSG-1).
+// (musicindex ADR 0085 R-MSG-1).
 function FailedLine({ failed }) {
   const line = failedLine(failed);
   return html`<li><strong>${line.name}</strong>${line.site && html` · <span class="mono">${line.site}</span>`}
@@ -5429,7 +5429,7 @@ function Studio({ epoch }) {
 }
 
 // Ask the user to confirm an action with a sheet of Studio (musicindex ADR
-// 0023 R-CONFIRM-1). `entry` is the result of an entry of `CONFIRMS`. The
+// 0085 R-CONFIRM-1). `entry` is the result of an entry of `CONFIRMS`. The
 // promise gives true for the action button, and false for each other close.
 let showConfirm = null;
 export function askConfirm(entry) {

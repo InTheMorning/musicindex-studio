@@ -2278,7 +2278,7 @@ export const lookupGroups = (rows) => LOOKUP_LEVELS
   .filter((group) => group.rows.length > 0);
 
 // The dot class and the type line of a row (ADR 0117 item 4). The count holds
-// releases of each kind, so it says "release" (musicindex ADR 0023 R-WORD-9
+// releases of each kind, so it says "release" (musicindex ADR 0085 R-WORD-9
 // item 5). The row gives no track count of each release. The dot of a
 // role is filled. The dots of the other kinds are hollow.
 export function lookupKind(row) {

@@ -1,4 +1,4 @@
-// The texts of the confirmation sheets (task 057, musicindex ADR 0023
+// The texts of the confirmation sheets (task 057, musicindex ADR 0085
 // R-CONFIRM-1). Each entry gives the title, the text, the action and the
 // role of the action button. `askConfirm` of app.js shows the sheet.
 const destructive = (title, text, action) => ({ title, text, action, role: 'destructive' });

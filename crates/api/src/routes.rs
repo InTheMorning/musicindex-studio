@@ -2510,7 +2510,7 @@ pub(crate) struct Import {
 }
 
 /// One failed read of an import, in the form of a discovery failure. The UI
-/// gives the words for its kind (musicindex ADR 0023 R-MSG-1).
+/// gives the words for its kind (musicindex ADR 0085 R-MSG-1).
 fn failed_json(url: &str, failure: &ReadFailure) -> Value {
     json!({
         "source": url,

@@ -3,7 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-23
 - Owner: operator, with the technical choices of the planning model
-- Changed by: musicindex ADR 0023 R-CASE-1, on 2026-10-25. A button label is title case. [ADR 0010](0010-studio-uses-the-afterglow-direction.md#rules-that-musicindex-replaces) names the change.
+- Changed by: musicindex ADR 0085 R-CASE-1, on 2026-10-25. A button label is title case. [ADR 0010](0010-studio-uses-the-afterglow-direction.md#rules-that-musicindex-replaces) names the change.
 - Changed by: [ADR 0180](0180-the-files-page-has-a-folder-picker-and-one-step-for-each-copy.md). The examples of the action role replace "Move to hostB" and "Reference" with **Use This Copy**.
 
 ## Context

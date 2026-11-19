@@ -1,4 +1,4 @@
-// The title case of the button labels (task 058, musicindex ADR 0023
+// The title case of the button labels (task 058, musicindex ADR 0085
 // R-CASE-1). The test finds each button label in the templates of the UI
 // modules, and in the models that give a label to a button.
 import { test } from 'node:test';
@@ -187,7 +187,7 @@ export function buttonLabels(src) {
 }
 
 function fail(label, where) {
-  return `musicindex ADR 0023 R-CASE-1: the button label "${label}" in ${where} is not in title case. Write "${titleCase(label)}".`;
+  return `musicindex ADR 0085 R-CASE-1: the button label "${label}" in ${where} is not in title case. Write "${titleCase(label)}".`;
 }
 
 test('buttonLabels finds a label, a busy text and a ternary', () => {

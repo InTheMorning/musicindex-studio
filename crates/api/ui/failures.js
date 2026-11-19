@@ -1,6 +1,6 @@
 // The words for a feed that Studio could not read. The core gives the kind,
 // and the UI gives the words, because a message never shows the raw text of
-// a library (musicindex ADR 0023 R-MSG-1). It has no Preact and no browser
+// a library (musicindex ADR 0085 R-MSG-1). It has no Preact and no browser
 // state, so that the Node tests can examine it (ADR 0042).
 
 // The text of each kind. It says what failed and what the user can do

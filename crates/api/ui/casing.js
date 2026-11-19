@@ -1,4 +1,4 @@
-// The title case of a button label (musicindex ADR 0023 R-CASE-1, task 058).
+// The title case of a button label (musicindex ADR 0085 R-CASE-1, task 058).
 // This module is for the test of the labels. The UI does not call it, and
 // each label stays a literal text in its template.
 

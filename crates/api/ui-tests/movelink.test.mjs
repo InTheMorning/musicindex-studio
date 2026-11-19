@@ -57,7 +57,7 @@ test('each repair of the core has a label and a route', () => {
   assert.equal(REPAIRS.remove_tag.label, 'Remove the Tag');
   assert.equal(repairRoute('remove_tag'), 'remove-tag');
   assert.equal(repairRoute('use_public_address'), 'use-public-address');
-  for (const { label } of Object.values(REPAIRS)) assert.ok(isTitleCase(label), `${label} is not in title case (musicindex ADR 0023 R-CASE-1).`);
+  for (const { label } of Object.values(REPAIRS)) assert.ok(isTitleCase(label), `${label} is not in title case (musicindex ADR 0085 R-CASE-1).`);
 });
 
 test('the stage gives what changed on the hosts', () => {

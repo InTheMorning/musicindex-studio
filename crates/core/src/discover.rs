@@ -161,7 +161,7 @@ pub struct Found {
 
 /// Why Studio could not read a feed. The UI gives the words for each kind,
 /// because a message must not show the raw text of a library (musicindex
-/// ADR 0023 R-MSG-1 item 4).
+/// ADR 0085 R-MSG-1 item 4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
@@ -209,7 +209,7 @@ pub struct Failed {
     /// The address that Studio read, when it has one.
     pub url: Option<String>,
     /// The text of the library. The UI does not show it (musicindex ADR
-    /// 0023 R-MSG-1 item 4).
+    /// 0085 R-MSG-1 item 4).
     pub message: String,
 }
 
@@ -619,7 +619,7 @@ mod tests {
 
     /// The human test of 2026-10-29: a release GUID gave an address that
     /// gives a sitemap. The failure names the feed and the reason, not the
-    /// parser text (musicindex ADR 0023 R-MSG-1).
+    /// parser text (musicindex ADR 0085 R-MSG-1).
     #[test]
     fn a_guid_whose_address_gives_no_feed_keeps_its_title_and_address() {
         let server = server();

@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { showsRootButtons, rootNav } from '../ui/shell.js';
+import { showsRootButtons, rootNav, backNav, canBack, canForward } from '../ui/shell.js';
 
 const fix = 'Fix the function in crates/api/ui/shell.js.';
 const nav = (views, index) => ({ entries: views.map((v) => (typeof v === 'string' ? { name: v } : v)), index });
@@ -18,20 +18,28 @@ test('the two root buttons show in a narrow window on each page other than the r
   assert.equal(showsRootButtons(null, true), false);
 });
 
-test('the root action goes back to the root entry and keeps the entries after it', () => {
-  const start = nav(['root', 'releases', { name: 'outline', id: 7 }, { name: 'feed', id: 7, page: 'tracks' }], 3);
+test('the root action adds the root page after the current entry and removes the entries after it', () => {
+  // rc.27 check finding 10: Forward from the root page opened the artist page.
+  const start = nav(['root', 'releases', { name: 'feed', id: 7 }, { name: 'outline', id: 7 }, 'people'], 3);
   const next = rootNav(start);
-  assert.equal(next.index, 0, `musicindex ADR 0080 R-TITLE-1 item 4: the action goes to the root entry. ${fix}`);
-  assert.equal(next.entries[0].name, 'root');
-  assert.equal(next.entries.length, 4,
-    `musicindex ADR 0080 R-TITLE-1 item 4: the stack keeps the pages after the root entry for Forward. ${fix}`);
-  assert.equal(start.index - next.index, 3, 'musicindex ADR 0080 R-TITLE-1 item 4: n is the index of the current entry.');
+  assert.equal(next.index, 4, `musicindex ADR 0080 R-TITLE-1 item 4: the root page is a new entry after the current entry, at its index + 1. ${fix}`);
+  assert.equal(next.entries[4].name, 'root', `musicindex ADR 0080 R-TITLE-1 item 4: the new entry is the root page. ${fix}`);
+  assert.equal(next.entries.length, 5,
+    `musicindex ADR 0080 R-TITLE-1 item 4: the entries after the current entry go, so Forward has no page. ${fix}`);
+  assert.equal(canForward(next), false, `musicindex ADR 0080 R-TITLE-1 item 4: Forward has no page after the action. ${fix}`);
+  assert.deepEqual(backNav(next).entries[backNav(next).index], { name: 'outline', id: 7 },
+    `musicindex ADR 0080 R-TITLE-1 item 4: Back on the new root page opens the page that the person left. ${fix}`);
   assert.equal(start.index, 3, `rootNav must not change its argument. ${fix}`);
 });
 
 test('the root action on the root page does not move', () => {
-  const start = nav(['root', 'releases'], 0);
-  assert.equal(rootNav(start).index, 0);
+  const start = nav(['root', 'releases', 'root'], 2);
+  assert.equal(rootNav(start), start);
+});
+
+test('a root page at a later entry has no back control', () => {
+  assert.equal(canBack(nav(['root', 'releases', 'root'], 2)), false,
+    `musicindex ADR 0080 R-SHELL-2: the root page has no back control, also at a later entry. Fix canBack in crates/api/ui/shell.js.`);
 });
 
 // The order of the bar is in the template of `Bar`, and no Node test renders

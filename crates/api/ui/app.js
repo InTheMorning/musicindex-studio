@@ -3839,26 +3839,16 @@ function Shell({ vault, onLock, version }) {
     });
   };
   // The home button and the title button of a narrow window (musicindex ADR
-  // 0080 R-TITLE-1). When the history agrees with the state, the browser goes
-  // back to the root entry, and `popstate` moves the state. Otherwise the
-  // state moves in place, as `back` does, and the history entry gets the
-  // index of the root.
+  // 0080 R-TITLE-1 items 4 and 5). The root page is a new history entry at
+  // the index of the current entry + 1, so Back opens the page that the person
+  // left, and Forward has no page.
   const toRoot = () => {
-    const current = withScroll();
-    const next = rootNav(current);
-    const steps = current.index - next.index;
-    if (steps <= 0) return;
+    if (rootNav(navRef.current) === navRef.current) return;
     guarded(() => {
-      if (mirrored.current && history.state && history.state.scope === 'shell'
-        && history.state.index === current.index) {
-        // The guard has asked, so `popstate` does not ask again.
-        leaving.current = Boolean(leaveGuard.current);
-        history.go(-steps);
-        return;
-      }
-      commit(rootNav(withScroll()));
-      history.replaceState({ scope: 'shell', index: 0, mirrored: mirrored.current }, '');
-    }, next.entries[next.index]);
+      const next = rootNav(withScroll());
+      commit(next);
+      history.pushState({ scope: 'shell', index: next.index, mirrored: mirrored.current }, '');
+    }, { name: 'root' });
   };
   const forward = () => guarded(() => {
     if (!canForward(nav)) return;

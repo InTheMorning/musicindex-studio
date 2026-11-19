@@ -795,9 +795,12 @@ export function forwardNav(nav) {
 }
 
 // Back is possible above index 0, and from a feed or an outline at index 0.
-// The root page has no Back.
+// The root page has no back control, also at a later entry (musicindex ADR
+// 0080 R-SHELL-2, R-TITLE-1 item 4). The browser Back still leaves it.
 export function canBack(nav) {
-  return nav.index > 0 || isFeedView(nav.entries[nav.index]);
+  const current = nav.entries[nav.index];
+  if (current && current.name === 'root') return false;
+  return nav.index > 0 || isFeedView(current);
 }
 
 // Forward is possible when an entry is after the current one.
@@ -880,18 +883,14 @@ export function showsRootButtons(nav, narrow) {
   return Boolean(view) && view.name !== 'root';
 }
 
-// The state after the home button or the title button (R-TITLE-1 item 4):
-// the stack goes back to the root entry, one `backNav` step at a time, so
-// that each step marks the feed row on Releases as Back does. The entries after the root entry stay
-// for Forward. The count of steps is the `n` of `history.go(-n)`.
+// The state after the home button or the title button (musicindex ADR 0080
+// R-TITLE-1 item 4): the root page is a new entry after the current entry,
+// and the entries after the current entry go. Back then opens the page that
+// the person left, and Forward has no page. On the root page nothing moves.
 export function rootNav(nav) {
-  let next = nav;
-  while (next.index > 0 && next.entries[next.index].name !== 'root') {
-    const stepped = backNav(next);
-    if (stepped.index === next.index) break;
-    next = stepped;
-  }
-  return next;
+  const current = nav.entries[nav.index];
+  if (current && current.name === 'root') return nav;
+  return pushNav(nav, { name: 'root' });
 }
 
 // The navigation state that fits a width. A state that already has the form

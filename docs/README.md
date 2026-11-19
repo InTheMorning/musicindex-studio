@@ -199,6 +199,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0220: A release page links its page on Music Index](adr/0220-a-release-page-links-its-page-on-music-index.md)
 - [ADR 0221: The Welcome page and the first steps](adr/0221-the-welcome-page-and-the-first-steps.md)
 - [ADR 0222: Errors give a step, terms get a hint, and the first run has two stages](adr/0222-errors-give-a-step-terms-get-a-hint-and-the-first-run-has-two-stages.md)
+- [ADR 0223: A split in shares or percent, a release search, and one tap on a phone](adr/0223-a-split-in-shares-or-percent-a-release-search-and-one-tap-on-a-phone.md)
 
 ## Plans
 

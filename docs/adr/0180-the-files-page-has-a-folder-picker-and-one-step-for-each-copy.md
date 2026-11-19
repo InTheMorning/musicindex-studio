@@ -11,6 +11,7 @@
 - Changes: [ADR 0036](0036-library-records-host-inventory-and-host-operations.md) items 8 and 12.
 - Changes: [ADR 0037](0037-button-roles.md), the examples of the action role.
 - Changes: [ADR 0124](0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md) item 3.
+- Changed by: [ADR 0223](0223-a-split-in-shares-or-percent-a-release-search-and-one-tap-on-a-phone.md) item 10, on 2026-11-19. Item 8: the folder dialog also opens from the first-run library sheet.
 - Uses: [ADR 0167](0167-each-release-has-an-editable-library-folder.md) items 1 and 2 for the standard path. [ADR 0105](0105-a-public-server-holds-no-assets.md) for a server with no assets.
 - Source: findings 1, 3 and 5 of the [human checks of 2026-11-11](../reviews/2026-11-11-local-human-test-findings.md).
 

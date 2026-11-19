@@ -7,6 +7,7 @@
 - Revised: 2026-11-15 by operator decision, from the [walk notes of 2026-11-15](../reviews/2026-11-15-walk-notes.md). Item 13 moves the menu "Kind" from the tab **Settings** to the first tab. Item 16 gives the hint of that menu.
 - Technical choices: the planning model selected items 3 to 6, 8, 10 to 16, 19 to 22 and 24 to 27.
 - Changed by: [ADR 0218](0218-a-page-link-in-review-and-a-suggestion-starts-with-no-person.md) items 1 to 9, on 2026-11-19. Items 18, 19 and 21: Review links the page itself, the write button shows disabled, and the finding tells that the write stops.
+- Changed by: [ADR 0223](0223-a-split-in-shares-or-percent-a-release-search-and-one-tap-on-a-phone.md) items 11 and 12, on 2026-11-19. Item 11: a release with no track and no live item has the kind "Release".
 - Changes: [ADR 0212](0212-the-add-pages.md) items 1, 6 to 8: the page "Add a Feed" and its form make no release.
 - Changes: [ADR 0164](0164-the-releases-of-a-publisher-feed-have-an-add-row.md) item 2: only the page of an artist has the add row.
 - Uses: [ADR 0014](0014-collection-in-sqlite.md) for the collection. [ADR 0065](0065-the-core-applies-each-feed-rule.md) for the feed rules. [ADR 0174](0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md) for the findings of the tab **Check**. [ADR 0205](0205-publisher-feeds-announcements-and-show-grants.md) items 5 to 8 for the links of a publisher feed. [ADR 0221](0221-the-welcome-page-and-the-first-steps.md) item 8 for the first-step rows. [ADR 0007](0007-draft-diff-write-and-announce.md) for the review.

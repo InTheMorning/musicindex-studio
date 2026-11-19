@@ -21,7 +21,7 @@ import {
   nip46State, nip46ErrorText, isBunkerAddress, qrSource, UNLOCK_AGAIN_TEXT, needsRecentUnlock,
 } from './account.js';
 import { addChoices, MAKE_TYPES, RELEASE_KINDS, makeFields, makeTitle, feedFileStart, startChoices } from './addfeeds.js';
-import { WELCOME, HOST_STEP, showWelcome, welcomeSteps, pathTexts, hostStepModel, welcomeBody, releaseAdd } from './welcome.js';
+import { WELCOME, HOST_STEP, showWelcome, welcomeSteps, pathTexts, hostStepModel, welcomeBody, releaseAdd, libraryResult } from './welcome.js';
 import { isLiveItem } from './live.js';
 import { appRowLines, pairingPhase, pairingNotice, doneRemovesApp } from './apps.js';
 import { CONFIRMS, confirmButtons } from './confirms.js';
@@ -756,7 +756,7 @@ function ShowRecoveryKey({ recoveryKey, onDone }) {
 
 // `startRoot` is the folder that the form starts with (ADR 0122 item 3). The
 // submit button has the text `submitLabel`.
-function LocalHostForm({ onAdded, startRoot = '', submitLabel = 'Add the Folder' }) {
+function LocalHostForm({ onAdded, startRoot = '', submitLabel = 'Add the Folder', busyLabel = 'Adding…' }) {
   const [name, setName] = useState('');
   const [root, setRoot] = useState(startRoot);
   const [baseUrl, setBaseUrl] = useState('');
@@ -789,13 +789,13 @@ function LocalHostForm({ onAdded, startRoot = '', submitLabel = 'Add the Folder'
       hint="When a web server publishes this folder, Studio uses this address for each feed."
       value=${baseUrl} onInput=${(e) => setBaseUrl(e.target.value)} />
     <${ErrorNotice} error=${hostError.other} />
-    <div class="actions"><button class="button primary" type="submit" disabled=${busy || !root}>${busy ? 'Adding…' : submitLabel}</button></div>
+    <div class="actions"><button class="button primary" type="submit" disabled=${busy || !root}>${busy ? busyLabel : submitLabel}</button></div>
   </form>`;
 }
 
 // The fields of an S3 or R2 bucket (ADR 0046). The secret access key goes
 // to the vault. The form never shows it again.
-function S3HostForm({ onAdded }) {
+function S3HostForm({ onAdded, submitLabel = 'Add the Bucket', busyLabel = 'Testing the Bucket…' }) {
   const [values, setValues] = useState({
     name: '', endpoint: '', region: 'auto', bucket: '', prefix: '',
     url_style: 'path', base_url: '', access_key_id: '', secret_access_key: '',
@@ -899,7 +899,7 @@ function S3HostForm({ onAdded }) {
       hint="Studio keeps this key in your vault."
       value=${values.secret_access_key} onInput=${set('secret_access_key')} />
     ${notice}
-    <div class="actions"><button class="button primary" type="submit" disabled=${busy || !ready}>${busy ? 'Testing the Bucket…' : 'Add the Bucket'}</button></div>
+    <div class="actions"><button class="button primary" type="submit" disabled=${busy || !ready}>${busy ? busyLabel : submitLabel}</button></div>
   </form>`;
 }
 
@@ -907,7 +907,7 @@ function S3HostForm({ onAdded }) {
 // gets its host key fingerprint. Step 2 shows the fingerprint. Studio adds
 // the host only after the user accepts it. After the add, Studio does not
 // show a secret again.
-function SftpHostForm({ onAdded }) {
+function SftpHostForm({ onAdded, submitLabel = 'Accept and Add the Server', busyLabel = 'Adding…' }) {
   const [values, setValues] = useState({
     name: '', host: '', port: '22', user: '', root: '', base_url: '',
     login: 'key', private_key: '', passphrase: '', password: '',
@@ -1001,7 +1001,7 @@ function SftpHostForm({ onAdded }) {
       <p class="mono" aria-label="Host key fingerprint">${fingerprint}</p>
       ${notice}
       <div class="actions">
-        <button class="button primary" type="submit" disabled=${busy}>${busy ? 'Adding…' : 'Accept and Add the Server'}</button>
+        <button class="button primary" type="submit" disabled=${busy}>${busy ? busyLabel : submitLabel}</button>
         <button class="button" type="button" disabled=${busy} onClick=${() => setStep(1)}>Back</button>
       </div>
     </form>`;
@@ -1207,7 +1207,7 @@ function useNostrHostAdd(nk, makeBody, onAdded) {
 }
 
 // The fields of an nsite site (ADR 0048, ADR 0050).
-function NsiteHostForm({ feeds, onAdded }) {
+function NsiteHostForm({ feeds, onAdded, submitLabel = 'Add the Site', busyLabel = 'Adding…' }) {
   const [values, setValues] = useState({
     name: '', feed_id: '', d: '', relays: '', servers: '', gateway: 'nsite.lol', title: '',
   });
@@ -1268,7 +1268,7 @@ function NsiteHostForm({ feeds, onAdded }) {
       value=${values.gateway} onInput=${set('gateway')} />
     <${Field} id="nsite-title" label="Title of the site (optional)" value=${values.title} onInput=${set('title')} />
     ${errors.notice}
-    <div class="actions"><button class="button primary" type="submit" disabled=${add.busy || !ready}>${add.busy ? 'Adding…' : 'Add the Site'}</button></div>
+    <div class="actions"><button class="button primary" type="submit" disabled=${add.busy || !ready}>${add.busy ? busyLabel : submitLabel}</button></div>
   </form>`);
 }
 
@@ -1384,7 +1384,7 @@ export function RoleMenu({ id, label = 'Role', role, group, hint, status, pendin
 // `start` is the type that the form opens with (ADR 0119 item 6). `showType`
 // hides the choice when the sheet shows the rows of step 2 (ADR 0122 item 2).
 // `startRoot` and `submitLabel` go to the folder form (ADR 0122 item 3).
-function AddHostForm({ feeds, onAdded, start, showType = true, startRoot = '', submitLabel = 'Add the Folder' }) {
+function AddHostForm({ feeds, onAdded, start, showType = true, startRoot = '', submitLabel = null, busyLabel = null }) {
   const [type, setType] = useState(start || (serverMode ? 's3' : 'local'));
   return html`<div class="form">
     ${showType && html`<${ChoiceSelect} id="host-type" label="Type of file host" value=${type} onChange=${setType} options=${[
@@ -1395,14 +1395,18 @@ function AddHostForm({ feeds, onAdded, start, showType = true, startRoot = '', s
       ['blossom', 'Blossom server'],
     ]} />`}
     ${type === 's3'
-      ? html`<${S3HostForm} onAdded=${onAdded} />`
+      ? html`<${S3HostForm} onAdded=${onAdded} submitLabel=${submitLabel || 'Add the Bucket'}
+          busyLabel=${busyLabel || 'Testing the Bucket…'} />`
       : type === 'sftp'
-        ? html`<${SftpHostForm} onAdded=${onAdded} />`
+        ? html`<${SftpHostForm} onAdded=${onAdded} submitLabel=${submitLabel || 'Accept and Add the Server'}
+            busyLabel=${busyLabel || 'Adding…'} />`
         : type === 'nsite'
-          ? html`<${NsiteHostForm} feeds=${feeds} onAdded=${onAdded} />`
+          ? html`<${NsiteHostForm} feeds=${feeds} onAdded=${onAdded} submitLabel=${submitLabel || 'Add the Site'}
+              busyLabel=${busyLabel || 'Adding…'} />`
           : type === 'blossom'
             ? html`<${BlossomHostForm} onAdded=${onAdded} />`
-            : html`<${LocalHostForm} onAdded=${onAdded} startRoot=${startRoot} submitLabel=${submitLabel} />`}
+            : html`<${LocalHostForm} onAdded=${onAdded} startRoot=${startRoot} submitLabel=${submitLabel || 'Add the Folder'}
+                busyLabel=${busyLabel || 'Adding…'} />`}
   </div>`;
 }
 
@@ -1769,14 +1773,13 @@ function LibrarySheet({ defaultRoot, onDone }) {
     });
   };
   if (report) {
+    const result = libraryResult(report);
     return html`<main class="center"><div class="card">
       <${Brand} />
       <div><h1>Studio set up your library</h1></div>
-      <dl class="facts">
-        <dt>Release folders</dt><dd>${report.release_folders}</dd>
-        <dt>Feed files</dt><dd>${report.feed_files}</dd>
-        <dt>Files moved</dt><dd>${report.moved_files}</dd>
-      </dl>
+      ${result.empty
+        ? html`<p>The folder has no releases yet.</p>`
+        : html`<dl class="facts">${result.rows.flatMap((row) => [html`<dt>${row.label}</dt>`, html`<dd>${row.count}</dd>`])}</dl>`}
       ${report.errors.length > 0 && html`<div class="notice error" role="alert">
         <strong>Studio could not move each file into the library.</strong>
         <ul class="failed">${report.errors.map((e) => html`<li>Feed ${e.feed_id}: ${e.message}</li>`)}</ul>
@@ -3615,9 +3618,9 @@ function StartSheet({ path, connectors, feeds, onAdded, onClose }) {
   };
   // The form of the selected row. Its submit button adds the file host and makes the page.
   const selectedForm = hostType === null ? null : hostType === 'temporary'
-    ? html`<div class="actions"><button class="button primary" type="button" disabled=${busy} onClick=${addTemporary}>${busy ? 'Making the Page…' : 'Continue'}</button></div>`
+    ? html`<div class="actions"><button class="button primary" type="button" disabled=${busy} onClick=${addTemporary}>${busy ? 'Making the Page…' : 'Make the Page'}</button></div>`
     : html`<${AddHostForm} key=${hostType} feeds=${feeds} start=${hostType} showType=${false}
-        startRoot=${defaultRoot} submitLabel="Continue"
+        startRoot=${defaultRoot} submitLabel="Make the Page" busyLabel="Making the Page…"
         onAdded=${(connector) => { setMadeHost(connector); createFeed(connector.id); }} />`;
   return html`<dialog ref=${ref} class="sheet small" aria-labelledby="start-title" onClose=${onClose}>
     <header>

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import {
-  firstStart, releaseAdd, releaseArtistChoices,
+  firstStart, releaseAdd, releaseArtistChoices, libraryResult,
   WELCOME, HOST_STEP, showWelcome, welcomeSteps, pathTexts, hostStepModel, HOST_ROWS, welcomeBody, nextStep, FIRST_STEPS,
 } from '../ui/welcome.js';
 import { isTitleCase } from '../ui/casing.js';
@@ -16,9 +16,9 @@ test('showWelcome is true for an empty feed list and false with one feed', () =>
   assert.equal(showWelcome([{ id: 1, medium: 'music' }]), false);
 });
 
-test('welcomeSteps gives the three steps of each path', () => {
-  assert.deepEqual(welcomeSteps('music'), ['Your name', 'Where it lives', 'Your first album']);
-  assert.deepEqual(welcomeSteps('label'), ['Label name', 'Where it lives', 'Your first artist']);
+test('welcomeSteps gives the two stages of each path', () => {
+  assert.deepEqual(welcomeSteps('music'), ['Your name', 'Where it lives']);
+  assert.deepEqual(welcomeSteps('label'), ['Label name', 'Where it lives']);
 });
 
 test('HOST_ROWS gives the desktop rows, with the folder as the first row', () => {
@@ -27,8 +27,9 @@ test('HOST_ROWS gives the desktop rows, with the folder as the first row', () =>
   assert.deepEqual(desktop.map((r) => r.type), ['local', 'nsite', 's3', 'sftp']);
   assert.equal(desktop[0].primary, true);
   assert.equal(desktop[1].primary, undefined);
-  assert.equal(desktop[1].line, 'A site on Nostr. Its pages and songs go to Blossom servers, signed with your Nostr key.');
-  assert.equal(desktop[2].line, 'A storage bucket at Amazon S3, Cloudflare R2 or a similar provider.');
+  assert.equal(desktop[1].line, 'A site on Nostr. Its pages and songs go to Blossom servers, the file servers of Nostr, signed with your Nostr key.');
+  assert.equal(desktop[2].line, 'A storage bucket, an online folder at Amazon S3, Cloudflare R2 or a similar provider.');
+  assert.equal(desktop[3].line, 'Your own server or web hosting account, which you reach with SFTP.');
   assert.equal(desktop[0].line, 'A folder on this computer. The public address is optional.');
 });
 
@@ -66,6 +67,25 @@ test('the button labels of step 2 are in title case', () => {
   for (const label of ['Continue', 'Make the Page', 'Add the Folder']) {
     assert.equal(isTitleCase(label), true, label);
   }
+});
+
+test('libraryResult lists positive counts and gives the empty folder line', () => {
+  assert.deepEqual(libraryResult({ release_folders: 2, feed_files: 0, moved_files: 1 }), {
+    rows: [{ label: 'Release folders', count: 2 }, { label: 'Files moved', count: 1 }], empty: false,
+  });
+  assert.deepEqual(libraryResult({ release_folders: 0, feed_files: 0, moved_files: 0 }), { rows: [], empty: true });
+  const app = readFileSync(new URL('../ui/app.js', import.meta.url), 'utf8');
+  assert.match(app, /The folder has no releases yet\./);
+  assert.match(app, /libraryResult\(report\)/);
+});
+
+test('the first-run page action uses Make the Page labels in step 2', () => {
+  const app = readFileSync(new URL('../ui/app.js', import.meta.url), 'utf8');
+  assert.match(app, /busy \? 'Making the Page…' : 'Make the Page'/);
+  assert.match(app, /submitLabel="Make the Page" busyLabel="Making the Page…"/);
+  assert.match(app, /type === 's3'[\s\S]*submitLabel=\$\{submitLabel \|\| 'Add the Bucket'\}[\s\S]*busyLabel=\$\{busyLabel \|\| 'Testing the Bucket…'\}/);
+  assert.match(app, /type === 'sftp'[\s\S]*submitLabel=\$\{submitLabel \|\| 'Accept and Add the Server'\}/);
+  assert.match(app, /type === 'nsite'[\s\S]*submitLabel=\$\{submitLabel \|\| 'Add the Site'\}/);
 });
 
 test('welcomeBody gives the role of the path, the name as title and author, and the file start', () => {

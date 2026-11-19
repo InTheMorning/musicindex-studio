@@ -32,7 +32,7 @@ export const HOST_STEP = {
 const PATHS = {
   music: {
     role: 'artist',
-    steps: ['Your name', 'Where it lives', 'Your first album'],
+    steps: ['Your name', 'Where it lives'],
     sheet: 'Your artist page',
     nameLabel: 'Artist name',
     hint: 'A band is one artist. Add the members later, in People.',
@@ -40,7 +40,7 @@ const PATHS = {
   },
   label: {
     role: 'label',
-    steps: ['Label name', 'Where it lives', 'Your first artist'],
+    steps: ['Label name', 'Where it lives'],
     sheet: 'Your label page',
     nameLabel: 'Label name',
     hint: null,
@@ -90,10 +90,20 @@ export function HOST_ROWS(serverMode) {
     serverMode
       ? { type: 'temporary', icon: 'hard-drive', primary: true, title: 'Try it here (temporary)', line: HOST_STEP.temporary }
       : { type: 'local', icon: 'hard-drive', primary: true, title: 'Folder on this computer', line: 'A folder on this computer. The public address is optional.' },
-    { type: 'nsite', icon: 'upload', title: 'Nostr site (nsite)', line: 'A site on Nostr. Its pages and songs go to Blossom servers, signed with your Nostr key.' },
-    { type: 's3', icon: 'cloud', title: 'S3 or Cloudflare R2', line: 'A storage bucket at Amazon S3, Cloudflare R2 or a similar provider.' },
-    { type: 'sftp', icon: 'hard-drive', title: 'SFTP server', line: 'Your own SFTP server.' },
+    { type: 'nsite', icon: 'upload', title: 'Nostr site (nsite)', line: 'A site on Nostr. Its pages and songs go to Blossom servers, the file servers of Nostr, signed with your Nostr key.' },
+    { type: 's3', icon: 'cloud', title: 'S3 or Cloudflare R2', line: 'A storage bucket, an online folder at Amazon S3, Cloudflare R2 or a similar provider.' },
+    { type: 'sftp', icon: 'hard-drive', title: 'SFTP server', line: 'Your own server or web hosting account, which you reach with SFTP.' },
   ];
+}
+
+// The rows of a library setup result. An empty library has one explanatory line.
+export function libraryResult(report) {
+  const rows = [
+    ['Release folders', report.release_folders],
+    ['Feed files', report.feed_files],
+    ['Files moved', report.moved_files],
+  ].filter(([, count]) => count > 0).map(([label, count]) => ({ label, count }));
+  return { rows, empty: rows.length === 0 };
 }
 
 // The body of `POST /feeds/new` for the first publisher feed of a path (ADR

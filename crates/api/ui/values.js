@@ -3,7 +3,7 @@
 import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
 import { TextField, set, setAt, withCids, startOpen, openOnce, useSheet } from './editor.js';
 import { CONFIRMS } from './confirms.js';
-import { percentText, lookupHint, WALLET_TYPES, ADDRESS_HINTS, addressField, takeOtherType, addressProblem, CUSTOM_KEY_HINT, percentages, feeLine, isFee, shares, shareParts, splitOrder, recipientFields, recipientFromFields } from './recipients.js';
+import { percentText, lookupHint, WALLET_TYPES, ADDRESS_HINTS, addressField, takeOtherType, addressProblem, CUSTOM_KEY_HINT, percentages, feeLine, isFee, shares, shareParts, splitOrder, recipientFields, recipientFromFields, setPercent } from './recipients.js';
 import { recipientPickRows, recipientChoices, recipientIdentity, personKeys, memberText, addRecipientsLabel, trackHeading, recipientAddressMenu } from './people.js';
 import { PickerLayout, PickFillRow, FindOneSheet, PickFold, SearchResults, TakenTag, useFieldList } from './pickers.js';
 import { PersonArt, TypePanel, UseTypeButton, useLookup } from './peoplepages.js';
@@ -131,13 +131,18 @@ function RecipientAddressActions({ recipient, onChange }) {
 // groups: "Recipients", then "Fees" (ADR 0039 item 12). A recipient with
 // fee "true" is in "Fees". The screen sorts each group by split (ADR 0144).
 function Recipients({ id, recipients, defaultType, onChange, openAdd = false, onAddOpened, onEmptyClose, wrongAddresses = new Set() }) {
-  const percent = percentages(recipients);
+  const percent = percentages(recipients).map((value, i) => (shares(recipients[i]) === null ? null : value));
   // The sheet of a new recipient or of one address: null when closed, else
   // `{ cid }` with the `_cid` of the row to change, or `{}` for a new row.
   const [sheet, setSheet] = useState(null);
   const [copying, setCopying] = useState(false);
   const [current, setCurrent] = useState(0);
   const [expandedRows, setExpandedRows] = useState({});
+  // The split mode of each open row, by `_cid`: "shares" or "percent". Studio
+  // does not keep it, and the feed always holds shares (ADR 0223 item 1).
+  const [splitModes, setSplitModes] = useState({});
+  const [percentDrafts, setPercentDrafts] = useState({});
+  const [percentErrors, setPercentErrors] = useState({});
   const preserveEmpty = useRef(false);
   useEffect(() => {
     if (openAdd) { setSheet({}); onAddOpened?.(); }
@@ -172,6 +177,25 @@ function Recipients({ id, recipients, defaultType, onChange, openAdd = false, on
       const currentIndex = Math.min(current, Math.max(0, recipients.length - 1));
       const change = (name) => (value) => onChange(setAt(recipients, i, set(r, name, value)));
       const rid = `${id}-r-${r._cid}`;
+      const mode = splitModes[r._cid] || 'shares';
+      const splitPercent = percent[i] === null ? '' : String(Math.round(percent[i]));
+      const percentValue = percentDrafts[r._cid] ?? splitPercent;
+      const commitPercent = (event) => {
+        if (mode !== 'percent' || (recipients.length === 1 && shares(r) !== null)) return;
+        const value = event.currentTarget.value;
+        if (!/^([1-9]|[1-9][0-9])$/.test(value)) {
+          setPercentErrors((errors) => ({ ...errors, [r._cid]: 'Type a whole number from 1 to 99.' }));
+          return;
+        }
+        const updated = setPercent(recipients, i, Number(value));
+        if (!updated) {
+          setPercentErrors((errors) => ({ ...errors, [r._cid]: 'Type a whole number from 1 to 99.' }));
+          return;
+        }
+        setPercentErrors((errors) => ({ ...errors, [r._cid]: null }));
+        setPercentDrafts((drafts) => ({ ...drafts, [r._cid]: null }));
+        onChange(updated);
+      };
       const open = Boolean(expandedRows[r._cid]);
       const openRef = openOnce(r._cid);
       const setOpenRow = (element) => {
@@ -187,11 +211,32 @@ function Recipients({ id, recipients, defaultType, onChange, openAdd = false, on
           <span class="title-cell"><span class="title">${r.name || r.address || 'New recipient'}</span>
             ${r.address && wrongAddresses.has(r.address) && html`<span class="state-mark warning" role="img" aria-label="Wrong address type" title="Wrong address type"><${Icon} name="alert" /></span>`}</span>
           <${Meter} percent=${percent[i]} />
-          <span class="share">${percentText(percent[i])}${isFee(r) ? ' fee' : ''}</span>
+          <span class="share">${percent[i] === null ? '—' : percentText(percent[i])}${isFee(r) ? ' fee' : ''}</span>
           <span class="mono address" title=${r.address || null}>${r.address ? (r.recipient_type === 'lnaddress' ? r.address : shortKey(r.address)) : 'No address'}</span>
         </summary>
         <div class="form">
-        <${TextField} id=${`${rid}-split`} label='Split (shares)' inputmode="numeric" hint="A recipient gets its shares divided by the total shares of the block." value=${r.split} onChange=${change('split')} />
+        <div class="field">
+          <label for=${`${rid}-split`}>Split</label>
+          <div class="field-body">
+            <span class="hint" id=${`${rid}-split-hint`}>A recipient gets its shares divided by the total shares of the block.</span>
+            <div class="inline split-input">
+              <input id=${`${rid}-split`} inputmode="numeric" value=${mode === 'percent' ? percentValue : r.split ?? ''}
+                aria-describedby=${`${rid}-split-hint`} aria-invalid=${percentErrors[r._cid] ? 'true' : undefined}
+                readOnly=${mode === 'percent' && recipients.length === 1 && shares(r) !== null}
+                onInput=${(e) => { if (mode === 'percent') setPercentDrafts((drafts) => ({ ...drafts, [r._cid]: e.target.value })); else change('split')(e.target.value); }}
+                onChange=${commitPercent} onKeyDown=${(e) => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }} />
+              <label class="visually-hidden" for=${`${rid}-split-mode`}>Split as</label>
+              <select id=${`${rid}-split-mode`} value=${mode} onChange=${(e) => { setSplitModes((modes) => ({ ...modes, [r._cid]: e.target.value })); setPercentDrafts((drafts) => ({ ...drafts, [r._cid]: null })); setPercentErrors((errors) => ({ ...errors, [r._cid]: null })); }}>
+                <option value="shares">Shares</option><option value="percent">Percent</option>
+              </select>
+            </div>
+            ${percentErrors[r._cid] && html`<span class="field-error">${percentErrors[r._cid]}</span>`}
+            ${shares(r) === null ? html`<span class="field-error">Give a split.</span>`
+              : recipients.length === 1 ? html`<span class="hint">One recipient gets each payment.</span>`
+                : mode === 'shares' ? html`<span class="hint">${percentText(percent[i])} of this block</span>`
+                  : html`<span class="hint">${shares(r)} shares of ${recipients.reduce((sum, item) => sum + (shares(item) ?? 0), 0)}</span>`}
+          </div>
+        </div>
         <label class="check"><input type="checkbox" checked=${isFee(r)}
           onChange=${(e) => change('fee')(e.target.checked ? 'true' : null)} />
           Fee</label>

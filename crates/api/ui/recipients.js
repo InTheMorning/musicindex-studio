@@ -41,6 +41,40 @@ export function percentages(recipients) {
   });
 }
 
+// Scale the splits so that their total is `total`, with the rule of the core
+// function `scale` (crates/core/src/change_set.rs). Each split gets its part
+// with integer division. The first biggest split gets the remainder. A sum
+// of zero gives the splits with no change.
+export function scaleSplits(splits, total) {
+  const sum = splits.reduce((value, split) => value + split, 0);
+  if (sum === 0) return [...splits];
+  const scaled = splits.map((split) => Math.floor(split * total / sum));
+  const remainder = total - scaled.reduce((value, split) => value + split, 0);
+  let largest = 0;
+  for (let i = 1; i < splits.length; i += 1) if (splits[i] > splits[largest]) largest = i;
+  if (scaled.length) scaled[largest] += remainder;
+  return scaled;
+}
+
+// Give the recipient at `index` the split `percent`, and scale each other
+// split, fees included, to `100 - percent` (ADR 0223 item 3). The total of
+// the block becomes 100. A split that is not a whole number gives null.
+export function setPercent(recipients, index, percent) {
+  const splits = recipients.map((recipient) => {
+    if (recipient.split === '' || recipient.split === null || recipient.split === undefined) return null;
+    const value = Number(recipient.split);
+    return Number.isFinite(value) && Number.isInteger(value) && value >= 0 ? value : null;
+  });
+  if (splits.some((split) => split === null) || !Number.isInteger(percent) || index < 0 || index >= recipients.length) return null;
+  const other = splits.filter((_, i) => i !== index);
+  const scaled = scaleSplits(other, 100 - percent);
+  let nextIndex = 0;
+  return recipients.map((recipient, i) => ({
+    ...recipient,
+    split: String(i === index ? percent : scaled[nextIndex++]),
+  }));
+}
+
 // The line that names the fees of a block, or null with no fee (musicindex
 // ADR 0075 R-VALUE-5 item 7).
 export function feeLine(recipients) {

@@ -2,7 +2,7 @@
 
 Decision: [ADR 0223](../adr/0223-a-split-in-shares-or-percent-a-release-search-and-one-tap-on-a-phone.md) items 1 to 4.
 
-Status: Open.
+Status: Done.
 
 ## Problem
 

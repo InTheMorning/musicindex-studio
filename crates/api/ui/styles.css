@@ -1139,6 +1139,8 @@ textarea {
 textarea:focus { background: var(--fill); }
 .inline { display: flex; gap: 8px; }
 .inline input, .inline select { flex: 1; }
+/* The mode menu of a split is as wide as its text (ADR 0223 item 1). */
+.field .split-input select { flex: none; width: auto; }
 .failed { padding-left: 18px; color: var(--muted); font-size: var(--text-callout); }
 .choices .hint { margin-bottom: 4px; }
 

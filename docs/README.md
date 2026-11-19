@@ -103,7 +103,6 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0116: The page of a person has Save and Discard](adr/0116-the-page-of-a-person-has-save-and-discard.md)
 - [ADR 0117: The page of a person finds values on musicindex](adr/0117-the-page-of-a-person-finds-values-on-musicindex.md)
 - [ADR 0118: "Member of" offers a credit on the artist feed](adr/0118-member-of-offers-a-credit-on-the-artist-feed.md)
-- [ADR 0119: A new user starts as a musician or a label](adr/0119-a-new-user-starts-as-a-musician-or-a-label.md)
 - [ADR 0122: A new user starts with a default file host](adr/0122-a-new-user-starts-with-a-default-file-host.md)
 - [ADR 0123: One type of value has one picker](adr/0123-one-type-of-value-has-one-picker.md)
 - [ADR 0124: The desktop app is a Tauri window on the local API](adr/0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md)
@@ -198,6 +197,8 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0218: A page link in Review, and a suggestion starts with no person](adr/0218-a-page-link-in-review-and-a-suggestion-starts-with-no-person.md)
 - [ADR 0219: A release checklist, and a check of the address type](adr/0219-a-release-checklist-and-a-check-of-the-address-type.md)
 - [ADR 0220: A release page links its page on Music Index](adr/0220-a-release-page-links-its-page-on-music-index.md)
+- [ADR 0221: The Welcome page and the first steps](adr/0221-the-welcome-page-and-the-first-steps.md)
+- [ADR 0222: Errors give a step, terms get a hint, and the first run has two stages](adr/0222-errors-give-a-step-terms-get-a-hint-and-the-first-run-has-two-stages.md)
 
 ## Plans
 
@@ -631,6 +632,7 @@ Superseded decisions. Read them for research only. They bind no change.
 - [ADR 0103: One person collects the items of many suggestions](archive/adr/0103-one-person-collects-the-items-of-many-suggestions.md), superseded by ADR 0203
 - [ADR 0111: The page of a person checks the feeds](archive/adr/0111-the-page-of-a-person-checks-the-feeds.md), superseded by ADR 0203
 - [ADR 0120: The check of a person shows each difference](archive/adr/0120-the-check-of-a-person-shows-each-difference.md), superseded by ADR 0203
+- [ADR 0119: A new user starts as a musician or a label](archive/adr/0119-a-new-user-starts-as-a-musician-or-a-label.md), superseded by ADR 0221
 - [ADR 0121: A folder with no public address holds practice pages](archive/adr/0121-a-folder-with-no-public-address-holds-practice-pages.md), superseded by ADR 0122
 - [ADR 0156: The page of a person lists where the person is](archive/adr/0156-the-page-of-a-person-lists-where-the-person-is.md), superseded by ADR 0203
 - [ADR 0158: A hidden suggestion can come back](archive/adr/0158-a-hidden-suggestion-can-come-back.md), superseded by ADR 0203

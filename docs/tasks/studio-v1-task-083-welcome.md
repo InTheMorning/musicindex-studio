@@ -1,7 +1,7 @@
 # Studio v1 Task 083: The Welcome Page Of A New User
 
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "The First Visit".
-Decision: [ADR 0119](../adr/0119-a-new-user-starts-as-a-musician-or-a-label.md).
+Decision: [ADR 0119](../archive/adr/0119-a-new-user-starts-as-a-musician-or-a-label.md).
 
 Status: Complete. Packet 083a is committed. The screenshot visual check passed on 2026-11-02, with a local folder that has a public address. A local folder with no public address makes feeds with a placeholder GUID since task 086 (ADR 0122). The human test is open.
 
@@ -73,7 +73,7 @@ Implement only this task. Do not redesign the architecture.
 
 Read:
 - AGENTS.md
-- docs/adr/0119-a-new-user-starts-as-a-musician-or-a-label.md
+- docs/archive/adr/0119-a-new-user-starts-as-a-musician-or-a-label.md
 - docs/tasks/studio-v1-task-083-welcome.md
 - ~/.agents/skills/asd-ste100/SKILL.md
 - The files that the Files section of packet 083a names.

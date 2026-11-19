@@ -6,8 +6,8 @@
 - Accepted: 2026-11-10 by the operator, through the questionnaire. The operator selected the drawing "Row in Releases".
 - Revised: 2026-11-10 by the operator. Items 6 and 7 come from the check of the first version: the list view of a group also gets the action, and the title of the sheet names the page.
 - Changed: 2026-11-14 by the operator, at the human check walk. Item 2 gives **＋ Add a Release** to each role.
-- Changes: [ADR 0119](0119-a-new-user-starts-as-a-musician-or-a-label.md) item 9.
-- Uses: [ADR 0041](../archive/adr/0041-publisher-feeds-and-two-way-links.md) for the two-way link and its notices. [ADR 0119](0119-a-new-user-starts-as-a-musician-or-a-label.md) item 8 for the first-step rows. [ADR 0007](0007-draft-diff-write-and-announce.md) for the write.
+- Changes: [ADR 0119](../archive/adr/0119-a-new-user-starts-as-a-musician-or-a-label.md) item 9.
+- Uses: [ADR 0041](../archive/adr/0041-publisher-feeds-and-two-way-links.md) for the two-way link and its notices. [ADR 0221](0221-the-welcome-page-and-the-first-steps.md) item 8 for the first-step rows. [ADR 0007](0007-draft-diff-write-and-announce.md) for the write.
 - Changed by: [ADR 0213](0213-a-release-starts-on-the-page-of-its-artist.md) items 1, 4 and 6 to 8: only the page of an artist has the add row, and the form of a release has its own fields.
 
 ## Context
@@ -20,7 +20,7 @@ The first-step row also did not link the new album to the artist. The form sent 
 
 ## Decision
 
-1. The section **Releases** of a publisher feed has an add row at its end, below the releases. The row shows when the feed has a file host and has no first-step row of ADR 0119 item 8.
+1. The section **Releases** of a publisher feed has an add row at its end, below the releases. The row shows when the feed has a file host and has no first-step row of ADR 0221 item 8.
 2. The words of the row come from the first role of the feed:
     - artist: **＋ Add a Release**. The form starts with the name of the artist in **Artist**.
     - each other role: **＋ Add a Release**. The form has no start value.

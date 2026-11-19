@@ -12,7 +12,7 @@
 - Changes: [ADR 0068](0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md), The Sequence Of The Sections And Fields Of An Editor Page. ADR 0068 names the changed items.
 - Changed by: [ADR 0077](../../adr/0077-a-new-album-can-start-from-an-album.md) adds the select menu "Start from" to the form of items 5 and 6, for the type Album.
 - Changed by: [ADR 0130](../../adr/0130-the-facts-of-an-audio-file-stay-locked.md). Item 14: "Properties" of the add sheet shows the values as text. The boxes show after "Advanced".
-- Changed by: [ADR 0119](../../adr/0119-a-new-user-starts-as-a-musician-or-a-label.md), A New User Starts As A Musician Or A Label.
+- Changed by: [ADR 0119](0119-a-new-user-starts-as-a-musician-or-a-label.md), A New User Starts As A Musician Or A Label.
 
 ## Context
 

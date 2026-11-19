@@ -9,7 +9,7 @@
 - Changed by: [ADR 0218](0218-a-page-link-in-review-and-a-suggestion-starts-with-no-person.md) items 1 to 9, on 2026-11-19. Items 18, 19 and 21: Review links the page itself, the write button shows disabled, and the finding tells that the write stops.
 - Changes: [ADR 0212](0212-the-add-pages.md) items 1, 6 to 8: the page "Add a Feed" and its form make no release.
 - Changes: [ADR 0164](0164-the-releases-of-a-publisher-feed-have-an-add-row.md) item 2: only the page of an artist has the add row.
-- Uses: [ADR 0014](0014-collection-in-sqlite.md) for the collection. [ADR 0065](0065-the-core-applies-each-feed-rule.md) for the feed rules. [ADR 0174](0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md) for the findings of the tab **Check**. [ADR 0205](0205-publisher-feeds-announcements-and-show-grants.md) items 5 to 8 for the links of a publisher feed. [ADR 0119](0119-a-new-user-starts-as-a-musician-or-a-label.md) item 8 for the first-step rows. [ADR 0007](0007-draft-diff-write-and-announce.md) for the review.
+- Uses: [ADR 0014](0014-collection-in-sqlite.md) for the collection. [ADR 0065](0065-the-core-applies-each-feed-rule.md) for the feed rules. [ADR 0174](0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md) for the findings of the tab **Check**. [ADR 0205](0205-publisher-feeds-announcements-and-show-grants.md) items 5 to 8 for the links of a publisher feed. [ADR 0221](0221-the-welcome-page-and-the-first-steps.md) item 8 for the first-step rows. [ADR 0007](0007-draft-diff-write-and-announce.md) for the review.
 - Source: design item 7 of the [human check walk of 2026-11-14](../reviews/2026-11-14-human-check-walk.md).
 
 ## Context
@@ -24,7 +24,7 @@ The form has no release kind. The operator wants a select menu with album, EP an
 
 ### Where A Release Starts
 
-1. A release starts only on the page of an artist: from the add row **＋ Add a Release** of ADR 0164, and from the first-step row of ADR 0119 item 8.
+1. A release starts only on the page of an artist: from the add row **＋ Add a Release** of ADR 0164, and from the first-step row of ADR 0221 item 8.
 2. The group "Make a new feed" of the page "Add a Feed" has the rows Artist or label, Show and Playlist. It has no row "Album". Below the rows, one hint says "A release starts on the page of its artist."
 3. The menu "Type" of the form of ADR 0212 item 6 has Artist or label, Show and Playlist.
 4. The page of a label and the page of a hosting feed have no add row for a release. The list view of a group of ADR 0164 item 6 has the action only for an artist.

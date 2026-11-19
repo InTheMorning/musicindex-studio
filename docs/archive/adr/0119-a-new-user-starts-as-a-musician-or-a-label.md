@@ -1,3 +1,5 @@
+> Archived: superseded by [ADR 0221](../../adr/0221-the-welcome-page-and-the-first-steps.md) on 2026-11-19. ADR 0221 restates each live rule of this ADR. Its item map gives the new item of each item.
+
 # ADR 0119: A New User Starts As A Musician Or A Label
 
 - Status: Accepted
@@ -6,13 +8,13 @@
 - Accepted: 2026-11-02 by the operator, from screens 2 to 6 of the mockups in `.studio-dev/mockup-start/site/`.
 - Revised: 2026-11-02 by the operator: "My own server" is the first row of item 6. Item 11 comes from the visual check of task 083.
 - Changed: 2026-11-14 by the operator, at the human check walk. The button of items 8 and 9 is "Add a Release".
-- Changed by: [ADR 0122](0122-a-new-user-starts-with-a-default-file-host.md) items 1 to 4, step 2.
-- Changed by: [ADR 0164](0164-the-releases-of-a-publisher-feed-have-an-add-row.md) item 9: the new album becomes a release of the artist.
-- Changes: [ADR 0072](0072-add-a-feed-opens-from-releases.md), the empty Releases page.
-- Changes: [ADR 0020](0020-first-run-asks-one-question.md) items 1 and 2, the question of the first-run wizard (item 11).
-- Changes: [ADR 0073](../archive/adr/0073-the-add-pages-ask-one-question-at-a-time.md) does not change for a user with feeds.
-- Changed by: [ADR 0121](../archive/adr/0121-a-folder-with-no-public-address-holds-practice-pages.md), A Folder With No Public Address Holds Practice Pages.
-- Uses: [ADR 0007](0007-draft-diff-write-and-announce.md) for the first write. [ADR 0045](0045-phase-9-crates-test-servers-and-host-forms.md) for the file host forms. [ADR 0082](0082-a-publisher-feed-has-a-set-of-roles.md) and [ADR 0083](0083-hosting-is-a-first-class-role.md) for the roles. [ADR 0107](0107-a-user-can-export-and-import-an-account.md) for the import.
+- Changed by: [ADR 0122](../../adr/0122-a-new-user-starts-with-a-default-file-host.md) items 1 to 4, step 2.
+- Changed by: [ADR 0164](../../adr/0164-the-releases-of-a-publisher-feed-have-an-add-row.md) item 9: the new album becomes a release of the artist.
+- Changes: [ADR 0072](../../adr/0072-add-a-feed-opens-from-releases.md), the empty Releases page.
+- Changes: [ADR 0020](../../adr/0020-first-run-asks-one-question.md) items 1 and 2, the question of the first-run wizard (item 11).
+- Changes: [ADR 0073](0073-the-add-pages-ask-one-question-at-a-time.md) does not change for a user with feeds.
+- Changed by: [ADR 0121](0121-a-folder-with-no-public-address-holds-practice-pages.md), A Folder With No Public Address Holds Practice Pages.
+- Uses: [ADR 0007](../../adr/0007-draft-diff-write-and-announce.md) for the first write. [ADR 0045](../../adr/0045-phase-9-crates-test-servers-and-host-forms.md) for the file host forms. [ADR 0082](../../adr/0082-a-publisher-feed-has-a-set-of-roles.md) and [ADR 0083](../../adr/0083-hosting-is-a-first-class-role.md) for the roles. [ADR 0107](../../adr/0107-a-user-can-export-and-import-an-account.md) for the import.
 
 ## Context
 

@@ -819,7 +819,7 @@ function ValuesForm({ personId, row, feeds, shown, onBack, onFill }) {
       <div class="group"><div class="link-row static"><${PersonArt} person=${{ img: row.image_url, name: title }} />
         <span class="text"><span class="label">${title}</span>
           <span class="summary"><span class=${`dot ${kind.dot}`} aria-hidden="true"></span>${kind.text}</span>
-          <span class="summary"><a href=${musicindexFeedUrl(row.feed_guid)} target="_blank" rel="noopener">Open on musicindex.org</a></span></span></div></div>
+          <a class="button link index-link" href=${musicindexFeedUrl(row.feed_guid)} target="_blank" rel="noopener">Open on musicindex.org</a></span></div></div>
       <${ErrorNotice} error=${error} />
       ${loading && html`<p class="empty" role="status">${VALUES_WAIT}</p>`}
       ${values && html`<section class="page-section"><h2>Link</h2>

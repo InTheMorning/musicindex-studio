@@ -42,11 +42,11 @@ Visual, by the main session with screenshots at 1280 px and 390 px: the release 
 
 ## Result
 
-Done on 2026-11-19. A ChatGPT run made the change. The main session gave the link the link style of Studio (`button link`, class `feed-index-link` in `styles.css`). Before, it had the color of the browser.
+Done on 2026-11-19. A ChatGPT run made the change. The main session gave the link the link style of Studio (`button link`, class `index-link` in `styles.css`). Before, it had the color of the browser.
 
 - Mechanical: 446 API tests, 857 UI tests and `bash tools/gate.sh` pass. The syntax check of each changed `.js` file passes.
 - Visual, from screenshots at 1280 px and 390 px (walk `v181a.json`, with a local index stub through `--musicindex`): the link "Open on musicindex.org" shows under the feed address and opens `https://musicindex.org/#feed={guid}` with `target="_blank"`.
-- Open: the link "Open on musicindex.org" on the People page has the same browser color. This task does not change it.
+- Correction of 2026-11-19: the link "Open on musicindex.org" of the People sheet "From Music Index" had the same browser color. It now has the same class `button link index-link`. Screenshots at 1280 px and 390 px (walk `vlink.json`, with the index stub and a search answer) show the accent color.
 
 ## Rules for the delegate
 

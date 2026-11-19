@@ -70,7 +70,7 @@ Results:
 
 - Mechanical: 857 UI tests and `bash tools/gate.sh` pass. The syntax check of `review.js` passes.
 - Visual, from screenshots at 1280 px and 390 px (walk `v182a.json`): the group "Payments" shows "Added: artist@getalby.com" and "artist@getalby.com · LNURL Address · 100.0 %".
-- Open: no screenshot of the placeholder row. The walk data has no feed with a placeholder GUID. A UI test examines the row.
+- Visual, from screenshots at 1280 px and 390 px (walk `v182b.json`, a new release with no public address): the row "Podcast GUID" shows "Set when the feed has a public address".
 
 ## Rules for the delegate
 

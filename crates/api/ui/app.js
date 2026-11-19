@@ -2300,7 +2300,7 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
           ${feed.public_url
             ? html`<${FeedAddress} url=${feed.public_url} />`
             : html`<p class="sub mono">This feed has no public address yet.</p>`}
-          ${musicIndexLink && html`<a class="button link feed-index-link" href=${musicIndexLink.href} target="_blank" rel="noopener">${musicIndexLink.text}</a>`}
+          ${musicIndexLink && html`<a class="button link index-link" href=${musicIndexLink.href} target="_blank" rel="noopener">${musicIndexLink.text}</a>`}
         </div>
         ${feed.last_version !== null && html`<button class="button" type="button" disabled=${busy} onClick=${refresh}>
           ${busy ? 'Reading…' : 'Read Again'}</button>`}

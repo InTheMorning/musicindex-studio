@@ -36,6 +36,7 @@ test('isTitleCase refuses a label in sentence case', () => {
 // is in `NAMES` of casing.js.
 const NOT_LABELS = new Map([
   ['Open Untitled feed', 'The text "Untitled feed" replaces the title of a feed. It is not a label word.'],
+  ['Open on musicindex.org', 'The domain name stays in small letters. ADR 0220 item 3 gives the same text as the People sheet, and HitIt uses it.'],
 ]);
 
 const SKIP_TAGS = new Set(['select', 'option', 'input', 'textarea']);

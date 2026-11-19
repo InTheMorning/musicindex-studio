@@ -6,6 +6,7 @@
 - Accepted: 2026-11-19 by the operator, through the questionnaire, from drawings. For T7, the operator selected "Checklist on page". For O2, the operator selected "Finding with a fix". For the payment form, the operator kept the menu "Type" and asked for a different field for each type, and then selected "Menu selects fields".
 - Technical choices: the main session selected items 2, 4, 5, 7, 8, 11, 12 and 15.
 - Bar: crosses modules. Items 1 to 12 add findings in the core and show them in the editor and on the Check tab. An agent can also make the opposite choice by mistake: one shared address field, or an automatic change of a type.
+- Changed by: [ADR 0224](0224-a-finding-that-stops-the-write-and-a-new-release-opens-add-tracks.md) items 4 to 6, on 2026-11-19. Items 6 and 7: the checklist gets the row "Artist page".
 - Changes: [ADR 0174](0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md) item 7. Five new finding kinds.
 - Changes: [ADR 0217](0217-a-new-artist-sees-the-result-of-a-write-the-payment-types-and-an-undo-of-a-merge.md) items 7 and 11. The menu "Type" selects the fields that show, and each type has its own address field.
 - Uses: [ADR 0138](0138-the-names-of-a-wallet-address-and-the-correction-of-a-wrong-key.md) for the words of the two types. [ADR 0007](0007-draft-diff-write-and-announce.md) for Review. [ADR 0070](0070-a-cover-opens-the-artwork-sheet.md) for the artwork sheet.

@@ -203,12 +203,12 @@ pub fn check(feed: &Feed, facts: &Facts) -> Vec<Finding> {
             PageRefusal::NoArtistPage => (
                 FindingKind::NoArtistPage,
                 "No artist page",
-                "This release has no artist page.",
+                "This release has no artist page. Studio cannot write it before the link.",
             ),
             PageRefusal::NoPublisherPage => (
                 FindingKind::NoPublisherPage,
                 "No linked page",
-                "This feed has no artist, label or hosting page.",
+                "This feed has no artist, label or hosting page. Studio cannot write it before the link.",
             ),
         };
         found.push(Finding {

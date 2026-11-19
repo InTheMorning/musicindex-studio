@@ -13,6 +13,19 @@ test('a feed with a public address gives its written line and address', () => {
   });
 });
 
+test('a linked page appears in the result', () => {
+  assert.deepEqual(writeResult(
+    { title: 'Songs', public_url: 'https://example.test/feed.xml' },
+    { kind: 's3', name: 'My bucket' },
+    { id: 7, title: 'Artist page' },
+  ), {
+    title: 'Written',
+    line: 'Songs is written to My bucket.',
+    changedPage: { id: 7, title: 'Artist page' },
+    address: 'https://example.test/feed.xml',
+  });
+});
+
 test('a local host without a public address gives the folder warning', () => {
   assert.deepEqual(writeResult({ title: 'Songs', public_url: null }, { kind: 'local', name: 'Music' }), {
     title: 'Written',

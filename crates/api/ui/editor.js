@@ -1956,7 +1956,7 @@ export async function currentSignerChoice(toSign) {
 
 // The review sheet: the draft status, the diff and the write (ADR 0029 item
 // 2). It is the same content as the former Changes panel.
-function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, onWritten, onClose, connectors, onOpenHosts, onOpsChanged, onOpsCleared, go }) {
+function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, onWritten, onClose, connectors, feeds = [], onListChanged, onMakeArtist, linkedPage, setLinkedPage, onOpenHosts, onOpsChanged, onOpsCleared, go }) {
   const ref = useSheet(open);
   const [diff, setDiff] = useState(null);
   const returnWait = useReturnWait(feedId, diff && diff.feed_move);
@@ -1965,6 +1965,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
   const [progress, setProgress] = useState(null);
   const [result, setResult] = useState(null);
   const [resultHostId, setResultHostId] = useState(null);
+  const [selectedPage, setSelectedPage] = useState('');
   const resultTitle = useRef(null);
   useEffect(() => { if (result) resultTitle.current?.focus(); }, [result]);
   // A diff is for one draft. After a user edit, the diff is not current.
@@ -2074,7 +2075,8 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
       const writtenConnector = targets.find((item) => item.id === writtenConnectorId);
       if (writtenConnector) {
         setResultHostId(writtenConnectorId);
-        setResult(writeResult(feed, writtenConnector));
+        setResult(writeResult(feed, writtenConnector, linkedPage));
+        setLinkedPage(null);
       }
       else ref.current.close();
     }
@@ -2138,13 +2140,21 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
   const streamRows = diff ? streamProblemRows(diff.stream_problems, draft.model && draft.model.live_items) : [];
   const streamRefusal = streamRows.some((problem) => problem.blocksWrite);
   const deletion = diff && deleteWrite(diff);
-  const pageRefusal = diff && pageRefusalView(diff.page_refusal);
+  // The pages of the menu "Link to an artist or label page" (ADR 0218 item 3).
+  const pageCandidates = pageLinkCandidates(feeds, draft.model);
+  const pageRefusal = diff && pageRefusalView(diff.page_refusal, Boolean(selectedPage), pageCandidates.length);
+  // The link of the section, then a new diff (ADR 0218 item 4).
+  const linkAndContinue = () => run(async () => {
+    if (!selectedPage || !(await draft.flush())) return;
+    const changed = await linkPublisherPage(selectedPage, feedId);
+    const page = changed.find((item) => item.id !== feedId);
+    if (page) setLinkedPage({ id: page.id, title: page.title || 'Untitled feed' });
+    setSelectedPage('');
+    await draft.load();
+    await onListChanged?.();
+    await refreshDiff();
+  });
   const hasWork = !pageRefusal && diff && (diff.changed || diff.operations.length > 0 || diff.blocked.length > 0 || !!diff.feed_move || diff.grants.length > 0);
-  const openLinkedPages = () => {
-    ref.current.close();
-    go({ name: 'feed', id: feedId, page: 'album' });
-    setTimeout(() => document.getElementById('linked-artist-and-label-pages')?.scrollIntoView({ block: 'center' }), 50);
-  };
   return html`<dialog ref=${ref} class="sheet" aria-labelledby="review-title" onClose=${onClose}>
     <header>
       <h2 id="review-title" ref=${result ? resultTitle : undefined} tabIndex=${result ? -1 : undefined}>${result ? result.title : 'Review changes'}</h2>
@@ -2153,6 +2163,8 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
     <div class="body">
       ${result ? html`<div class="write-result">
         <p class="write-result-line"><${Icon} name="check" />${result.line}</p>
+        ${result.changedPage && html`<div class="actions"><span>${result.changedPage.title} also changed.</span>
+          <button class="button" type="button" onClick=${() => { ref.current.close(); go({ name: 'feed', id: result.changedPage.id }); }}>Open ${result.changedPage.title}</button></div>`}
         ${result.address && html`<div class="write-result-address"><div class="notice-label">Public address</div>
           <div class="write-result-url"><span class="mono">${result.address}</span><${CopyButton} text=${result.address} label="the public address" /></div></div>`}
         ${result.warning && html`<div class="notice warning" role="status"><strong><${Icon} name="alert" />${result.warning.title}</strong>
@@ -2193,8 +2205,12 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
         <ul class="address-list">${draft.bad.map((b) => html`<li><span class="mono">${b.field}</span>: <span class="mono">${b.value}</span></li>`)}</ul>
       </div>`}
       ${refusal && html`<${LinkRefusal} refusal=${refusal} busy=${busy} onRepair=${repair} />`}
-      ${pageRefusal && html`<div class="notice error" role="alert"><p>${pageRefusal.text}</p>
-        <div class="actions"><button class="button" type="button" onClick=${openLinkedPages}>${pageRefusal.button}</button></div>
+      ${pageRefusal && html`<div class="notice error" role="alert"><strong>${pageRefusal.title}</strong><p>${pageRefusal.line}</p>
+        ${pageRefusal.menu && html`<div class="group rows"><${ChoiceSelect} id="review-page" label=${pageRefusal.label} value=${selectedPage}
+          placeholder=${pageRefusal.placeholder} options=${pageCandidates.map((c) => [String(c.id), c.title || 'Untitled feed'])}
+          onChange=${setSelectedPage} /></div>`}
+        <div class="actions"><button class="button action" type="button" disabled=${busy || pageRefusal.linkDisabled}
+          onClick=${pageRefusal.menu ? linkAndContinue : () => { ref.current.close(); onMakeArtist(); }}>${pageRefusal.button}</button></div>
       </div>`}
       ${streamRows.map((problem) => problem.blocksWrite
         ? html`<div class="notice error" role="alert" key=${problem.guid + problem.text}>
@@ -2244,6 +2260,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
         <button class="button" type="button" disabled=${busy || draft.status === 'loading'} onClick=${examine}>Examine the Changes</button>
       </div>`}
       `}
+      ${!result && pageRefusal && html`<p class="hint" role="status">${pageRefusal.write}</p>`}
     </div>
     <footer>
       ${!result && html`
@@ -2251,6 +2268,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
       ${deletion && diff && hasWork && !addressesBlocked && !choosing && html`<button class="button destructive" type="button" disabled=${busy || waiting || needsSigner || streamRefusal || blocksWrite(links)} onClick=${write}>
         ${progress ? signProgressLabel(progress) : busy ? 'Writing…' : deletion.label}</button>`}
       <button class=${`button${deletion ? '' : ' destructive'}`} type="button" disabled=${busy || (!deletion && !draft.changed)} onClick=${discard}>${deletion && deletion.cancel ? deletion.cancel : 'Discard the Draft'}</button>
+      ${!deletion && diff && pageRefusal && html`<button class="button primary" type="button" disabled>${busy ? 'Writing…' : 'Write to the File Host'}</button>`}
       ${!deletion && diff && hasWork && !addressesBlocked && !choosing && html`<button class="button primary" type="button" disabled=${busy || waiting || needsSigner || streamRefusal || blocksWrite(links)} onClick=${write}>
         ${progress ? signProgressLabel(progress) : busy ? 'Writing…' : 'Write to the File Host'}</button>`}
       `}
@@ -2307,12 +2325,28 @@ function toolbarStatus(draft) {
   return draft.changed ? { text: 'Saved, not written' } : { text: 'No changes' };
 }
 
+// The form of AddFeedRowSheet that makes an artist page.
+const ARTIST_PAGE_FORM = 'publisher';
+
 // The toolbar of the editor: the draft status, and the buttons that open
 // the review sheet and the versions sheet (ADR 0029 items 1 to 3).
-export function DraftToolbar({ feedId, feedConnectorId, draft, onWritten, connectors, onOpenHosts, onOpsChanged, onOpsCleared, go }) {
+export function DraftToolbar({ feedId, feedConnectorId, draft, onWritten, connectors, feeds, onListChanged, onOpenHosts, onOpsChanged, onOpsCleared, go }) {
   // null, 'review' or 'versions': the sheet that is open now.
   const [open, setOpen] = useState(null);
   const [mergeRequest, setMergeRequest] = useState(0);
+  // The page whose draft a link in Review changed (ADR 0218 item 7).
+  const [linkedPage, setLinkedPage] = useState(null);
+  // The form that makes an artist page from Review (ADR 0218 item 6).
+  const [making, setMaking] = useState(false);
+  const madeArtist = async (page) => {
+    setMaking(false);
+    if (!page || !(await draft.flush())) return;
+    await linkPublisherPage(page.id, feedId);
+    setLinkedPage({ id: page.id, title: page.title || 'Untitled feed' });
+    await draft.load();
+    await onListChanged?.();
+    setOpen('review');
+  };
   useEffect(() => {
     const openReview = () => setOpen('review');
     window.addEventListener(OPEN_REVIEW, openReview);
@@ -2330,7 +2364,10 @@ export function DraftToolbar({ feedId, feedConnectorId, draft, onWritten, connec
     <button class="button primary" type="button" onClick=${() => setOpen('review')}>Review</button>
     <${ReviewSheet} feedId=${feedId} feedConnectorId=${feedConnectorId} draft=${draft} open=${open === 'review'} mergeRequest=${mergeRequest}
       onWritten=${onWritten} onClose=${() => setOpen(null)} connectors=${connectors} onOpenHosts=${onOpenHosts}
+      feeds=${feeds} onListChanged=${onListChanged} onMakeArtist=${() => setMaking(true)} linkedPage=${linkedPage} setLinkedPage=${setLinkedPage}
       onOpsChanged=${onOpsChanged} onOpsCleared=${onOpsCleared} go=${go} />
+    ${making && html`<${AddFeedRowSheet} open=${ARTIST_PAGE_FORM} connectors=${connectors} feeds=${feeds || []}
+      start=${{ title: draft.model?.author || '', role: 'artist' }} onAdded=${madeArtist} onClose=${() => setMaking(false)} />`}
     <${VersionsSheet} feedId=${feedId} draft=${draft} open=${open === 'versions'} onClose=${() => setOpen(null)} />
   </div>`;
 }
@@ -2556,8 +2593,7 @@ function ArtistsAndLabels({ feed, feeds, model, update, draft, go, onListChanged
   // `podcast:publisher` (ADR 0041 item 9). The first one is the primary.
   const publishers = model.publisher ? model.publisher.remote_items : [];
   const rows = publishers.map((entry, index) => ({ index, entry, match: linkedFeed(feeds, entry) }));
-  const linkedIds = new Set(rows.filter((row) => row.match).map((row) => row.match.id));
-  const candidates = feeds.filter((f) => f.connector_id && mediumOf(f) === 'publisher' && !linkedIds.has(f.id));
+  const candidates = pageLinkCandidates(feeds, model);
   const twoDrafts = (action, call) => changeTwoDrafts(action, { feedId: feed.id, draft, onListChanged, setChanged, call });
   // Swap this publisher feed with the one above or below it. No other feed
   // changes (ADR 0041 item 9).
@@ -2577,9 +2613,7 @@ function ArtistsAndLabels({ feed, feeds, model, update, draft, go, onListChanged
     twoDrafts(linkAction, async () => (await api(`/feeds/${row.match.id}/links/${feed.id}`, { method: 'DELETE' })).changed);
   };
   const addPublisher = async () => {
-    const done = await twoDrafts(linkAction, async () => (await api(`/feeds/${chosen}/links`, {
-      method: 'POST', body: { release: feed.id },
-    })).changed);
+    const done = await twoDrafts(linkAction, () => linkPublisherPage(chosen, feed.id));
     if (done) setChosen('');
   };
   return html`<section id="linked-artist-and-label-pages" class="page-section"><h2>Linked artist and label pages</h2>
@@ -2615,6 +2649,19 @@ function ArtistsAndLabels({ feed, feeds, model, update, draft, go, onListChanged
       <${ErrorNotice} error=${publisherError(linkAction.error, 'Open that feed and select its role first.')} />
     </div>
   </section>`;
+}
+
+// The pages that a feed can link to: each publisher feed on a host that the
+// feed has no link to. The section and Review use it (ADR 0218 item 3).
+export function pageLinkCandidates(feeds, model) {
+  const publisher = model?.publisher?.remote_items || [];
+  const linkedIds = new Set(publisher.map((entry) => linkedFeed(feeds || [], entry)?.id).filter(Boolean));
+  return (feeds || []).filter((candidate) => candidate.connector_id && mediumOf(candidate) === 'publisher' && !linkedIds.has(candidate.id));
+}
+
+// Links a release to a page. It gives the feeds whose drafts changed.
+async function linkPublisherPage(pageId, releaseId) {
+  return (await api(`/feeds/${pageId}/links`, { method: 'POST', body: { release: releaseId } })).changed || [];
 }
 
 // The album page: the album fields, the album details and the tracks

@@ -1409,12 +1409,13 @@ function AddHostForm({ feeds, onAdded, start, showType = true, startRoot = '', s
 // One form makes each new feed, as a draft with no file on the host yet
 // (ADR 0073 items 5 to 9, ADR 0032 items 6 to 9, ADR 0041 item 2, ADR 0053
 // item 2). "Feed file" starts from the title until the user types in it.
-// `start` gives `author`, `role` and `publisher_id` (ADR 0119 item 8, ADR 0213 item 7).
+// `start` gives `title`, `author`, `role` and `publisher_id` (ADR 0119 item 8, ADR 0213 item 7,
+// ADR 0218 item 6).
 // `onKind` gets the type and the role, for the title of the sheet.
 function MakeFeedForm({ connectors, feeds, startType, start = {}, onAdded, onKind }) {
   const [type, setType] = useState(startType);
   const [connectorId, setConnectorId] = useState(connectors[0] ? connectors[0].id : null);
-  const [title, setTitle] = useState('');
+  const [title, setTitle] = useState(start.title || '');
   const [author, setAuthor] = useState(start.author || '');
   const [releaseKind, setReleaseKind] = useState(start.kind || '');
   const [role, setRole] = useState(start.role || null);
@@ -2270,7 +2271,7 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
   return html`<div>
     <${Bar}>
       <${Crumb} feed=${feed} view=${view} draft=${draft} />
-      <${DraftToolbar} key=${feed.id} feedId=${feed.id} feedConnectorId=${feed.connector_id} draft=${draft} onWritten=${onChanged} connectors=${connectors}
+      <${DraftToolbar} key=${feed.id} feedId=${feed.id} feedConnectorId=${feed.connector_id} draft=${draft} onWritten=${onChanged} connectors=${connectors} feeds=${feeds} onListChanged=${onListChanged}
         onOpenHosts=${() => go({ name: 'hosts' })}
         onOpsChanged=${() => { opsChanged(); reloadFiles(); }} onOpsCleared=${reloadFiles} go=${go} />
     <//>
@@ -3358,7 +3359,7 @@ function RootPage({ panel, go, onLock }) {
 
 // The outline page of a narrow window (ADR 0039 item 11a). Its bar has the
 // back control, the title of the feed and the draft toolbar of the feed.
-function OutlinePage({ feed, panel, draft, changedFeeds, go, onAdding, onImporting, onChanged, connectors }) {
+function OutlinePage({ feed, panel, draft, changedFeeds, feeds, go, onAdding, onImporting, onChanged, onListChanged, connectors }) {
   // A host operation can change the draft XML. After it, the shell saves the
   // edits of the user and loads the draft again (ADR 0036 item 14).
   const opsChanged = async () => {
@@ -3367,7 +3368,7 @@ function OutlinePage({ feed, panel, draft, changedFeeds, go, onAdding, onImporti
   return html`<div class="panel-page">
     <${Bar}><span class="bar-title">${feed.title || 'Untitled feed'}</span>
       ${isEditable(feed) && html`<${DraftToolbar} key=${feed.id} feedId=${feed.id} feedConnectorId=${feed.connector_id} draft=${draft}
-        onWritten=${onChanged} connectors=${connectors} onOpenHosts=${() => go({ name: 'hosts' })} onOpsChanged=${opsChanged} onOpsCleared=${() => {}} go=${go} />`}
+        onWritten=${onChanged} connectors=${connectors} feeds=${feeds} onListChanged=${onListChanged} onOpenHosts=${() => go({ name: 'hosts' })} onOpsChanged=${opsChanged} onOpsCleared=${() => {}} go=${go} />`}
     <//>
     <section class="section outline-page">
       <${Outline} panel=${panel} draft=${draft} changedFeeds=${changedFeeds} go=${go} showReleases=${null}
@@ -3991,8 +3992,8 @@ function Shell({ vault, onLock, version }) {
   } else if (view.name === 'add-feed') {
     main = html`<${AddFeeds} connectors=${connectors} feeds=${feeds} go=${go} onAdded=${addedFeed} />`;
   } else if (selected && view.name === 'outline') {
-    main = html`<${OutlinePage} feed=${selected} panel=${panel} draft=${draft} changedFeeds=${changedFeeds} go=${go}
-      onAdding=${setAdding} onImporting=${setImporting} onChanged=${() => load()} connectors=${connectors} />`;
+    main = html`<${OutlinePage} feed=${selected} panel=${panel} draft=${draft} changedFeeds=${changedFeeds} feeds=${feeds} go=${go}
+      onAdding=${setAdding} onImporting=${setImporting} onChanged=${() => load()} onListChanged=${() => load()} connectors=${connectors} />`;
   } else if (selected) {
     main = html`<${FeedDetail} feed=${selected} feeds=${feeds} draft=${draft} view=${view} go=${go}
       adding=${adding} onAdding=${setAdding} importing=${importing} onImporting=${setImporting} onChanged=${() => load()}

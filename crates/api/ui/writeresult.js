@@ -1,12 +1,13 @@
 // The result of a write to one feed (ADR 0217 items 2 to 4).
-export function writeResult(feed, connector) {
+export function writeResult(feed, connector, changedPage = null) {
   const result = {
     title: 'Written',
     line: `${feed.title} is written to ${connector.name}.`,
   };
-  if (feed.public_url) return { ...result, address: feed.public_url };
+  const withChangedPage = changedPage ? { ...result, changedPage } : result;
+  if (feed.public_url) return { ...withChangedPage, address: feed.public_url };
   return {
-    ...result,
+    ...withChangedPage,
     warning: {
       title: 'Listeners cannot get it yet.',
       text: connector.kind === 'local'

@@ -74,9 +74,23 @@ export const PAGE_FINDING_TEXT = {
   no_publisher_page: 'This feed has no artist, label or hosting page.',
 };
 
-export function pageRefusalView(reason) {
-  const text = PAGE_FINDING_TEXT[reason];
-  return text ? { text, button: 'Link a Page' } : null;
+// The line, the menu label and the write line of each refusal (ADR 0218 item 2).
+const PAGE_REFUSAL_TEXT = {
+  no_artist_page: { line: 'Music Index lists each release under its artist.', label: 'Artist page', write: 'Link an artist page first.' },
+  no_publisher_page: { line: 'Music Index lists each feed under its page.', label: 'Page', write: 'Link a page first.' },
+};
+
+// The refusal panel of Review (ADR 0218 items 1 to 6). `selected` is true
+// after a selection in the menu. With no candidate page, the panel has the
+// button that makes an artist page in place of the menu.
+export function pageRefusalView(reason, selected = false, candidates = 1) {
+  const title = PAGE_FINDING_TEXT[reason];
+  if (!title) return null;
+  return {
+    title, ...PAGE_REFUSAL_TEXT[reason], placeholder: 'Select a page',
+    button: candidates > 0 ? 'Link and Continue' : 'Make an Artist Page…',
+    menu: candidates > 0, linkDisabled: candidates > 0 && !selected,
+  };
 }
 
 // The label of the tab: "Check 5", or "Check" for no finding and before the

@@ -2,7 +2,7 @@
 
 Decision: [ADR 0218](../adr/0218-a-page-link-in-review-and-a-suggestion-starts-with-no-person.md) items 1 to 9. [ADR 0213](../adr/0213-a-release-starts-on-the-page-of-its-artist.md) items 17 to 21.
 
-Status: Open.
+Status: Complete, with one open visual check.
 
 ## Problem
 
@@ -58,3 +58,18 @@ Visual, by the main session with screenshots (`.studio-dev/journeys/j04.json` as
 - Write each comment and text in Simplified Technical English: `/home/citizen/.agents/skills/asd-ste100/SKILL.md`.
 - Do not commit. Leave the change in the working tree and report the changed files and the check results.
 - Do not make an architecture decision. When the ADR does not answer a question, stop and report.
+
+## Result
+
+- ChatGPT (`gpt-6-luna`, effort `medium`) did the first change. The main session corrected these defects:
+  - The panel texts were not the texts of ADR 0218 item 2. `pageRefusalView` now gives the title, the line, the menu label and the write line of each refusal.
+  - The menu showed only artist pages. It now shows the pages of the section, as item 3 tells.
+  - The make form opened from an event in the shell, and the result line did not show after it. The toolbar now holds the form and the changed page.
+  - The make form did not get the name. `MakeFeedForm` in `app.js` now reads `start.title`.
+  - The route text of the refusal changed with no decision. The main session put it back.
+- `pageLinkCandidates` and `linkPublisherPage` in `editor.js` are the shared functions of the section and Review. `editor.js` has no Node test, so a test does not examine the shared candidate function. Its filter is the same expression as before.
+- Tests: `feedcheck.test.mjs` examines the texts and the button state of the panel. `writeresult.test.mjs` examines the line of change 5. The core test examines the reason of change 6.
+- Screenshots of the main session:
+  - `.studio-dev/journeys/v175a.json` with the data `base`. They show the panel before and after a selection, and Review after **Link and Continue**, at 1280 px and 390 px.
+  - `.studio-dev/journeys/v175b.json` with the data `base`, and no page on a host. They show **Make an Artist Page…**, the form with the name "Loose Single", and Review after the link.
+- Open visual check: the result panel with the line of change 5. The walk cannot write "Loose Single", because the check of its public address needs a network that the sandbox does not have.

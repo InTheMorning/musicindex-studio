@@ -2304,7 +2304,11 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
     if (row.action === 'open-pages') {
       go({ name: 'feed', id: feed.id, page: 'album' });
       setTimeout(() => document.getElementById('linked-artist-and-label-pages')?.scrollIntoView({ block: 'center' }), 50);
-    } else if (row.action === 'open-tracks') onAdding(true);
+    } else if (row.action === 'open-tracks') {
+      // The import sheet "Add tracks", as in the outline (ADR 0219 item 3).
+      go({ name: 'feed', id: feed.id, page: 'album' });
+      onImporting(true);
+    }
     else if (row.action === 'open-cover') setArtwork({ kind: 'feed' });
     else if (row.action === 'open-track') go({ name: 'feed', id: feed.id, page: 'track', track: row.track });
     else if (row.action === 'open-recipient') {

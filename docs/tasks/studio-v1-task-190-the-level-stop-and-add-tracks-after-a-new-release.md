@@ -69,3 +69,4 @@ Visual, by the main session with screenshots at 1280 px and 390 px:
 - The artist page has its own `addedFeed` in `editor.js`, and the delegate run did not change it. The main session added `addTracksNext` to the navigation context. The shell and the artist page call it before they open the new release.
 - Walks: `.studio-dev/journeys/v190a.json` and `v190b.json` (mode `fresh`, 1280 px and 390 px), and `v190c.json` (mode `base`, release "Loose Single").
 
+- Defect correction after the commit of this task: the checklist button **Add Tracks** opened the sheet "Add a track from an address". It now opens the import sheet "Add tracks", as the outline does (ADR 0219 item 3). Walk: `.studio-dev/journeys/v191a.json` (mode `fresh`, 1280 px).

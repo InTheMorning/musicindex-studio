@@ -4,7 +4,7 @@
 import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
 import { useSheet, NostrKeyRow, NostrSheet } from './editor.js';
 import { PickerLayout, FindOneSheet, PickFold, RowList, TakenTag, useFieldList } from './pickers.js';
-import { LoadErrorNotice, api, assetMode, askConfirm, Bar, SortMenu, LetterBar, useLeaveGuard, ChoiceSelect, CopyButton, Icon, RoleMenu, ErrorNotice, FeedCheckRow, Field, useAction, useImage } from './app.js';
+import { LoadErrorNotice, api, assetMode, askConfirm, Bar, SortMenu, LetterBar, useLeaveGuard, ChoiceSelect, CopyButton, Icon, RoleMenu, ErrorNotice, FeedCheckRow, Field, SearchField, useAction, useImage } from './app.js';
 import { AddressRow } from './addressrow.js';
 import { CONFIRMS } from './confirms.js';
 import { pageSequence } from './pages.js';
@@ -189,9 +189,7 @@ export function PeoplePage({ feeds, go, sort, reversed, onOrder }) {
   const sections = data ? peopleSections({ people, suggestions: data.suggestions, changes: data.changes, payees, hidden: data.hidden, server: assetMode().server }) : [];
   const sectionViews = {
     note: () => html`<p class="hint">${PEOPLE_SERVER_NOTE}</p>`,
-    search: () => html`<div class="field search-field"><div class="field-body">
-      <input type="search" aria-label="Search people, addresses and keys" placeholder="Search people, addresses and keys"
-        value=${query} onInput=${(e) => setQuery(e.target.value)} /></div></div>`,
+    search: () => html`<${SearchField} label="Search people, addresses and keys" value=${query} onInput=${(e) => setQuery(e.target.value)} />`,
     actions: () => html`<div class="actions">
       <button class="button action" type="button" onClick=${() => setAdding(true)}>Add a Person</button>
       ${hasLinkedPages(data.people) && html`<button class="button" type="button" disabled=${busy} onClick=${() => run(async () => {

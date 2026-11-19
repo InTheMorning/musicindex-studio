@@ -625,7 +625,7 @@ export function sortEntries(sorts) {
 // album and playlist (ADR 0085 item 6). With the ID of a feed with roles as
 // `group`, it gives the releases of that feed, and `head` gives the feed. The
 // group 'none' gives the releases with no link (ADR 0085 items 3 and 4).
-export function releasesList({ feeds, connectors, sort, view, reversed, marked, group }) {
+export function releasesList({ feeds, connectors, sort, view, reversed, marked, group, query = '' }) {
   const list = Array.isArray(feeds) ? feeds : [];
   const owner = group === undefined || group === 'none'
     ? null
@@ -660,6 +660,13 @@ export function releasesList({ feeds, connectors, sort, view, reversed, marked, 
   // (musicindex ADR 0043 R-LIST-7 item 9). The letters follow the rows.
   const isReversed = reversed === true;
   if (isReversed) sorted.reverse();
+  const search = typeof query === 'string' ? query.trim().toLowerCase() : '';
+  const matches = (feed) => {
+    if (!search) return true;
+    const titles = [displayTitle(feed), ...(feed.publisher_ids || []).map((id) => list.find((item) => item.id === id)).filter(Boolean).map(displayTitle)];
+    return titles.some((title) => title.toLowerCase().includes(search));
+  };
+  const filtered = search ? sorted.filter(matches) : sorted;
   const titleOf = (id) => {
     const feed = list.find((f) => f.id === id);
     return feed ? displayTitle(feed) : null;
@@ -673,7 +680,7 @@ export function releasesList({ feeds, connectors, sort, view, reversed, marked, 
     const others = (feed.publisher_ids || []).filter((id) => id !== owner.id && !related.has(id)).map(titleOf).filter(Boolean);
     return others.length > 0 ? `Also on ${others.join(', ')}` : null;
   };
-  const rows = sorted.map((feed) => ({
+  const rows = filtered.map((feed) => ({
     id: feed.id,
     title: displayTitle(feed),
     typeLabel: feedKind(feed).label,
@@ -705,7 +712,7 @@ export function releasesList({ feeds, connectors, sort, view, reversed, marked, 
     head,
     levelTile,
     rows,
-    letters: sortKey === 'az' ? letterGroups(rows) : null,
+    letters: search ? null : sortKey === 'az' ? letterGroups(rows) : null,
   };
 }
 

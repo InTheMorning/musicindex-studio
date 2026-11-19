@@ -504,6 +504,13 @@ export function Field({ id, label, hint, error, children, rootProps, ...input })
   </div>`;
 }
 
+// The search field of a list: one input with the label as its placeholder
+// (ADR 0223 item 9). People and Releases use it.
+export function SearchField({ label, value, onInput }) {
+  return html`<div class="field search-field"><div class="field-body">
+    <input type="search" aria-label=${label} placeholder=${label} value=${value} onInput=${onInput} /></div></div>`;
+}
+
 // A field for a date and a time (ADR 0093). It shows local time with the
 // native picker. `value` and `onChange` use RFC 3339 text, or null for no
 // time. `sourceText` is the date text of the feed that the core cannot read.
@@ -3447,7 +3454,13 @@ export function LetterBar({ letters, idOf }) {
 // and the sort of that page is `groupSort` (ADR 0085 items 4 to 6).
 function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, groupReversed, changedFeeds, onQuery, onGroupSort, onOpen, onAddFeed, onAddedFeed }) {
   const inGroup = group !== undefined;
-  const releases = releasesList({ feeds, connectors, sort: inGroup ? groupSort : list.sort, reversed: inGroup ? groupReversed : list.reversed, view: list.view, marked, group });
+  // The search text stays in the page and not in the address (ADR 0223
+  // item 6). A different feed group starts with no text.
+  const [query, setQuery] = useState('');
+  useEffect(() => { setQuery(''); }, [group]);
+  const releaseArgs = { feeds, connectors, sort: inGroup ? groupSort : list.sort, reversed: inGroup ? groupReversed : list.reversed, view: list.view, marked, group };
+  const allReleases = releasesList(releaseArgs);
+  const releases = releasesList({ ...releaseArgs, query });
   const { results: outside } = useContext(OutsideContext);
   const head = releases.head;
   const title = head ? head.title : 'Releases';
@@ -3467,6 +3480,7 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
     else onQuery({ sort: id, reversed });
   };
   const hasRows = releases.rows.length > 0;
+  const hasUnfilteredRows = allReleases.rows.length > 0;
   const viewButton = (name, label, icon) => html`<button class="button quiet icon-button view-button" type="button"
     aria-label=${label} title=${label} aria-pressed=${list.view === name ? 'true' : 'false'}
     onClick=${() => onQuery({ view: name })}>${icon}</button>`;
@@ -3477,15 +3491,16 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
     <section class="releases">
       <div class="releases-head">
         <h1>${title}</h1>
-        ${(hasRows || (head && head.id !== null)) && html`<div class="releases-tools">
-          ${hasRows && html`<${SortMenu} sorts=${releases.sorts} sort=${releases.sort} reversed=${releases.reversed} onSort=${pickSort} />`}
-          ${hasRows && viewButton('rows', 'Rows', html`<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>`)}
-          ${hasRows && viewButton('tiles', 'Tiles', html`<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"></rect><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"></rect><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"></rect><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"></rect></svg>`)}
+        ${(hasUnfilteredRows || (head && head.id !== null)) && html`<div class="releases-tools">
+          ${hasUnfilteredRows && html`<${SortMenu} sorts=${releases.sorts} sort=${releases.sort} reversed=${releases.reversed} onSort=${pickSort} />`}
+          ${hasUnfilteredRows && viewButton('rows', 'Rows', html`<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>`)}
+          ${hasUnfilteredRows && viewButton('tiles', 'Tiles', html`<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"></rect><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"></rect><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"></rect><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"></rect></svg>`)}
           ${!inGroup && html`<button class="button action" type="button" onClick=${onAddFeed}>＋ Add a Feed</button>`}
           ${more && html`<button class="button action" type="button" onClick=${() => setAdding(true)}>＋ ${more.label}</button>`}
           ${head && head.id !== null && html`<button class="button" type="button" onClick=${() => onOpen(head.id)}>Open the Feed</button>`}
         </div>`}
       </div>
+      ${hasUnfilteredRows && html`<${SearchField} label="Search releases" value=${query} onInput=${(e) => setQuery(e.target.value)} />`}
       ${head && head.id !== null && html`<p class="releases-roles"><span class=${`dot ${head.dot}`} aria-hidden="true"></span>${head.typeLabel}</p>`}
       ${head && head.id === null && html`<p class="hint releases-roles">${head.note}</p>`}
       ${releases.levelTile && html`<${LevelFeedTile} tile=${releases.levelTile} view=${releases.view}
@@ -3506,6 +3521,8 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
               </button>
             </li>`)}
           <//>`
+        : query.trim()
+        ? html`<p class="hint">No release has “${query.trim()}”.</p>`
         : inGroup
         ? html`<div class="empty-releases"><p class="empty">No releases are linked yet.</p></div>`
         : html`<div class="empty-releases">

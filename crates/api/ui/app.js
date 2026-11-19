@@ -28,7 +28,7 @@ import { CONFIRMS, confirmButtons } from './confirms.js';
 import { changeTitle, afterDiscard, changeLine } from './people.js';
 import { makeSettingsDraft, changeSetting, settingsDraftView, discardSettings, saveSettings, asksSettingsLeave } from './settingsdraft.js';
 import { PeoplePage, PersonPage, CheckPage, WalletPage } from './peoplepages.js';
-import { OUTSIDE_LIMIT, OUTSIDE_SETTING_LABEL, OUTSIDE_SETTING_HINT, outsideMark, outsideNotice, readOnlyHostNotice, indexNotice, moveNotice, writeNotice, nextNoticeLoad, eachLimited, panelSet, stateMark } from './outsidecheck.js';
+import { OUTSIDE_LIMIT, OUTSIDE_SETTING_LABEL, OUTSIDE_SETTING_HINT, outsideMark, outsideNotice, readOnlyHostNotice, indexNotice, releaseMusicIndexLink, moveNotice, writeNotice, nextNoticeLoad, eachLimited, panelSet, stateMark } from './outsidecheck.js';
 import { collectionMark, collectionRow, collectionSectionActions, collectionSheet, collectionAction, CLOSED_EXPORT_HINT, COLLECTIONS_HINT, OPENING_TEXT } from './collectionlist.js';
 import { localInputToIso, isoToLocalInput, zoneHint, nowInput, unreadDateHint } from './datetime.js';
 import { durationText, readDuration, DURATION_ERROR, unreadDurationHint } from './duration.js';
@@ -2242,6 +2242,7 @@ function Crumb({ feed, view, draft }) {
 // The toolbar stays in view at each scroll position (ADR 0029 item 1).
 function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importing, onImporting, onChanged, onListChanged, onRemoved, connectors, differences, onRescan }) {
   const { busy, error, run } = useAction();
+  const [outsideCheck, setOutsideCheck] = useState(null);
   const kind = feedKind(feed);
   // The core moves a draft with no edits to the file that it reads, so the
   // edits of the user go first, and the draft loads again (ADR 0007 item 6).
@@ -2270,6 +2271,7 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
   const check = useFeedCheck(feed.id, draft);
   const [addRecipient, setAddRecipient] = useState(false);
   const checklist = releaseChecklist(check.check);
+  const musicIndexLink = releaseMusicIndexLink(feed, outsideCheck);
   // The open actions of a finding, for the checklist and for the Check page
   // (ADR 0219 items 3 and 7). `row` is a row of `checkRows`.
   const openFinding = (row) => {
@@ -2298,6 +2300,7 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
           ${feed.public_url
             ? html`<${FeedAddress} url=${feed.public_url} />`
             : html`<p class="sub mono">This feed has no public address yet.</p>`}
+          ${musicIndexLink && html`<a class="button link feed-index-link" href=${musicIndexLink.href} target="_blank" rel="noopener">${musicIndexLink.text}</a>`}
         </div>
         ${feed.last_version !== null && html`<button class="button" type="button" disabled=${busy} onClick=${refresh}>
           ${busy ? 'Reading…' : 'Read Again'}</button>`}
@@ -2310,7 +2313,7 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
         Open Review and write the draft to make the file.
       </div>`}
       <${AddressDifferences} feed=${feed} />
-      <${OutsideNotices} feed=${feed} busy=${busy} refresh=${refresh} onChanged=${onChanged} />
+      <${OutsideNotices} feed=${feed} busy=${busy} refresh=${refresh} onChanged=${onChanged} onCheck=${setOutsideCheck} />
       ${checklist && html`<section class="release-checklist" aria-labelledby="release-checklist-title">
         <h2 id="release-checklist-title">${checklist.title}</h2>
         <ul>${checklist.rows.map((row) => html`<li key=${row.label}>
@@ -4850,7 +4853,7 @@ function useOutsideChecks(feeds, key) {
 
 // The notices of the check on a feed page (ADR 0150 items 2 to 5). Each new
 // read of the feed checks again.
-function OutsideNotices({ feed, busy, refresh, onChanged }) {
+function OutsideNotices({ feed, busy, refresh, onChanged, onCheck }) {
   const [check, setCheck] = useState(null);
   const [reads, setReads] = useState(0);
   const confirmedHere = useRef(false);
@@ -4863,9 +4866,15 @@ function OutsideNotices({ feed, busy, refresh, onChanged }) {
   const load = () => {
     readsRef.current += 1;
     setReads(readsRef.current);
-    return api(`/feeds/${feed.id}/outside?index=true`).then(setCheck, () => {});
+    return api(`/feeds/${feed.id}/outside?index=true`).then((answer) => {
+      setCheck(answer);
+      if (onCheck) onCheck(answer);
+    }, () => {
+      setCheck(null);
+      if (onCheck) onCheck(null);
+    });
   };
-  useEffect(() => { setCheck(null); setReads(0); readsRef.current = 0; since.current = 0; confirmedHere.current = false; load(); }, [feed.id, feed.last_version]);
+  useEffect(() => { setCheck(null); if (onCheck) onCheck(null); setReads(0); readsRef.current = 0; since.current = 0; confirmedHere.current = false; load(); }, [feed.id, feed.last_version]);
   useEffect(() => {
     window.addEventListener(ANNOUNCE_RELOAD, load);
     return () => window.removeEventListener(ANNOUNCE_RELOAD, load);

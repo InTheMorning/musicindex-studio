@@ -1,5 +1,6 @@
 import { unlinkedReleases, otherFeeds } from './shell.js';
 import { INDEX_READ_AGAIN_MS, INDEX_READ_AGAIN_MAX } from './releasemove.js';
+import { musicindexFeedUrl } from './people.js';
 
 // The check for a change from outside Studio (ADR 0150). This module has no
 // Preact and no browser state. The core makes the comparison and gives the
@@ -82,6 +83,12 @@ export function indexNotice(check) {
     own: check.own_url,
     after: 'A different collection or a different tool can hold this feed.',
   };
+}
+
+// The release page link to Music Index (ADR 0220 items 1 to 3).
+export function releaseMusicIndexLink(feed, check) {
+  if (!feed || !feed.podcast_guid || !check || check.held !== true) return null;
+  return { href: musicindexFeedUrl(feed.podcast_guid), text: 'Open on musicindex.org' };
 }
 
 // The local time of a Unix time in seconds. Review uses it too (ADR 0190

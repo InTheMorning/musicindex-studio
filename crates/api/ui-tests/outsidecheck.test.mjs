@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { outsideMark, outsideNotice, readOnlyHostNotice, indexNotice, moveNotice, writeNotice, nextNoticeLoad, LATE_NOTICE_LOAD, eachLimited, OUTSIDE_LIMIT, panelSet, stateMark } from '../ui/outsidecheck.js';
+import { outsideMark, outsideNotice, readOnlyHostNotice, indexNotice, releaseMusicIndexLink, moveNotice, writeNotice, nextNoticeLoad, LATE_NOTICE_LOAD, eachLimited, OUTSIDE_LIMIT, panelSet, stateMark } from '../ui/outsidecheck.js';
 import { pageSequence, tierError } from '../ui/pages.js';
 
 test('A tile has a mark for a change and a move, and none for an index difference (ADR 0150 items 2, 3 and 5)', () => {
@@ -27,6 +27,17 @@ test('The index notice gives both addresses (ADR 0150 item 5)', () => {
   const notice = indexNotice({ index_url: 'https://a/x.xml', own_url: 'https://b/x.xml' });
   assert.deepEqual([notice.index, notice.own], ['https://a/x.xml', 'https://b/x.xml']);
   assert.equal(indexNotice({ index_url: null }), null);
+});
+
+test('The release page links to Music Index only when it holds the feed (ADR 0220 items 1 to 3)', () => {
+  const feed = { podcast_guid: 'a b' };
+  assert.deepEqual(releaseMusicIndexLink(feed, { held: true }), {
+    href: 'https://musicindex.org/#feed=a%20b',
+    text: 'Open on musicindex.org',
+  });
+  assert.equal(releaseMusicIndexLink(feed, { held: false }), null);
+  assert.equal(releaseMusicIndexLink(feed, { held: null }), null);
+  assert.equal(releaseMusicIndexLink({ podcast_guid: null }, { held: true }), null);
 });
 
 test('The Studio move notice gives each podping state and its action (ADR 0184 items 3 to 7)', () => {

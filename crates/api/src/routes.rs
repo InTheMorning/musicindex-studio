@@ -1887,11 +1887,12 @@ pub(crate) async fn outside_check(
             "last_move": last_move,
             "last_write": last_write_json(last_write.as_ref(), None),
             "index_is_move_source": false,
+            "held": null,
         })));
     }
     let Some(address) = outside::address_of(&row) else {
         return Ok(Json(
-            json!({ "enabled": true, "state": null, "read": false, "last_move": last_move, "last_write": last_write_json(last_write.as_ref(), None), "index_is_move_source": false }),
+            json!({ "enabled": true, "state": null, "read": false, "last_move": last_move, "last_write": last_write_json(last_write.as_ref(), None), "index_is_move_source": false, "held": null }),
         ));
     };
     let ask_index = query.index;
@@ -1916,6 +1917,7 @@ pub(crate) async fn outside_check(
         folder_hosted,
         index_url,
         index_read,
+        held,
     } = reads;
     blocking(shared, move |w| {
         // True only when this request read the hosted file (ADR 0165 item 7).
@@ -1948,6 +1950,7 @@ pub(crate) async fn outside_check(
             "connected": row.connector_id.is_some(),
             "last_move": last_move,
             "last_write": last_write_json(last_write.as_ref(), index_read),
+            "held": held,
         })))
     })
     .await
@@ -1971,6 +1974,7 @@ struct OutsideCheckReads {
     folder_hosted: Option<Vec<u8>>,
     index_url: Option<String>,
     index_read: Option<bool>,
+    held: Option<bool>,
 }
 
 fn outside_check_reads(
@@ -1984,18 +1988,26 @@ fn outside_check_reads(
 ) -> OutsideCheckReads {
     let hosted = outside::read_hosted(web, address);
     let folder_hosted = folder_address.and_then(|url| outside::read_hosted(web, url));
-    let held = match ask_index
+    let presence = match ask_index
         .then_some(row.podcast_guid.as_deref())
         .flatten()
         .map(|guid| index.feed_presence(guid))
     {
-        Some(Ok(studio_core::musicindex::IndexPresence::Held(found))) => Some(found),
+        Some(Ok(presence)) => Some(presence),
         _ => None,
     };
-    let index_url = held
+    let held = presence
+        .as_ref()
+        .map(|presence| matches!(presence, studio_core::musicindex::IndexPresence::Held(_)));
+    let found = presence.and_then(|presence| match presence {
+        studio_core::musicindex::IndexPresence::Held(found) => Some(found),
+        studio_core::musicindex::IndexPresence::Absent
+        | studio_core::musicindex::IndexPresence::Superseded(_) => None,
+    });
+    let index_url = found
         .as_ref()
         .and_then(|found| outside::index_difference(row, found));
-    let index_read = held.as_ref().and_then(|found| {
+    let index_read = found.as_ref().and_then(|found| {
         studio_core::feed_check::index_read(found.last_build_date, written_build_date)
     });
     OutsideCheckReads {
@@ -2003,6 +2015,7 @@ fn outside_check_reads(
         folder_hosted,
         index_url,
         index_read,
+        held,
     }
 }
 

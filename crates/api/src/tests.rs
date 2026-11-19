@@ -16495,11 +16495,13 @@ async fn the_outside_check_compares_the_address_of_musicindex_only_on_request() 
     server.set(route, 404, Vec::new());
     let (_, none) = call(&app, "GET", &format!("{path}?index=true"), None).await;
     assert_eq!(none["index_url"], Value::Null, "ADR 0150 item 5");
+    assert_eq!(none["held"], json!(false), "ADR 0220 item 2");
 
     // The same address gives nothing.
     server.set(route, 200, answer(&own));
     let (_, same) = call(&app, "GET", &format!("{path}?index=true"), None).await;
     assert_eq!(same["index_url"], Value::Null, "ADR 0150 item 5: {same}");
+    assert_eq!(same["held"], json!(true), "ADR 0220 item 2");
 
     // A different address gives both.
     server.set(route, 200, answer("https://other.example/a.xml"));
@@ -16509,14 +16511,17 @@ async fn the_outside_check_compares_the_address_of_musicindex_only_on_request() 
         Value::Null,
         "no request without index=true"
     );
+    assert_eq!(plain["held"], Value::Null, "ADR 0220 item 2");
     let (_, found) = call(&app, "GET", &format!("{path}?index=true"), None).await;
     assert_eq!(found["index_url"], json!("https://other.example/a.xml"));
     assert_eq!(found["own_url"], json!(own));
+    assert_eq!(found["held"], json!(true), "ADR 0220 item 2");
 
     // No answer gives nothing.
     server.set(route, 500, Vec::new());
     let (_, failed) = call(&app, "GET", &format!("{path}?index=true"), None).await;
     assert_eq!(failed["index_url"], Value::Null, "ADR 0150 item 5");
+    assert_eq!(failed["held"], Value::Null, "ADR 0220 item 2");
 }
 
 #[tokio::test]

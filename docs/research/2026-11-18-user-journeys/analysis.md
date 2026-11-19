@@ -208,3 +208,10 @@ Operator choices of 2026-11-18. [ADR 0217](../../adr/0217-a-new-artist-sees-the-
   is the first item and the default.
 - T3: the merge sheet selects no person at the start. Each row tells its feed. After the merge, a message
   with an undo shows. This needs an undo in the core.
+
+Operator choices of 2026-11-19. [ADR 0218](../../adr/0218-a-page-link-in-review-and-a-suggestion-starts-with-no-person.md) owns them.
+
+- T4: the refusal panel in Review links the page. With no page, the panel makes an artist page. The write of
+  the artist page stays separate, and the result panel tells it.
+- T6: the menu "Person" of a suggestion starts on "Select a person". The note of the fold tells the user to add
+  a name to a person that exists.

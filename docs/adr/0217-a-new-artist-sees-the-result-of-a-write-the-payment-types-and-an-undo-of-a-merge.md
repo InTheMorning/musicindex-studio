@@ -7,6 +7,7 @@
 - Technical choices: the main session selected items 2, 5, 6, 9, 10, 13, 16 and 17.
 - Bar: crosses modules. Item 15 needs an undo in the core, the API and the UI. An agent can also make the opposite choice by mistake: close Review after a write, or select a person at the start of a merge.
 - Changes: [ADR 0203](0203-people.md) item 52. The menu "Person to merge" has no first selection, and a merge has an undo.
+- Changed by: [ADR 0218](0218-a-page-link-in-review-and-a-suggestion-starts-with-no-person.md) item 7, on 2026-11-19. Item 2: the result panel tells a page that a link in Review changed.
 - Uses: [ADR 0138](0138-the-names-of-a-wallet-address-and-the-correction-of-a-wrong-key.md) item 3 for the type words. [ADR 0203](0203-people.md) items 31 and 32 for the merge. [ADR 0175](0175-the-check-shows-what-music-index-holds.md) item 1 for the notice of Music Index after a write. [ADR 0191](0191-a-return-warning-has-the-warning-color-and-a-sent-podping-can-go-again.md) item 1 for the warning title. [ADR 0007](0007-draft-diff-write-and-announce.md) for Review.
 - Source: [analysis of two journeys for a new independent artist](../research/2026-11-18-user-journeys/analysis.md), themes T1, T2 and T3, and its section "Operator choices".
 

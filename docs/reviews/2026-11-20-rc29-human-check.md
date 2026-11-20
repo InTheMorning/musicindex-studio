@@ -178,7 +178,7 @@ The operator ran the release binary `target/release/musicindex-studio-desktop` o
 | 3. Discard a move from bastone to CloudFlare | Fail. See finding 3. |
 | 4. Plan a move where the target has the media files and a different host keeps old copies | Not run. The feed of the test album already uses the bastone addresses, so the plan says "7 files: Already on bastone" and "Old files: None". The CloudFlare copies have their record in **Old files to delete** from the earlier write (`crates/api/src/routes.rs:5516`). No release on the real data has this condition. The known gap stays open. |
 | 5. Write with "Send a podping" on | Pass. |
-| 6. A deleted release on **Settings** | Not run. The operator removed "new Feed" from the collection before this check. The real data has no other deleted release. |
+| 6. A deleted release on **Settings** | Not run on the real data. The operator removed "new Feed" from the collection before this check, and no other release is deleted. Agent check: the screenshot `.studio-dev/v-207/out23/w-notice-settings.png` (steps `s23.json`, the code of task 211 at `0ba9526`) shows the notice with **Put the File Back** and **Check Again** below the head on **Settings**. No later commit changes `crates/api/ui/feeddelete.js` or `OutsideNotices` in `crates/api/ui/app.js`. |
 | 7. **Remove from Collection** of "Various & Assorted", a new release that was not written | Pass. No error. The notice says "Various & Assorted is removed from your collection." Releases and the left panel do not show the release. |
 
 ### Findings Of The Desktop Check Of rc.30

@@ -9,9 +9,12 @@
 
 use crate::collection::{Collection, FeedId};
 use crate::feed::Feed;
+use crate::feed_check::same_but_spelling;
 use crate::feed_reads::IndexReads;
 use crate::library::Library;
+use crate::media::plain_address;
 use crate::musicindex::IndexPresence;
+use crate::outside::{self, LastWrittenMove};
 use crate::pipeline::{self, PipelineError, PipelineErrorKind};
 use crate::publisher::{self, PublisherError};
 
@@ -40,6 +43,15 @@ pub enum IndexRemoval {
     Removed,
     /// The read gave a record. musicindex holds the entry.
     NotYet,
+    /// The read gave a record at an address that is not the address of this
+    /// file, and Studio did not move the feed from that address (ADR 0228
+    /// items 20 and 21). This file is a leftover copy. The page line is
+    /// "Music Index reads this feed from {address}. This file is a leftover
+    /// copy."
+    LeftoverCopy {
+        /// The address that Music Index reads.
+        index_url: String,
+    },
     /// The read gave a 404 with `superseded_by`. musicindex holds the feed
     /// with a different GUID, so it did not remove the feed. The page line
     /// is "Music Index holds this feed with a different GUID."
@@ -92,6 +104,11 @@ pub struct RetireFacts {
     pub delete: FileDelete,
     /// The `podcast:guid` of the draft, or of the last read of the feed.
     pub guid: Option<String>,
+    /// The public address of this file. `None` when the feed has none, or
+    /// when the address is a placeholder.
+    pub public_address: Option<String>,
+    /// The last move of the feed that Studio completed.
+    pub last_move: Option<LastWrittenMove>,
 }
 
 /// Collect the local facts of the retire state of a feed.
@@ -121,28 +138,70 @@ pub fn retire_facts(
     };
     let guid = draft
         .and_then(|feed| feed.podcast_guid)
-        .or(row.podcast_guid)
+        .or(row.podcast_guid.clone())
         .filter(|guid| !guid.is_empty());
     let delete = if deleted {
         FileDelete::Done
     } else {
         FileDelete::NotDone
     };
-    Ok(RetireFacts { ask, delete, guid })
+    let public_address = outside::address_of(&row);
+    let last_move = outside::last_written_move(collection, &row)?;
+    Ok(RetireFacts {
+        ask,
+        delete,
+        guid,
+        public_address,
+        last_move,
+    })
 }
 
 /// Read the record of the feed from the index. This is the only request of
 /// the retire (ADR 0131 item 6). A feed with no `podcast:guid` sends none.
-pub fn read_removal(guid: Option<&str>, reads: &dyn IndexReads) -> IndexRemoval {
+///
+/// A record at an address that differs from `public_address` gives
+/// [`IndexRemoval::LeftoverCopy`], unless Studio moved the feed from that
+/// address (ADR 0228 items 20 to 22). With no known public address the
+/// answer stays [`IndexRemoval::NotYet`].
+pub fn read_removal(
+    guid: Option<&str>,
+    public_address: Option<&str>,
+    last_move: Option<&LastWrittenMove>,
+    reads: &dyn IndexReads,
+) -> IndexRemoval {
     let Some(guid) = guid else {
         return IndexRemoval::NotKnownNoGuid;
     };
     match reads.feed_presence(guid) {
         Ok(IndexPresence::Absent) => IndexRemoval::Removed,
-        Ok(IndexPresence::Held(_)) => IndexRemoval::NotYet,
+        Ok(IndexPresence::Held(record)) => {
+            leftover_address(record.url.as_deref(), public_address, last_move)
+                .map_or(IndexRemoval::NotYet, |index_url| {
+                    IndexRemoval::LeftoverCopy { index_url }
+                })
+        }
         Ok(IndexPresence::Superseded(new_guid)) => IndexRemoval::HeldWithOtherGuid { new_guid },
         Err(address) => IndexRemoval::NotKnownFailed { address },
     }
+}
+
+/// The address that Music Index reads, when this file is a leftover copy
+/// (ADR 0228 items 20 to 22). Both addresses get the same plain form first.
+fn leftover_address(
+    index_url: Option<&str>,
+    public_address: Option<&str>,
+    last_move: Option<&LastWrittenMove>,
+) -> Option<String> {
+    let index_url = plain_address(index_url?.trim()).into_owned();
+    let own = plain_address(public_address?.trim());
+    if index_url.is_empty()
+        || index_url == own
+        || same_but_spelling(&index_url, &own)
+        || outside::index_is_move_source(Some(&index_url), last_move)
+    {
+        return None;
+    }
+    Some(index_url)
 }
 
 /// Refuse a delete while Music Index may hold the feed.
@@ -152,7 +211,7 @@ pub fn read_removal(guid: Option<&str>, reads: &dyn IndexReads) -> IndexRemoval 
 /// Gives [`PipelineErrorKind::IndexHoldsFeed`] unless Music Index removed the feed.
 pub fn ensure_index_removed(removal: &IndexRemoval) -> Result<(), PipelineError> {
     let next_step = match removal {
-        IndexRemoval::Removed => return Ok(()),
+        IndexRemoval::Removed | IndexRemoval::LeftoverCopy { .. } => return Ok(()),
         IndexRemoval::NotYet => "retire the feed and wait until Music Index removes the entry",
         IndexRemoval::HeldWithOtherGuid { .. } => {
             "retire the feed that has the new GUID in Music Index"
@@ -174,7 +233,10 @@ pub fn ensure_index_removed(removal: &IndexRemoval) -> Result<(), PipelineError>
 pub fn retire_state(facts: &RetireFacts, removal: IndexRemoval) -> RetireState {
     RetireState {
         ask: facts.ask,
-        removal_done: removal == IndexRemoval::Removed,
+        removal_done: matches!(
+            removal,
+            IndexRemoval::Removed | IndexRemoval::LeftoverCopy { .. }
+        ),
         removal,
         delete: facts.delete,
     }
@@ -269,8 +331,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn ensure_index_removed_accepts_only_removed() {
+    fn ensure_index_removed_accepts_only_removed_or_a_leftover_copy() {
         assert!(ensure_index_removed(&IndexRemoval::Removed).is_ok());
+        assert!(
+            ensure_index_removed(&IndexRemoval::LeftoverCopy {
+                index_url: "https://other.example/a.xml".to_owned()
+            })
+            .is_ok()
+        );
         let held = [
             IndexRemoval::NotYet,
             IndexRemoval::HeldWithOtherGuid {

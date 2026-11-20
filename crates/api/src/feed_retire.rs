@@ -17,6 +17,19 @@ use studio_core::feed_retire;
 use crate::routes::{ApiResult, Shared, blocking, blocking_unlocked, diff_json, draft_json};
 use crate::routes::{ensure_writable_draft, writer_check};
 
+/// Read the index for the facts of a feed (ADR 0228 items 20 to 22).
+fn read_removal(
+    facts: &feed_retire::RetireFacts,
+    index: &dyn studio_core::feed_reads::IndexReads,
+) -> feed_retire::IndexRemoval {
+    feed_retire::read_removal(
+        facts.guid.as_deref(),
+        facts.public_address.as_deref(),
+        facts.last_move.as_ref(),
+        index,
+    )
+}
+
 /// The state of the three steps of a retire. The route reads the index one
 /// time. The page calls it when it opens and at **Check Again** (ADR 0131
 /// item 6). The route starts no draft.
@@ -28,9 +41,8 @@ pub(crate) async fn retire_state(State(shared): State<Shared>, Path(id): Path<i6
         Ok((facts, w.index.clone()))
     })
     .await?;
-    let guid = facts.guid.clone();
-    let removal =
-        blocking_unlocked(move || Ok(feed_retire::read_removal(guid.as_deref(), &index))).await?;
+    let read_facts = facts.clone();
+    let removal = blocking_unlocked(move || Ok(read_removal(&read_facts, &index))).await?;
     Ok(Json(json!(feed_retire::retire_state(&facts, removal))))
 }
 
@@ -72,14 +84,13 @@ pub(crate) async fn delete_draft(
     Json(body): Json<SentDelete>,
 ) -> ApiResult {
     let id = FeedId(id);
-    let (guid, index) = blocking(shared.clone(), move |w| {
+    let (facts, index) = blocking(shared.clone(), move |w| {
         let library = w.library()?;
         let facts = feed_retire::retire_facts(&w.collection, &library, id)?;
-        Ok((facts.guid, w.index.clone()))
+        Ok((facts, w.index.clone()))
     })
     .await?;
-    let removal =
-        blocking_unlocked(move || Ok(feed_retire::read_removal(guid.as_deref(), &index))).await?;
+    let removal = blocking_unlocked(move || Ok(read_removal(&facts, &index))).await?;
     feed_retire::ensure_index_removed(&removal)?;
     blocking(shared, move |w| {
         writer_check(w, id)?;

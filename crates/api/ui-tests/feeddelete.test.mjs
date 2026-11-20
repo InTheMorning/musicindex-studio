@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { deleteChoices, deleteButtonEnabled, deleteWrite, refusedDelete, retireSteps, operationNote, domainLine, DELETE_POINTS, retireActions } from '../ui/feeddelete.js';
+import { deleteChoices, deleteButtonEnabled, deleteWrite, refusedDelete, retireSteps, leftoverLine, operationNote, domainLine, DELETE_POINTS, retireActions } from '../ui/feeddelete.js';
 import { readFileSync } from 'node:fs';
 
 test('the choice sheet gives the goals of ADR 0131 items 2 to 4 and the third row only after removal', () => {
@@ -204,4 +204,17 @@ test('ADR 0198 reads the retire state again after a write', () => {
     'ADR 0198 item 6: a late answer must not show the state before the write. Set the retire state only from the answer of the last request.');
   assert.ok(editor.includes('onClick=${loadRetire}>Check Again</button>') && !editor.includes('setRetire(await api('),
     'ADR 0198 item 6: Check Again must use loadRetire. Do not set the retire state directly from an API answer.');
+});
+
+test('a leftover copy shows the row of the delete and the line of ADR 0228 item 20', () => {
+  const fix = 'Fix leftoverLine and deleteChoices in crates/api/ui/feeddelete.js.';
+  const leftover = state({ removal: { answer: 'leftover_copy', index_url: 'https://other.example/a.xml' }, removal_done: true });
+  assert.equal(leftoverLine(leftover), 'Music Index reads this feed from https://other.example/a.xml. This file is a leftover copy.',
+    `ADR 0228 item 20: the sheet gives this text. ${fix}`);
+  assert.deepEqual(deleteChoices(leftover).map(({ action }) => action), ['move', 'retire', 'delete'],
+    `ADR 0228 item 20: a leftover copy has the delete row. ${fix}`);
+  assert.equal(retireSteps(leftover)[2].button, 'Delete the File');
+  for (const value of [null, state(), state({ removal: { answer: 'removed' }, removal_done: true })]) {
+    assert.equal(leftoverLine(value), null, `ADR 0228 item 20: only a leftover copy has the line. ${fix}`);
+  }
 });

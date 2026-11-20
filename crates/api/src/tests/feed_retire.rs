@@ -541,3 +541,46 @@ async fn feed_rows_report_a_completed_host_delete() {
         "ADR 0198 item 7: mark an undeleted feed as not deleted. Set host_deleted per feed."
     );
 }
+
+#[tokio::test]
+async fn a_guid_at_another_address_is_a_leftover_copy_and_the_delete_draft_passes() {
+    // ADR 0228 item 20: the index reads the feed from another address.
+    let index = CountingIndex::start(
+        200,
+        r#"{"data":{"feed_url":"https://other.example/a.xml"}}"#,
+    );
+    let (app, id) = app_with(&index.url(), &feed_xml("Album", &guid_tag())).await;
+    let answer = state(&app, id).await;
+    assert_eq!(answer["removal"]["answer"], "leftover_copy", "{answer}");
+    assert_eq!(
+        answer["removal"]["index_url"],
+        "https://other.example/a.xml"
+    );
+    assert_eq!(answer["removal_done"], true);
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/delete/draft"),
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+
+    // The address of this file keeps the refusal (ADR 0200 item 6).
+    let index = CountingIndex::start(
+        200,
+        r#"{"data":{"feed_url":"HTTPS://Music.Example/a.xml"}}"#,
+    );
+    let (app, id) = app_with(&index.url(), &feed_xml("Album", &guid_tag())).await;
+    let answer = state(&app, id).await;
+    assert_eq!(answer["removal"]["answer"], "not_yet", "{answer}");
+    assert_eq!(answer["removal_done"], false);
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/delete/draft"),
+        Some(json!({})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+}

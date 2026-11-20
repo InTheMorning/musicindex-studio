@@ -49,7 +49,7 @@ import { shortType as formatLabel, propertiesSummary, propertiesOpen, propertyRo
 import { MOVE_SCOPES, fileHostRows, planRows, stayRows, deleteLabel, deleteAllLabel, DELETE_NOTE_ON, DELETE_NOTE_OFF, waitLabel, waitingView, readyNotice, partMoveNotice, existsRefusalView, addDisabled, replacesCopyNote, replaceWarning, indexNeedsRead, INDEX_READ_AGAIN_MS } from './releasemove.js';
 import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary, artworkPreview } from './artwork.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, addsAsTrackFile, refusedText, wrongKindText, replacedAddresses, selectedFacts, TRACK_FILES_ACCEPT } from './picker.js';
-import { deleteChoices, deleteButtonEnabled, retireSteps, retireActions, domainLine, DELETE_POINTS, operationNote, refusedDelete } from './feeddelete.js';
+import { deleteChoices, leftoverLine, deleteButtonEnabled, retireSteps, retireActions, domainLine, DELETE_POINTS, operationNote, refusedDelete } from './feeddelete.js';
 import { writeResult } from './writeresult.js';
 import { undoKey } from './undohistory.js';
 
@@ -2607,7 +2607,7 @@ function FeedDelete({ feed, draft, onListChanged }) {
       <${ErrorNotice} error=${action.error} />`}
     <dialog ref=${firstRef} class="sheet small" aria-labelledby="delete-host-title" onClose=${() => setFirstOpen(false)}>
       <header><h2 id="delete-host-title">What do you want to do?</h2><button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => firstRef.current.close()}>✕</button></header>
-      <div class="body"><div class="group rows">
+      <div class="body">${leftoverLine(deleteState) && html`<p class="hint">${leftoverLine(deleteState)}</p>`}<div class="group rows">
           ${deleteChoices(deleteState).map((choice) => html`<button class=${`delete-choice link-row${choice.destructive ? ' destructive' : ''}`} type="button" key=${choice.action}
             onClick=${choice.action === 'retire' ? startRetire : choice.action === 'move' ? () => {
               setFirstOpen(false); window.dispatchEvent(new CustomEvent(OPEN_FEED_MOVE, { detail: feed.id }));

@@ -2,7 +2,7 @@
 
 Decision: [ADR 0228](../adr/0228-undo-in-the-bar-a-notice-that-stays-and-the-rc28-check-findings.md) items 20 to 22.
 
-Status: Open.
+Status: Done.
 
 ## Problem
 
@@ -41,3 +41,11 @@ Visual (the main session): none. The human check deletes the file of finding 9 o
 - Read `/home/citizen/.agents/skills/asd-ste100/SKILL.md` before you write a comment.
 - Do not commit. Leave the change in the working tree and report the changed files and the check results.
 - Do not make an architecture decision. When this task does not answer a question, stop and report.
+
+## Result
+
+- The core gives `IndexRemoval::LeftoverCopy` when the record of Music Index has an address that is not the public address of this file. The core compares the two addresses after `plain_address` and `same_but_spelling`. The source address of the last move by Studio gives `NotYet` (item 21).
+- `retire_state` gives `removal_done: true` for a leftover copy, and `ensure_index_removed` accepts it. Each other answer stays refused.
+- The first sheet and step 2 of the retire show "Music Index reads this feed from {address}. This file is a leftover copy."
+- Core tests, route tests and UI tests cover a different address, the same address and the source address of a move. `bash tools/gate.sh` passed.
+- No walk shows the sheet with a leftover copy. The walk needs an index stub that gives a record at a different address. The human check of ADR 0228 (the leftover copy of finding 9 on the real file host) stays open.

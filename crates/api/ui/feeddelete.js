@@ -31,6 +31,14 @@ export function deleteChoices(state) {
   return DELETE_CHOICES.slice(0, 2);
 }
 
+// The line above the rows when this file is a leftover copy (ADR 0228
+// item 20). The core gives the address of Music Index.
+export function leftoverLine(state) {
+  const removal = state?.removal;
+  if (removal?.answer !== 'leftover_copy' || !removal.index_url) return null;
+  return `Music Index reads this feed from ${removal.index_url}. This file is a leftover copy.`;
+}
+
 // The domain line (ADR 0131 items 15 and 16): the title, then the text. The
 // core gives the host as `address_host`, so this function does not read an
 // address. `deleted` is true for a feed with a done delete.
@@ -68,6 +76,7 @@ export function retireSteps(state) {
       : askDone ? 'Hide from apps is on in the last write.' : 'Hide from apps is not on in the draft or last write.';
   const removal = state.removal;
   let removalText = 'Music Index still holds this feed.';
+  if (removal.answer === 'leftover_copy') removalText = leftoverLine(state) || removalText;
   if (removal.answer === 'removed') removalText = 'Music Index does not hold this feed.';
   if (removal.answer === 'held_with_other_guid') removalText = 'Music Index holds this feed with a different GUID.';
   if (removal.answer === 'not_known_failed') removalText = `Studio could not read ${removal.address}.`;

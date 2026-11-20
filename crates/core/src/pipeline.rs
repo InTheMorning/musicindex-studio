@@ -6067,15 +6067,18 @@ fn temporary_copy(
 /// Put each upload and each copy of `operations` on its host: the first
 /// step of [`write_draft`] (ADR 0036 item 15).
 ///
-/// The write does not replace a file that is on the host already. After
-/// each file, the function records it in the inventory, with the
-/// SHA-256 of the library file (ADR 0036 item 6).
+/// The write does not replace a file that is on the host already. A file
+/// at the planned path with the SHA-256 of the library file is the file of
+/// the operation, also when the inventory has no record of it (ADR 0034
+/// items 2 and 3). An example is the copy from before of a return to an
+/// earlier host. After each file, the function records it in the
+/// inventory, with the SHA-256 of the library file (ADR 0036 item 6).
 ///
 /// # Errors
 ///
 /// Gives [`PipelineErrorKind::NoFolder`] when the feed has no release
-/// folder, and [`PipelineErrorKind::FileExists`] when a file is on the
-/// host at the planned path already.
+/// folder, and [`PipelineErrorKind::FileExists`] when a different file is
+/// on the host at the planned path already.
 fn put_uploads_and_copies(
     collection: &Collection,
     hosts: &Hosts,
@@ -6117,14 +6120,26 @@ fn put_uploads_and_copies(
         };
         let mut source = std::fs::File::open(&library_path).map_err(read_error)?;
         let length = source.metadata().map_err(read_error)?.len();
+        let sha256 = match file.sha256.clone() {
+            Some(sha256) => sha256,
+            None => crate::digest::sha256_file(&library_path).map_err(read_error)?,
+        };
         let target = hosts.get(operation.connector_id)?;
         match target.write_from(&operation.path, &mut source, length, &Expected::Absent) {
             Ok(_) => {}
             Err(error) if error.kind() == ConnectorErrorKind::Conflict => {
-                return Err(PipelineError::new(
-                    PipelineErrorKind::FileExists,
-                    format!("a file exists at {} already", operation.path),
-                ));
+                let found = inventory::host_sha(
+                    collection,
+                    hosts,
+                    operation.connector_id,
+                    &operation.path,
+                )?;
+                if found.as_deref() != Some(sha256.as_str()) {
+                    return Err(PipelineError::new(
+                        PipelineErrorKind::FileExists,
+                        format!("a file exists at {} already", operation.path),
+                    ));
+                }
             }
             Err(error) => return Err(error.into()),
         }
@@ -6140,10 +6155,6 @@ fn put_uploads_and_copies(
             listed.size,
             &listed.stamp,
         )?;
-        let sha256 = match file.sha256.clone() {
-            Some(sha256) => sha256,
-            None => crate::digest::sha256_file(&library_path).map_err(read_error)?,
-        };
         collection.set_host_file_sha(operation.connector_id, &operation.path, &sha256)?;
         touched.insert(operation.connector_id);
     }

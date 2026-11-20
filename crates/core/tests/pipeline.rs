@@ -1118,6 +1118,81 @@ fn a_draft_that_refers_to_an_imported_file_gives_one_upload_until_it_is_on_the_h
     assert_eq!(diff.files, Vec::new());
 }
 
+/// A write meets a file at the planned path that the inventory has no
+/// record of, for example the copy from before of a return to an earlier
+/// host. A file with the SHA-256 of the library file is the file of the
+/// upload (ADR 0034 item 2).
+#[test]
+fn an_upload_uses_a_file_with_the_same_bytes_that_the_inventory_does_not_know() {
+    let mut s = setup();
+    s.collection.set_feed_folder(s.feed, "album").unwrap();
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    let imported = import_file(&s, "01.mp3", b"one");
+    let planned = reference_planned(&s, imported.library_file_id);
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    assert_eq!(diff.operations.len(), 1);
+
+    s.connector
+        .write(&planned.path, b"one", &Expected::Absent)
+        .unwrap();
+    pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        &ScriptedReader::empty(),
+        s.feed,
+        &diff.id,
+    )
+    .expect(
+        "ADR 0034 item 2: a file with the SHA-256 of the library file is the file of the upload. \
+         Fix: compare the SHA-256 in put_uploads_and_copies before FileExists.",
+    );
+    let library_sha = s
+        .collection
+        .library_file(imported.library_file_id)
+        .unwrap()
+        .sha256;
+    let row = s
+        .collection
+        .host_file(planned.connector_id, &planned.path)
+        .unwrap()
+        .unwrap();
+    assert!(library_sha.is_some());
+    assert_eq!(row.sha256, library_sha);
+}
+
+/// A different file at the planned path stops the write, and the file
+/// does not change (ADR 0034 item 3).
+#[test]
+fn an_upload_does_not_replace_a_different_file_that_the_inventory_does_not_know() {
+    let mut s = setup();
+    s.collection.set_feed_folder(s.feed, "album").unwrap();
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    let imported = import_file(&s, "01.mp3", b"one");
+    let planned = reference_planned(&s, imported.library_file_id);
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+
+    s.connector
+        .write(&planned.path, b"two", &Expected::Absent)
+        .unwrap();
+    let error = pipeline::write_draft(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        &ScriptedReader::empty(),
+        s.feed,
+        &diff.id,
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::FileExists);
+    assert_eq!(
+        s.connector.read(&planned.path).unwrap().unwrap().bytes,
+        b"two"
+    );
+}
+
 /// A draft that refers to a copy of a library file on a different host
 /// uses that copy. The file needs no upload to its own host
 /// (ADR 0036 item 10).

@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { outsideMark, outsideNotice, readOnlyHostNotice, indexNotice, releaseMusicIndexLink, moveNotice, moveAgainDelay, tagTime, writeNotice, nextNoticeLoad, LATE_NOTICE_LOAD, WRITE_NOTICE_AGE, eachLimited, OUTSIDE_LIMIT, panelSet, stateMark } from '../ui/outsidecheck.js';
+import { outsideMark, outsideNotice, readOnlyHostNotice, indexNotice, releaseMusicIndexLink, moveNotice, moveAgainDelay, tagTime, writeNotice, nextNoticeLoad, LATE_NOTICE_LOAD, WRITE_NOTICE_AGE, eachLimited, OUTSIDE_LIMIT, panelSet, stateMark, feedsToCheck } from '../ui/outsidecheck.js';
 import { pageSequence, tierError } from '../ui/pages.js';
 import { INDEX_READ_AGAIN_MS } from '../ui/releasemove.js';
 
@@ -247,6 +247,24 @@ test('The mark of a set ranks outside, pending and unchecked (ADR 0165 item 2)',
   assert.equal(stateMark([feedOf(1)], { 1: { read: false, state: null } }).kind, 'unchecked');
   assert.equal(stateMark([feedOf(1, { draft_state: 'none' })], { 1: read() }), null);
   assert.equal(stateMark([], {}), null);
+});
+
+test('The mark is Checking while a feed of the set has a running check (ADR 0230 item 18)', () => {
+  const feeds = [feedOf(1), feedOf(2)];
+  const mark = stateMark(feeds, { 1: read() }, new Set([2]));
+  assert.deepEqual([mark.kind, mark.icon, mark.tone, mark.text], ['checking', 'spinner', 'muted', 'Checking']);
+  assert.equal(stateMark(feeds, { 1: read() }, new Set([3])).kind, 'unchecked');
+  assert.equal(stateMark(feeds, { 1: read(), 2: read() }, new Set([2])).kind, 'checking');
+  assert.equal(stateMark(feeds, { 1: read('changed'), 2: read() }, new Set([2])).kind, 'outside');
+  assert.equal(stateMark(feeds, { 1: read(), 2: read() }, new Set()), null);
+});
+
+test('A click checks only the feeds that are not checked (ADR 0230 items 17 and 19)', () => {
+  const feeds = [feedOf(1), feedOf(2), feedOf(3), feedOf(4)];
+  const results = { 1: read(), 2: { read: false, state: null }, 4: read('changed') };
+  assert.deepEqual(feedsToCheck(feeds, results).map((feed) => feed.id), [2, 3]);
+  assert.deepEqual(feedsToCheck(feeds, { 1: read(), 2: read(), 3: read(), 4: read() }), []);
+  assert.deepEqual(feedsToCheck([], {}), []);
 });
 
 test('A single-feed mark shows outside changes and hides an up-to-date feed (ADR 0165 item 2)', () => {

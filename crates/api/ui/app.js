@@ -34,7 +34,7 @@ import { DeleteUndoProvider, useDeleteUndo, undoNoticeText } from './undonotice.
 // different page and comes back (ADR 0227 item 7).
 const settingsHistory = makeHistory();
 import { PeoplePage, PersonPage, CheckPage, WalletPage } from './peoplepages.js';
-import { OUTSIDE_LIMIT, OUTSIDE_SETTING_LABEL, OUTSIDE_SETTING_HINT, outsideMark, outsideNotice, readOnlyHostNotice, indexNotice, releaseMusicIndexLink, moveNotice, moveAgainDelay, writeNotice, nextNoticeLoad, eachLimited, panelSet, stateMark } from './outsidecheck.js';
+import { OUTSIDE_LIMIT, OUTSIDE_SETTING_LABEL, OUTSIDE_SETTING_HINT, outsideMark, outsideNotice, readOnlyHostNotice, indexNotice, releaseMusicIndexLink, moveNotice, moveAgainDelay, writeNotice, nextNoticeLoad, eachLimited, panelSet, stateMark, feedsToCheck } from './outsidecheck.js';
 import { collectionMark, collectionRow, collectionSectionActions, collectionSheet, collectionAction, CLOSED_EXPORT_HINT, COLLECTIONS_HINT, OPENING_TEXT } from './collectionlist.js';
 import { localInputToIso, isoToLocalInput, zoneHint, nowInput, unreadDateHint } from './datetime.js';
 import { durationText, readDuration, DURATION_ERROR, unreadDurationHint } from './duration.js';
@@ -1987,20 +1987,33 @@ export function Icon({ name, mirrored = false }) {
 
 // The results of the check for a change from outside, with the feeds. The
 // shell gives them to the left panel (ADR 0165 item 6).
-const OutsideContext = createContext({ feeds: [], results: {} });
+// `running` is a Set of the feed IDs that a click-started check reads now.
+// `check` reads a list of feeds (ADR 0230 items 17 and 18).
+const OutsideContext = createContext({ feeds: [], results: {}, running: new Set(), check: () => {} });
 
 // The state mark of a row of the left panel, for the feeds that `ids` covers
 // (ADR 0165 items 1 to 4). `set` is a list of feeds. It gives nothing for a
 // set that is up to date. The text is a tooltip and an accessible name.
 function useStateMark(set) {
-  const { results } = useContext(OutsideContext);
-  return stateMark(set, results);
+  const { results, running } = useContext(OutsideContext);
+  return stateMark(set, results, running);
+}
+
+// The click handler of a row with a mark. A row with the mark "Not checked"
+// also checks its feeds that are not checked. A row with a different mark, or
+// no mark, starts no check (ADR 0230 items 17 and 19).
+function useOpenAndCheck(set, mark, open) {
+  const { results, check } = useContext(OutsideContext);
+  return () => {
+    open();
+    if (mark && mark.kind === 'unchecked') check(feedsToCheck(set, results));
+  };
 }
 
 function StateMark({ mark }) {
   if (!mark) return null;
   return html`<span class=${`state-mark ${mark.tone}`} role="img" title=${mark.text} aria-label=${mark.text}>
-    <${Icon} name=${mark.icon} /></span>`;
+    ${mark.kind === 'checking' ? html`<span class="player-wait" aria-hidden="true"></span>` : html`<${Icon} name=${mark.icon} />`}</span>`;
 }
 
 // The public address of a feed in the header of its page. The link opens
@@ -3307,11 +3320,13 @@ const currentAttr = (item) => (item.current ? 'page' : undefined);
 // feeds that it covers, between the name and the count (ADR 0165 items 1 to 4).
 function DestinationRow({ item, open }) {
   const { feeds } = useContext(OutsideContext);
-  const mark = useStateMark(item.group === undefined ? [] : panelSet(feeds, item.group));
+  const set = item.group === undefined ? [] : panelSet(feeds, item.group);
+  const mark = useStateMark(set);
+  const click = useOpenAndCheck(set, mark, () => open(item));
   const releases = item.group === undefined ? '' : `${item.label}, ${item.count} ${item.count === 1 ? 'release' : 'releases'}`;
   return html`<button class="row" type="button" aria-current=${currentAttr(item)}
     aria-label=${item.group === undefined ? undefined : (mark ? `${releases}, ${mark.text}` : releases)}
-    onClick=${() => open(item)}>
+    onClick=${click}>
     ${item.icon && html`<${Icon} name=${item.icon} />`}
     ${item.group !== undefined && (item.art
       ? html`<${FeedArt} art=${item.art} glow=${item.glow} dot=${item.dot} />`
@@ -3344,10 +3359,11 @@ function destinationRows(top, go) {
 // `count` is given for a section row, which shows art and a number.
 function LevelRow({ item, set, label, count, attrs, onOpen }) {
   const mark = useStateMark(set);
+  const click = useOpenAndCheck(set, mark, onOpen);
   const section = count !== undefined;
   const base = section ? `${label}, ${count} ${count === 1 ? 'release' : 'releases'}` : label;
   return html`<button class="row" type="button" ...${attrs} aria-label=${mark ? `${base}, ${mark.text}` : (section ? base : undefined)}
-    onClick=${onOpen}>
+    onClick=${click}>
     ${section && html`<${FeedArt} art=${item.art} glow=${item.glow} dot=${item.dot} />`}
     <span class="row-label">${label}</span>
     <${StateMark} mark=${mark} />
@@ -3364,7 +3380,9 @@ function Level({ panel, go, back }) {
   const [current, setCurrent] = useState(null);
   const { feeds } = useContext(OutsideContext);
   const head = panel.head;
-  const headMark = useStateMark(levelFeedSet(feeds, head.id));
+  const headSet = levelFeedSet(feeds, head.id);
+  const headMark = useStateMark(headSet);
+  const openHead = useOpenAndCheck(headSet, headMark, () => go({ name: 'feed', id: head.id, page: 'album', from: head.from }));
   let cursor = back ? 1 : 0;
   const headIndex = cursor++;
   // A different level can have fewer rows, so the current row stays in range.
@@ -3379,7 +3397,7 @@ function Level({ panel, go, back }) {
   return html`<div role="tree" aria-label=${head.title} onKeyDown=${(event) => onTreeKey(event, currentIndex, setCurrent)}>
     ${back && html`<button class="row" type="button" ...${rowAttrs(0, null)} onClick=${() => go(panel.back.view)}><${Chevron} direction="back" />${panel.back.label}</button>`}
     <button class="outline-feed" type="button" ...${rowAttrs(headIndex, null, 'tree')} aria-expanded="true" aria-label=${`${head.title}, ${head.typeLabel}${headMark ? `, ${headMark.text}` : ''}`}
-      onClick=${() => go({ name: 'feed', id: head.id, page: 'album', from: head.from })}>
+      onClick=${openHead}>
       <${ArtWithDot} dot=${head.dot}><${FeedArt} art=${head.art} glow=${head.glow} className="outline-cover" /><//>
       <div class="text"><span class="title">${head.title}</span><span class="sub">${head.typeLabel}</span></div>
       <${StateMark} mark=${headMark} />
@@ -4126,8 +4144,8 @@ function Shell({ vault, onLock, version }) {
   const releasesOpened = useRef({ shown: false, count: 0 });
   if (view.name === 'releases' && !releasesOpened.current.shown) releasesOpened.current.count += 1;
   releasesOpened.current.shown = view.name === 'releases';
-  const results = useOutsideChecks(feeds, releasesOpened.current.count);
-  const outsideValue = { feeds: feeds || [], results };
+  const { results, running, check } = useOutsideChecks(feeds, releasesOpened.current.count);
+  const outsideValue = { feeds: feeds || [], results, running, check };
   const panel = leftPanel({
     view, feeds: feeds || [], model: draft.model, vaultOpen: vault === 'open',
     vaultLocked: serverMode && vault === 'locked', narrow, collection,
@@ -4993,6 +5011,8 @@ function WindowPanel({ draft, draftState, changed, causes }) {
 // result before it.
 function useOutsideChecks(feeds, key) {
   const [results, setResults] = useState({});
+  const [running, setRunning] = useState(() => new Set());
+  const runningRef = useRef(new Set());
   const signature = feeds === null ? null : feeds.map((feed) => feed.id).join(',');
   useEffect(() => {
     if (signature === null || signature === '') return undefined;
@@ -5003,7 +5023,24 @@ function useOutsideChecks(feeds, key) {
     });
     return () => { live = false; };
   }, [signature, key]);
-  return results;
+  // The check that a click on a row with the mark "Not checked" starts (ADR
+  // 0230 item 17). A feed that a check reads now is not read again.
+  const check = (list) => {
+    const ids = list.map((feed) => feed.id).filter((id) => !runningRef.current.has(id));
+    if (ids.length === 0) return;
+    ids.forEach((id) => runningRef.current.add(id));
+    setRunning(new Set(runningRef.current));
+    eachLimited(ids, OUTSIDE_LIMIT, async (id) => {
+      try {
+        const answer = await api(`/feeds/${id}/outside`);
+        setResults((old) => ({ ...old, [id]: answer }));
+      } finally {
+        runningRef.current.delete(id);
+        setRunning(new Set(runningRef.current));
+      }
+    });
+  };
+  return { results, running, check };
 }
 
 // The notices of the check on a feed page (ADR 0150 items 2 to 5). Each new

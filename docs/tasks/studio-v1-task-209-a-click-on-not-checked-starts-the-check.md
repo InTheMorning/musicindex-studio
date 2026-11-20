@@ -2,7 +2,7 @@
 
 Decision: [ADR 0230](../adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 17 to 19.
 
-Status: Open. Start after task 208, because it changes `crates/api/ui/app.js`.
+Status: Done. One point for the narrow layout is open. Refer to the Result.
 
 ## Problem
 
@@ -34,6 +34,31 @@ Mechanical:
 Visual:
 
 - drive-ui screenshots at 1280 px and 390 px: a row with "Not checked", the row during the check, and the row after the check. Run `$edges()` on each.
+
+## Result
+
+Changed files:
+
+- `crates/api/ui/outsidecheck.js`: `STATE_MARKS` has a "Checking" mark. `stateMark` takes a third argument, a Set of running feed IDs. `feedsToCheck` gives the feeds that are not checked.
+- `crates/api/ui/app.js`: `useOutsideChecks` gives `{ results, running, check }`. `OutsideContext` carries `running` and `check`. `StateMark` shows the existing `player-wait` spinner for the mark "Checking". No style change.
+- `crates/api/ui-tests/outsidecheck.test.mjs`: two new tests.
+
+Click handler: `useOpenAndCheck` in `crates/api/ui/app.js` near line 2005. It opens the row. It starts `check` only when the mark kind is `unchecked`. `DestinationRow` (line 3325), `LevelRow` (line 3362) and the head of a level (line 3385) use it. The outline row of an open feed does not use it, because a test pins its source.
+
+Rules of the mark: the order is outside, pending, checking, unchecked. A feed that a check reads now is not read again. The check at load does not show "Checking".
+
+Mechanical checks, run by the delegate:
+
+- `tools/node --test crates/api/ui-tests/*.test.mjs`: 922 pass, 0 fail (920 before).
+- Syntax check of `app.js` and `outsidecheck.js` as `.mjs` copies: passed.
+- `bash tools/gate.sh`: "gate: each check passed".
+
+Visual check (2026-11-20), drive-ui on test data with unreadable folder hosts. The page delays each check request by 4 seconds, so that the screenshot shows the spinner:
+
+- At 1280 px, the row "Not linked" has the mark "Not checked". After the click, the mark is the spinner with the name "Checking". After the check, the mark is "Not checked" again, because the host stays unreadable.
+- `$edges()` gives no finding. The spinner fits in the place of the mark.
+
+Open: at 390 px, a tap on a row opens the page of the row, and the panel list goes off the screen. Thus the spinner does not show there. The check runs, and the row shows its new mark when the user goes back.
 
 ## Rules for the delegate
 

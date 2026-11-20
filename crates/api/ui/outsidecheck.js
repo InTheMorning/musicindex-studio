@@ -250,6 +250,7 @@ export function panelSet(feeds, group) {
 const STATE_MARKS = {
   outside: { icon: 'cloud-alert', tone: 'warning' },
   pending: { icon: 'pencil', tone: 'accent', text: 'Changes not written' },
+  checking: { icon: 'spinner', tone: 'muted', text: 'Checking' },
   unchecked: { icon: 'circle-dashed', tone: 'muted', text: 'Not checked' },
 };
 
@@ -260,10 +261,18 @@ function isUnchecked(results, feed) {
   return !check || check.read !== true;
 }
 
+// The feeds of a set that a click on a row checks: each feed that is not
+// checked (ADR 0230 item 17).
+export function feedsToCheck(feeds, results) {
+  return (Array.isArray(feeds) ? feeds : []).filter((feed) => isUnchecked(results, feed));
+}
+
 // The mark of a set of feeds, or null when each feed is up to date (ADR 0165
 // items 2 and 3). `results` maps a feed ID to the answer of the check. The
 // answer has `text`, `icon` and `tone`. A set with a moved feed says "Moved".
-export function stateMark(feeds, results) {
+// `running` is a Set of the IDs of the feeds that a check reads now. While a
+// feed of the set is in it, the mark is "Checking" (ADR 0230 item 18).
+export function stateMark(feeds, results, running) {
   const list = Array.isArray(feeds) ? feeds : [];
   const states = list.map((feed) => results && results[feed.id] && results[feed.id].state);
   if (states.some((state) => state === 'moved' || state === 'changed')) {
@@ -276,6 +285,7 @@ export function stateMark(feeds, results) {
   }
   const draft = (feed) => feed.draft_state === 'new' || feed.draft_state === 'changed';
   if (list.some(draft)) return { kind: 'pending', ...STATE_MARKS.pending };
+  if (running && list.some((feed) => running.has(feed.id))) return { kind: 'checking', ...STATE_MARKS.checking };
   if (list.some((feed) => isUnchecked(results, feed))) return { kind: 'unchecked', ...STATE_MARKS.unchecked };
   return null;
 }

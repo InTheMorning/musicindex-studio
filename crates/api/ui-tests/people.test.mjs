@@ -2178,4 +2178,6 @@ test('ADR 0228 item 18: the find button is in the role line for a person with a 
   const fix = 'Fix findPageButton in people.js.';
   assert.deepEqual(findPageButton({ role: '', members: [{ id: 1, title: 'A' }] }), { label: 'Find Another Page', inRoleLine: true }, fix);
   assert.deepEqual(findPageButton({ role: 'Artist', members: [] }), { label: 'Find on Music Index', inRoleLine: false }, fix);
+  // A read-only link is a linked page too (rc.29 desktop check: Matt Finlay).
+  assert.deepEqual(findPageButton({ role: 'Musician', members: [] }, [{ feed_guid: 'g1', title: 'Matt Finlay' }]), { label: 'Find Another Page', inRoleLine: true }, fix);
 });

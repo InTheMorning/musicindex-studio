@@ -1083,7 +1083,7 @@ export function PersonPage({ id, feeds, go, view, tab: requestedTab }) {
   const titles = new Map((feeds || []).map((f) => [f.id, f.title || 'Untitled feed']));
   const groups = walletGroups(person, recipients);
   const profile = profileLine(person, titles, feeds);
-  const findButton = findPageButton(profile);
+  const findButton = findPageButton(profile, person.pages);
   const check = checkRow(person);
   const where = whereEntries(person.places, feeds);
   const fromPages = pageSuggestions(pageNotes, shown);
@@ -1109,8 +1109,8 @@ export function PersonPage({ id, feeds, go, view, tab: requestedTab }) {
   const sections = {
     profile: () => html`<${Fragment}><header class="person-head"><${PersonArt} person=${person} large />
       <div class="text"><div class="person-name-line"><h1>${displayName(shown || person)}</h1><button class="button quiet icon-button" type="button" aria-label="Change the Nickname" onClick=${() => setNicknameOpen(true)}><${Icon} name="pencil" /></button></div>
-        ${(profile.role || profile.members.length > 0) && html`<p class="hint">${profile.role}${profile.role && profile.members.length > 0 && ' · '}${profile.members.map((m, i) =>
-          html`${i > 0 && ', '}<span class=${`dot ${m.dot || 'feed'}`} aria-hidden="true"></span><button class="button link" type="button" onClick=${() => go({ name: 'feed', id: m.id })}>${m.title}</button>${m.role && ` · ${m.role}`}`)}${findButton.inRoleLine && html` · <button class="button link" type="button" onClick=${() => setFinding(person.name)}>${findButton.label}</button>`}</p>`}
+        ${(profile.role || profile.members.length > 0 || findButton.inRoleLine) && html`<p class="hint">${profile.role}${profile.role && profile.members.length > 0 && ' · '}${profile.members.map((m, i) =>
+          html`${i > 0 && ', '}<span class=${`dot ${m.dot || 'feed'}`} aria-hidden="true"></span><button class="button link" type="button" onClick=${() => go({ name: 'feed', id: m.id })}>${m.title}</button>${m.role && ` · ${m.role}`}`)}${findButton.inRoleLine && html`${(profile.role || profile.members.length > 0) && ' · '}<button class="button link" type="button" onClick=${() => setFinding(person.name)}>${findButton.label}</button>`}</p>`}
         ${person.keys.map((k) => html`<p class="hint key-hint" key=${k.id}><span class="key-hint-text">Nostr <span class=${keyRow(k.npub, profiles, person.name).mono ? 'mono key-text' : ''}>${keyRow(k.npub, profiles, person.name).title}</span>${keyEvidenceText(k.evidence) && ` · ${keyEvidenceText(k.evidence)}`}</span>
           <${CopyButton} text=${k.npub} label="the Nostr key" /></p>`)}
       </div></header>

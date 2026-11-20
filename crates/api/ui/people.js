@@ -1162,8 +1162,9 @@ export function profileLine(person, titles, feeds = []) {
 // The button that finds a page on Music Index, in the head of a person
 // (ADR 0228 item 18). A person with a linked page has a quiet text button in
 // the role line. A person with no linked page has the button below the line.
-export function findPageButton(profile) {
-  return profile.members.length > 0
+// A linked page is a member feed or a read-only link in `pages`.
+export function findPageButton(profile, pages = []) {
+  return profile.members.length > 0 || (pages || []).length > 0
     ? { label: 'Find Another Page', inRoleLine: true }
     : { label: 'Find on Music Index', inRoleLine: false };
 }

@@ -68,6 +68,17 @@ export function retireBlockShown(state, hostDeleted) {
   return state.ask !== 'no' || hostDeleted === true || state.delete === 'done';
 }
 
+// The notice under the head of a deleted feed, on each tab (ADR 0231 item
+// 1). It is null for a feed that is not deleted. The buttons do the actions of
+// the Retire block.
+export function deletedNotice(feed) {
+  if (feed?.host_deleted !== true) return null;
+  return {
+    text: 'The feed file of this release is deleted from its file host.',
+    actions: ['restore', 'check'],
+  };
+}
+
 // The buttons of the Retire block, in their sequence (ADR 0198 item 9).
 export function retireActions(state) {
   return state?.delete === 'done' ? ['restore', 'check'] : ['check', 'stop'];

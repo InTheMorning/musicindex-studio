@@ -2518,3 +2518,12 @@ export function fillSource(row) {
 
 // The link of a feed on musicindex.org (ADR 0117 item 8).
 export const musicindexFeedUrl = (guid) => `https://musicindex.org/#feed=${encodeURIComponent(guid)}`;
+
+// `noun` gives the words of the feed group: "Feed" or, for a new release,
+// "Release" (ADR 0231 item 3).
+export function feedWords(noun = 'Feed') {
+  return {
+    group: `${noun}s`,
+    row: (artist) => (artist ? `${noun} · ${artist}` : noun),
+  };
+}

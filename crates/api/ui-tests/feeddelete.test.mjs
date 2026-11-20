@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { deleteChoices, deleteButtonEnabled, deleteWrite, refusedDelete, retireSteps, leftoverLine, operationNote, domainLine, DELETE_POINTS, retireActions, retireBlockShown } from '../ui/feeddelete.js';
+import { deleteChoices, deleteButtonEnabled, deleteWrite, refusedDelete, retireSteps, leftoverLine, operationNote, domainLine, DELETE_POINTS, retireActions, retireBlockShown, deletedNotice } from '../ui/feeddelete.js';
 import { readFileSync } from 'node:fs';
 
 test('the choice sheet gives the goals of ADR 0131 items 2 to 4 and the third row only after removal', () => {
@@ -245,4 +245,17 @@ test('ADR 0230 item 27: the Retire block shows for a feed with a done delete tha
     `ADR 0230 item 27: the block waits for the retire state. ${fix}`);
   assert.deepEqual(retireActions({ ask: 'no', delete: 'done' }), ['restore', 'check'],
     `ADR 0198 item 6 and ADR 0230 item 27: a deleted feed has no Stop Retiring. ${fix}`);
+});
+
+test('ADR 0231 item 1: a deleted feed has a notice with two actions, a feed that is not deleted has none', () => {
+  const fix = 'Fix deletedNotice in crates/api/ui/feeddelete.js and its use in OutsideNotices in crates/api/ui/app.js.';
+  assert.deepEqual(deletedNotice({ host_deleted: true }), {
+    text: 'The feed file of this release is deleted from its file host.',
+    actions: ['restore', 'check'],
+  }, `ADR 0231 item 1: the notice has the text and the actions Put the File Back and Check Again. ${fix}`);
+  for (const feed of [{ host_deleted: false }, {}, null, undefined]) {
+    assert.equal(deletedNotice(feed), null, `ADR 0231 item 1: a feed that is not deleted has no notice. ${fix}`);
+  }
+  const app = readFileSync(new URL('../ui/app.js', import.meta.url), 'utf8');
+  assert.match(app, /deletedNotice\(feed\)/, `ADR 0231 item 1: the head of the page must show the notice. ${fix}`);
 });

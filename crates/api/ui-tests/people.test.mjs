@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {
   changeSetView, peopleSections, PEOPLE_EMPTY, PEOPLE_SERVER_NOTE, suggestionRow, personRow, displayName, makePersonStart, makePersonBody, sheetFeeds,
   checkedIds, toggledRow, reviewLabel, operationBody, addResultLine, pendingTabs,
-  lookupAddress, showFindEmpty,
+  lookupAddress, showFindEmpty, feedWords,
   addressMenu, recipientAddressMenu,
   nicknameBody, afterNicknameSave,
 } from '../ui/people.js';
@@ -2180,4 +2180,19 @@ test('ADR 0228 item 18: the find button is in the role line for a person with a 
   assert.deepEqual(findPageButton({ role: 'Artist', members: [] }), { label: 'Find on Music Index', inRoleLine: false }, fix);
   // A read-only link is a linked page too (rc.29 desktop check: Matt Finlay).
   assert.deepEqual(findPageButton({ role: 'Musician', members: [] }, [{ feed_guid: 'g1', title: 'Matt Finlay' }]), { label: 'Find Another Page', inRoleLine: true }, fix);
+});
+
+test('ADR 0231 item 3: the search sheet of a new release says Releases, other sheets say Feeds', async () => {
+  const fix = 'Fix feedWords in crates/api/ui/people.js and the noun of FindOneSheet in crates/api/ui/pickers.js and crates/api/ui/app.js.';
+  assert.deepEqual([feedWords('Release').group, feedWords('Release').row('Ann'), feedWords('Release').row('')],
+    ['Releases', 'Release · Ann', 'Release'], `ADR 0231 item 3: the words of a release. ${fix}`);
+  assert.deepEqual([feedWords().group, feedWords().row('Ann'), feedWords().row(undefined)],
+    ['Feeds', 'Feed · Ann', 'Feed'], `ADR 0231 item 3: the default stays Feeds and Feed. ${fix}`);
+  const app = await readFile(new URL('../ui/app.js', import.meta.url), 'utf8');
+  const caller = app.slice(app.indexOf('choices=${releaseFindChoices}'), app.indexOf('choices=${releaseFindChoices}') + 200);
+  assert.match(caller, /noun="Release"/, `ADR 0231 item 3: the form of a new release passes the noun. ${fix}`);
+  for (const name of ['values.js', 'peoplepages.js', 'editor.js']) {
+    const source = await readFile(new URL(`../ui/${name}`, import.meta.url), 'utf8');
+    assert.doesNotMatch(source, /FindOneSheet[^>]*noun=/, `ADR 0231 item 3: ${name} keeps the words Feeds and Feed. ${fix}`);
+  }
 });

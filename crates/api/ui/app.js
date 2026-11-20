@@ -7,7 +7,7 @@ import { UI_SCALES, SCALE_KEY, normalizeScale, measureWindowUnits } from './uisc
 import { LOCK_HINT, lockChoiceText } from './vaultlock.js';
 import { serverFilesRows, sizeText, SERVER_FILES_NOTE } from './assets.js';
 import { failedLine } from './failures.js';
-import { OPEN_MERGE, OPEN_FEED_MOVE, MoveAllSheet, AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, OUTSIDE_RECHECK, AnnounceChoice, UndoButtons, useUndoKeys, DeleteUndoBar } from './editor.js';
+import { OPEN_MERGE, OPEN_FEED_MOVE, MoveAllSheet, AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, OUTSIDE_RECHECK, restoreDeletedFile, checkDeletedAgain, AnnounceChoice, UndoButtons, useUndoKeys, DeleteUndoBar } from './editor.js';
 import {
   recipientKey,
   outcomeText, blockedText, operationLine, nameOf, writableIds, firstOpenId, initialStatuses, refreshedStatuses, startWrite,
@@ -34,6 +34,7 @@ import { DeleteUndoProvider, useDeleteUndo, undoNoticeText } from './undonotice.
 // different page and comes back (ADR 0227 item 7).
 const settingsHistory = makeHistory();
 import { PeoplePage, PersonPage, CheckPage, WalletPage } from './peoplepages.js';
+import { deletedNotice } from './feeddelete.js';
 import { OUTSIDE_LIMIT, OUTSIDE_SETTING_LABEL, OUTSIDE_SETTING_HINT, outsideMark, outsideNotice, readOnlyHostNotice, indexNotice, releaseMusicIndexLink, moveNotice, moveAgainDelay, writeNotice, nextNoticeLoad, eachLimited, panelSet, stateMark, feedsToCheck } from './outsidecheck.js';
 import { collectionMark, collectionRow, collectionSectionActions, collectionSheet, collectionAction, CLOSED_EXPORT_HINT, COLLECTIONS_HINT, OPENING_TEXT } from './collectionlist.js';
 import { localInputToIso, isoToLocalInput, zoneHint, nowInput, unreadDateHint } from './datetime.js';
@@ -1559,7 +1560,7 @@ function MakeFeedForm({ connectors, feeds, startType, start = {}, onAdded, onKin
           ${authorField}${hostField}${feedFile}</div>`}
         notice=${submitRow} lists=${[]} />
       ${choosing && html`<${ParentSheet} choices=${releaseArtistChoices(feeds)} onChoose=${changeParent} onClose=${() => setChoosing(false)} />`}
-      <${FindOneSheet} open=${finding} choices=${releaseFindChoices} empty="Select a release. This row is not a release."
+      <${FindOneSheet} open=${finding} choices=${releaseFindChoices} empty="Select a release. This row is not a release." noun="Release"
         onPick=${pick} onClose=${() => setFinding(false)} />`;
   }
   return html`<form class="form" onSubmit=${submit}>
@@ -2427,7 +2428,7 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
         Open Review and write the draft to make the file.
       </div>`}
       <${AddressDifferences} feed=${feed} />
-      <${OutsideNotices} feed=${feed} busy=${busy} refresh=${refresh} onChanged=${onChanged} onCheck=${setOutsideCheck} />
+      <${OutsideNotices} feed=${feed} busy=${busy} refresh=${refresh} onChanged=${onChanged} onCheck=${setOutsideCheck} onListChanged=${onListChanged} />
       ${checklist && html`<section class="release-checklist" aria-labelledby="release-checklist-title">
         <h2 id="release-checklist-title">${checklist.title}</h2>
         <ul>${checklist.rows.map((row) => html`<li key=${row.label}>
@@ -5058,7 +5059,7 @@ function useOutsideChecks(feeds, key) {
 
 // The notices of the check on a feed page (ADR 0150 items 2 to 5). Each new
 // read of the feed checks again.
-function OutsideNotices({ feed, busy, refresh, onChanged, onCheck }) {
+function OutsideNotices({ feed, busy, refresh, onChanged, onCheck, onListChanged }) {
   const [check, setCheck] = useState(null);
   const [reads, setReads] = useState(0);
   const confirmedHere = useRef(false);
@@ -5165,6 +5166,7 @@ function OutsideNotices({ feed, busy, refresh, onChanged, onCheck }) {
     window.dispatchEvent(new CustomEvent(OPEN_FEED_MOVE, { detail: { id: feed.id, start: oldHost } }));
   });
   const readOnly = readOnlyHostNotice(feed);
+  const deleted = deletedNotice(feed);
   const useHost = () => run(async () => { await api(`/feeds/${feed.id}/outside/use-host`, { method: 'POST' }); await onChanged(); });
   return html`${notice && html`<div class=${notice.tone === 'warning' ? 'notice warning' : notice.tone === 'error' ? 'notice error' : 'notice'} role=${notice.tone === 'error' ? 'alert' : 'status'}>
       ${notice.tone === 'warning' ? html`<strong><${Icon} name="alert" />${notice.strong}</strong>` : html`<strong>${notice.strong}</strong>`}
@@ -5184,6 +5186,11 @@ function OutsideNotices({ feed, busy, refresh, onChanged, onCheck }) {
       <${ErrorNotice} error=${error} />
     </div>`}
     ${readOnly && html`<div class="notice" role="status">${readOnly.text}<div class="actions"><button class="button action" type="button" disabled=${busy || sending} onClick=${readOnly.use ? useHost : () => nav.go({ name: 'hosts' })}>${readOnly.button}</button></div><${ErrorNotice} error=${error} /></div>`}
+    ${deleted && html`<div class="notice" role="status">${deleted.text}<div class="actions">
+      ${deleted.actions.map((key) => key === 'restore'
+        ? html`<button class="button action" type="button" key=${key} disabled=${busy || sending} onClick=${() => run(() => restoreDeletedFile(feed.id, onListChanged))}>Put the File Back</button>`
+        : html`<button class="button action" type="button" key=${key} disabled=${busy || sending} onClick=${() => run(() => checkDeletedAgain(feed.id))}>Check Again</button>`)}
+      </div><${ErrorNotice} error=${error} /></div>`}
     ${index && html`<div class="notice" role="status"><strong>${index.strong}</strong> <span class="mono">${index.index}</span>. Your feed is at <span class="mono">${index.own}</span>. ${index.after}</div>`}
     ${move && html`<div class="notice" role="status"><strong>${move.strong}</strong>
       <${PodpingLines} lines=${move.lines} disabled=${busy || sending} send=${sendPodping} />

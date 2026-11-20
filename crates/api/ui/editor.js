@@ -1929,6 +1929,26 @@ export const OPEN_REVIEW = 'studio-open-review';
 export const OPEN_MERGE = 'studio-open-merge';
 export const OPEN_FEED_MOVE = 'studio-open-feed-move';
 export const OPEN_DELETE_REVIEW = 'studio-open-delete-review';
+// The notice under the head of a deleted feed sends the new retire state in
+// `detail.state` and the ID of the feed in `detail.id`. The Retire block
+// shows that state (ADR 0231 item 1).
+export const RETIRE_STATE = 'studio-retire-state';
+
+// Put the file of a deleted feed back. The route gives the feed its file host
+// again, so the feed list loads before Review opens. The Retire block and the
+// notice under the head both use this function (ADR 0231 item 1).
+export async function restoreDeletedFile(feedId, onListChanged) {
+  await api(`/feeds/${feedId}/delete/restore`, { method: 'POST' });
+  if (onListChanged) await onListChanged();
+  window.dispatchEvent(new Event(OPEN_DELETE_REVIEW));
+}
+
+// Read the retire state again. The Retire block shows the answer through
+// `RETIRE_STATE`.
+export async function checkDeletedAgain(feedId) {
+  const state = await api(`/feeds/${feedId}/retire/state`, { method: 'POST' });
+  window.dispatchEvent(new CustomEvent(RETIRE_STATE, { detail: { id: feedId, state } }));
+}
 // Sent after a write, with the ID of the written feed in `detail.id`. The
 // outside checks read that feed again (task 210 item 3).
 export const OUTSIDE_RECHECK = 'studio-outside-recheck';
@@ -2558,6 +2578,16 @@ function FeedDelete({ feed, draft, onListChanged }) {
     if (!retiring) { retireRequest.current += 1; setRetire(null); return; }
     loadRetire();
   }, [retiring, feed.id, written]);
+  // The notice under the head checks again and gives the state here.
+  useEffect(() => {
+    const show = (event) => {
+      if (event.detail.id !== feed.id) return;
+      retireRequest.current += 1;
+      setRetire(event.detail.state);
+    };
+    window.addEventListener(RETIRE_STATE, show);
+    return () => window.removeEventListener(RETIRE_STATE, show);
+  }, [feed.id]);
   const loadPreview = (include) => action.run(async () => {
     // The old preview stays while the request runs. The sheet keeps its
     // height, and the check box and Delete are off (`action.busy`).
@@ -2588,11 +2618,7 @@ function FeedDelete({ feed, draft, onListChanged }) {
   // item 10). The route gives the feed its file host again, so the feed
   // list loads before Review opens. Review then shows a usual write, not
   // a move of a read-only feed. `OPEN_DELETE_REVIEW` loads the draft.
-  const restoreFile = () => action.run(async () => {
-    await api(`/feeds/${feed.id}/delete/restore`, { method: 'POST' });
-    if (onListChanged) await onListChanged();
-    window.dispatchEvent(new Event(OPEN_DELETE_REVIEW));
-  });
+  const restoreFile = () => action.run(() => restoreDeletedFile(feed.id, onListChanged));
   const discardDelete = async () => {
     if (keepDeleteDraft.current) { keepDeleteDraft.current = false; return; }
     if (!deleteDraftStarted.current) { setFinalOpen(false); return; }

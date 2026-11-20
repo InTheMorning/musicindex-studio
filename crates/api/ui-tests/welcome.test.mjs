@@ -189,3 +189,17 @@ test('a release start lists writable artist pages only (ADR 0213 items 4 and 5)'
   assert.deepEqual(releaseArtistChoices(feeds), [['1', 'Artist']],
     'ADR 0213 items 4 and 5: a release needs a writable artist page. Fix releaseArtistChoices in crates/api/ui/welcome.js.');
 });
+
+test('ADR 0231 item 6: the parent choices of a new release have artist pages only', () => {
+  const feeds = [
+    { id: 1, medium: 'publisher', connector_id: 4, publisher_roles: ['artist'], title: 'Artist' },
+    { id: 3, medium: 'publisher', connector_id: 4, publisher_roles: ['label'], title: 'Label' },
+    { id: 5, medium: 'publisher', connector_id: 4, publisher_roles: ['artist', 'label'], title: 'Both' },
+    { id: 6, medium: 'music', connector_id: 4, publisher_roles: [], title: 'Album' },
+  ];
+  const ids = releaseArtistChoices(feeds).map(([id]) => id);
+  assert.ok(!ids.includes('3'),
+    'ADR 0231 item 6: the parent list has no label page. Fix releaseArtistChoices in crates/api/ui/welcome.js.');
+  assert.ok(!ids.includes('6'),
+    'ADR 0231 item 6: the parent list has no release. Fix releaseArtistChoices in crates/api/ui/welcome.js.');
+});

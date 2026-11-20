@@ -1,27 +1,39 @@
-// The model of the Add feeds page and of the form that makes a feed (ADR 0073
+// The model of the Add One You Have page and of the form that makes a feed (ADR 0073
 // items 1 to 10, ADR 0042). The functions have no Preact and no browser
 // state. `app.js` shows the rows and the form.
 import { compareNames, feedKind } from './shell.js';
 
-// The rows of the Add feeds page, in two groups. With no connected host, the
-// group "Make a new feed" has no rows and the flag `connect`. The row
-// "From a file host folder" needs a file host, so it goes out too.
+// The rows of the page "Add One You Have" (ADR 0230 item 4). The page has one
+// group. The row "From a file host folder" needs a file host, so it goes out
+// when no host is connected. With no host, the flag `connect` shows the
+// button that connects one (ADR 0230 item 3: each make entry needs a host).
 export function addChoices({ hasHost }) {
-  const make = [
-    { id: 'publisher', title: 'Artist or label', text: 'A list of your releases' },
-    { id: 'show', title: 'Show', text: 'A feed for live shows' },
-    { id: 'playlist', title: 'Playlist', text: 'Tracks from other feeds' },
-  ];
   const have = [
-    { id: 'find', title: 'By address or name', text: 'Search Music Index, or give a feed address' },
+    { id: 'find', title: 'By address or name', text: 'Search Music Index, or give an address' },
     { id: 'folder', title: 'From a file host folder', text: 'A feed file on a connected file host' },
     { id: 'msp', title: 'From MSP 2.0 backups', text: 'The .json files that MSP 2.0 saved' },
   ];
   return [
-    hasHost
-      ? { id: 'make', label: 'Make a new feed', rows: make, hint: 'A release starts on the page of its artist.' }
-      : { id: 'make', label: 'Make a new feed', rows: [], connect: true, hint: 'A release starts on the page of its artist.' },
-    { id: 'have', label: 'Add a feed you have', rows: hasHost ? have : have.filter((row) => row.id !== 'folder') },
+    { id: 'have', label: 'Add One You Have', rows: hasHost ? have : have.filter((row) => row.id !== 'folder'), connect: !hasHost },
+  ];
+}
+
+// The title of the page "Add One You Have" (ADR 0230 item 4).
+export const ADD_PAGE_TITLE = 'Add One You Have';
+
+// The entries of the add menu of Releases and of an artist page (ADR 0230
+// items 1 to 4). `release` is the add action of the artist of the page (from
+// `releaseAdd`), or null on the top page, on a label page and on a hosting
+// page. Then Release has no start parent. `open` is the form that the entry
+// opens. `have` opens the page "Add One You Have".
+export function addMenuEntries(release) {
+  return [
+    { id: 'release', label: 'Release', open: 'album', start: release ? release.start : {} },
+    { id: 'artist', label: 'Artist', open: 'publisher', start: { role: 'artist' } },
+    { id: 'label', label: 'Label', open: 'publisher', start: { role: 'label' } },
+    { id: 'show', label: 'Show', open: 'show', start: {} },
+    { id: 'playlist', label: 'Playlist', open: 'playlist', start: {} },
+    { id: 'have', label: 'Add One You Have…', open: null, separatorBefore: true },
   ];
 }
 
@@ -52,7 +64,7 @@ export function releaseKindOptions(kindShown, trackCount, liveItemCount = 0) {
 const FIELDS = {
   album: { medium: 'music', titleLabel: 'Album title', authorLabel: 'Artist', role: false, button: 'Make the Release', busyLabel: 'Making the Release…' },
   publisher: { medium: 'publisher', titleLabel: 'Name', authorLabel: null, role: true, button: 'Make the Page', busyLabel: 'Making the Page…' },
-  show: { medium: 'music', titleLabel: 'Show feed title', authorLabel: 'Artist', role: false, button: 'Make the Show Feed', busyLabel: 'Making the Show Feed…' },
+  show: { medium: 'music', titleLabel: 'Show title', authorLabel: 'Artist', role: false, button: 'Make the Show', busyLabel: 'Making the Show…' },
   playlist: { medium: 'musicL', titleLabel: 'Playlist name', authorLabel: 'Author', role: false, button: 'Make the Playlist', busyLabel: 'Making the Playlist…' },
 };
 

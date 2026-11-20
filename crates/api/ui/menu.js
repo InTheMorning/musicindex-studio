@@ -2,10 +2,11 @@
 // menu styles and Escape behavior. With `row`, the button has two forms
 // (ADR 0207 item 55): the styles show the ellipsis icon in the narrow layout
 // and the text in the wide layout. `Icon` is the icon component of the
-// shell, so that this module does not import the shell.
+// shell, so that this module does not import the shell. `className` adds a
+// class to the wrapper, for example to open the menu to the left.
 import { html, useState, useRef } from './vendor/htm-preact-standalone.module.js';
 
-export function MenuControl({ buttonLabel, accessibleName, menuLabel, items, onSelect, row = false, Icon }) {
+export function MenuControl({ buttonLabel, accessibleName, menuLabel, items, onSelect, row = false, Icon, className = '' }) {
   const [open, setOpen] = useState(false);
   const button = useRef(null);
   const pick = (entry) => {
@@ -21,7 +22,7 @@ export function MenuControl({ buttonLabel, accessibleName, menuLabel, items, onS
       if (button.current) button.current.focus();
     }
   };
-  return html`<div class=${row ? 'sort row-menu-wrap' : 'sort'} onKeyDown=${onKey}>
+  return html`<div class=${`${row ? 'sort row-menu-wrap' : 'sort'}${className ? ` ${className}` : ''}`} onKeyDown=${onKey}>
     <button class=${row ? 'button row-menu' : 'button'} type="button" ref=${button} aria-haspopup="menu"
       aria-label=${accessibleName} aria-expanded=${open ? 'true' : 'false'} onClick=${() => setOpen(!open)}>
       ${row ? html`<span class="row-menu-icon"><${Icon} name="ellipsis" /></span><span class="row-menu-text">${buttonLabel} ⌄</span>` : html`${buttonLabel} ⌄`}</button>

@@ -20,7 +20,7 @@ import {
   prfOutputOf, passkeyBrowserCode, defaultPasskeyName,
   nip46State, nip46ErrorText, isBunkerAddress, qrSource, UNLOCK_AGAIN_TEXT, needsRecentUnlock,
 } from './account.js';
-import { addChoices, MAKE_TYPES, RELEASE_KINDS, makeFields, makeTitle, feedFileStart, startChoices, shouldAddTracksAfterNewRelease } from './addfeeds.js';
+import { addChoices, addMenuEntries, ADD_PAGE_TITLE, MAKE_TYPES, RELEASE_KINDS, makeFields, makeTitle, feedFileStart, startChoices, shouldAddTracksAfterNewRelease } from './addfeeds.js';
 import { WELCOME, HOST_STEP, showWelcome, welcomeSteps, pathTexts, hostStepModel, welcomeBody, releaseAdd, libraryResult } from './welcome.js';
 import { isLiveItem } from './live.js';
 import { appRowLines, pairingPhase, pairingNotice, doneRemovesApp } from './apps.js';
@@ -1580,7 +1580,7 @@ function AddFeedForm({ connectors, onAdded }) {
         ${connectors.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
       </select></div>`}
     ${!typing && html`<div class="field">
-      <label for="feed-choice">Feeds in this folder</label>
+      <label for="feed-choice">Feed files in this folder</label>
       <div class="field-body">
         ${listError && html`<${ErrorNotice} error=${listError} />`}
         ${!found && !listError && html`<p class="empty" role="status">Looking for feed files…</p>`}
@@ -1600,10 +1600,10 @@ function AddFeedForm({ connectors, onAdded }) {
       ? html`<${Field} id="feed-path" label="Feed file" required placeholder="album/feed.xml"
           hint="The path of the feed file in the folder of the file host."
           error=${feedError.field} value=${path} onInput=${(e) => setPath(e.target.value)} />`
-      : html`<button class="button link" type="button" onClick=${() => setTyping(true)}>The Feed Is Not in the List</button>`}
+      : html`<button class="button link" type="button" onClick=${() => setTyping(true)}>The File Is Not in the List</button>`}
     ${typing && available.length > 0 && html`<button class="button link" type="button" onClick=${() => setTyping(false)}>Select from the List</button>`}
     <${ErrorNotice} error=${feedError.other} action="Studio could not add the feed." onRetry=${retry} />
-    <div class="actions"><button class="button primary" type="submit" disabled=${busy || !target}>${busy ? 'Reading the Feed…' : 'Add the Feed'}</button></div>
+    <div class="actions"><button class="button primary" type="submit" disabled=${busy || !target}>${busy ? 'Reading the File…' : 'Add to Studio'}</button></div>
   </form>`;
 }
 
@@ -1638,7 +1638,7 @@ function FindFeeds({ onFound }) {
   const runFind = () => find.run(async () => onFound(await api('/discover', { method: 'POST', body: { addresses: lines, guids } })));
   return html`<div class="form">
     <div class="field">
-      <label for="addresses">Feed addresses</label>
+      <label for="addresses">Addresses</label>
       <span class="hint" id="addresses-hint">One on each line. An artist feed or a label feed brings all of its releases.</span>
       <textarea id="addresses" rows="3" aria-describedby="addresses-hint" placeholder="https://music.example/feed.xml"
         value=${addresses} onInput=${(e) => setAddresses(e.target.value)}></textarea>
@@ -1647,14 +1647,14 @@ function FindFeeds({ onFound }) {
       <div class="field">
         <label for="search">Or search Music Index by name</label>
         <div class="inline"><input id="search" type="search" value=${query} ...${fields.input}
-          placeholder="Artist or feed name" />
+          placeholder="Artist or release name" />
           <button class="button" type="submit" disabled=${search.busy || !query.trim()}>${search.busy ? 'Searching…' : 'Search'}</button></div>
         ${fields.list}
       </div>
       <${ErrorNotice} error=${search.error} />
       ${note && html`<p class="hint" role="status">${note.message}</p>`}
       ${hits && hits.length === 0 && !note && html`<p class="empty">Music Index found no feed with that name.</p>`}
-      ${hits && hits.length > 0 && html`<fieldset class="choices"><legend>Select your feeds</legend>
+      ${hits && hits.length > 0 && html`<fieldset class="choices"><legend>Select the ones to add</legend>
         ${hits.map((h) => html`<label class="choice">
           <input type="checkbox" checked=${guids.includes(h.feed_guid)} onChange=${() => toggle(h.feed_guid)} />
           <span class="dot feed"></span>
@@ -1664,7 +1664,7 @@ function FindFeeds({ onFound }) {
     </form>
     <${ErrorNotice} error=${find.error} />
     <div class="actions"><button class="button primary" type="button" disabled=${find.busy || count === 0} onClick=${runFind}>
-      ${find.busy ? 'Reading the Feeds…' : count > 0 ? `Find My Feeds (${count})` : 'Find My Feeds'}</button></div>
+      ${find.busy ? 'Reading the Addresses…' : count > 0 ? `Find Them (${count})` : 'Find Them'}</button></div>
   </div>`;
 }
 
@@ -1710,7 +1710,7 @@ function FoundFeeds({ found, onAdded, onNothingToAdd }) {
       ? html`<p role="status">Each of these feeds is in your collection.</p>
         ${onNothingToAdd && html`<div class="actions"><button class="button primary" type="button" onClick=${onNothingToAdd}>Open Studio</button></div>`}`
       : addable.length > 0 && html`<div class="actions"><button class="button primary" type="button" disabled=${busy || chosen.length === 0} onClick=${add}>
-          ${busy ? 'Adding…' : `Add ${chosen.length} Feed${chosen.length === 1 ? '' : 's'}`}</button></div>`}
+          ${busy ? 'Adding…' : `Add ${chosen.length} to Studio`}</button></div>`}
   </div>`;
 }
 
@@ -2447,7 +2447,7 @@ function FolderFeeds({ connector, onAdded }) {
     </fieldset>
     <${ErrorNotice} error=${error} />
     <div class="actions"><button class="button primary" type="button" disabled=${busy || chosen.length === 0} onClick=${add}>
-      ${busy ? 'Adding…' : `Add ${chosen.length} Feed${chosen.length === 1 ? '' : 's'}`}</button></div>
+      ${busy ? 'Adding…' : `Add ${chosen.length} to Studio`}</button></div>
   </div>`;
 }
 
@@ -3052,8 +3052,8 @@ function AddFeedSheet({ open, title, connectors, feeds, found, setFound, start, 
   </dialog>`;
 }
 
-// The Add feeds page: two groups of rows. A row opens its form in a sheet
-// (ADR 0073 items 1 to 4).
+// The page Add One You Have: one group of rows. A row opens its form in a
+// sheet (ADR 0073 items 1 to 4, ADR 0230 item 4).
 function AddFeeds({ connectors, feeds, onAdded, go }) {
   const [open, setOpen] = useState(null);
   const [found, setFound] = useState(null);
@@ -3062,9 +3062,9 @@ function AddFeeds({ connectors, feeds, onAdded, go }) {
   const close = () => { setOpen(null); setFound(null); };
   // The sheet gives the title of a make row itself.
   const title = (rows.find((row) => row.id === open) || {}).title || '';
-  return html`<div><${Bar}><span class="bar-title">Add feeds</span><//><section class="section">
+  return html`<div><${Bar}><span class="bar-title">${ADD_PAGE_TITLE}</span><//><section class="section">
     ${groups.map((group) => html`<section key=${group.id} class="page-section"><h2>${group.label}</h2>
-      ${group.connect && html`<p class="hint">Studio puts the files of a release on a file host. Connect a file host first.</p>
+      ${group.connect && html`<p class="hint">Studio puts the files of a release on a file host. Connect a file host to add a release, an artist, a label, a show or a playlist.</p>
         <div class="actions"><button class="button action" type="button" onClick=${() => go({ name: 'hosts' })}>Connect a File Host</button></div>`}
       ${group.rows.length > 0 && html`<${RowList}>
         ${group.rows.map((row) => html`<button key=${row.id} class="link-row" type="button" onClick=${() => setOpen(row.id)}>
@@ -3533,9 +3533,12 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
   // When the link fails, the group stays and shows the error.
   const headFeed = inGroup && head && head.id !== null ? feeds.find((f) => f.id === head.id) : null;
   const more = releaseAdd(headFeed, headFeed && headFeed.title);
-  const [adding, setAdding] = useState(false);
+  const [adding, setAdding] = useState(null);
+  // The groups "Not linked" and "Other" have no add menu (ADR 0230 item 2
+  // names the top page and the pages of a publisher).
+  const hideAdd = inGroup && !headFeed;
   const addedRelease = (f, makeInfo) => {
-    setAdding(false);
+    setAdding(null);
     onAddedFeed(f, makeInfo);
   };
   // A feed group keeps its own sort and direction (ADR 0085 item 8).
@@ -3559,9 +3562,8 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
           ${hasUnfilteredRows && html`<${SortMenu} sorts=${releases.sorts} sort=${releases.sort} reversed=${releases.reversed} onSort=${pickSort} />`}
           ${hasUnfilteredRows && viewButton('rows', 'Rows', html`<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>`)}
           ${hasUnfilteredRows && viewButton('tiles', 'Tiles', html`<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"></rect><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"></rect><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"></rect><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"></rect></svg>`)}
-          ${!inGroup && html`<button class="button action" type="button" onClick=${onAddFeed}>＋ Add a Feed</button>`}
-          ${more && html`<button class="button action" type="button" onClick=${() => setAdding(true)}>＋ ${more.label}</button>`}
-          ${head && head.id !== null && html`<button class="button" type="button" onClick=${() => onOpen(head.id)}>Open the Feed</button>`}
+          ${!hideAdd && html`<${AddMenu} release=${more} hasHost=${connectors.length > 0} onOpenForm=${setAdding} onOther=${onAddFeed} />`}
+          ${head && head.id !== null && html`<button class="button" type="button" onClick=${() => onOpen(head.id)}>${head.typeLabel} Page</button>`}
         </div>`}
       </div>
       ${hasUnfilteredRows && html`<${SearchField} label="Search releases" value=${query} onInput=${(e) => setQuery(e.target.value)} />`}
@@ -3591,12 +3593,21 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
         ? html`<div class="empty-releases"><p class="empty">No releases are linked yet.</p></div>`
         : html`<div class="empty-releases">
             <p class="empty">No releases yet.</p>
-            <div class="actions"><button class="button primary" type="button" onClick=${onAddFeed}>Add a Feed</button></div>
+            <div class="actions"><${AddMenu} release=${more} hasHost=${connectors.length > 0} onOpenForm=${setAdding} onOther=${onAddFeed} /></div>
           </div>`}
     </section>
-    ${adding && html`<${AddFeedRowSheet} open="album" connectors=${connectors} feeds=${feeds}
-      start=${more.start} onAdded=${addedRelease} onClose=${() => setAdding(false)} />`}
+    ${adding && html`<${AddFeedRowSheet} open=${adding.open} connectors=${connectors} feeds=${feeds}
+      start=${adding.start} onAdded=${addedRelease} onClose=${() => setAdding(null)} />`}
   </div>`;
+}
+
+// The add menu of Releases and of the page of a publisher (ADR 0230 items 1
+// to 4). `release` is the add action of an artist page, or null. With no
+// connected file host, a make entry opens the page that connects one.
+function AddMenu({ release, hasHost, onOpenForm, onOther }) {
+  const items = addMenuEntries(release);
+  return html`<${MenuControl} className="add-menu" buttonLabel="＋ Add" accessibleName="Add" menuLabel="Add" items=${items}
+    onSelect=${(entry) => (entry.open && hasHost ? onOpenForm({ open: entry.open, start: entry.start }) : onOther())} />`;
 }
 
 // The feed of an open level comes before its releases, in the same view

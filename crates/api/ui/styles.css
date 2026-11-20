@@ -1849,6 +1849,13 @@ button.outline-feed {
 /* The sort is the first tool. At 390 px the tools wrap below the heading and
    the sort is at the left edge, so its menu opens to the right. */
 .releases-tools .sort-menu { right: auto; left: 0; }
+/* In the wide layout the add menu is near the right edge, so its menu opens
+   to the left (ADR 0230 item 1). In the narrow layout the tools wrap below
+   the heading, so the menu opens to the right as the sort menu does. */
+.releases-tools .add-menu .sort-menu { left: auto; right: 0; }
+@media (max-width: 760px) {
+  .releases-tools .add-menu .sort-menu { right: auto; left: 0; }
+}
 /* The field list of a search field (ADR 0154). It is a floating layer at the
    field, as on musicindex.org, so it does not change the height of a sheet.
    It has fixed position, so a sheet does not cut it. `useListPlace` gives its

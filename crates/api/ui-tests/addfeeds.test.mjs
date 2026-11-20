@@ -2,7 +2,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { addChoices, makeFields, makeTitle, feedFileStart, startChoices, MAKE_TYPES, RELEASE_KINDS } from '../ui/addfeeds.js';
+import { addChoices, addMenuEntries, ADD_PAGE_TITLE, makeFields, makeTitle, feedFileStart, startChoices, MAKE_TYPES, RELEASE_KINDS } from '../ui/addfeeds.js';
+
+import { releaseAdd } from '../ui/welcome.js';
 
 test('feedFileStart gives the file name from the title', () => {
   assert.equal(feedFileStart('Pixel Palace'), 'pixel-palace.xml');
@@ -16,32 +18,66 @@ test('feedFileStart gives an empty path when the title has no usable character',
   assert.equal(feedFileStart('!!!'), '');
 });
 
-test('addChoices gives two groups with all rows when a host exists', () => {
-  const owner = 'ADR 0213 item 2: the make group leaves out Album and gives the release hint. Fix addChoices in crates/api/ui/addfeeds.js.';
+test('addChoices gives the one group of the page Add One You Have', () => {
+  const owner = 'ADR 0230 item 4: the page has the three rows of "Add One You Have". Fix addChoices in crates/api/ui/addfeeds.js.';
   const groups = addChoices({ hasHost: true });
-  assert.deepEqual(groups.map((g) => [g.id, g.label]), [['make', 'Make a new feed'], ['have', 'Add a feed you have']]);
-  assert.deepEqual(groups[0].rows.map((r) => r.id), ['publisher', 'show', 'playlist'], owner);
-  assert.equal(groups[0].hint, 'A release starts on the page of its artist.', owner);
-  assert.deepEqual(groups[1].rows.map((r) => r.id), ['find', 'folder', 'msp']);
-  assert.equal(groups[0].connect, undefined);
-  for (const row of groups.flatMap((g) => g.rows)) {
+  assert.deepEqual(groups.map((g) => [g.id, g.label]), [['have', 'Add One You Have']], owner);
+  assert.deepEqual(groups[0].rows.map((r) => r.id), ['find', 'folder', 'msp'], owner);
+  assert.equal(groups[0].connect, false, owner);
+  assert.equal(ADD_PAGE_TITLE, 'Add One You Have', owner);
+  for (const row of groups[0].rows) {
     assert.ok(row.title && row.text, `the row ${row.id} needs a title and a text`);
   }
 });
 
-test('addChoices leaves out the make rows and the folder row when no host exists', () => {
+test('addChoices leaves out the folder row and asks for a host when no host exists', () => {
   const groups = addChoices({ hasHost: false });
-  const owner = 'ADR 0213 item 2: the make group keeps its release hint without a file host. Fix addChoices in crates/api/ui/addfeeds.js.';
-  assert.deepEqual(groups[0].rows, [], owner);
-  assert.equal(groups[0].hint, 'A release starts on the page of its artist.', owner);
+  assert.deepEqual(groups[0].rows.map((r) => r.id), ['find', 'msp']);
   assert.equal(groups[0].connect, true);
-  assert.deepEqual(groups[1].rows.map((r) => r.id), ['find', 'msp']);
+});
+
+const artistPage = { id: 9, medium: 'publisher', connector_id: 1, publisher_roles: ['artist'] };
+
+test('the add menu has the values of ADR 0230 item 1 in their sequence', () => {
+  const owner = 'ADR 0230 item 1: the add menu has Release, Artist, Label, Show, Playlist, a separator, then Add One You Have. Fix addMenuEntries in crates/api/ui/addfeeds.js.';
+  const entries = addMenuEntries(null);
+  assert.deepEqual(entries.map((e) => e.label), ['Release', 'Artist', 'Label', 'Show', 'Playlist', 'Add One You Have…'], owner);
+  assert.deepEqual(entries.map((e) => Boolean(e.separatorBefore)), [false, false, false, false, false, true], owner);
+  assert.deepEqual(entries.map((e) => e.open), ['album', 'publisher', 'publisher', 'show', 'playlist', null], owner);
+  assert.deepEqual(entries[1].start, { role: 'artist' }, owner);
+  assert.deepEqual(entries[2].start, { role: 'label' }, owner);
+});
+
+test('the add menu of an artist page gives that artist as the start parent of Release', () => {
+  const owner = 'ADR 0230 items 2 and 3: Release has the artist page as its parent, and no parent on the top page. Fix addMenuEntries and releaseAdd.';
+  const onArtist = addMenuEntries(releaseAdd(artistPage, 'Pixel Palace'));
+  assert.equal(onArtist[0].start.publisher_id, 9, owner);
+  assert.equal(onArtist[0].start.author, 'Pixel Palace', owner);
+  assert.deepEqual(addMenuEntries(releaseAdd(null, '')) [0].start, {}, owner);
+  const label = { ...artistPage, publisher_roles: ['label'] };
+  assert.deepEqual(addMenuEntries(releaseAdd(label, 'Label'))[0].start, {}, owner);
+});
+
+test('no label of an add control has the word "feed" except "feed file"', () => {
+  const owner = 'ADR 0230 item 6: a user action does not use the word "feed". Change the label in addfeeds.js or app.js.';
+  const labels = [
+    ...addMenuEntries(null).map((e) => e.label),
+    ...addChoices({ hasHost: true }).flatMap((g) => [g.label, ...g.rows.map((r) => r.title)]),
+    ADD_PAGE_TITLE,
+    ...['album', 'publisher', 'show', 'playlist'].flatMap((t) => [makeFields(t).button, makeFields(t).busyLabel, makeFields(t).titleLabel]),
+    ...['artist', 'label', 'hosting', undefined].map((r) => makeTitle('publisher', r)),
+    makeTitle('show'), makeTitle('playlist'), makeTitle('album'),
+  ];
+  for (const label of labels) assert.doesNotMatch(label.replace(/feed file/gi, ''), /feed/i, `${owner} Label: ${label}`);
+  const source = readFileSync(new URL('../ui/app.js', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /＋ Add a Feed|>Add a Feed<|Open the Feed/, owner);
+  assert.match(source, /\$\{head\.typeLabel\} Page/, 'ADR 0230 item 7: the head button is {Type} Page.');
 });
 
 test('makeFields gives the fields of each type', () => {
   assert.deepEqual(makeFields('album'), { medium: 'music', titleLabel: 'Album title', authorLabel: 'Artist', role: false, button: 'Make the Release', busyLabel: 'Making the Release…' });
   assert.deepEqual(makeFields('publisher'), { medium: 'publisher', titleLabel: 'Name', authorLabel: null, role: true, button: 'Make the Page', busyLabel: 'Making the Page…' });
-  assert.deepEqual(makeFields('show'), { medium: 'music', titleLabel: 'Show feed title', authorLabel: 'Artist', role: false, button: 'Make the Show Feed', busyLabel: 'Making the Show Feed…' });
+  assert.deepEqual(makeFields('show'), { medium: 'music', titleLabel: 'Show title', authorLabel: 'Artist', role: false, button: 'Make the Show', busyLabel: 'Making the Show…' });
   assert.deepEqual(makeFields('playlist'), { medium: 'musicL', titleLabel: 'Playlist name', authorLabel: 'Author', role: false, button: 'Make the Playlist', busyLabel: 'Making the Playlist…' });
 });
 

@@ -2,7 +2,7 @@
 
 Decision: [ADR 0230](../adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 1 to 7.
 
-Status: Open.
+Status: Done.
 
 ## Problem
 
@@ -49,3 +49,18 @@ Visual:
 - Read `/home/citizen/.agents/skills/asd-ste100/SKILL.md` before you write a comment or a label.
 - Do not commit. Leave the change in the working tree and report the changed files and the check results.
 - Do not make an architecture decision. When this task does not answer a question, stop and report.
+
+## Result
+
+Mechanical checks passed: 918 Node tests, the gate.
+
+Visual check (2026-11-20), drive-ui on a copy of the real data:
+
+- The open menu on Releases at 1280 px, 900 px and 390 px.
+- The head of the artist page at 1280 px, with **Artist Page** and the open menu.
+
+ `$edges()` gives no finding, and the page has no horizontal scroll. The first screenshot found that the menu went past the right edge at 1280 px. Now `MenuControl` in `menu.js` takes `className`. `styles.css` opens the add menu to the left in the wide layout. At 760 px and less, it opens to the right. **Release** on the artist page opens the form with the artist name.
+
+At 390 px the level of an artist shows only the panel list, with no head row. This was also true before the task. Thus the add menu and **Artist Page** do not show there. The add row **＋ Add a Release** of the artist page stays.
+
+With no connected file host, each make entry of the add menu opens the page Add One You Have. That page shows the button **Connect a File Host**. The groups "Not linked" and "Other" of Releases have no add menu.

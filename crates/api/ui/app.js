@@ -34,7 +34,7 @@ import { DeleteUndoProvider, useDeleteUndo, undoNoticeText } from './undonotice.
 // different page and comes back (ADR 0227 item 7).
 const settingsHistory = makeHistory();
 import { PeoplePage, PersonPage, CheckPage, WalletPage } from './peoplepages.js';
-import { OUTSIDE_LIMIT, OUTSIDE_SETTING_LABEL, OUTSIDE_SETTING_HINT, outsideMark, outsideNotice, readOnlyHostNotice, indexNotice, releaseMusicIndexLink, moveNotice, writeNotice, nextNoticeLoad, eachLimited, panelSet, stateMark } from './outsidecheck.js';
+import { OUTSIDE_LIMIT, OUTSIDE_SETTING_LABEL, OUTSIDE_SETTING_HINT, outsideMark, outsideNotice, readOnlyHostNotice, indexNotice, releaseMusicIndexLink, moveNotice, moveAgainDelay, writeNotice, nextNoticeLoad, eachLimited, panelSet, stateMark } from './outsidecheck.js';
 import { collectionMark, collectionRow, collectionSectionActions, collectionSheet, collectionAction, CLOSED_EXPORT_HINT, COLLECTIONS_HINT, OPENING_TEXT } from './collectionlist.js';
 import { localInputToIso, isoToLocalInput, zoneHint, nowInput, unreadDateHint } from './datetime.js';
 import { durationText, readDuration, DURATION_ERROR, unreadDurationHint } from './duration.js';
@@ -4999,19 +4999,35 @@ function OutsideNotices({ feed, busy, refresh, onChanged, onCheck }) {
     if (wasBusy.current && !busy) load();
     wasBusy.current = busy;
   }, [busy]);
+  // The move notice gives a sent line its action after a wait. No new data
+  // comes then, so a timer renders the notice again (ADR 0229 item 6).
+  const [, setClock] = useState(0);
+  useEffect(() => {
+    const delay = moveAgainDelay(check, Date.now() / 1000);
+    if (delay === null) return undefined;
+    const timer = setTimeout(() => setClock((n) => n + 1), delay);
+    return () => clearTimeout(timer);
+  }, [check, feed.id]);
   const notice = outsideNotice(check);
-  const move = moveNotice(check);
+  const move = moveNotice(check, Date.now() / 1000);
   const writtenNow = writeNotice(check, { reads, nowSeconds: Date.now() / 1000, confirmedHere: confirmedHere.current, since: since.current });
   // The confirmation shows only after the page showed that Music Index had
   // not read the write.
   if (writtenNow && writtenNow.kind !== 'confirmed') confirmedHere.current = true;
   const written = writtenNow && check.last_write.written_at !== dismissedWrite ? writtenNow : null;
-  // Measure each notice that is not the confirmation. The confirmation then
-  // has at least that height.
+  // Measure each notice that is not the confirmation. Each later state of the
+  // same write then has at least the greatest height, so the notice does not
+  // change its height (ADR 0228 item 10, ADR 0229 item 7). A change of the
+  // window size starts the measure again.
   useLayoutEffect(() => {
-    if (written && written.kind !== 'confirmed' && writeBox.current) writeHeight.current = writeBox.current.offsetHeight;
+    if (written && written.kind !== 'confirmed' && writeBox.current) writeHeight.current = Math.max(writeHeight.current, writeBox.current.offsetHeight);
   });
-  const writeStyle = written && written.kind === 'confirmed' && writeHeight.current > 0 ? `min-height: ${writeHeight.current}px` : undefined;
+  useEffect(() => {
+    const reset = () => { writeHeight.current = 0; };
+    window.addEventListener('resize', reset);
+    return () => window.removeEventListener('resize', reset);
+  }, []);
+  const writeStyle = written && writeHeight.current > 0 ? `min-height: ${writeHeight.current}px` : undefined;
   const index = move ? null : indexNotice(check);
   const keep = () => run(async () => {
     await api(`/feeds/${feed.id}/outside/keep`, { method: 'POST' });
@@ -5080,7 +5096,7 @@ function OutsideNotices({ feed, busy, refresh, onChanged, onCheck }) {
 // The podping lines of the notice after a move (ADR 0184) and of the notice
 // after a write (ADR 0175 item 1).
 function PodpingLines({ lines, disabled, send }) {
-  return lines.map((line) => html`<p class="podping-line"><span class=${'status-tag ' + line.state}>${line.state === 'waiting' && html`<span class="player-wait" aria-hidden="true"></span>`}${line.state === 'sent' && html`<${Icon} name="check" />`}${line.tag}${line.time ? ` · ${line.time}` : ''}</span> <span class="mono">${line.url}</span>${line.text && ` ${line.text}`}
+  return lines.map((line) => html`<p class=${'podping-line' + (line.state === 'failed' ? ' wrap' : '') + (line.action ? ' has-action' : '')}><span class=${'status-tag ' + line.state}>${line.state === 'waiting' && html`<span class="player-wait" aria-hidden="true"></span>`}${line.state === 'sent' && html`<${Icon} name="check" />`}<span>${line.tag}${line.time && html`<span class="podping-time"> · ${line.time}</span>`}</span></span> <span class="mono podping-url" title=${line.url}>${line.url}</span>${line.text && html`<span class="podping-url">${line.text}</span>`}
         ${line.action && html`<button class="button action" type="button" disabled=${disabled} onClick=${send}>${line.action}</button>`}</p>`);
 }
 

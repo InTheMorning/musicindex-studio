@@ -2,7 +2,7 @@
 
 Decision: [ADR 0229](../adr/0229-the-media-host-after-a-follow-a-podping-again-and-empty-folders.md) items 4 to 7.
 
-Status: Open.
+Status: Done.
 
 ## Problem
 
@@ -43,3 +43,18 @@ Visual (the main session):
 - Do not make an architecture decision. When this task does not answer a question, stop and report.
 
 ## Result
+
+`podpingLines` takes the option `again` (a boolean or a function of the announcement). A sent line has **Send the Podping Again** only when it is true. A failed line always has it. `writeNotice` passes `again` only in the state `no_reply`. `moveNotice(check, nowSeconds)` passes a function that is true when `nowSeconds - finished_at > WRITE_NOTICE_AGE`.
+
+The move notice renders again after the wait because no new data arrives then, and `nextNoticeLoad` gives no timer for a sent line. The new function `moveAgainDelay` gives the milliseconds until the first sent line passes the age. A new `useEffect` in the notice component of app.js sets a timeout for that delay and bumps a state counter, which renders the notice again.
+
+The main session corrected the layout after its screenshots at 1280 px and 390 px:
+
+- Each podping line has the height of the button (`min-height: var(--target)`). The line keeps its height when the button comes or goes: 28 px at 1280 px and 44 px at 390 px.
+- A sent line stays on one row. The address shrinks with an ellipsis.
+- At 760 px or less, the tag with its time and the button do not fit on one row. A sent line with the button then shows only the tag "Sent" and the button, with no time and no address. The text of the notice gives the time of the write.
+- A failed line always has its button, so its height does not change. It wraps, and its error text shows in full.
+- Operator choice (main session): the tag of a podping line gives a short time (`tagTime`). On the same day it gives the hour and the minute. On a different day it gives a short date and time.
+- The write notice keeps the greatest height that it had for the same write. At 390 px the waiting state was 204 px and the no reply state 179 px, because their bold text has a different length. A change of the window size starts the measure again.
+
+Checks: UI tests pass, the .mjs syntax check passes for outsidecheck.js and app.js, `bash tools/gate.sh` passes. The screenshots show no fit finding at 390 px and 761 px. They come from a test page that renders the notices with the real `outsidecheck.js` and `styles.css`, not from the app.

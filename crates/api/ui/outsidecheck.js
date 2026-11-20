@@ -95,22 +95,35 @@ export function releaseMusicIndexLink(feed, check) {
 // item 2).
 export const localTime = (seconds) => new Date(seconds * 1000).toLocaleString();
 
+// The time in the tag of a podping line. On the day of `nowSeconds` it is the
+// hour and the minute. On a different day it is a short date and time. The
+// tag must leave space for the button on one row at 390 px (ADR 0229 item 7).
+export function tagTime(seconds, nowSeconds) {
+  const date = new Date(seconds * 1000);
+  const now = new Date(nowSeconds * 1000);
+  if (date.toDateString() === now.toDateString()) return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  return date.toLocaleString([], { dateStyle: 'short', timeStyle: 'short' });
+}
+
 // The notice after a move by Studio (ADR 0184 items 3 to 7). A sent line can
 // send again (ADR 0191 item 4). A feed with no public address has no send
-// button (ADR 0184 item 11).
-function podpingLines(announcements, ownUrl) {
+// button (ADR 0184 item 11). A sent line has the action only when `again` is
+// true, or when `again` is a function that returns true for the announcement
+// (ADR 0229 item 4). A failed line always has it.
+function podpingLines(announcements, ownUrl, { again = false, nowSeconds = 0 } = {}) {
   return (announcements || []).map((announcement) => {
     const line = { url: announcement.url, state: announcement.state, tag: '', time: null, text: '' };
     if (announcement.state === 'waiting') {
       line.tag = 'Waiting';
-      line.time = localTime(announcement.send_at);
+      line.time = tagTime(announcement.send_at, nowSeconds);
     } else if (announcement.state === 'sent') {
       line.tag = 'Sent';
-      line.time = localTime(announcement.finished_at);
-      if (ownUrl) line.action = 'Send the Podping Again';
+      line.time = tagTime(announcement.finished_at, nowSeconds);
+      const allowed = typeof again === 'function' ? again(announcement) : again;
+      if (ownUrl && allowed) line.action = 'Send the Podping Again';
     } else if (announcement.state === 'failed') {
       line.tag = 'Failed';
-      line.time = localTime(announcement.finished_at);
+      line.time = tagTime(announcement.finished_at, nowSeconds);
       line.text = announcement.error || '';
       if (ownUrl) line.action = 'Send the Podping Again';
     } else if (announcement.state === 'not_sent') {
@@ -121,9 +134,11 @@ function podpingLines(announcements, ownUrl) {
   });
 }
 
-export function moveNotice(check) {
+export function moveNotice(check, nowSeconds = 0) {
   if (!check || check.index_is_move_source !== true || !check.last_move) return null;
-  const lines = podpingLines(check.last_move.announcements, check.own_url);
+  // A sent line has the action only after the wait (ADR 0229 item 6).
+  const again = (announcement) => nowSeconds - announcement.finished_at > WRITE_NOTICE_AGE;
+  const lines = podpingLines(check.last_move.announcements, check.own_url, { again, nowSeconds });
   return {
     tone: 'plain',
     strong: `You moved this feed at ${localTime(check.last_move.moved_at)}. Music Index reads the new address after it gets the podping.`,
@@ -156,8 +171,10 @@ export function writeNotice(check, { reads, nowSeconds, confirmedHere, since = 0
   if (write.index_read === true) {
     return confirmedHere ? { kind: 'confirmed', tone: 'plain', strong: `Music Index has your write of ${time}.`, lines: [], dismiss: 'Dismiss' } : null;
   }
-  const lines = podpingLines(write.announcements, check.own_url);
-  if (writeNotRead(write) && (reads >= INDEX_READ_AGAIN_MAX || writeAge(write, nowSeconds, since) > WRITE_NOTICE_AGE)) {
+  const noReply = writeNotRead(write) && (reads >= INDEX_READ_AGAIN_MAX || writeAge(write, nowSeconds, since) > WRITE_NOTICE_AGE);
+  // Only the state no_reply gives a sent line the action (ADR 0229 item 5).
+  const lines = podpingLines(write.announcements, check.own_url, { again: noReply, nowSeconds });
+  if (noReply) {
     return { kind: 'no_reply', tone: 'plain', strong: `Music Index has not read your write of ${time} yet.`, lines, action: 'Check Again', dismiss: 'Dismiss' };
   }
   return {
@@ -167,6 +184,17 @@ export function writeNotice(check, { reads, nowSeconds, confirmedHere, since = 0
     lines,
     dismiss: 'Dismiss',
   };
+}
+
+// The delay in milliseconds until a sent podping of the move gets its action
+// (ADR 0229 item 6). The page has no new data at that time, so the caller sets
+// a timer to render the notice again. It gives null when no sent line waits.
+export function moveAgainDelay(check, nowSeconds) {
+  if (!check || check.index_is_move_source !== true || !check.own_url) return null;
+  const due = (check.last_move?.announcements || [])
+    .filter((announcement) => announcement.state === 'sent' && nowSeconds - announcement.finished_at <= WRITE_NOTICE_AGE)
+    .map((announcement) => (announcement.finished_at + WRITE_NOTICE_AGE - nowSeconds) * 1000 + 1000);
+  return due.length > 0 ? Math.min(...due) : null;
 }
 
 // The delay before the notice reads a waiting podping again (ADR 0189 item 6).

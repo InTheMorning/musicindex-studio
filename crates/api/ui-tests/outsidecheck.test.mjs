@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { outsideMark, outsideNotice, readOnlyHostNotice, indexNotice, releaseMusicIndexLink, moveNotice, writeNotice, nextNoticeLoad, LATE_NOTICE_LOAD, eachLimited, OUTSIDE_LIMIT, panelSet, stateMark } from '../ui/outsidecheck.js';
+import { outsideMark, outsideNotice, readOnlyHostNotice, indexNotice, releaseMusicIndexLink, moveNotice, moveAgainDelay, tagTime, writeNotice, nextNoticeLoad, LATE_NOTICE_LOAD, WRITE_NOTICE_AGE, eachLimited, OUTSIDE_LIMIT, panelSet, stateMark } from '../ui/outsidecheck.js';
 import { pageSequence, tierError } from '../ui/pages.js';
 import { INDEX_READ_AGAIN_MS } from '../ui/releasemove.js';
 
@@ -53,7 +53,7 @@ test('The Studio move notice gives each podping state and its action (ADR 0184 i
   } });
   assert.equal(notice.tone, 'plain');
   assert.match(notice.strong, /^You moved this feed at /);
-  const expectedTime = (seconds) => new Date(seconds * 1000).toLocaleString();
+  const expectedTime = (seconds) => tagTime(seconds, 0);
   for (const [index, state, tag, time] of [
     [0, 'waiting', 'Waiting', 110],
     [1, 'sent', 'Sent', 120],
@@ -71,7 +71,7 @@ test('The Studio move notice gives each podping state and its action (ADR 0184 i
   assert.equal(notice.lines[3].text, '');
   assert.equal(notice.lines[3].action, 'Send the Podping');
   assert.equal(notice.lines[0].action, undefined, 'ADR 0191 item 5: a waiting line has no button. Correct moveNotice in crates/api/ui/outsidecheck.js.');
-  assert.equal(notice.lines[1].action, 'Send the Podping Again', 'ADR 0191 item 4: a sent line can send the podping again. Correct moveNotice in crates/api/ui/outsidecheck.js.');
+  assert.equal(notice.lines[1].action, undefined, 'ADR 0229 item 6: a sent line has no button before the wait. Correct moveNotice in crates/api/ui/outsidecheck.js.');
   assert.equal(moveNotice({ index_is_move_source: false, index_url: 'https://old.example/a.xml' }), null);
   assert.ok(indexNotice({ index_url: 'https://old.example/a.xml', own_url: 'https://new.example/a.xml' }));
 });
@@ -86,7 +86,7 @@ test('A Studio move notice has no send button with no public address (ADR 0184 i
   } });
   assert.equal(notice.lines[0].state, 'failed', 'ADR 0189 item 7: a failed line gives its state.');
   assert.equal(notice.lines[0].tag, 'Failed', 'ADR 0189 item 7: a failed line gives its status tag.');
-  assert.equal(notice.lines[0].time, new Date(130000).toLocaleString(), 'ADR 0189 item 7: a failed line gives its time in the tag.');
+  assert.equal(notice.lines[0].time, tagTime(130, 0), 'ADR 0189 item 7: a failed line gives its time in the tag.');
   assert.equal(notice.lines[0].text, '', 'ADR 0189 item 7: a failed line with no error has no sentence text.');
   assert.equal(notice.lines[0].action, undefined);
   assert.equal(notice.lines[1].action, undefined);
@@ -105,7 +105,24 @@ test('ADR 0228 items 8 and 9: each write state has Dismiss and the confirmation 
   }
   assert.deepEqual(confirmed.lines, [], 'ADR 0228 item 9: the confirmation has no podping line. Fix: return no lines.');
   assert.equal(confirmed.action, undefined, 'ADR 0228 item 9: the confirmation has no Send the Podping Again. Fix: set no action.');
-  assert.equal(noReply.lines[0].action, 'Send the Podping Again', 'ADR 0191 item 4: a sent line keeps its button. Fix: keep podpingLines.');
+  assert.equal(noReply.lines[0].action, 'Send the Podping Again', 'ADR 0229 item 5: a sent line has the button in the state no_reply. Fix: pass again in writeNotice.');
+  assert.equal(waiting.lines[0].action, undefined, 'ADR 0229 item 5: a sent line has no button while the notice waits. Fix: pass again only in no_reply.');
+});
+
+test('ADR 0229 items 5 and 6: a failed line has the action in each state and a sent move line has it after the wait', () => {
+  const failed = { own_url: 'https://x/feed.xml', last_write: {
+    written_at: 100, index_read: false,
+    announcements: [{ url: 'https://x/feed.xml', state: 'failed', finished_at: 110, error: 'timeout' }],
+  } };
+  assert.equal(writeNotice(failed, { reads: 1, nowSeconds: 120, confirmedHere: false }).lines[0].action, 'Send the Podping Again', 'ADR 0229 item 4: a failed line always has the action. Fix: keep it in podpingLines.');
+  assert.equal(writeNotice(failed, { reads: 15, nowSeconds: 120, confirmedHere: false }).lines[0].action, 'Send the Podping Again');
+  const move = { index_is_move_source: true, own_url: 'https://x/feed.xml', last_move: {
+    moved_at: 100, announcements: [{ url: 'https://x/feed.xml', state: 'sent', finished_at: 110 }],
+  } };
+  assert.equal(moveNotice(move, 110 + WRITE_NOTICE_AGE).lines[0].action, undefined, 'ADR 0229 item 6: no button until the wait ends. Fix: use > in moveNotice.');
+  assert.equal(moveNotice(move, 111 + WRITE_NOTICE_AGE).lines[0].action, 'Send the Podping Again', 'ADR 0229 item 6: the button comes after the wait. Fix: pass again in moveNotice.');
+  assert.equal(moveAgainDelay(move, 120), (110 + WRITE_NOTICE_AGE - 120) * 1000 + 1000, 'ADR 0229 item 6: the page renders again after the wait. Fix: use moveAgainDelay.');
+  assert.equal(moveAgainDelay(move, 111 + WRITE_NOTICE_AGE), null, 'ADR 0229 item 6: no timer after the wait.');
 });
 
 test('ADR 0175 item 1: a write notice gives its states and suppresses inapplicable notices', () => {
@@ -301,4 +318,13 @@ test('ADR 0211: the feed notice follows a move and removes retired wording', () 
   const source = readFileSync(new URL('../ui/app.js', import.meta.url), 'utf8');
   assert.match(source, /outside\/follow/);
   assert.doesNotMatch(source, /moved outside Studio/i);
+});
+
+test('ADR 0229 item 7: the tag of a podping line has a short time', () => {
+  const now = new Date(2026, 10, 20, 15, 0).getTime() / 1000;
+  const sameDay = new Date(2026, 10, 20, 10, 46, 4).getTime() / 1000;
+  const otherDay = new Date(2026, 10, 19, 10, 46, 4).getTime() / 1000;
+  assert.equal(tagTime(sameDay, now), new Date(sameDay * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }), 'ADR 0229 item 7: on the same day the tag gives only the hour and the minute. Correct tagTime in crates/api/ui/outsidecheck.js.');
+  assert.ok(!tagTime(sameDay, now).includes('2026'), 'ADR 0229 item 7: on the same day the tag gives no date.');
+  assert.equal(tagTime(otherDay, now), new Date(otherDay * 1000).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }), 'ADR 0229 item 7: on a different day the tag gives a short date and time.');
 });

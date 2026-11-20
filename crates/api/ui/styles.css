@@ -2519,8 +2519,26 @@ button.outline-feed {
 .status-tag.not_sent { color: var(--muted); background: var(--fill-soft); }
 .status-tag .player-wait, .status-tag .icon { display: block; flex: none; width: 12px; height: 12px; }
 .status-tag .icon { stroke-width: 3; }
-/* The tag, the address and the button wrap with a gap (ADR 0191 item 4). */
-.podping-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 8px 0 0; overflow-wrap: anywhere; }
+.podping-line { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px 10px; margin: 8px 0 0; }
+/* The tag, the address and the button stay on one row. The line has the
+   height of the button, so the notice keeps its height when the button comes
+   or goes. The address shrinks to give the button its space (ADR 0229 item 7). */
+.podping-line { min-height: var(--target); }
+.podping-line > .status-tag, .podping-line > .button { flex: 0 0 auto; }
+.podping-line > .podping-url { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.podping-line > .mono.podping-url { flex: 1 1 0; }
+/* At narrow width the tag with its time, the address and the button do not
+   fit on one row. A sent line with the button then shows only its tag and
+   the button. The text of the notice gives the time. */
+@media (max-width: 760px) {
+  .podping-line.has-action:not(.wrap) .podping-time,
+  .podping-line.has-action:not(.wrap) > .podping-url { display: none; }
+  .podping-line.has-action:not(.wrap) { justify-content: space-between; }
+}
+/* A failed line always has its button, so it can wrap and show all of its
+   error text. */
+.podping-line.wrap { flex-wrap: wrap; }
+.podping-line.wrap > .podping-url:not(.mono) { flex: 1 1 100%; order: 3; white-space: normal; }
 /* At narrow width the buttons of a row go on their own line, so that the text keeps its width. */
 @media (max-width: 760px) {
   .more-row { flex-wrap: wrap; }

@@ -10,6 +10,7 @@
 - Uses: musicindex ADR 0068 R-STATUS-1 for the Warning color. [ADR 0052](../archive/adr/0052-announcements-through-the-podcast-index-hub.md) for the queue. [ADR 0189](0189-a-move-sends-one-podping-of-the-old-address.md) item 4 for the address that the button sends.
 - Source: the human check of task 127 on 2026-11-12.
 - Changed by: [ADR 0228](0228-undo-in-the-bar-a-notice-that-stays-and-the-rc28-check-findings.md) item 9, on 2026-11-20. Item 4: the confirmation of a write has no **Send the Podping Again**.
+- Changed by: [ADR 0229](0229-the-media-host-after-a-follow-a-podping-again-and-empty-folders.md) items 4 to 7, on 2026-11-20. Item 4: a sent line has the button only in the state "no reply", or after the wait for a move. The button is in the line.
 
 ## Context
 

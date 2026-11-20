@@ -8,6 +8,7 @@
 - Changes: [ADR 0150](0150-studio-shows-a-change-from-outside-when-a-page-opens.md) items 2 to 4: the color of each result, and the notice of a move.
 - Changes: [ADR 0165](0165-the-left-panel-marks-the-state-of-each-feed.md) item 2: the color of the mark of an outside change.
 - Uses: [ADR 0021](0021-public-address-of-a-feed.md) for the sources of a feed address. [ADR 0067](0067-a-read-only-feed-opens-in-the-editor.md) for a read-only feed. [ADR 0129](0129-a-draft-takes-a-change-of-the-hosted-file.md) for the comparison. [ADR 0128](0128-a-moved-feed-names-its-own-address.md) and [ADR 0190](0190-review-gives-the-return-wait-of-music-index.md) for a return. [ADR 0191](0191-a-return-warning-has-the-warning-color-and-a-sent-podping-can-go-again.md) item 1 and musicindex ADR 0068 R-STATUS-1 for the style of a warning.
+- Changed by: [ADR 0229](0229-the-media-host-after-a-follow-a-podping-again-and-empty-folders.md) items 1 to 3, on 2026-11-20. Items 11 and 16: the release files host follows when one connected file host gives each media address.
 - Changed: 2026-11-14 by the operator, after the build. The operator selected "Build the return function" for **Move It Back…**. Items 7, 17 and 18 give its form, which is a technical choice of the planning model. Item 16 has its own text.
 - Source: defects 3 and 4, missing function 1 and design item 8 of the [human check walk of 2026-11-14](../reviews/2026-11-14-human-check-walk.md).
 

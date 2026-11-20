@@ -10,6 +10,7 @@
 - Uses: [ADR 0128](0128-a-moved-feed-names-its-own-address.md) for the tag `itunes:new-feed-url`. [ADR 0052](../archive/adr/0052-announcements-through-the-podcast-index-hub.md) items 8 and 13 to 20 for the queue. [ADR 0136](0136-one-announcement-choice-at-the-write.md) for the choice at the write.
 - Changed by: [ADR 0189](0189-a-move-sends-one-podping-of-the-old-address.md). Item 6: the notice gives one line, for the address before the move. Item 10: the button sends that address.
 - Changed by: [ADR 0191](0191-a-return-warning-has-the-warning-color-and-a-sent-podping-can-go-again.md) item 4: a sent line has the button **Send the Podping Again**.
+- Changed by: [ADR 0229](0229-the-media-host-after-a-follow-a-podping-again-and-empty-folders.md) item 6, on 2026-11-20. Item 7: a sent line gets the button after the wait of the write notice.
 - Source: findings 2 and 8 of the [human checks of 2026-11-11](../reviews/2026-11-11-local-human-test-findings.md).
 
 ## Context

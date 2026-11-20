@@ -205,6 +205,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0226: The typed start folder, the program name, the root order and person tabs](adr/0226-the-typed-start-folder-the-program-name-the-root-order-and-person-tabs.md)
 - [ADR 0227: Undo and redo](adr/0227-undo-and-redo.md)
 - [ADR 0228: Undo in the bar, a notice that stays, and the rc.28 check findings](adr/0228-undo-in-the-bar-a-notice-that-stays-and-the-rc28-check-findings.md)
+- [ADR 0229: The media host after a follow, a podping again, and empty folders](adr/0229-the-media-host-after-a-follow-a-podping-again-and-empty-folders.md)
 
 ## Plans
 

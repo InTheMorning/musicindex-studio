@@ -14,6 +14,7 @@
 - Changes: [ADR 0117](0117-the-page-of-a-person-finds-values-on-musicindex.md) item 1, for a linked person (item 18).
 - Changes: [ADR 0200](0200-studio-deletes-a-feed-file-only-after-music-index-removes-the-entry.md) items 4 and 6, for a leftover copy (items 19 to 21).
 - Uses: [ADR 0227](0227-undo-and-redo.md) items 1 to 12 and 20 to 22: the history of a page and the operations with no undo.
+- Changed by: [ADR 0229](0229-the-media-host-after-a-follow-a-podping-again-and-empty-folders.md) items 4 and 5, on 2026-11-20. Item 9: a waiting line has no **Send the Podping Again**.
 
 ## Context
 

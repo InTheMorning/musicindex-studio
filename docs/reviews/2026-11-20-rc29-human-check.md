@@ -166,3 +166,17 @@ The main session ran the debug binary of `main` in the screenshot harness (`.stu
 | The artist level at 390 px | Pass. The level has its head row and **＋ Add release**. |
 | **Remove from Collection** of the artist, then **Undo** | Fail, then fixed. The core gave back the artist and its kept link, but the open level did not show the artist until the next load of the list. The shell now loads the list after each undo and redo of a delete step. After the fix, the artist shows below the label again at once (`out38`). |
 | **Find Another Page** for a person with only a read-only link | Pass, from the desktop screenshots of task 201 on a copy of the operator data (`.studio-dev/d29/r9`). |
+
+## Desktop Check Of rc.30
+
+The operator ran the release binary `target/release/musicindex-studio-desktop` of main at `4ff83cd` on the real data. A first start used the path `target/release/studio-desktop-app`, which held an earlier binary with schema 44. That binary stopped before it opened the collection. The main session deleted it.
+
+| Step | Result |
+| --- | --- |
+| 1. Start the binary on the real data | Pass. The collection went from schema 46 to 47. |
+| 2. **＋ Add release** on the level of HeyCitizen, filled from **Find on Music Index** | Open. Findings 1 and 2 came during this step. The new release shows a ✓ for "Cover image". |
+
+### Findings Of The Desktop Check Of rc.30
+
+1. In the sheet **Find on Music Index** of a new release, a click on an artist row gives "Select a release. This row is not a release." The operator wants the click to show the releases of that artist, so that the user can select one of them.
+2. The release made from a pick has no tracks and no payment recipient. The operator asks why. ADR 0230 items 14 to 16 give this scope: a pick fills the title, the artist name, the description, the cover and the website. Item 16 says that the tracks are not copied, and it leaves the scope open for a review by the operator. The ADR does not name the value recipients. A decision is necessary after the check.

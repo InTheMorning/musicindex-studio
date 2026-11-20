@@ -2089,7 +2089,7 @@ function ReadOnlyFeed({ feed, onChanged, onRemoved }) {
 }
 
 // The names of the pages that are not the album page or a track.
-const PAGE_NAMES = { lives: 'Live shows', credits: 'Credits', check: 'Check', settings: 'Settings', recipients: 'Value routes', files: 'Files', tracks: 'Tracks' };
+const PAGE_NAMES = { lives: 'Live shows', credits: 'Credits', check: 'Issues', settings: 'Settings', recipients: 'Value routes', files: 'Files', tracks: 'Tracks' };
 
 // The keys of a segmented control (musicindex ADR 0051 R-SEG-1 item 7, ADR
 // 0157). The selected segment is the one Tab stop of the row, and the arrow
@@ -2251,10 +2251,17 @@ export function PageTabs({ feed, view, go, checkCount = 0, tabs: suppliedTabs, c
     ${tabs.map((tab) => html`<span key=${tab.page}>${tab.label}<${SettingsPencil} pending=${tab.pending} /></span>`)}
   </div>`;
   if (narrow || !fit) {
-    return html`<div class="page-tabs-host" ref=${host}>${probeLabels}<select class="button page-tab-menu" aria-label=${settings ? label : 'Page of this feed'}
+    const menu = html`<select class="button page-tab-menu" aria-label=${settings ? label : 'Page of this feed'}
       value=${tabs.find((tab) => tab.current)?.page} onChange=${(e) => open(e.target.value)}>
       ${tabs.map((tab) => html`<option key=${tab.page} value=${tab.page}>${tab.label}${tab.pending ? ' (Not saved)' : ''}</option>`)}
-    </select></div>`;
+    </select>`;
+    // At narrow width, the button "‹ Overview" is at the left of the menu and
+    // opens the outline page (ADR 0228 item 11).
+    if (narrow && !settings) {
+      return html`<div class="page-tabs-host" ref=${host}>${probeLabels}<div class="page-tab-row">
+        <button class="button" type="button" onClick=${() => go({ name: 'outline', id: feed.id, ...(view.from ? { from: view.from } : {}) })}>‹ Overview</button>${menu}</div></div>`;
+    }
+    return html`<div class="page-tabs-host" ref=${host}>${probeLabels}${menu}</div>`;
   }
   return html`<div class="page-tabs-host" ref=${host}>${probeLabels}<nav class="page-tabs segmented" aria-label=${settings ? label : 'Pages of this feed'} onKeyDown=${onSegmentKey}>
     ${tabs.map((tab) => html`<button key=${tab.page} class="segment" type="button" tabIndex=${tab.current ? 0 : -1}
@@ -2285,7 +2292,6 @@ function Crumb({ feed, view, draft }) {
 // The toolbar stays in view at each scroll position (ADR 0029 item 1).
 function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importing, onImporting, onChanged, onListChanged, onRemoved, connectors, differences, onRescan }) {
   const { busy, error, run } = useAction();
-  const narrow = useNarrow();
   const [outsideCheck, setOutsideCheck] = useState(null);
   const kind = feedKind(feed);
   // The core moves a draft with no edits to the file that it reads, so the
@@ -2337,7 +2343,6 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
   return html`<div>
     <${Bar}>
       <${Crumb} feed=${feed} view=${view} draft=${draft} />
-      ${narrow && html`<button class="button" type="button" onClick=${() => go({ name: 'outline', id: feed.id, ...(view.from ? { from: view.from } : {}) })}>Sections</button>`}
       <${DraftToolbar} key=${feed.id} feedId=${feed.id} feedConnectorId=${feed.connector_id} draft=${draft} onWritten=${onChanged} connectors=${connectors} feeds=${feeds} onListChanged=${onListChanged}
         onOpenHosts=${() => go({ name: 'hosts' })}
         onOpsChanged=${() => { opsChanged(); reloadFiles(); }} onOpsCleared=${reloadFiles} go=${go} />
@@ -3566,7 +3571,7 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
         outside=${outside[releases.levelTile.id]} onOpen=${onOpen} />`}
       ${releases.letters && html`<${LetterBar} letters=${releases.letters} idOf=${(id) => `release-${id}`} />`}
       ${hasRows
-        ? html`<${RowList} as="ul" className=${`releases-list ${releases.view}`} mode=${releases.view === 'tiles' ? 'grid' : 'list'} selector=":scope > li > button">
+        ? html`<${RowList} as="ul" className=${`releases-list ${releases.view}${releases.nested ? ' nested' : ''}`} mode=${releases.view === 'tiles' ? 'grid' : 'list'} selector=":scope > li > button">
             ${releases.rows.map((row) => html`<li id=${`release-${row.id}`} data-marked=${row.marked ? 'true' : 'false'}>
               <button class=${releases.view === 'tiles' ? 'releases-tile' : 'releases-row'} type="button" onClick=${() => onOpen(row.id)}>
                 <${ArtWithDot} dot=${row.dot}><${ImageThumb} url=${row.image} glow=${row.glow} className="releases-cover" always /><//>

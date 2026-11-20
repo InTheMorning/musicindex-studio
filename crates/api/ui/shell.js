@@ -722,6 +722,8 @@ export function releasesList({ feeds, connectors, sort, view, reversed, marked, 
     view: viewKey,
     head,
     levelTile,
+    // The release rows have an indent below the level tile (ADR 0228 item 19).
+    nested: levelTile !== null && viewKey === 'rows',
     rows,
     letters: search ? null : sortKey === 'az' ? letterGroups(rows) : null,
   };

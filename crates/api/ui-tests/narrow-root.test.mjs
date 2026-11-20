@@ -39,9 +39,10 @@ test('ADR 0226 items 7 and 8: RootPage gives the full panel to LeftPanelFooter, 
   assert.ok(!body.includes('panel.bottom'), `ADR 0226 item 8: RootPage must not split panel.bottom. ${fix}`);
 });
 
-test('ADR 0223 item 8: the bar of the feed page has the button Sections. Add it in EditableFeed of app.js.', () => {
-  const start = app.indexOf('function EditableFeed');
-  const bar = app.indexOf('<${Bar}>', start);
-  const sections = app.indexOf('>Sections</button>', start);
-  assert.ok(sections > bar && sections < app.indexOf('<${DraftToolbar}', bar));
+test('ADR 0228 item 11: the button "‹ Overview" is at the left of the menu of the tabs, not in the bar. Fix PageTabs and EditableFeed in app.js.', () => {
+  const tabs = app.indexOf('export function PageTabs');
+  const button = app.indexOf('‹ Overview</button>', tabs);
+  const menu = app.indexOf('${menu}</div></div>', button);
+  assert.ok(button > tabs && menu > button);
+  assert.ok(!app.includes('>Sections</button>'));
 });

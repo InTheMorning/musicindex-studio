@@ -103,10 +103,10 @@ export function pageRefusalView(reason, selected = false, candidates = 1) {
   };
 }
 
-// The label of the tab: "Check 5", or "Check" for no finding and before the
-// first answer (ADR 0174 item 17).
+// The label of the tab: "Issues (5)", or "Issues" for no finding and before
+// the first answer (ADR 0228 item 13).
 export function tabLabel(count) {
-  return Number.isInteger(count) && count > 0 ? `Check ${count}` : 'Check';
+  return Number.isInteger(count) && count > 0 ? `Issues (${count})` : 'Issues';
 }
 
 // The count of the tab from an answer of the API, or 0 before the answer.

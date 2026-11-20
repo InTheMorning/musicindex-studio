@@ -446,7 +446,7 @@ test('the sheet Check gives its rows and menu', () => {
 
 // ---- Task 065c: the page of a person and its sheets ----
 import {
-  keyValue, keyFromValue, memberLine, memberText, walletGroups, addressOptions, usedText, keyEvidenceText, checkRow,
+  keyValue, keyFromValue, memberLine, memberText, walletGroups, addressOptions, usedText, keyEvidenceText, findPageButton, checkRow,
   savedValues, pendingKeys, pendingStatus, isPending, saveBody, leaveText, checkGroups, findingLine, checkFeedLines, checkKeys,
   addPersonValue, removePersonValue, personValueLine,
   feedRows, levelRows, feedsHeading, SHEET_TITLES, sheetStart, sheetBody, sheetReady, LINK_FORMS, linkFields,
@@ -502,7 +502,7 @@ test('a wallet gives its addresses, the LNURL addresses first', () => {
 });
 
 test('the evidence of a key and the row Check your feeds have their texts', () => {
-  assert.equal(keyEvidenceText('user'), 'Added by you');
+  assert.equal(keyEvidenceText('user'), '', 'ADR 0228 item 17: a key that the user added has no source text. Fix keyEvidenceText in people.js.');
   assert.equal(keyEvidenceText('nostr'), 'Found in a Nostr profile');
   const lines = (n) => checkRow({ ...MK, needs_correction: n }).lines;
   // ADR 0156 item 6: the row gives only the state of the check.
@@ -1658,7 +1658,7 @@ test('a credit name row gives one labeled attribute for each value and joins its
   assert.equal(only.keyId, 10);
   assert.equal(only.title, 'Nostr key');
   assert.equal(only.attributes[0].mono, true);
-  assert.equal(only.attributes[0].sub.at(-1), 'Added by you');
+  assert.ok(!only.attributes[0].sub.includes('Added by you'), 'ADR 0228 item 17: a key that the user added shows no source text. Fix keyOnlyRow in people.js.');
   assert.deepEqual(creditFoldSummary(person), { title: 'Credited as HeyCitizen', line: '2 credit names · 2 Nostr keys' });
   assert.deepEqual(creditFoldSummary({ name: 'Ann', credit_names: [], keys: [{ id: 1, npub: 'a' }] }), { title: 'Credited as Ann', line: '1 Nostr key' });
   assert.equal(creditFoldSummary({ name: 'Ann Lee', credit_names: [{ id: 1, name: 'A. Lee' }, { id: 2, name: 'ann lee' }] }).title, 'Credited as ann lee');
@@ -2172,4 +2172,10 @@ test('the row "Link this page" has three states (ADR 0163 items 5 to 7)', () => 
   assert.equal(linkRow({ feed_guid: 'aaaa-1111' }, PAGE_FEEDS, savedValues(MK)).already, true);
   assert.equal(linkRow({ feed_guid: 'aaaa-1111' }, PAGE_FEEDS, savedValues(MK)).selectable, false);
   assert.equal(linkRow({ feed_guid: 'g-ann' }, PAGE_FEEDS, { ...own, pages: [PAGE] }).already, true);
+});
+
+test('ADR 0228 item 18: the find button is in the role line for a person with a member', () => {
+  const fix = 'Fix findPageButton in people.js.';
+  assert.deepEqual(findPageButton({ role: '', members: [{ id: 1, title: 'A' }] }), { label: 'Find Another Page', inRoleLine: true }, fix);
+  assert.deepEqual(findPageButton({ role: 'Artist', members: [] }), { label: 'Find on Music Index', inRoleLine: false }, fix);
 });

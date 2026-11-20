@@ -657,7 +657,7 @@ export function creditNameRows(person, profiles = null) {
 // The row of a Nostr key that is not in a credit name.
 export function keyOnlyRow(key, profiles, name) {
   const row = keyRow(key.npub, profiles, name);
-  return { key: `k${key.id}`, title: row.mono ? 'Nostr key' : row.title, attributes: [nostrAttribute(row, [keyEvidenceText(key.evidence)])],
+  return { key: `k${key.id}`, title: row.mono ? 'Nostr key' : row.title, attributes: [nostrAttribute(row, [keyEvidenceText(key.evidence)].filter(Boolean))],
     picture: row.picture, warning: row.warning, npub: key.npub, keyId: key.id };
 }
 
@@ -680,11 +680,12 @@ export const CREDIT_FOLD_HINT = 'How Studio recognizes this person in your feeds
 export const usedText = (count) => (count > 0 ? feedCount(count) : 'Not used');
 
 // The text for the evidence of a Nostr key of a person.
+// A key that the user added has no text (ADR 0228 item 17).
 export function keyEvidenceText(evidence) {
   switch (evidence) {
     case 'keysend': return 'Found in a lookup of an LNURL address';
     case 'nostr': return 'Found in a Nostr profile';
-    default: return 'Added by you';
+    default: return '';
   }
 }
 
@@ -1156,6 +1157,15 @@ export function profileLine(person, titles, feeds = []) {
       return member;
     }),
   };
+}
+
+// The button that finds a page on Music Index, in the head of a person
+// (ADR 0228 item 18). A person with a linked page has a quiet text button in
+// the role line. A person with no linked page has the button below the line.
+export function findPageButton(profile) {
+  return profile.members.length > 0
+    ? { label: 'Find Another Page', inRoleLine: true }
+    : { label: 'Find on Music Index', inRoleLine: false };
 }
 
 // The hint of the links of a person (ADR 0132 item 2, ADR 0146 item 1).

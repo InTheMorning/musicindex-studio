@@ -55,11 +55,11 @@ test('the payment page address mark uses wrong address findings', () => {
 const check = (findings, extra = {}) => ({ revision: 'r1', read_only: false, read: true, unreadable: [], findings, ...extra });
 
 test('the tab label has the count, and no count for no finding', () => {
-  const owner = 'ADR 0174 item 17: check tabLabel in feedcheck.js.';
-  assert.equal(tabLabel(5), 'Check 5', owner);
-  assert.equal(tabLabel(1), 'Check 1', owner);
-  assert.equal(tabLabel(0), 'Check', owner);
-  assert.equal(tabLabel(undefined), 'Check', owner);
+  const owner = 'ADR 0228 item 13: check tabLabel in feedcheck.js.';
+  assert.equal(tabLabel(5), 'Issues (5)', owner);
+  assert.equal(tabLabel(1), 'Issues (1)', owner);
+  assert.equal(tabLabel(0), 'Issues', owner);
+  assert.equal(tabLabel(undefined), 'Issues', owner);
   assert.equal(checkCount(null), 0, owner);
   assert.equal(checkCount(check([finding('no_language', 'select_a_language', { level: 'question' })])), 1, owner);
 });

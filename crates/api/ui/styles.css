@@ -1618,9 +1618,14 @@ select.position:focus { background: var(--fill); }
    and the weight of a selected segment. */
 .page-tabs-host { position: relative; }
 .page-tab-menu { display: block; width: auto; max-width: calc(100% - 64px); margin: 0 32px 8px; }
+/* The row of the button "‹ Overview" and the menu (ADR 0228 item 11). */
+.page-tab-row { display: flex; align-items: center; gap: 8px; margin: 0 32px 8px; }
+.page-tab-row .button:not(.page-tab-menu) { flex: none; }
+.page-tab-row .page-tab-menu { min-width: 0; margin: 0; max-width: none; }
 /* At 760 px or less, the page content starts 16 px from the window edge. */
 @media (max-width: 760px) {
   .page-tab-menu { max-width: calc(100% - 32px); margin: 0 16px 8px; }
+  .page-tab-row { margin: 0 16px 8px; }
 }
 .page-tabs-probe {
   position: absolute;
@@ -1957,6 +1962,9 @@ button.outline-feed {
 }
 .letters .letter { min-width: var(--target); padding: 0 6px; }
 .releases-list { list-style: none; display: grid; gap: 2px; }
+/* In the rows view of a group, the release rows have an indent below the
+   row of the artist or label (ADR 0228 item 19). */
+.releases-list.rows.nested { padding-left: 32px; }
 .releases-list li { min-width: 0; scroll-margin-top: calc(var(--bar-h) + 12px); }
 .releases-list li[data-marked="true"] > button { background: var(--level-3); }
 .releases-row, .releases-tile {

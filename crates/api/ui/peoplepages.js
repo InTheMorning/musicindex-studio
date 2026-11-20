@@ -33,7 +33,7 @@ import {
   toggledItem, dismissBody, addPersonBody, moreAddLabel,
   checkedIds, toggledRow, reviewLabel, addResultLine, keyValue, keyFromValue, walletGroups, addressOptions, isDefaultAddress, DEFAULT_HINT,
   defaultFirst, walletValues, walletSelected, walletEdit, walletEditNote, creditNameEdit, supportLinkEdit, creditNameRows, keyOnlyRow, keysWithNoCreditName, creditFoldSummary, CREDIT_FOLD_HINT,
-  usedText, keyEvidenceText, checkRow, feedRows, levelRows, feedsHeading, SHEET_TITLES, addIntro, useHint, renameHint,
+  usedText, keyEvidenceText, findPageButton, checkRow, feedRows, levelRows, feedsHeading, SHEET_TITLES, addIntro, useHint, renameHint,
   removeHint, sheetStart, sheetBody, sheetReady, supportChoices, BUSY_REVIEW, LINK_FORMS, linkFields, linkStart, linkBody,
   changeSetView, linkReady, profileLine, resolveBody, profileMap, withProfiles, keyRow, profileAddressNote,
   personChoices, addToTitle, ADD_TO_HINT, addToRows, addItemsBody, MORE_HINT,
@@ -1083,6 +1083,7 @@ export function PersonPage({ id, feeds, go, view, tab: requestedTab }) {
   const titles = new Map((feeds || []).map((f) => [f.id, f.title || 'Untitled feed']));
   const groups = walletGroups(person, recipients);
   const profile = profileLine(person, titles, feeds);
+  const findButton = findPageButton(profile);
   const check = checkRow(person);
   const where = whereEntries(person.places, feeds);
   const fromPages = pageSuggestions(pageNotes, shown);
@@ -1109,11 +1110,11 @@ export function PersonPage({ id, feeds, go, view, tab: requestedTab }) {
     profile: () => html`<${Fragment}><header class="person-head"><${PersonArt} person=${person} large />
       <div class="text"><div class="person-name-line"><h1>${displayName(shown || person)}</h1><button class="button quiet icon-button" type="button" aria-label="Change the Nickname" onClick=${() => setNicknameOpen(true)}><${Icon} name="pencil" /></button></div>
         ${(profile.role || profile.members.length > 0) && html`<p class="hint">${profile.role}${profile.role && profile.members.length > 0 && ' · '}${profile.members.map((m, i) =>
-          html`${i > 0 && ', '}<span class=${`dot ${m.dot || 'feed'}`} aria-hidden="true"></span><button class="button link" type="button" onClick=${() => go({ name: 'feed', id: m.id })}>${m.title}</button>${m.role && ` · ${m.role}`}`)}</p>`}
-        ${person.keys.map((k) => html`<p class="hint key-hint" key=${k.id}><span class="key-hint-text">Nostr <span class=${keyRow(k.npub, profiles, person.name).mono ? 'mono key-text' : ''}>${keyRow(k.npub, profiles, person.name).title}</span> · ${keyEvidenceText(k.evidence)}</span>
+          html`${i > 0 && ', '}<span class=${`dot ${m.dot || 'feed'}`} aria-hidden="true"></span><button class="button link" type="button" onClick=${() => go({ name: 'feed', id: m.id })}>${m.title}</button>${m.role && ` · ${m.role}`}`)}${findButton.inRoleLine && html` · <button class="button link" type="button" onClick=${() => setFinding(person.name)}>${findButton.label}</button>`}</p>`}
+        ${person.keys.map((k) => html`<p class="hint key-hint" key=${k.id}><span class="key-hint-text">Nostr <span class=${keyRow(k.npub, profiles, person.name).mono ? 'mono key-text' : ''}>${keyRow(k.npub, profiles, person.name).title}</span>${keyEvidenceText(k.evidence) && ` · ${keyEvidenceText(k.evidence)}`}</span>
           <${CopyButton} text=${k.npub} label="the Nostr key" /></p>`)}
       </div></header>
-      <div class="actions"><button class="button action" type="button" onClick=${() => setFinding(person.name)}>Find on Music Index</button></div><//>`,
+      ${!findButton.inRoleLine && html`<div class="actions"><button class="button action" type="button" onClick=${() => setFinding(person.name)}>${findButton.label}</button></div>`}<//>`,
     // One entry for each feed, and one open at a time (ADR 0156, ADR 0028).
     where: () => where.length > 0 && html`<section class="page-section"><h2>Where this person is</h2>
       <div class="group">${where.map((entry, index) => {

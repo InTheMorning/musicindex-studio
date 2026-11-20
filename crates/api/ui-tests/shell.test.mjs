@@ -430,24 +430,24 @@ test('each tab segment has the width of the longest label', () => {
 test('the page of a feed gives the tabs of its type', () => {
   const tabs = (feed, view) => pageTabs(feed, { name: 'feed', id: feed.id, ...view }).map((tab) => tab.label);
   const owner = 'ADR 0135 item 2: check pageTabs in shell.js.';
-  assert.deepEqual(tabs(album), ['Release', 'Live Shows', 'Value Routes', 'Credits', 'Files', 'Check', 'Settings'], 'ADR 0225 item 1: the first tab of a release is "Release". Check pageTabs in shell.js.');
+  assert.deepEqual(tabs(album), ['Release', 'Live Shows', 'Value Routes', 'Credits', 'Files', 'Issues', 'Settings'], 'ADR 0225 item 1: the first tab of a release is "Release". Check pageTabs in shell.js.');
   assert.equal(tabs({ ...album, kind_shown: 'single' })[0], 'Release', 'ADR 0225 item 1: the first tab does not show the kind. Check pageTabs in shell.js.');
   const artist = { ...publisher, publisher_roles: ['artist'], roles_confirmed: true };
-  assert.deepEqual(tabs(artist), ['Artist', 'Value Routes', 'Credits', 'Files', 'Check', 'Settings'], owner);
-  assert.deepEqual(tabs({ ...album, medium: 'musicL' }), ['Playlist', 'Tracks', 'Value Routes', 'Files', 'Check', 'Settings'], owner);
+  assert.deepEqual(tabs(artist), ['Artist', 'Value Routes', 'Credits', 'Files', 'Issues', 'Settings'], owner);
+  assert.deepEqual(tabs({ ...album, medium: 'musicL' }), ['Playlist', 'Tracks', 'Value Routes', 'Files', 'Issues', 'Settings'], owner);
   assert.deepEqual(tabs({ ...readOnly, medium: 'podcast' }), [], owner);
 });
 
-test('the tab Check comes before Settings and shows the count of the findings', () => {
+test('the tab Issues comes before Settings and shows the count of the findings', () => {
   const owner = 'ADR 0174 item 17: check pageTabs in shell.js.';
   const labels = (feed, count) => pageTabs(feed, { name: 'feed', id: feed.id }, count).map((tab) => tab.label);
   const artist = { ...publisher, publisher_roles: ['artist'], roles_confirmed: true };
   for (const feed of [album, artist, { ...album, medium: 'musicL' }]) {
     const withCount = labels(feed, 5);
-    assert.equal(withCount[withCount.length - 2], 'Check 5', owner);
+    assert.equal(withCount[withCount.length - 2], 'Issues (5)', owner);
     assert.equal(withCount[withCount.length - 1], 'Settings', owner);
-    assert.equal(labels(feed, 0)[withCount.length - 2], 'Check', owner);
-    assert.equal(labels(feed)[withCount.length - 2], 'Check', owner);
+    assert.equal(labels(feed, 0)[withCount.length - 2], 'Issues', owner);
+    assert.equal(labels(feed)[withCount.length - 2], 'Issues', owner);
   }
   const current = pageTabs(album, { name: 'feed', id: 1, page: 'check' }, 2).filter((tab) => tab.current).map((tab) => tab.page);
   assert.deepEqual(current, ['check'], owner);
@@ -681,6 +681,15 @@ test('the level tile model puts the level feed before its releases (ADR 0181 ite
     draftLabel: 'Saved, not written',
   });
   assert.deepEqual(list.rows.map((row) => row.id), [release.id]);
+  assert.equal(list.nested, false, 'ADR 0228 item 19: the tiles view has no indent.');
+});
+
+test('the release rows of a group have an indent below the level row (ADR 0228 item 19)', () => {
+  const message = 'ADR 0228 item 19: the rows view of a group sets nested. Use releasesList of crates/api/ui/shell.js.';
+  const owner = { ...labelA, draft_state: 'none' };
+  const release = { ...album1, draft_state: 'none' };
+  assert.equal(releasesList({ feeds: [owner, release], connectors: [], sort: 'order', view: 'rows', group: owner.id }).nested, true, message);
+  assert.equal(releasesList({ feeds: [owner, release], connectors: [], sort: 'order', view: 'rows' }).nested, false, message);
 });
 
 test('a feed opened from a level goes back to that level', () => {

@@ -16466,6 +16466,39 @@ async fn the_outside_use_host_route_connects_a_read_only_feed() {
 }
 
 #[tokio::test]
+async fn the_outside_use_host_route_sets_the_host_of_the_media_files() {
+    let (app, server, id) = outside_app().await;
+    let new_url = server.url("/new/album.xml");
+    let media = server.url("/new/a.mp3");
+    let xml = format!(
+        "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\" xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\"><channel><title>Album</title><podcast:guid>g-1</podcast:guid><itunes:new-feed-url>{new_url}</itunes:new-feed-url><item><title>A</title><guid>a</guid><enclosure url=\"{media}\" length=\"1\" type=\"audio/mpeg\"/></item></channel></rss>"
+    );
+    outside_set_move(&app, &server, id, &new_url, 200, xml.into_bytes()).await;
+    call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/outside/follow"),
+        None,
+    )
+    .await;
+    let root = tempfile::tempdir().unwrap();
+    let (_, host) = call(&app, "POST", "/api/v1/connectors", Some(json!({ "kind": "local", "name": "New host", "root": root.path(), "base_url": server.url("/new") }))).await;
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/outside/use-host"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, files) = call(&app, "GET", &format!("/api/v1/feeds/{id}/files"), None).await;
+    assert_eq!(
+        files["files_connector_id"], host["id"],
+        "ADR 0229 item 1. Fix: outside_use_host in crates/api/src/routes.rs must read the feed and set the host of the media files. {files}"
+    );
+}
+
+#[tokio::test]
 async fn the_outside_use_host_route_refuses_an_unknown_host() {
     let (app, server, id) = outside_app().await;
     let new_url = server.url("/new/album.xml");

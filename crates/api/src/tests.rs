@@ -8137,7 +8137,7 @@ async fn the_one_search_gives_artists_labels_and_other_feeds() {
     server.set(
         "/v1/feeds/c0ffee-10",
         200,
-        br#"{"data":{"remote_items":[{"feed_guid":"c0ffee-11","feed_url":"https://feed.example/one.xml","title":"One"},{"feed_guid":"c0ffee-12","feed_url":"https://feed.example/two.xml","title":"Two"}]}}"#.to_vec(),
+        br#"{"data":{"remote_items":[{"remote_feed_guid":"c0ffee-11","remote_feed_url":"https://feed.example/one.xml","remote_feed_title":"One"},{"remote_feed_guid":"c0ffee-12","remote_feed_url":"https://feed.example/two.xml","remote_feed_title":"Two"}]}}"#.to_vec(),
     );
     let app = app_with_index(&server.url(""));
     let (status, body) = call(&app, "GET", "/api/v1/musicindex/search?q=ann", None).await;
@@ -8156,6 +8156,27 @@ async fn the_one_search_gives_artists_labels_and_other_feeds() {
     assert_eq!(releases["feeds"][0]["in_studio_id"], Value::Null);
     let (status, _) = call(&app, "GET", "/api/v1/musicindex/values/c0ffee-02", None).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+/// ADR 0233 item 6: the search of Music Index gives no feed address, so the
+/// copy preview of an address on a connected file host says "yours" and
+/// reads no file.
+#[tokio::test]
+async fn the_copy_preview_of_an_address_on_a_connected_host_is_yours() {
+    let server = web_feeds();
+    let app = app_with_index(&server.url(""));
+    let (_, _) = call(&app, "POST", "/api/v1/connectors", Some(json!({
+        "kind":"local", "name":"Music", "root":app.feeds.path(), "base_url":"https://music.example"
+    }))).await;
+    let (status, body) = call(
+        &app,
+        "GET",
+        "/api/v1/feeds/copy-preview?url=https://music.example/not-read.xml",
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["yours"], true, "{body}");
 }
 
 #[tokio::test]

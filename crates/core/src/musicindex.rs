@@ -675,12 +675,15 @@ struct RemoteItemsData {
 }
 
 #[derive(Deserialize)]
+// The names of Stophammer `GET /v1/feeds/{guid}?include=remote_items`
+// (`src/query.rs` near line 2827).
+#[allow(clippy::struct_field_names)]
 struct RemoteItemData {
-    #[serde(alias = "feedGuid")]
-    feed_guid: Option<String>,
-    #[serde(alias = "feedUrl")]
-    feed_url: Option<String>,
-    title: Option<String>,
+    remote_feed_guid: Option<String>,
+    remote_feed_url: Option<String>,
+    remote_feed_title: Option<String>,
+    remote_feed_image_url: Option<String>,
+    remote_release_artist: Option<String>,
 }
 
 impl From<PublisherFeedData> for PublisherValues {
@@ -1248,11 +1251,11 @@ impl MusicIndex {
                             .into_iter()
                             .filter_map(|item| {
                                 Some(SearchHit {
-                                    feed_guid: item.feed_guid?,
-                                    title: item.title,
-                                    artist: None,
-                                    image_url: None,
-                                    feed_url: item.feed_url,
+                                    feed_guid: item.remote_feed_guid?,
+                                    title: item.remote_feed_title,
+                                    artist: item.remote_release_artist,
+                                    image_url: item.remote_feed_image_url,
+                                    feed_url: item.remote_feed_url,
                                 })
                             })
                             .collect()
@@ -1627,7 +1630,7 @@ mod tests {
         let server = TestServer::start(vec![(
             "/v1/feeds/c0ffee-01",
             200,
-            br#"{"data":{"remote_items":[{"feed_guid":"release-1","feed_url":"https://feed.example/a.xml","title":"Album A"},{"feed_guid":"release-2","title":"Album B"}]}}"#.to_vec(),
+            br#"{"data":{"remote_items":[{"position":0,"remote_feed_guid":"release-1","remote_feed_url":"https://feed.example/a.xml","remote_feed_title":"Album A","remote_release_artist":"Ann"},{"position":1,"remote_feed_guid":"release-2","remote_feed_title":"Album B"}]}}"#.to_vec(),
         )]);
         let index = MusicIndex::new(Web::new(), &server.url(""));
         let hits = index.feed_remote_items("c0ffee-01").unwrap().unwrap();
@@ -1637,6 +1640,7 @@ mod tests {
             hits[0].feed_url.as_deref(),
             Some("https://feed.example/a.xml")
         );
+        assert_eq!(hits[0].artist.as_deref(), Some("Ann"));
         assert_eq!(hits[1].title.as_deref(), Some("Album B"));
     }
 

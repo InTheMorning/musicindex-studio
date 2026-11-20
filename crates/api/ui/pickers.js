@@ -262,10 +262,10 @@ export function PickFillRow({ title, line, lead, after, taken, selected, onSelec
 // The results of the one search (ADR 0145 item 3): the artist and label feeds,
 // then the other feeds. `onPick` gets the row, and for a row of the other feeds
 // it gets `true` as its second argument. `listOpen` is true while the field
-// list of the search field is open.
-// `noun` is the word of a row in the feed group (see `feedWords`).
-export function SearchResults({ query, search, listOpen, disabled, onPick, noun = 'Feed' }) {
-  const words = feedWords(noun);
+// list of the search field is open. `markOf` gives the mark of a feed row, or
+// null (ADR 0233 items 6 and 7).
+export function SearchResults({ query, search, listOpen, disabled, onPick, markOf = () => null }) {
+  const words = feedWords();
   const { rows, feeds, note, error } = search;
   const searching = query.trim() !== '';
   return html`<${ErrorNotice} error=${error} />
@@ -281,7 +281,7 @@ export function SearchResults({ query, search, listOpen, disabled, onPick, noun 
         onClick=${disabled ? undefined : () => onPick(h, true)}>
         <${PersonArt} person=${{ img: h.image_url, name: h.title || '' }} />
         <span class="text"><span class="label">${h.title || h.feed_guid}</span>
-          <span class="summary"><span class="dot feed" aria-hidden="true"></span>${words.row(h.artist)}</span></span>
+          <span class="summary"><span class="dot feed" aria-hidden="true"></span>${[words.row(h.artist), markOf(h)].filter(Boolean).join(' · ')}</span></span>
         <span class="go" aria-hidden="true">›</span>
       </button>`) }<//></section>`}`;
 }
@@ -290,15 +290,15 @@ export function SearchResults({ query, search, listOpen, disabled, onPick, noun 
 // `choices` turns the values of a feed into the choices of that feed, each with
 // `values`. With many choices, the sheet asks for one of them. With `credits`,
 // the values also hold the credits of the feed and its tracks (ADR 0146 item 8).
-export function FindOneSheet({ open, start, choices, empty, credits = false, noun = 'Feed', onPick, onClose }) {
+export function FindOneSheet({ open, start, choices, empty, credits = false, onPick, onClose }) {
   const ref = useSheet(open);
   return html`<dialog ref=${ref} class="sheet search-sheet" aria-labelledby="find-one-title" onClose=${onClose}>
-    ${open && html`<${FindOneForm} start=${start} choices=${choices} empty=${empty} credits=${credits} noun=${noun} onCancel=${() => ref.current.close()}
+    ${open && html`<${FindOneForm} start=${start} choices=${choices} empty=${empty} credits=${credits} onCancel=${() => ref.current.close()}
       onPick=${(values) => { onPick(values); ref.current.close(); }} />`}
   </dialog>`;
 }
 
-function FindOneForm({ start, choices, empty, credits, noun, onPick, onCancel }) {
+function FindOneForm({ start, choices, empty, credits, onPick, onCancel }) {
   const [query, setQuery] = useState(start || '');
   const search = useLookup(query, '/musicindex/search');
   const fields = useFieldList({ id: 'find-one-query', value: query, setValue: setQuery });
@@ -324,7 +324,7 @@ function FindOneForm({ start, choices, empty, credits, noun, onPick, onCancel })
       <p class="hint">${FIND_ONE_HINT}</p></section>`}
       <${ErrorNotice} error=${problem} />
       ${none && html`<p class="hint" role="status">${empty}</p>`}
-      ${options === null && html`<${SearchResults} query=${query} search=${search} listOpen=${fields.open} noun=${noun} onPick=${open} />`}
+      ${options === null && html`<${SearchResults} query=${query} search=${search} listOpen=${fields.open} onPick=${open} />`}
       ${options !== null && html`<div class="group">${options.map((option) => html`<button class="link-row" type="button" key=${option.id} onClick=${() => onPick(option.values)}>
         <span class="text"><span class="label">${option.title}</span><span class="summary">${option.line}</span></span></button>`)}</div>`}
     </div>

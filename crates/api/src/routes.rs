@@ -1661,7 +1661,20 @@ pub(crate) async fn feed_copy_preview(
     State(shared): State<Shared>,
     Query(query): Query<FeedCopyPreviewQuery>,
 ) -> ApiResult {
-    let web = blocking(shared, move |w| Ok(w.web.clone())).await?;
+    // ADR 0233 item 6: the search of Music Index gives no feed address, so
+    // the mark "Yours" of a found feed comes from this preview.
+    let url = query.url.clone();
+    let (web, yours) = blocking(shared, move |w| {
+        let connectors = w.collection.connectors()?;
+        Ok((
+            w.web.clone(),
+            studio_core::outside::host_for_address(&connectors, &url).is_some(),
+        ))
+    })
+    .await?;
+    if yours {
+        return Ok(Json(json!({ "yours": true })));
+    }
     blocking_unlocked(move || {
         let feed = studio_core::discover::read_feed(&web, &query.url).map_err(|error| {
             ApiError::new(
@@ -1672,7 +1685,7 @@ pub(crate) async fn feed_copy_preview(
         })?;
         let (tracks, recipients) = copy_counts(&feed.feed);
         Ok(Json(
-            json!({ "author": feed.feed.author, "tracks": tracks, "recipients": recipients }),
+            json!({ "author": feed.feed.author, "tracks": tracks, "recipients": recipients, "yours": false }),
         ))
     })
     .await

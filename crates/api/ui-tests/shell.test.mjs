@@ -99,12 +99,10 @@ test('with no open feed, the left panel gives Releases at the top', () => {
   assert.equal(JSON.stringify(panel).includes('Select a feed'), false);
 });
 
-test('the row Releases is current on the view add-feed (ADR 0072 item 5)', () => {
-  const panel = leftPanel({ view: { name: 'add-feed' }, feeds: [album], model: null, vaultOpen: true });
-  assert.equal(panel.top.find((e) => e.id === 'releases').current, true, 'ADR 0072 item 5: Releases is current on Add feeds.');
-  assert.equal(panel.top[0].id, 'releases', 'ADR 0072 item 1: Releases is the first destination.');
-  assert.equal(panel.top[0].opens, true, 'ADR 0072 item 5: on Add feeds, the row Releases must open Releases. Set opens in leftPanel of crates/api/ui/shell.js.');
+test('Releases stays current on the Releases page', () => {
   const releases = leftPanel({ view: { name: 'releases' }, feeds: [album], model: null, vaultOpen: true });
+  assert.equal(releases.top.find((e) => e.id === 'releases').current, true);
+  assert.equal(releases.top[0].id, 'releases');
   assert.equal(releases.top[0].opens, false);
 });
 
@@ -316,7 +314,7 @@ test('Forward is false when no entry follows, and Back is false at the start', (
 test('a new view drops the entries after the current one', () => {
   let nav = startNav({ name: 'releases' });
   nav = pushNav(nav, { name: 'hosts' });
-  nav = pushNav(nav, { name: 'add-feed' });
+  nav = pushNav(nav, { name: 'people' });
   nav = backNav(nav);
   nav = pushNav(nav, { name: 'feed', id: 2 });
   assert.deepEqual(nav.entries.map((e) => e.name), ['releases', 'hosts', 'feed']);
@@ -340,7 +338,6 @@ test('the narrow stack gives the root page below each view (ADR 0039 item 11)', 
   assert.deepEqual(narrowStack({ name: 'releases' }), [root, releases]);
   assert.deepEqual(narrowStack({ name: 'change-set', id: 3 }), [root, { name: 'people' }, { name: 'change-set', id: 3 }]);
   assert.deepEqual(narrowStack({ name: 'hosts' }), [root, { name: 'hosts' }]);
-  assert.deepEqual(narrowStack({ name: 'add-feed' }), [root, releases, { name: 'add-feed' }]);
   assert.deepEqual(narrowStack({ name: 'outline', id: 1 }), [root, releases, { name: 'feed', id: 1 }, { name: 'outline', id: 1 }]);
   const feed = { name: 'feed', id: 1, page: 'track', track: 'g-1' };
   assert.deepEqual(narrowStack(feed), [root, releases, feed]);

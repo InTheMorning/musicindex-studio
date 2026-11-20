@@ -1,36 +1,38 @@
 # Add feeds that you already have
 
-Select **Releases** in the left panel. Then select **＋ Add a Feed**.
-When Releases has no feed, select **Add a Feed** on the empty page.
+Select **Releases** in the left panel. Then select **＋ Add** and one of the values: **Release**, **Artist**, **Label**, **Show** or **Playlist**.
+The form of that value opens. The first row of the form is **Find on Music Index**.
 
-The page "Add feeds" has two groups of rows. Select a row to open its sheet.
-This page covers the group **Add a feed you have**.
-To make a new feed, see [Make a new release](new-release.md).
+If you have no file host, the form tells you to connect one. See [Connect a file host](hosts.md).
+To make a new feed with no start values, see [Make a new release](new-release.md).
 
-## Find feeds by address or name
+## Find on Music Index
 
-Select the row **By address or name**. A sheet opens.
+Select **Find on Music Index**. A sheet opens.
+
+1. Type a name in **Name or feed address**. The sheet shows the results that agree with the form. For example, the form of a label shows labels, and not artists.
+2. Select a result:
+   - A result that is in your collection already opens its page. The row shows "In Studio".
+   - A feed on a file host that you connected is yours. Studio adds that feed with its identity and its file.
+   - In the form of a release, an artist row shows the releases of that artist. Select **‹ Results** to go back.
+   - Each other feed fills the form. The form shows "Copies N tracks and M payment recipients from" the name of the feed.
+3. Select the button of the form, for example **Make the Release**.
+
+A copy gets the values, the tracks and the payment recipients of the found feed. It gets a new identity.
+Its tracks play from the audio addresses of the found feed until you move the release.
+
+The artist of the found feed can be different from the artist of the form. Then the form tells you that the payments go to the recipients of the found feed. Examine them on **Value Routes** before the write.
+If Studio cannot read the feed file, the form gets only the values of Music Index. Studio then tells you that it copies no tracks and no payment recipients.
+
+### Add a feed by its address
+
+Type the feed address in **Name or feed address**, for example `https://example.com/feed.xml`.
+Select **Add This Address**. Studio adds that feed.
 Feeds that you add this way are read-only until you connect the file host that holds them.
-
-1. Type one feed address on each line in **Feed addresses**. An artist feed or a label feed brings all of its releases.
-2. Or type an artist name or a feed name in **Or search Music Index by name** and select **Search**.
-3. In the results, select the feeds that are yours.
-4. Select **Find My Feeds**. The button shows the number of addresses and feeds.
-5. Studio lists what it found, grouped by host. Select the feeds to add.
-6. Select **Add N Feeds**.
-
-If Studio cannot read a feed, it lists the feed below "Studio could not read". Each line gives the name of the feed, its site, the cause and what you can do.
-Studio stops at 100 feeds. Add the rest in a second search.
-
-A feed that is in your collection shows "in your collection".
-
-To edit a feed that you found, connect its folder. See [Connect a file host](hosts.md).
-Some file hosts are services where Studio can only read the feeds.
-The page tells you which.
 
 ## From a file host folder
 
-If you connected a file host, select the row **From a file host folder**. A sheet opens.
+If you connected a file host, open **Find on Music Index** and select **Add from a File Host Folder…**.
 
 1. If you have more than one file host, select it in **File host**.
 2. Under **Feeds in this folder**, select a feed. Studio lists the feed files that it finds, with the type.
@@ -44,7 +46,7 @@ If the file is not a feed that Studio can read, Studio shows "This file is not a
 
 ## From MSP 2.0 backups
 
-Select the row **From MSP 2.0 backups** to move your hosted feeds from MSP 2.0.
+Open **Find on Music Index** and select **Add from MSP 2.0 Backups…** to move your hosted feeds from MSP 2.0.
 
 1. Select **Choose Backup Files**.
 2. Select one or more .json files that MSP 2.0 saved.

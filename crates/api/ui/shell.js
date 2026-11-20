@@ -314,7 +314,7 @@ export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, 
           id: 'releases',
           label: 'Releases',
           icon: 'library',
-          current: all || view.name === 'add-feed',
+          current: all,
           opens: !all,
         },
         ...groupDestinations(feeds, view),
@@ -870,7 +870,6 @@ export function narrowStack(view) {
     // A destination below Releases is a page of the root (ADR 0085 item 7).
     // Each level above a level is a page below it (ADR 0088 item 7).
     case 'releases': return view.group === undefined ? [root, releases] : [root, ...levelPages(view.trail), view];
-    case 'add-feed': return [root, releases, view];
     // The People area (ADR 0099 items 1 and 5).
     case 'person':
     case 'wallet':

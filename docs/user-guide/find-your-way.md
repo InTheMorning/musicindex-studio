@@ -37,7 +37,7 @@ Studio remembers the sort and the view in the address of the page.
 ### An empty collection
 
 If you have no feeds, the page shows "No releases yet."
-Select **Add a Feed**. See [Add feeds that you already have](add-feeds.md).
+Select **＋ Add**. See [Add feeds that you already have](add-feeds.md).
 
 ## The levels of your artists and labels
 

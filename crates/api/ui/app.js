@@ -2,7 +2,7 @@
 import { html, render, useState, useEffect, useLayoutEffect, useCallback, useRef, useContext, createContext } from './vendor/htm-preact-standalone.module.js';
 import { checkCount, releaseChecklist } from './feedcheck.js';
 import { pageSequence, settingsTabs } from './pages.js';
-import { useFieldList, RowList, FindOneSheet, PickerLayout } from './pickers.js';
+import { useFieldList, RowList, PickerLayout, SearchResults } from './pickers.js';
 import { UI_SCALES, SCALE_KEY, normalizeScale, measureWindowUnits } from './uiscale.js';
 import { LOCK_HINT, lockChoiceText } from './vaultlock.js';
 import { serverFilesRows, sizeText, SERVER_FILES_NOTE } from './assets.js';
@@ -20,7 +20,7 @@ import {
   prfOutputOf, passkeyBrowserCode, defaultPasskeyName,
   nip46State, nip46ErrorText, isBunkerAddress, qrSource, UNLOCK_AGAIN_TEXT, needsRecentUnlock,
 } from './account.js';
-import { addChoices, addMenuEntries, ADD_PAGE_TITLE, MAKE_TYPES, RELEASE_KINDS, makeFields, makeTitle, feedFileStart, parentCard, releaseFindChoices, shouldAddTracksAfterNewRelease } from './addfeeds.js';
+import { addMenuEntries, addSearchRows, addRowIsArtist, addSheetRows, addResultMark, addFoundValues, MAKE_TYPES, RELEASE_KINDS, makeFields, makeTitle, feedFileStart, parentCard, shouldAddTracksAfterNewRelease } from './addfeeds.js';
 import { WELCOME, HOST_STEP, showWelcome, welcomeSteps, pathTexts, hostStepModel, welcomeBody, releaseAdd, releaseArtistChoices, libraryResult } from './welcome.js';
 import { isLiveItem } from './live.js';
 import { appRowLines, pairingPhase, pairingNotice, doneRemovesApp } from './apps.js';
@@ -33,7 +33,7 @@ import { DeleteUndoProvider, useDeleteUndo, undoNoticeText, UNDO_COMPLETE } from
 // The undo history of the Settings draft. It stays when the user opens a
 // different page and comes back (ADR 0227 item 7).
 const settingsHistory = makeHistory();
-import { PeoplePage, PersonPage, CheckPage, WalletPage } from './peoplepages.js';
+import { PeoplePage, PersonPage, CheckPage, WalletPage, useLookup } from './peoplepages.js';
 import { deletedNotice } from './feeddelete.js';
 import { OUTSIDE_LIMIT, OUTSIDE_SETTING_LABEL, OUTSIDE_SETTING_HINT, outsideMark, outsideNotice, readOnlyHostNotice, indexNotice, releaseMusicIndexLink, moveNotice, moveAgainDelay, writeNotice, nextNoticeLoad, eachLimited, panelSet, stateMark, feedsToCheck } from './outsidecheck.js';
 import { collectionMark, collectionRow, collectionSectionActions, collectionSheet, collectionAction, CLOSED_EXPORT_HINT, COLLECTIONS_HINT, OPENING_TEXT } from './collectionlist.js';
@@ -1466,6 +1466,91 @@ function ParentSheet({ choices, onChoose, onClose }) {
   </dialog>`;
 }
 
+// Find a feed to add to a form (ADR 0233 items 2 to 14). The results are the
+// one search of `SearchResults`, with the rows of the kind of the form.
+function AddFindSheet({ open, type, role, parent, connectors, onPick, onAdded, onOpen, onImport, onClose }) {
+  const ref = useSheet(open);
+  const [query, setQuery] = useState('');
+  const [artist, setArtist] = useState(null);
+  const [problem, setProblem] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const search = useLookup(query, '/musicindex/search');
+  const fields = useFieldList({ id: 'add-find-query', value: query, setValue: setQuery });
+  const address = /^https?:\/\//i.test(query.trim());
+  useEffect(() => {
+    if (open) { setArtist(null); setProblem(null); }
+  }, [open]);
+  const close = () => ref.current.close();
+  const working = async (step) => {
+    setProblem(null);
+    setBusy(true);
+    try { await step(); } catch (error) { setProblem(error); } finally { setBusy(false); }
+  };
+  // ADR 0233 items 4 and 6: an address, or a found feed that is yours, is added as it is.
+  const addAddress = (url) => working(async () => {
+    const result = await api('/feeds/import', { method: 'POST', body: { urls: [url] } });
+    const added = result.added?.[0];
+    if (!added) throw new Error(result.failed?.[0]?.message || 'Studio could not add the feed at this address.');
+    onAdded(added, { type, copied: true });
+    close();
+  });
+  // ADR 0233 items 8 and 14: a different feed is copied. When Studio cannot
+  // read its feed file, the form gets the values of Music Index.
+  const copy = (row) => working(async () => {
+    let values = {};
+    let url = row.feed_url;
+    if (!url || !row.artist) {
+      try { values = await api(`/musicindex/values/${encodeURIComponent(row.feed_guid)}`); } catch (_) { values = {}; }
+      url = url || values.feed_url;
+    }
+    const title = row.title || values.title || url || '';
+    let preview;
+    try {
+      if (!url) throw Object.assign(new Error('no address'), { code: 'copy_failed' });
+      preview = { ...(await api(`/feeds/copy-preview?url=${encodeURIComponent(url)}`)), title };
+      if (preview.yours) { await addAddress(url); return; }
+    } catch (error) {
+      if (error.code !== 'copy_failed') throw error;
+      preview = { author: row.artist || '', title, failed: true };
+    }
+    onPick({ row: { ...row, feed_url: url }, preview, values });
+    close();
+  });
+  const pick = (row, isFeed) => {
+    if (row.in_studio_id != null) { onOpen(Number(row.in_studio_id)); close(); return; }
+    if (row.yours && row.feed_url) { addAddress(row.feed_url); return; }
+    // ADR 0233 item 13: an artist row of the form of a release gives the releases of that artist.
+    if (!isFeed && type === 'album' && addRowIsArtist(row)) {
+      working(async () => setArtist({ row, feeds: (await api(`/musicindex/releases/${encodeURIComponent(row.feed_guid)}`)).feeds || [] }));
+      return;
+    }
+    copy(row);
+  };
+  const shown = artist
+    ? { rows: [], feeds: artist.feeds, note: null, searched: true, searchedFor: query, error: null }
+    : { ...search, rows: search.rows === null ? null : addSearchRows(search.rows, type, role) };
+  return html`<dialog ref=${ref} class="sheet search-sheet" aria-labelledby="add-find-title" onClose=${onClose}>
+    <header><h2 id="add-find-title">Find on Music Index</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${close}>✕</button></header>
+    <div class="body">
+      ${artist
+        ? html`<section class="page-section"><${RowList}><button class="link-row" type="button" onClick=${() => { setArtist(null); setProblem(null); }}>
+            <span class="text"><span class="label">‹ Results</span><span class="summary">${artist.row.title || ''}</span></span></button><//></section>`
+        : html`<section class="page-section pinned-form"><div class="group rows"><${Field} id="add-find-query" label="Name or feed address" type="search" value=${query} ...${fields.input}>${fields.list}<//></div>
+          ${address && html`<div class="actions"><button class="button" type="button" disabled=${busy} onClick=${() => addAddress(query.trim())}>Add This Address</button></div>`}</section>`}
+      <${ErrorNotice} error=${problem} />
+      ${busy && html`<p class="empty" role="status">Reading the feed…</p>`}
+      <${SearchResults} query=${artist ? 'artist' : query} search=${shown} listOpen=${!artist && fields.open} disabled=${busy}
+        markOf=${addResultMark} onPick=${pick} />
+      <section class="page-section"><${RowList}>
+        ${addSheetRows(connectors.length > 0).map((row) => html`<button key=${row.id} class="link-row" type="button"
+          onClick=${() => { onImport(row.id); close(); }}><span class="text"><span class="label">${row.title}</span></span><span class="go" aria-hidden="true">›</span></button>`)}
+      <//></section>
+    </div>
+    <footer><button class="button" type="button" onClick=${close}>Cancel</button></footer>
+  </dialog>`;
+}
+
 // One form makes each new page or release, as a draft with no file on the host
 // yet (ADR 0073 items 5 to 9, ADR 0032 items 6 to 9, ADR 0041 item 2, ADR 0053
 // item 2). "Feed file" starts from the title until the user types in it.
@@ -1487,8 +1572,10 @@ function MakeFeedForm({ connectors, feeds, startType, start = {}, onAdded, onKin
   const [parentId, setParentId] = useState(start.publisher_id ?? null);
   const [choosing, setChoosing] = useState(false);
   const [finding, setFinding] = useState(false);
-  // The description, the artwork address and the website of a found release.
-  const [found, setFound] = useState({});
+  const [copyFrom, setCopyFrom] = useState(null);
+  const [copyPreview, setCopyPreview] = useState(null);
+  const [foundValues, setFoundValues] = useState({});
+  const [importMode, setImportMode] = useState(null);
   const { busy, error, run, retry } = useAction();
   const card = parentCard(feeds, parentId);
   const isRelease = type === 'album';
@@ -1501,12 +1588,13 @@ function MakeFeedForm({ connectors, feeds, startType, start = {}, onAdded, onKin
     const chosen = parentCard(feeds, id);
     if (chosen && !authorTyped) setAuthor(chosen.title);
   };
-  // A pick fills the title, the artist name and the kind. It keeps the other values for the first draft.
-  const pick = (values) => {
+  const pick = ({ row, preview, values: indexValues }) => {
+    const values = addFoundValues(row, preview, indexValues);
     if (values.title) setTitle(values.title);
     if (values.author) { setAuthor(values.author); setAuthorTyped(true); }
-    if (values.kind) setReleaseKind(values.kind);
-    setFound({ description: values.description, image: values.image, website: values.website });
+    setCopyFrom(row.feed_url);
+    setCopyPreview(preview);
+    setFoundValues(values);
   };
   // Open "Feed file" when the API gives an error for it.
   useEffect(() => { if (formError.field) setPathOpen(true); }, [formError.field]);
@@ -1521,9 +1609,11 @@ function MakeFeedForm({ connectors, feeds, startType, start = {}, onAdded, onKin
       if (isRelease) {
         body.kind = releaseKind || null;
         body.publisher_id = parentId;
-        for (const key of ['description', 'image', 'website']) if (found[key]) body[key] = found[key];
       }
-      onAdded(await api('/feeds/new', { method: 'POST', body }), { type });
+      for (const key of ['description', 'image', 'website']) if (foundValues[key]) body[key] = foundValues[key];
+      if (copyFrom) body.copy_from = copyFrom;
+      const result = await api('/feeds/new', { method: 'POST', body });
+      onAdded(result, { type, copied: Boolean(copyFrom), copyFailed: result.copy_failed === true, copyTitle: copyPreview?.title });
     });
   };
   const ready = connectorId !== null && path.trim() && title.trim()
@@ -1544,27 +1634,39 @@ function MakeFeedForm({ connectors, feeds, startType, start = {}, onAdded, onKin
       </div>
     </details></div>`;
   const submitRow = html`<${ErrorNotice} error=${formError.other} action="Studio could not make it." onRetry=${retry} />
+    ${copyPreview && !copyPreview.failed && html`<p class="hint">${`Copies ${copyPreview.tracks} tracks and ${copyPreview.recipients} payment recipients from ${copyPreview.title || ''}.`}</p>`}
+    ${copyPreview && copyPreview.failed && html`<p class="hint">${`Studio could not read the feed file of ${copyPreview.title || ''}. No tracks and no payment recipients are copied.`}</p>`}
+    ${copyPreview && !copyPreview.failed && card && copyPreview.author && copyPreview.author !== card.title
+      && html`<p class="hint">${`The payments go to the recipients of ${copyPreview.title || ''}. Examine them on Value Routes before the write.`}</p>`}
     <div class="actions"><button class="button primary" type="submit" disabled=${busy || !ready}>
       ${busy ? fields.busyLabel : fields.button}</button></div>`;
   const titleField = html`<${Field} id="make-title" label=${fields.titleLabel} required
       value=${title} onInput=${(e) => setTitle(e.target.value)} />`;
   const authorField = fields.authorLabel !== null && html`<${Field} id="make-author" label=${fields.authorLabel} required
       value=${author} onInput=${(e) => { setAuthorTyped(true); setAuthor(e.target.value); }} />`;
+  if (importMode) return html`<div class="form"><button class="button link" type="button" onClick=${() => setImportMode(null)}>‹ Form</button>
+    ${importMode === 'folder' ? html`<${AddFeedForm} connectors=${connectors} onAdded=${onAdded} />`
+      : html`<${MspImport} onAdded=${(result) => onAdded(result.added[0])} />`}</div>`;
+  const findRow = html`<button class="link-row" type="button" onClick=${() => setFinding(true)}>
+    <span class="text"><span class="label">Find on Music Index</span></span><span class="go">›</span></button>`;
+  const findSheet = html`<${AddFindSheet} open=${finding} type=${type} role=${role} parent=${card?.title} connectors=${connectors}
+    onPick=${pick} onAdded=${onAdded} onOpen=${(id) => onAdded({ id }, { openId: id })}
+    onImport=${setImportMode} onClose=${() => setFinding(false)} />`;
   if (isRelease) {
     return html`<${PickerLayout} id="make-release-form" onSubmit=${submit}
         lead=${html`<${ParentCard} card=${card} onChange=${() => setChoosing(true)} />`}
         musicindexFirst=${true}
-        musicindex=${{ title: 'Find on Music Index', summary: 'Fill the form from a release.', onOpen: () => setFinding(true) }}
+        musicindex=${{ title: 'Find on Music Index', summary: '', onOpen: () => setFinding(true) }}
         fields=${html`<div class="form">${titleField}
           <${ChoiceSelect} id="make-kind" label="Kind" value=${releaseKind} options=${RELEASE_KINDS}
             hint="Studio shows this kind. The feed file has no tag for it." onChange=${setReleaseKind} />
           ${authorField}${hostField}${feedFile}</div>`}
         notice=${submitRow} lists=${[]} />
       ${choosing && html`<${ParentSheet} choices=${releaseArtistChoices(feeds)} onChoose=${changeParent} onClose=${() => setChoosing(false)} />`}
-      <${FindOneSheet} open=${finding} choices=${releaseFindChoices} empty="Select a release. This row is not a release." noun="Release"
-        onPick=${pick} onClose=${() => setFinding(false)} />`;
+      ${findSheet}`;
   }
   return html`<form class="form" onSubmit=${submit}>
+    <div class="group rows">${findRow}</div>
     <${ChoiceSelect} id="make-type" label="Type" value=${type} options=${MAKE_TYPES} onChange=${setType} />
     ${hostField}
     ${titleField}
@@ -1573,7 +1675,7 @@ function MakeFeedForm({ connectors, feeds, startType, start = {}, onAdded, onKin
       options=${FIRST_CLASS_ROLES.map((r) => [r, roleWord(r)])} onChange=${(value) => setRole(value || null)} />`}
     ${feedFile}
     ${submitRow}
-  </form>`;
+  </form>${findSheet}`;
 }
 
 // Choose a feed file from the host, or type its path (ADR 0019).
@@ -3077,11 +3179,9 @@ function SettingsPencil({ pending }) {
   return pending && html` <${StateMark} mark=${NOT_SAVED_MARK} />`;
 }
 
-// The sheet of one row of the Add feeds page (ADR 0073 item 3). `open` is the
-// ID of the row, or null. The forms of "Add a feed you have" do not change.
-// The title of a make row follows the type and the role in the form (ADR 0164
-// item 7).
-function AddFeedSheet({ open, title, connectors, feeds, found, setFound, start, onAdded, onClose }) {
+// The sheet of an add form or an import flow. `open` gives its type or flow.
+// The title of a make form follows its type and role (ADR 0164 item 7).
+function AddFeedSheet({ open, title, connectors, feeds, found, setFound, start, onAdded, onConnect, onClose }) {
   const ref = useSheet(open !== null);
   const makeType = ['album', 'publisher', 'show', 'playlist'].includes(open) ? open : null;
   // The type and the role of the open form. A value of an earlier row is not used.
@@ -3090,7 +3190,10 @@ function AddFeedSheet({ open, title, connectors, feeds, found, setFound, start, 
   const now = kind && kind.open === open ? kind : { type: makeType, role: (start || {}).role, parent: startParent && startParent.title };
   const shownTitle = makeType ? makeTitle(now.type, now.role, now.parent) : title;
   let body = null;
-  if (makeType) {
+  if (makeType && connectors.length === 0) {
+    body = html`<div class="form"><p class="hint">Connect a file host to add this feed.</p>
+      <div class="actions"><button class="button action" type="button" onClick=${onConnect}>Connect a File Host</button></div></div>`;
+  } else if (makeType) {
     body = html`<${MakeFeedForm} key=${open} connectors=${connectors} feeds=${feeds} startType=${makeType} start=${start}
       onAdded=${onAdded} onKind=${(k) => setKind({ ...k, open })} />`;
   } else if (open === 'find') {
@@ -3110,32 +3213,6 @@ function AddFeedSheet({ open, title, connectors, feeds, found, setFound, start, 
     </header>
     <div class="body">${body}</div>
   </dialog>`;
-}
-
-// The page Add One You Have: one group of rows. A row opens its form in a
-// sheet (ADR 0073 items 1 to 4, ADR 0230 item 4).
-function AddFeeds({ connectors, feeds, onAdded, go }) {
-  const [open, setOpen] = useState(null);
-  const [found, setFound] = useState(null);
-  const groups = addChoices({ hasHost: connectors.length > 0 });
-  const rows = groups.flatMap((group) => group.rows);
-  const close = () => { setOpen(null); setFound(null); };
-  // The sheet gives the title of a make row itself.
-  const title = (rows.find((row) => row.id === open) || {}).title || '';
-  return html`<div><${Bar}><span class="bar-title">${ADD_PAGE_TITLE}</span><//><section class="section">
-    ${groups.map((group) => html`<section key=${group.id} class="page-section"><h2>${group.label}</h2>
-      ${group.connect && html`<p class="hint">Studio puts the files of a release on a file host. Connect a file host to add a release, an artist, a label, a show or a playlist.</p>
-        <div class="actions"><button class="button action" type="button" onClick=${() => go({ name: 'hosts' })}>Connect a File Host</button></div>`}
-      ${group.rows.length > 0 && html`<${RowList}>
-        ${group.rows.map((row) => html`<button key=${row.id} class="link-row" type="button" onClick=${() => setOpen(row.id)}>
-          <span class="text"><span class="label">${row.title}</span><span class="summary">${row.text}</span></span><span class="go">›</span>
-        </button>`)}
-      <//>`}
-      ${group.hint && html`<p class="hint">${group.hint}</p>`}
-    </section>`)}
-    <${AddFeedSheet} open=${open} title=${title} connectors=${connectors} feeds=${feeds} found=${found} setFound=${setFound}
-      onAdded=${onAdded} onClose=${close} />
-  </section></div>`;
 }
 
 // ---- Wallets and change sets (ADR 0091, ADR 0099) ----
@@ -3593,7 +3670,7 @@ export function LetterBar({ letters, idOf }) {
 // `marked` is the feed that the last Back selection left marked. With a
 // `group`, the page shows the releases of one destination below Releases,
 // and the sort of that page is `groupSort` (ADR 0085 items 4 to 6).
-function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, groupReversed, changedFeeds, onQuery, onGroupSort, onOpen, onAddFeed, onAddedFeed, from }) {
+function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, groupReversed, changedFeeds, onQuery, onGroupSort, onOpen, onAddedFeed, onConnect, from }) {
   const inGroup = group !== undefined;
   // The search text stays in the page and not in the address (ADR 0223
   // item 6). A different feed group starts with no text.
@@ -3639,7 +3716,7 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
           ${hasUnfilteredRows && html`<${SortMenu} sorts=${releases.sorts} sort=${releases.sort} reversed=${releases.reversed} onSort=${pickSort} />`}
           ${hasUnfilteredRows && viewButton('rows', 'Rows', html`<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>`)}
           ${hasUnfilteredRows && viewButton('tiles', 'Tiles', html`<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"></rect><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"></rect><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"></rect><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"></rect></svg>`)}
-          ${!hideAdd && html`<${AddMenu} release=${more} hasHost=${connectors.length > 0} from=${from} onOpenForm=${setAdding} onOther=${onAddFeed} />`}
+          ${!hideAdd && html`<${AddMenu} release=${more} from=${from} onOpenForm=${setAdding} />`}
           ${head && head.id !== null && html`<button class="button" type="button" onClick=${() => onOpen(head.id)}>${head.typeLabel} Page</button>`}
         </div>`}
       </div>
@@ -3670,21 +3747,19 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
         ? html`<div class="empty-releases"><p class="empty">No releases are linked yet.</p></div>`
         : html`<div class="empty-releases">
             <p class="empty">No releases yet.</p>
-            <div class="actions"><${AddMenu} release=${more} hasHost=${connectors.length > 0} from=${from} onOpenForm=${setAdding} onOther=${onAddFeed} /></div>
+            <div class="actions"><${AddMenu} release=${more} from=${from} onOpenForm=${setAdding} /></div>
           </div>`}
     </section>
     ${adding && html`<${AddFeedRowSheet} open=${adding.open} connectors=${connectors} feeds=${feeds}
-      start=${adding.start} onAdded=${addedRelease} onClose=${() => setAdding(null)} />`}
+      start=${adding.start} onAdded=${addedRelease} onConnect=${onConnect} onClose=${() => setAdding(null)} />`}
   </div>`;
 }
 
-// The add menu of Releases and of the page of a publisher (ADR 0230 items 1
-// to 4). `release` is the add action of an artist page, or null. With no
-// connected file host, a make entry opens the page that connects one.
-function AddMenu({ release, hasHost, from, onOpenForm, onOther }) {
+// The add menu of Releases and a publisher page (ADR 0233 item 1).
+function AddMenu({ release, from, onOpenForm }) {
   const items = addMenuEntries(release);
   return html`<${MenuControl} className="add-menu" buttonLabel="＋ Add" accessibleName="Add" menuLabel="Add" items=${items}
-    onSelect=${(entry) => (entry.open && hasHost ? onOpenForm({ open: entry.open, start: entry.start, from }) : onOther(from))} />`;
+    onSelect=${(entry) => onOpenForm({ open: entry.open, start: entry.start, from })} />`;
 }
 
 // The feed of an open level comes before its releases, in the same view
@@ -3840,14 +3915,15 @@ function StartSheet({ path, connectors, feeds, onAdded, onClose }) {
   </dialog>`;
 }
 
-// A row sheet of the Add feeds page, for the first steps (ADR 0119 items 6
-// and 8). The forms are the same as on the Add feeds page.
-export function AddFeedRowSheet({ open, connectors, feeds, start, onAdded, onClose }) {
+// A sheet for one add form or import flow.
+export function AddFeedRowSheet({ open, connectors, feeds, start, onAdded, onConnect, onClose }) {
   const [found, setFound] = useState(null);
-  const rows = addChoices({ hasHost: connectors.length > 0 }).flatMap((group) => group.rows);
-  const title = (rows.find((row) => row.id === open) || {}).title || '';
+  const titles = { album: 'New release', publisher: 'Make a new artist or label page', show: 'Make a new show', playlist: 'Make a new playlist',
+    find: 'Add from Music Index', folder: 'Add from a File Host Folder…', msp: 'Add from MSP 2.0 Backups…' };
+  const title = titles[open] || '';
   return html`<${AddFeedSheet} open=${open} title=${title} connectors=${connectors} feeds=${feeds}
-    found=${found} setFound=${setFound} start=${start} onAdded=${onAdded} onClose=${() => { setFound(null); onClose(); }} />`;
+    found=${found} setFound=${setFound} start=${start} onAdded=${onAdded} onConnect=${onConnect}
+    onClose=${() => { setFound(null); onClose(); }} />`;
 }
 
 // The navigation state of the session (ADR 0039 item 8). A reload keeps it
@@ -3891,6 +3967,7 @@ function Shell({ vault, onLock, version }) {
   // The Add a track sheet, by the left panel and by the album page (ADR 0029 item 7).
   const [adding, setAdding] = useState(false);
   const [addingFeed, setAddingFeed] = useState(null);
+  const [copyNotice, setCopyNotice] = useState(null);
   // The import sheet, by the left panel and by the album page (task 018d).
   const [importing, setImporting] = useState(false);
   const [pendingAddTracks, setPendingAddTracks] = useState(null);
@@ -4175,13 +4252,11 @@ function Shell({ vault, onLock, version }) {
   // A new feed opens its page. The list is loaded before the page opens.
   const addedFeed = async (f, makeInfo, from = view.from) => {
     await load();
-    if (f && makeInfo && shouldAddTracksAfterNewRelease(makeInfo.type)) setPendingAddTracks(f.id);
+    if (makeInfo?.copyFailed) setCopyNotice(`Studio could not read the feed file of ${makeInfo.copyTitle || f?.title || 'the found feed'}. No tracks and no payment recipients are copied.`);
+    if (f && makeInfo && !makeInfo.copied && shouldAddTracksAfterNewRelease(makeInfo.type)) setPendingAddTracks(f.id);
     go(f ? newFeedView(f.id, from) : { name: 'releases' });
   };
-  const openAddFeedRow = (item) => {
-    if (!connectors.length) { go({ name: 'add-feed', from: item.from }); return; }
-    setAddingFeed(item);
-  };
+  const openAddFeedRow = (item) => setAddingFeed(item);
   let main;
   // A screen with no bar of its own gets one.
   const withBar = (content) => html`<div><${Bar}><span class="bar-title">Studio</span><//>${content}</div>`;
@@ -4209,8 +4284,6 @@ function Shell({ vault, onLock, version }) {
     main = html`<${WalletPage} key=${JSON.stringify(recipientKey(view.recipient))} recipient=${view.recipient} feeds=${feeds} go=${go} />`;
   } else if (view.name === 'change-set') {
     main = html`<${ChangeSetPage} key=${view.id} id=${view.id} go=${go} onChanged=${() => load()} />`;
-  } else if (view.name === 'add-feed') {
-    main = html`<${AddFeeds} connectors=${connectors} feeds=${feeds} go=${go} onAdded=${addedFeed} />`;
   } else if (selected && view.name === 'outline') {
     main = html`<${OutlinePage} feed=${selected} panel=${panel} draft=${draft} changedFeeds=${changedFeeds} feeds=${feeds} go=${go}
       onAdding=${setAdding} onImporting=${setImporting} onAddFeedRow=${openAddFeedRow} onChanged=${() => load()} onListChanged=${() => load()} connectors=${connectors} />`;
@@ -4230,8 +4303,8 @@ function Shell({ vault, onLock, version }) {
       group=${view.name === 'releases' ? view.group : undefined} groupSort=${view.sort} groupReversed=${view.reversed === true}
       onGroupSort=${(sort, reversed) => go({ ...view, sort, reversed }, { replace: true })}
       changedFeeds=${changedFeeds} onQuery=${changeList}
-      onOpen=${(id) => go(openFeedView(id, narrow, from))} onAddFeed=${(addFrom) => go({ name: 'add-feed', from: addFrom })}
-      onAddedFeed=${addedFeed} from=${from} />`;
+      onOpen=${(id) => go(openFeedView(id, narrow, from))}
+      onAddedFeed=${addedFeed} onConnect=${() => go({ name: 'hosts' })} from=${from} />`;
   }
 
   const navValue = { coarse, canBack: canBack(nav), canForward: canForward(nav), back, forward, setLeaveGuard,
@@ -4244,6 +4317,8 @@ function Shell({ vault, onLock, version }) {
       <${LeftPanel} ...${panelProps} />
     </nav>`}
     <main class="main" ref=${mainRef}>
+      ${copyNotice && html`<div class="notice" role="status"><span>${copyNotice}</span>
+        <button class="button quiet icon-button" type="button" aria-label="Dismiss" onClick=${() => setCopyNotice(null)}>✕</button></div>`}
       ${differences.length > 0 && !noticeClosed && html`<div class="notice scan-notice" role="status">
         <span>Studio found ${differences.length} ${differences.length === 1 ? 'change' : 'changes'} in the library folder.</span>
         <div class="actions">
@@ -4256,6 +4331,7 @@ function Shell({ vault, onLock, version }) {
     </main>
     ${addingFeed && html`<${AddFeedRowSheet} open=${addingFeed.open} connectors=${connectors} feeds=${feeds}
       start=${addingFeed.start} onAdded=${(f, info) => { setAddingFeed(null); addedFeed(f, info, addingFeed.from); }}
+      onConnect=${() => go({ name: 'hosts' })}
       onClose=${() => setAddingFeed(null)} />`}
   </div><//><//>`;
 }

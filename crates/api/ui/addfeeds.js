@@ -1,31 +1,10 @@
-// The model of the Add One You Have page and of the form that makes a feed (ADR 0073
-// items 1 to 10, ADR 0042). The functions have no Preact and no browser
-// state. `app.js` shows the rows and the form.
+// The model of the add forms (ADR 0233, ADR 0042). These functions have no
+// Preact and no browser state. `app.js` shows their rows and forms.
 import { feedKind, kindGlow, publisherArt } from './shell.js';
 
-// The rows of the page "Add One You Have" (ADR 0230 item 4). The page has one
-// group. The row "From a file host folder" needs a file host, so it goes out
-// when no host is connected. With no host, the flag `connect` shows the
-// button that connects one (ADR 0230 item 3: each make entry needs a host).
-export function addChoices({ hasHost }) {
-  const have = [
-    { id: 'find', title: 'By address or name', text: 'Search Music Index, or give an address' },
-    { id: 'folder', title: 'From a file host folder', text: 'A feed file on a connected file host' },
-    { id: 'msp', title: 'From MSP 2.0 backups', text: 'The .json files that MSP 2.0 saved' },
-  ];
-  return [
-    { id: 'have', label: 'Add One You Have', rows: hasHost ? have : have.filter((row) => row.id !== 'folder'), connect: !hasHost },
-  ];
-}
-
-// The title of the page "Add One You Have" (ADR 0230 item 4).
-export const ADD_PAGE_TITLE = 'Add One You Have';
-
 // The entries of the add menu of Releases and of an artist page (ADR 0230
-// items 1 to 4). `release` is the add action of the artist of the page (from
-// `releaseAdd`), or null on the top page, on a label page and on a hosting
-// page. Then Release has no start parent. `open` is the form that the entry
-// opens. `have` opens the page "Add One You Have".
+// items 1 to 4). `release` is the add action of the artist of the page, or null
+// when Release has no start parent.
 export function addMenuEntries(release) {
   return [
     { id: 'release', label: 'Release', open: 'album', start: release ? release.start : {} },
@@ -33,8 +12,57 @@ export function addMenuEntries(release) {
     { id: 'label', label: 'Label', open: 'publisher', start: { role: 'label' } },
     { id: 'show', label: 'Show', open: 'show', start: {} },
     { id: 'playlist', label: 'Playlist', open: 'playlist', start: {} },
-    { id: 'have', label: 'Add One You Have…', open: null, separatorBefore: true },
   ];
+}
+
+// True when a row of the search is an artist: a role row with the role
+// artist, or an inferred artist (ADR 0233 item 13).
+export function addRowIsArtist(row) {
+  const kind = row?.kind || {};
+  return (kind.type === 'role' && (kind.roles || []).includes('artist')) || kind.type === 'inferred_artist';
+}
+
+// The artist and label rows of the search that a form shows (ADR 0233 item
+// 2). A release form and an artist form show artists, and a label form shows
+// labels. A show form and a playlist form show no role row. A row with no
+// role shows in each form. The feed results of Music Index have no kind, so
+// each form shows them.
+export function addSearchRows(rows, type, role) {
+  const wanted = type === 'album' ? ['artist'] : type === 'publisher' ? [role || 'artist'] : [];
+  return (rows || []).filter((row) => {
+    const kind = row.kind || {};
+    if (kind.type === 'role') return (kind.roles || []).some((r) => wanted.includes(r));
+    if (kind.type === 'inferred_artist') return wanted.includes('artist');
+    return true;
+  });
+}
+
+// The two import rows in the Music Index sheet (ADR 0233 item 3).
+export function addSheetRows(hasHost) {
+  return [
+    ...(hasHost ? [{ id: 'folder', title: 'Add from a File Host Folder…' }] : []),
+    { id: 'msp', title: 'Add from MSP 2.0 Backups…' },
+  ];
+}
+
+// The mark of a result in the add sheet (ADR 0233 items 6 and 7).
+export function addResultMark(row) {
+  if (row?.yours && row?.in_studio_id != null) return 'Yours · In Studio';
+  if (row?.yours) return 'Yours';
+  if (row?.in_studio_id != null) return 'In Studio';
+  return null;
+}
+
+// The form start values of a found feed (ADR 0233 items 8 to 14).
+export function addFoundValues(row, preview = {}, values = {}) {
+  const found = {
+    title: values.title || row?.title || '',
+    author: preview.author || values.author || row?.artist || '',
+    description: values.description || '',
+    image: values.image || values.image_url || row?.image_url || '',
+    website: values.website || '',
+  };
+  return Object.fromEntries(Object.entries(found).filter(([, value]) => value !== ''));
 }
 
 // The values of the select menu "Type" in the form that makes a feed.
@@ -101,37 +129,6 @@ export function parentCard(feeds, publisherId) {
     glow: kindGlow(feedKind(page)),
     art: publisherArt(page, feeds),
   };
-}
-
-// The kind that a track count gives (ADR 0230 item 14). The split is the
-// rule of ADR 0213 item 11, as `release_kind_shown` in the core applies it. Music Index does not give a count
-// in the values of a feed yet, so a pick leaves the kind as it is.
-export function kindOfTrackCount(count) {
-  if (!Number.isInteger(count) || count < 1) return null;
-  if (count <= 3) return 'single';
-  return count <= 6 ? 'ep' : 'album';
-}
-
-const hasText = (value) => typeof value === 'string' && value.trim() !== '';
-
-// The choices of a found release (ADR 0230 items 11, 14 and 15). `values` is
-// the answer of `GET /musicindex/values/{guid}`, and `hit` is the row of a
-// release. A row of an artist page or a label page gives no choice. The one
-// choice has only the values that Music Index gives: `title`, `author`,
-// `kind`, `description`, `image` and `website`.
-export function releaseFindChoices(values, hit) {
-  if (!hit) return [];
-  const kind = kindOfTrackCount(values.track_count);
-  const found = {
-    title: hasText(values.title) ? values.title : (hasText(hit.title) ? hit.title : null),
-    author: hasText(hit.artist) ? hit.artist : null,
-    kind,
-    description: hasText(values.description) ? values.description : null,
-    image: hasText(values.image_url) ? values.image_url : null,
-    website: hasText(values.website) ? values.website : null,
-  };
-  const present = Object.fromEntries(Object.entries(found).filter(([, value]) => value !== null));
-  return Object.keys(present).length === 0 ? [] : [{ id: 'release', values: present }];
 }
 
 // The start value of "Feed file" (ADR 0073 item 8). It is an edit aid, not a

@@ -9,6 +9,7 @@
 - Uses: these current ADRs own a part of this area. This ADR names each one at its item. [ADR 0077](../archive/adr/0077-a-new-album-can-start-from-an-album.md) (the menu "Start from"), [ADR 0092](0092-file-hosts-and-the-destination-icons.md) (the words "file host"), [ADR 0221](0221-the-welcome-page-and-the-first-steps.md) (the Welcome page and the first steps), [ADR 0130](0130-the-facts-of-an-audio-file-stay-locked.md) (the row "Properties") and [ADR 0164](0164-the-releases-of-a-publisher-feed-have-an-add-row.md) (the add row of a publisher feed and the title of the sheet).
 - Changed by: [ADR 0213](0213-a-release-starts-on-the-page-of-its-artist.md) items 2 and 3: the page "Add a Feed" and the menu "Type" have no album.
 - Changed by: [ADR 0230](0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 1 to 13, on 2026-11-20. Items 1, 5, 6 and 8: one menu **＋ Add**, no word "feed" in an add control, and no "Start from".
+- Changed by: [ADR 0233](0233-each-add-form-finds-on-music-index-and-copies-the-found-feed.md) items 3 to 6, on 2026-11-20. Item 1: the page goes, and its three ways to add are in the sheet "Find on Music Index".
 
 ## Context
 

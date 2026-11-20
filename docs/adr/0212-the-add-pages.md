@@ -8,6 +8,7 @@
 - Uses: [ADR 0023](0023-web-addresses-and-audio-file-facts.md) for the facts of an audio address. [ADR 0028](0028-summary-lines-and-one-open-entry.md) for a closed row with a summary. [ADR 0029](0029-editor-pages-toolbar-and-three-levels.md) for the groups and the rows. [ADR 0042](0042-ui-models-with-node-tests.md) for the model modules. [ADR 0065](0065-the-core-applies-each-feed-rule.md) for the feed rules.
 - Uses: these current ADRs own a part of this area. This ADR names each one at its item. [ADR 0077](0077-a-new-album-can-start-from-an-album.md) (the menu "Start from"), [ADR 0092](0092-file-hosts-and-the-destination-icons.md) (the words "file host"), [ADR 0221](0221-the-welcome-page-and-the-first-steps.md) (the Welcome page and the first steps), [ADR 0130](0130-the-facts-of-an-audio-file-stay-locked.md) (the row "Properties") and [ADR 0164](0164-the-releases-of-a-publisher-feed-have-an-add-row.md) (the add row of a publisher feed and the title of the sheet).
 - Changed by: [ADR 0213](0213-a-release-starts-on-the-page-of-its-artist.md) items 2 and 3: the page "Add a Feed" and the menu "Type" have no album.
+- Changed by: [ADR 0230](0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 1 to 13, on 2026-11-20. Items 1, 5, 6 and 8: one menu **＋ Add**, no word "feed" in an add control, and no "Start from".
 
 ## Context
 

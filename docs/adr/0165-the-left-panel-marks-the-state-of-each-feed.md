@@ -9,6 +9,7 @@
 - Changes: [ADR 0150](0150-studio-shows-a-change-from-outside-when-a-page-opens.md) item 1.
 - Uses: [ADR 0150](0150-studio-shows-a-change-from-outside-when-a-page-opens.md) for the check. [ADR 0088](../archive/adr/0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) for the rows of the left panel. musicindex ADR 0032 R-DOT-1 keeps the dot for the type only.
 - Changed by: [ADR 0211](0211-studio-follows-a-move-that-a-different-studio-made.md) items 20 and 21: the mark of an outside change has the Warning color.
+- Changed by: [ADR 0230](0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 17 to 19, on 2026-11-20. Item 2: a click on a row with "Not checked" also checks its feeds.
 
 ## Context
 

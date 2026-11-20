@@ -4,7 +4,7 @@
 import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
 import { useSheet, NostrKeyRow, NostrSheet, UndoButtons, useUndoKeys, DeleteUndoBar } from './editor.js';
 import { makeHistory, focusedField, isOperationStep } from './undohistory.js';
-import { useDeleteUndo, undoNoticeText } from './undonotice.js';
+import { useDeleteUndo, undoNoticeText, UNDO_COMPLETE } from './undonotice.js';
 
 // One undo history for each person. It stays when the user opens a different
 // page and comes back (ADR 0227 item 7).
@@ -194,8 +194,8 @@ export function PeoplePage({ feeds, go, sort, reversed, onOrder }) {
   };
   useEffect(() => {
     load();
-    window.addEventListener('studio-undo-complete', load);
-    return () => window.removeEventListener('studio-undo-complete', load);
+    window.addEventListener(UNDO_COMPLETE, load);
+    return () => window.removeEventListener(UNDO_COMPLETE, load);
   }, []);
 
   const titles = new Map((feeds || []).map((f) => [f.id, f.title || 'Untitled feed']));

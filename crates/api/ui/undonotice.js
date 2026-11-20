@@ -76,13 +76,18 @@ export function useDeleteUndo() {
 export const DELETE_UNDO_ACTIONS = Object.freeze(['record', 'undo', 'redo', 'clear']);
 
 // Holds the one delete step of the app.
+// The window event after a successful undo or redo of a delete step. The
+// shell and the pages that show data from the core load it again (ADR 0228
+// item 4).
+export const UNDO_COMPLETE = 'studio-undo-complete';
+
 export function DeleteUndoProvider({ api, children }) {
   const [model, setModel] = useState({ text: '', error: false, canUndo: false, canRedo: false });
   const control = useRef(null);
   if (control.current === null) {
     control.current = makeDeleteUndo(api, {
       changed: () => setModel(control.current.model()),
-      done: () => window.dispatchEvent(new Event('studio-undo-complete')),
+      done: () => window.dispatchEvent(new Event(UNDO_COMPLETE)),
     });
   }
   // Each action of the control, made one time, so that a page that calls

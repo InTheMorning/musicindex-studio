@@ -28,7 +28,7 @@ import { CONFIRMS, confirmButtons } from './confirms.js';
 import { changeTitle, afterDiscard, changeLine } from './people.js';
 import { makeSettingsDraft, changeSetting, settingsDraftView, discardSettings, saveSettings, asksSettingsLeave } from './settingsdraft.js';
 import { makeHistory } from './undohistory.js';
-import { DeleteUndoProvider, useDeleteUndo, undoNoticeText } from './undonotice.js';
+import { DeleteUndoProvider, useDeleteUndo, undoNoticeText, UNDO_COMPLETE } from './undonotice.js';
 
 // The undo history of the Settings draft. It stays when the user opens a
 // different page and comes back (ADR 0227 item 7).
@@ -4087,6 +4087,12 @@ function Shell({ vault, onLock, version }) {
     }
   }, []);
   useEffect(() => { load(); }, [load]);
+  // An undo or a redo of Remove from Collection changes the feed list, so
+  // the list loads again (ADR 0228 item 4).
+  useEffect(() => {
+    window.addEventListener(UNDO_COMPLETE, load);
+    return () => window.removeEventListener(UNDO_COMPLETE, load);
+  }, [load]);
   // The list loads again when the window gets the focus again, so that a
   // change from a different window shows. At most one load runs in each
   // FOCUS_RELOAD_MS (ADR 0165 item 10).

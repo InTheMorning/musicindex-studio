@@ -150,3 +150,19 @@ Operator choice (2026-11-20, main session, from drawings of findings 1 and 2):
 - Finding 1: each group of the left panel below an open feed gets an add row at its end. This applies to the level and to the page of an artist or a label. The group "Releases" gets **＋ Add release**, and the group "Artists" of a label level gets **＋ Add artist**. A group with no rows still shows, with only its add row. The top panel does not change, and the page Releases keeps its **＋ Add** menu.
 - Finding 2: the back row of a new release opens the level where the user made the release. A release made from HeyCitizen shows **‹ HeyCitizen**. A release made from the top page Releases shows **‹ Releases**. Cause: `addedFeed` in `crates/api/ui/app.js` opens the new feed with no `from`.
 - Open, not decided: `releaseAdd` in `crates/api/ui/welcome.js` gives a start only for an artist page, so **＋ Add release** of a label needs a start value. **＋ Add artist** of a label must link the new artist below that label.
+
+ADR 0232 (`ca737d8`) decides the open point above: **＋ Add release** of a label has no start parent, and **＋ Add artist** keeps a link below the label that only Studio knows.
+
+## Agent Checks Before The Desktop Check Of rc.30
+
+The main session ran the debug binary of `main` in the screenshot harness (`.studio-dev/v-207`, data copy `data-215`, steps `s32.json` to `s37.json`).
+
+| Check | Result |
+| --- | --- |
+| The level of a new label at 1100 px and 390 px | Pass. The level shows Artists with **＋ Add artist** and Releases with **＋ Add release**. `$edges()` gives no finding. |
+| **＋ Add artist** on the label level | Pass. The form starts with the role Artist. The new artist opens with **‹ Demo Label** and shows below the label. |
+| **＋ Add release** on the artist | Pass. The form starts with the artist as the parent. The new release opens with **‹ Demo Artist**. |
+| A new start of the server | Pass. The artist stays below the label. |
+| The artist level at 390 px | Pass. The level has its head row and **＋ Add release**. |
+| **Remove from Collection** of the artist, then **Undo** | Fail, then fixed. The core gave back the artist and its kept link, but the open level did not show the artist until the next load of the list. The shell now loads the list after each undo and redo of a delete step. After the fix, the artist shows below the label again at once (`out38`). |
+| **Find Another Page** for a person with only a read-only link | Pass, from the desktop screenshots of task 201 on a copy of the operator data (`.studio-dev/d29/r9`). |

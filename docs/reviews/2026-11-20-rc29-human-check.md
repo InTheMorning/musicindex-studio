@@ -194,3 +194,39 @@ Operator choices of 2026-11-20 after the check, from drawings:
 
 - Findings 2 and 4: a selection in **Find on Music Index** copies everything into the new feed: the start values, the tracks and the payment recipients. **Add One You Have…** leaves the menu **＋ Add**. The main session told the operator that a copy from a release of a different artist sends payments to that artist and uses the audio files of that artist.
 - Finding 4: each of the five forms of **＋ Add** (**Release**, **Artist**, **Label**, **Show**, **Playlist**) starts with **Find on Music Index**. The search shows only results of the same kind.
+
+## Desktop Check Of 9af319b
+
+The operator ran the release binary `target/release/musicindex-studio-desktop` of main at `9af319b` on the real data. The main session built it and found the text of the new add sheet in it.
+
+| Step | Result |
+| --- | --- |
+| 1. Start the binary on the real data | Pass. Releases and People keep their feeds and persons. The collection goes to schema 48. |
+| 2. **＋ Add release** on HeyCitizen, then **Find on Music Index** and "Various & Assorted" | Pass. The form shows HeyCitizen as the parent, "Copies 7 tracks and 32 payment recipients from Various & Assorted." and the payments warning. Review **Detailed** shows the title, the author Matt Finlay, the description, the website, the artwork, a new self link on bastone and the value recipients. The left panel shows 7 tracks and **‹ HeyCitizen**. Findings 1 and 2 came during this step. |
+| 2, part 5. **Remove from Collection** of the unwritten release, then **Undo** | Not run on this release. The operator wrote the release to bastone with "Also write HeyCitizen" off and "Send a podping" on. |
+| Cleanup | The operator deleted Various & Assorted from bastone and removed it from the collection. The walk starts again at step 2. |
+| A. The starting state of HeyCitizen | The draft keeps the build date and "Remote items. Added: Various & Assorted" from the write. See finding 4. |
+| B. **Discard the Draft** of HeyCitizen | Pass. HeyCitizen says "No changes". |
+| C. **＋ Add release** from Music Index (Various & Assorted again), not written | Pass. The release shows below HeyCitizen. The HeyCitizen draft gives the build date and "Remote items. Added: Various & Assorted". |
+| D. **Remove from Collection** of the unwritten release | Pass. The release is gone, and HeyCitizen says "No changes" with no draft (ADR 0233 item 15). |
+| E. **Undo** | Pass. Various & Assorted is back as "New, not written". HeyCitizen says "Saved, not written" with its pencil. |
+| F. **Remove from Collection** of the test release | Pass. HeyCitizen says "No changes" and lists 4 releases. |
+| G. **Files** of HeyCitizen's Test Album | **Feed file** says bastone, **Media files** says CloudFlare, as after the last check. |
+| H. **Move This Release…**, "Media files only" to bastone | **Media files** says bastone. Review has nothing to show. See finding 5. |
+| I. The collection of the operator after step H | `files_connector_id` 1 (bastone), `files_connector_kept` 2 (CloudFlare). This proves the kept value of finding 5. |
+| The discard of a move (step 3 of the notes) | Not run. Finding 5 makes the result depend on the leftover kept value. It runs after the fix. |
+
+### Findings Of The Desktop Check Of 9af319b
+
+1. Review of a new release that has no written file shows **Discard the Draft**. A click gives the heading "Studio could not write the release." and the detail "This release has no file on the file host yet. To remove it, remove it from the collection." The heading names a write that the user did not ask for, and the button offers an action that cannot work (`crates/api/src/routes.rs:3630`, `crates/api/ui/editor.js:2268`).
+2. The operator wrote Various & Assorted with "Also write HeyCitizen" off. The left panel then shows the release below HeyCitizen. The written file of HeyCitizen has no remote item for the release. **Issues** of the release says "Studio found no problem in this feed." The operator wants Studio to require a correct link to the artist page, and not to show a one-sided link as complete. ADR 0231 items 9 and 10 permit the write of a release without its page. A decision is necessary after the check.
+3. The level of HeyCitizen lists Various & Assorted as "Album · 7 tracks · bastone". The row does not show the artist name Matt Finlay of the release. The operator wants a release row to show its artist name when that name differs from the name of the artist page.
+4. After the delete from bastone and **Remove from Collection** of the written release Various & Assorted, the draft of HeyCitizen keeps "Remote items. Added: Various & Assorted" and a new build date. ADR 0233 item 15 removes such a change only for a release that was never written. Here the link is only in the draft of the artist page, and the release is gone. The draft thus asks for a write of a link to a removed feed.
+5. On **HeyCitizen's Test Album**, **Move This Release…** with "Media files only" to bastone and **Add to the Draft** set **Media files** to bastone at once. The release then says "No changes", and Review has nothing to show. The 7 files are on bastone already, so the move adds no operation to the draft. `move_release` (`crates/api/src/routes.rs:5910`) still calls `keep_files_connector` before it sets the target. With no draft, no write and no discard clears the kept value. A later discard of a different move can then put back CloudFlare (inference from the code, not examined).
+
+Operator choices of 2026-11-20 after the check, from drawings:
+
+- Finding 1: Review of a release that was never written shows **Remove from Collection…** in the place of **Discard the Draft**. It removes the release, with **Undo**.
+- Finding 2: the first write of a new release always writes its artist page too. The check box "Also write {title}" is on and locked for that write. The release row and **Issues** also report a release that its artist page does not list, with an action that writes the artist page.
+- Finding 3: a release row below an artist page shows the line "Artist: {name}" only when the artist name of the release differs from the name of the artist page.
+- Findings 4 and 5 are defects. They need no choice.

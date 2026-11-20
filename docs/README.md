@@ -209,6 +209,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0231: A new release writes its artist page, and the files of a restored release](adr/0231-a-new-release-writes-its-artist-page-and-the-files-of-a-restored-release.md)
 - [ADR 0232: Each group below an open feed has an add row](adr/0232-each-group-below-an-open-feed-has-an-add-row.md)
 - [ADR 0233: Each add form finds on Music Index and copies the found feed](adr/0233-each-add-form-finds-on-music-index-and-copies-the-found-feed.md)
+- [ADR 0234: A new release is written with its pages, and a one-sided link is reported](adr/0234-a-new-release-is-written-with-its-pages-and-a-one-sided-link-is-reported.md)
 
 ## Plans
 

@@ -274,3 +274,17 @@ test('Review uses the shared segmented control for its view', () => {
   assert.match(viewbar, /onKeyDown=\$\{onSegmentKey\}/, 'musicindex ADR 0051 R-SEG-1: use onSegmentKey for keyboard focus.');
   assert.match(viewbar, /VIEW_HINTS\[view\]/, 'musicindex ADR 0051 R-SEG-1: keep the hint for the selected view.');
 });
+
+test('ADR 0228 items 14 to 16: the Review sheet orders the diff, the file operations fold and the footer error', () => {
+  const source = readFileSync(new URL('../ui/editor.js', import.meta.url), 'utf8');
+  const sheet = source.slice(source.indexOf('function ReviewSheet('));
+  const diffAt = sheet.indexOf('<${DiffView} diff=${diff} />');
+  const opsAt = sheet.indexOf('<${HostOperations}');
+  assert.ok(diffAt > 0 && opsAt > diffAt, 'ADR 0228 item 14: DiffView comes before HostOperations. Fix: move the DiffView line above HostOperations.');
+  const ops = source.slice(source.indexOf('function HostOperations('), source.indexOf('function useAnnounceChoice'));
+  assert.match(ops, /<details class="disclosure[^"]*">\s*<summary[^>]*><span class="label">File operations \(\$\{count\}\)/, 'ADR 0228 item 15: the operations are in a closed fold. Fix: use details with no open attribute.');
+  assert.doesNotMatch(ops, /<details[^>]* open/, 'ADR 0228 item 15: the fold is closed when the sheet opens. Fix: remove open.');
+  const footer = sheet.slice(sheet.indexOf('<footer>'));
+  assert.ok(footer.indexOf('${writeError}') > 0 && footer.indexOf('${writeError}') < footer.indexOf('<${AnnounceFooterChoice}'), 'ADR 0228 item 16: the write error is in the footer above AnnounceFooterChoice. Fix: render writeError there.');
+  assert.ok(!sheet.slice(0, sheet.indexOf('<footer>')).includes('${writeError}'), 'ADR 0228 item 16: the body has no write error. Fix: render writeError in the footer only.');
+});

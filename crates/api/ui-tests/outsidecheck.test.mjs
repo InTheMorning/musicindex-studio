@@ -92,6 +92,22 @@ test('A Studio move notice has no send button with no public address (ADR 0184 i
   assert.equal(notice.lines[1].action, undefined);
 });
 
+test('ADR 0228 items 8 and 9: each write state has Dismiss and the confirmation has no podping line', () => {
+  const check = { own_url: 'https://x/feed.xml', last_write: {
+    written_at: 100, index_read: false,
+    announcements: [{ url: 'https://x/feed.xml', state: 'sent', finished_at: 110 }],
+  } };
+  const waiting = writeNotice(check, { reads: 1, nowSeconds: 120, confirmedHere: false });
+  const noReply = writeNotice(check, { reads: 15, nowSeconds: 120, confirmedHere: false });
+  const confirmed = writeNotice({ ...check, last_write: { ...check.last_write, index_read: true } }, { reads: 2, nowSeconds: 120, confirmedHere: true });
+  for (const notice of [waiting, noReply, confirmed]) {
+    assert.equal(notice.dismiss, 'Dismiss', 'ADR 0228 item 8: each state has Dismiss. Fix: set dismiss in writeNotice.');
+  }
+  assert.deepEqual(confirmed.lines, [], 'ADR 0228 item 9: the confirmation has no podping line. Fix: return no lines.');
+  assert.equal(confirmed.action, undefined, 'ADR 0228 item 9: the confirmation has no Send the Podping Again. Fix: set no action.');
+  assert.equal(noReply.lines[0].action, 'Send the Podping Again', 'ADR 0191 item 4: a sent line keeps its button. Fix: keep podpingLines.');
+});
+
 test('ADR 0175 item 1: a write notice gives its states and suppresses inapplicable notices', () => {
   const check = { own_url: 'https://x/feed.xml', last_write: {
     written_at: 100, index_read: false,

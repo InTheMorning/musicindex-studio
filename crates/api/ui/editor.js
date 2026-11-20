@@ -1819,13 +1819,19 @@ function BlockedDeleteRow({ blocked, connectors, onRemove, busy }) {
 // Each host operation of the diff, above the XML diff (ADR 0036 item 14).
 function HostOperations({ diff, connectors, onRemove, onUndoMove, busy, fromConnectorId }) {
   if (diff.operations.length === 0 && diff.blocked.length === 0 && !diff.feed_move) return null;
-  return html`<div class="group host-ops">
+  // The rows are in a fold that is closed when the sheet opens (ADR 0228
+  // item 15).
+  const count = diff.operations.length + diff.blocked.length + (diff.feed_move ? 1 : 0);
+  return html`<details class="disclosure host-ops-fold">
+    <summary class="link-row"><span class="label">File operations (${count})</span></summary>
+    <div class="group host-ops">
     ${diff.feed_move && html`<${FeedMoveRow} move=${diff.feed_move} connectors=${connectors} onUndo=${onUndoMove} busy=${busy} fromConnectorId=${fromConnectorId} />`}
     ${diff.operations.map((op) => html`<${HostOperationRow}
       key=${`${op.kind}-${op.connector_id}-${op.path}`} op=${op} connectors=${connectors} onRemove=${onRemove} busy=${busy} />`)}
     ${diff.blocked.map((b) => html`<${BlockedDeleteRow}
       key=${`blocked-${b.operation_id}`} blocked=${b} connectors=${connectors} onRemove=${onRemove} busy=${busy} />`)}
-  </div>`;
+    </div>
+  </details>`;
 }
 
 // The one announcement choice of a write (ADR 0136). Studio remembers it for
@@ -2162,6 +2168,20 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
     await onListChanged?.();
     await refreshDiff();
   });
+  // The error of a write shows in the footer, directly above the check box
+  // "Send a podping" (ADR 0228 item 16).
+  const writeError = conflict
+    ? html`<div class="notice error" role="alert"><strong>${conflictText.heading}</strong>
+        ${conflictText.times.map((line) => html`<div>${line}</div>`)}
+        ${conflictText.cause}
+        <div class="actions"><button class="button" type="button" disabled=${busy} onClick=${startMerge}>Apply My Edits to the New File</button></div></div>`
+    : stale
+      ? html`<div class="notice error" role="alert"><strong>The draft changed after you examined it.</strong>Examine the changes again.</div>`
+      : refusalOfError(error)
+        ? null
+        : signErrorText(error && error.code)
+          ? html`<div class="notice error" role="alert"><strong>${signErrorText(error.code)}</strong></div>`
+          : html`<${ErrorNotice} error=${error} action=${isPublisher(feeds.find((f) => f.id === feedId) || {}) ? 'Studio could not write the page.' : 'Studio could not write the release.'} onRetry=${retry} />`;
   const hasWork = !pageRefusal && diff && (diff.changed || diff.operations.length > 0 || diff.blocked.length > 0 || !!diff.feed_move || diff.grants.length > 0);
   return html`<dialog ref=${ref} class="sheet" aria-labelledby="review-title" onClose=${onClose}>
     <header>
@@ -2188,25 +2208,12 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
             Load the draft again to continue. The changes in this window since the last save go out.
             <div class="actions"><button class="button" type="button" onClick=${draft.load}>Load the Draft Again</button></div></div>`
         : html`<${ErrorNotice} error=${draft.error} action="Studio could not save the change." onRetry=${() => draft.flush()} />`}
-      ${merge
-        ? html`<${MergePanel} merge=${merge} busy=${busy} onApply=${applyMerge}
+      ${merge && html`<${MergePanel} merge=${merge} busy=${busy} onApply=${applyMerge}
             onChoose=${(id, side) => setMerge((m) => {
               const choices = { ...m.choices };
               if (side) choices[id] = side; else delete choices[id];
               return { ...m, choices };
-            })} />`
-        : conflict
-        ? html`<div class="notice error" role="alert"><strong>${conflictText.heading}</strong>
-            ${conflictText.times.map((line) => html`<div>${line}</div>`)}
-            ${conflictText.cause}
-            <div class="actions"><button class="button" type="button" disabled=${busy} onClick=${startMerge}>Apply My Edits to the New File</button></div></div>`
-        : stale
-          ? html`<div class="notice error" role="alert"><strong>The draft changed after you examined it.</strong>Examine the changes again.</div>`
-          : refusalOfError(error)
-          ? null
-          : signErrorText(error && error.code)
-            ? html`<div class="notice error" role="alert"><strong>${signErrorText(error.code)}</strong></div>`
-            : html`<${ErrorNotice} error=${error} action=${isPublisher(feeds.find((f) => f.id === feedId) || {}) ? 'Studio could not write the page.' : 'Studio could not write the release.'} onRetry=${retry} />`}
+            })} />`}
       ${addressesBlocked && html`<div class="notice error" role="alert">
         <strong>Studio cannot write while an address is not correct.</strong>
         Correct the fields with red text. Each address starts with https:// or http://.
@@ -2226,6 +2233,9 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
             ${problem.button && html`<div class="actions"><button class="button" type="button" disabled=${busy} onClick=${() => useStreamType(problem)}>${problem.button}</button></div>`}
           </div>`
         : html`<p class="field-warning" role="status" key=${problem.guid + problem.text}><strong>${problem.title}:</strong> ${problem.text}</p>`)}
+      ${diff && (diff.changed
+        ? html`<${DiffView} diff=${diff} />`
+        : !hasWork && !pageRefusal && html`<p>The draft is the same as the hosted file.</p>`)}
       ${diff && html`<${HostOperations} diff=${diff} connectors=${connectors} onRemove=${removeOperation} onUndoMove=${undoMove} busy=${busy} fromConnectorId=${feedConnectorId} />`}
       ${diff && html`<${ReplaceWarning} move=${diff.feed_move} />`}
       ${diff && html`<${LinkNotices} report=${links} busy=${busy} onRepair=${repair} />`}
@@ -2253,9 +2263,6 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
         <strong>This feed will be hidden from apps.</strong> Apps and directories do not list it after the write.</div>`}
       <${ErrorNotice} error=${announce.error} />
       ${diff && html`<${GrantChecks} feedId=${feedId} model=${draft.model} diff=${diff} busy=${busy} signerHost=${signerHost} onDiff=${setDiff} run=${run} />`}
-      ${diff && (diff.changed
-        ? html`<${DiffView} diff=${diff} />`
-        : !hasWork && !pageRefusal && html`<p>The draft is the same as the hosted file.</p>`)}
       ${waiting && html`<p class="hint" role="status">Wait for each download, then write.</p>`}
       ${diff && toSign.length > 0 && html`<p class="hint" role="status">${signSummary(toSign.length)}</p>`}
       ${diff && choice.kind === 'differs' && html`<div class="notice error" role="alert"><strong>${signErrorText('signer_key_differs')}</strong></div>`}
@@ -2272,6 +2279,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
     </div>
     <footer>
       ${!result && html`
+      ${!merge && html`<div class="footer-error">${writeError}</div>`}
       ${diff && hasWork && !addressesBlocked && !choosing && html`<${AnnounceFooterChoice} choice=${announce} skip=${announceSkipLine(diff)} />`}
       ${deletion && diff && hasWork && !addressesBlocked && !choosing && html`<button class="button destructive" type="button" disabled=${busy || waiting || needsSigner || streamRefusal || blocksWrite(links)} onClick=${write}>
         ${progress ? signProgressLabel(progress) : busy ? 'Writing…' : deletion.label}</button>`}

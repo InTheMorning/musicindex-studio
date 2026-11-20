@@ -2,7 +2,7 @@
 
 Decision: [ADR 0228](../adr/0228-undo-in-the-bar-a-notice-that-stays-and-the-rc28-check-findings.md) items 8 to 10 and 14 to 16.
 
-Status: Open.
+Status: Done.
 
 ## Problem
 
@@ -43,3 +43,17 @@ Visual (the main session):
 - Read `/home/citizen/.agents/skills/asd-ste100/SKILL.md` before you write a comment.
 - Do not commit. Leave the change in the working tree and report the changed files and the check results.
 - Do not make an architecture decision. When this task does not answer a question, stop and report.
+
+## Result
+
+- `writeNotice` gives `dismiss` in the waiting, no reply and confirmed states. **Dismiss** keeps the notice hidden for that write. A new write or a different feed shows it again.
+- The confirmed state has no podping line. The code gave no line for it before this task too (`writeNotice` in `outsidecheck.js`, since ed220d8), and a test now asserts it.
+- Cause of the button after the confirmation: not found in the code. Only `podpingLines` gives **Send the Podping Again**, and the confirmed state passes no lines. Inference: the operator saw the button on the waiting notice, and the smaller row was the confirmation that replaced it.
+- The confirmed notice gets a minimum height from the measured height of the notice before it.
+- `ReviewSheet` shows `DiffView` before `HostOperations`. `HostOperations` is in the closed fold "File operations ({n})". The write error is in `.footer-error`, directly above `AnnounceFooterChoice`.
+- Walks with the main session:
+  - `t199-1280.json` and `t199-390.json` (setup `setup-155b.py`): the write error is in the footer at both widths. With **Details** open at 390 px, the footer starts at 378 px, and the body keeps about 240 px.
+  - `t199b-1280.json` and `t199b-390.json` (setup `setup-142-move.py`): the XML changes come before the closed fold "File operations (1)". The open fold shows the move row.
+  - `t199c-1280.json` (setup `setup-155b.py`): the waiting notice and the confirmation both have a height of 105 px. **Dismiss** removes the notice.
+  - `$edges()`, `$overflow()` and the fit checks gave no finding.
+- Open: a long error text in the footer leaves less space for the body on a phone. No walk showed a body with no space.

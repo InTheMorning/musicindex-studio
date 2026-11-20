@@ -4956,6 +4956,13 @@ function OutsideNotices({ feed, busy, refresh, onChanged, onCheck }) {
   const [check, setCheck] = useState(null);
   const [reads, setReads] = useState(0);
   const confirmedHere = useRef(false);
+  // The `written_at` of the write that the user dismissed. A new write shows
+  // its notice again (ADR 0228 item 8).
+  const [dismissedWrite, setDismissedWrite] = useState(null);
+  // The notice of the write and its last measured height before the
+  // confirmation (ADR 0228 item 10).
+  const writeBox = useRef(null);
+  const writeHeight = useRef(0);
   const readsRef = useRef(0);
   // The time of the last Check Again, in seconds. The age limit of the write
   // starts again at that time (ADR 0175 item 1).
@@ -4973,7 +4980,8 @@ function OutsideNotices({ feed, busy, refresh, onChanged, onCheck }) {
       if (onCheck) onCheck(null);
     });
   };
-  useEffect(() => { setCheck(null); if (onCheck) onCheck(null); setReads(0); readsRef.current = 0; since.current = 0; confirmedHere.current = false; load(); }, [feed.id, feed.last_version]);
+  useEffect(() => { setCheck(null); if (onCheck) onCheck(null); setReads(0); readsRef.current = 0; since.current = 0; confirmedHere.current = false; writeHeight.current = 0; load(); }, [feed.id, feed.last_version]);
+  useEffect(() => { setDismissedWrite(null); }, [feed.id]);
   useEffect(() => {
     window.addEventListener(ANNOUNCE_RELOAD, load);
     return () => window.removeEventListener(ANNOUNCE_RELOAD, load);
@@ -4993,10 +5001,17 @@ function OutsideNotices({ feed, busy, refresh, onChanged, onCheck }) {
   }, [busy]);
   const notice = outsideNotice(check);
   const move = moveNotice(check);
-  const written = writeNotice(check, { reads, nowSeconds: Date.now() / 1000, confirmedHere: confirmedHere.current, since: since.current });
+  const writtenNow = writeNotice(check, { reads, nowSeconds: Date.now() / 1000, confirmedHere: confirmedHere.current, since: since.current });
   // The confirmation shows only after the page showed that Music Index had
   // not read the write.
-  if (written && written.kind !== 'confirmed') confirmedHere.current = true;
+  if (writtenNow && writtenNow.kind !== 'confirmed') confirmedHere.current = true;
+  const written = writtenNow && check.last_write.written_at !== dismissedWrite ? writtenNow : null;
+  // Measure each notice that is not the confirmation. The confirmation then
+  // has at least that height.
+  useLayoutEffect(() => {
+    if (written && written.kind !== 'confirmed' && writeBox.current) writeHeight.current = writeBox.current.offsetHeight;
+  });
+  const writeStyle = written && written.kind === 'confirmed' && writeHeight.current > 0 ? `min-height: ${writeHeight.current}px` : undefined;
   const index = move ? null : indexNotice(check);
   const keep = () => run(async () => {
     await api(`/feeds/${feed.id}/outside/keep`, { method: 'POST' });
@@ -5052,9 +5067,12 @@ function OutsideNotices({ feed, busy, refresh, onChanged, onCheck }) {
       <${PodpingLines} lines=${move.lines} disabled=${busy || sending} send=${sendPodping} />
       <${ErrorNotice} error=${error} />
     </div>`}
-    ${written && !move && html`<div class="notice" role="status"><strong>${written.strong}</strong>
+    ${written && !move && html`<div class="notice" role="status" ref=${writeBox} style=${writeStyle}><strong>${written.strong}</strong>
       <${PodpingLines} lines=${written.lines} disabled=${busy || sending} send=${sendPodping} />
-      ${written.action && html`<div class="actions"><button class="button action" type="button" disabled=${busy || sending} onClick=${checkWriteAgain}>${written.action}</button></div>`}
+      <div class="actions">
+        ${written.action && html`<button class="button action" type="button" disabled=${busy || sending} onClick=${checkWriteAgain}>${written.action}</button>`}
+        <button class="button" type="button" onClick=${() => setDismissedWrite(check.last_write.written_at)}>${written.dismiss}</button>
+      </div>
       <${ErrorNotice} error=${error} />
     </div>`}`;
 }

@@ -145,24 +145,27 @@ const writeNotRead = (write) => Boolean(write) && (write.index_read === false
 
 // The notice after a write with a podping (ADR 0175 item 1). `kind` is
 // 'waiting', 'confirmed' or 'no_reply'. The confirmation shows only when the
-// page showed a different kind before (`confirmedHere`).
+// page showed a different kind before (`confirmedHere`). Each state has the
+// action `dismiss`, and the notice stays until the user selects it (ADR 0228
+// item 8). The confirmation has no podping line (ADR 0228 item 9).
 export function writeNotice(check, { reads, nowSeconds, confirmedHere, since = 0 }) {
   const write = check && check.last_write;
   if (!write || moveNotice(check)) return null;
   if (write.index_read !== true && !writeNotRead(write)) return null;
   const time = localTime(write.written_at);
   if (write.index_read === true) {
-    return confirmedHere ? { kind: 'confirmed', tone: 'plain', strong: `Music Index has your write of ${time}.`, lines: [] } : null;
+    return confirmedHere ? { kind: 'confirmed', tone: 'plain', strong: `Music Index has your write of ${time}.`, lines: [], dismiss: 'Dismiss' } : null;
   }
   const lines = podpingLines(write.announcements, check.own_url);
   if (writeNotRead(write) && (reads >= INDEX_READ_AGAIN_MAX || writeAge(write, nowSeconds, since) > WRITE_NOTICE_AGE)) {
-    return { kind: 'no_reply', tone: 'plain', strong: `Music Index has not read your write of ${time} yet.`, lines, action: 'Check Again' };
+    return { kind: 'no_reply', tone: 'plain', strong: `Music Index has not read your write of ${time} yet.`, lines, action: 'Check Again', dismiss: 'Dismiss' };
   }
   return {
     kind: 'waiting',
     tone: 'plain',
     strong: `You wrote this feed at ${time}. Music Index reads it after it gets the podping.`,
     lines,
+    dismiss: 'Dismiss',
   };
 }
 

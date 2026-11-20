@@ -174,9 +174,16 @@ The operator ran the release binary `target/release/musicindex-studio-desktop` o
 | Step | Result |
 | --- | --- |
 | 1. Start the binary on the real data | Pass. The collection went from schema 46 to 47. |
-| 2. **＋ Add release** on the level of HeyCitizen, filled from **Find on Music Index** | Open. Findings 1 and 2 came during this step. The new release shows a ✓ for "Cover image". |
+| 2. **＋ Add release** on the level of HeyCitizen, filled from **Find on Music Index** | Pass. The form started with HeyCitizen as the parent. The release "Various & Assorted" shows **‹ HeyCitizen**. Review before the first write shows the link, the image and the author Matt Finlay. The release is not written. Findings 1 and 2 came during this step. |
+| 3. Discard a move from bastone to CloudFlare | Fail. See finding 3. |
+| 4. Plan a move where the target has the media files and a different host keeps old copies | Not run. The feed of the test album already uses the bastone addresses, so the plan says "7 files: Already on bastone" and "Old files: None". The CloudFlare copies have their record in **Old files to delete** from the earlier write (`crates/api/src/routes.rs:5516`). No release on the real data has this condition. The known gap stays open. |
+| 5. Write with "Send a podping" on | Pass. |
+| 6. A deleted release on **Settings** | Not run. The operator removed "new Feed" from the collection before this check. The real data has no other deleted release. |
+| 7. **Remove from Collection** of "Various & Assorted", a new release that was not written | Pass. No error. The notice says "Various & Assorted is removed from your collection." Releases and the left panel do not show the release. |
 
 ### Findings Of The Desktop Check Of rc.30
 
 1. In the sheet **Find on Music Index** of a new release, a click on an artist row gives "Select a release. This row is not a release." The operator wants the click to show the releases of that artist, so that the user can select one of them.
 2. The release made from a pick has no tracks and no payment recipient. The operator asks why. ADR 0230 items 14 to 16 give this scope: a pick fills the title, the artist name, the description, the cover and the website. Item 16 says that the tracks are not copied, and it leaves the scope open for a review by the operator. The ADR does not name the value recipients. A decision is necessary after the check.
+3. On **HeyCitizen's Test Album**, the operator is fairly certain that **Media files** said bastone before the step. The operator planned a move to CloudFlare, selected **Add to the Draft**, then discarded the draft. After the discard, **Media files** says CloudFlare. ADR 0230 item 20 asks for the earlier media file host. The release also has a written move from CloudFlare to bastone with old copies on CloudFlare ("New files: ✓ All 7 are on bastone"). Studio can take the host of these old copies as the earlier host. This cause is an inference, and no check has examined it.
+4. The menu **＋ Add** ends with **Add One You Have…**. The operator finds this item unnecessary. The operator wants **Find on Music Index** in each form that the menu opens: **Release**, **Artist**, **Label**, **Show** and **Playlist**.

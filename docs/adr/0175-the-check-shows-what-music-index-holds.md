@@ -10,6 +10,7 @@
 - Revised: 2026-11-15 by operator decision, from the [walk notes of 2026-11-15](../reviews/2026-11-15-walk-notes.md), Note 11. Item 1 permits the requests of the notice after a write with a podping.
 - Source: [research request on a feed check with repairs](../plans/research-feed-check-request.md), item F3.
 - Uses: [ADR 0007](0007-draft-diff-write-and-announce.md), [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md), [ADR 0045](0045-phase-9-crates-test-servers-and-host-forms.md), [ADR 0065](0065-the-core-applies-each-feed-rule.md), [ADR 0126](0126-studio-refuses-a-bad-move-link.md), [ADR 0127](0127-a-changed-feed-gets-a-new-build-date.md), [ADR 0174](0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md). Stophammer ADR 0052 and ADR 0058 own the rules of the index. This record cites them and does not restate them as rules of Studio.
+- Changed by: [ADR 0228](0228-undo-in-the-bar-a-notice-that-stays-and-the-rc28-check-findings.md) items 8 to 10, on 2026-11-20. Item 1: the notice after a write has **Dismiss**, stays until **Dismiss** and keeps its height.
 
 ## Context
 

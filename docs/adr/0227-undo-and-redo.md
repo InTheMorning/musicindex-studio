@@ -14,6 +14,7 @@
   - [ADR 0166](0166-settings-has-tabs-and-one-save-bar.md) items 7 to 13: the draft and the bar of Settings.
   - [ADR 0217](0217-a-new-artist-sees-the-result-of-a-write-the-payment-types-and-an-undo-of-a-merge.md) items 14 to 17: the undo of a merge.
   - [ADR 0203](0203-people.md) item 51 and musicindex ADR 0085 R-CONFIRM-1: the confirmation sheets.
+- Changed by: [ADR 0228](0228-undo-in-the-bar-a-notice-that-stays-and-the-rc28-check-findings.md) items 1 to 7, on 2026-11-20. Items 13 to 19: the four operations show no notice. Their undo is a step in the bar.
 
 ## Context
 

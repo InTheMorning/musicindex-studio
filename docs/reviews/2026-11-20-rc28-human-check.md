@@ -59,3 +59,7 @@ The operator ended the check after step 14. Step 15 of the notes stays open: `do
 
    Correction: when an upload meets a file at its path, the write compares the SHA-256 of that file with the library file. With the same SHA-256, the write records the file and continues (ADR 0034 item 2). With a different SHA-256, it refuses as before (ADR 0034 item 3). This is a defect correction and needs no decision record. Tests: `an_upload_uses_a_file_with_the_same_bytes_that_the_inventory_does_not_know` and `an_upload_does_not_replace_a_different_file_that_the_inventory_does_not_know` in `crates/core/tests/pipeline.rs`. Without the correction, the first test gives the error of the operator. Open: the operator does the return again with the next build.
 11. The Review sheet of a release with many file operations is very long. The operator must scroll past the file operations to examine the changes of the XML. After **Write to the File Host**, an error shows at the top of the sheet, far from the button. Finding 10 is an example: the error notice was above the list of the file operations.
+
+## Decisions
+
+The operator selected a drawing for each of findings 2 to 9 and 11 on 2026-11-20. [ADR 0228](../adr/0228-undo-in-the-bar-a-notice-that-stays-and-the-rc28-check-findings.md) gives them. Tasks 198 to 201 build it. Finding 3 needed no drawing: the operator gave the indent in the chat.

@@ -13,6 +13,7 @@
 - Uses: musicindex ADR 0075 R-VALUE-5 for the percentage of a recipient. [ADR 0091](0091-a-change-set-edits-one-recipient-in-many-feeds.md) item 13 and the core function `scale` for the scale of the other splits. [ADR 0222](0222-errors-give-a-step-terms-get-a-hint-and-the-first-run-has-two-stages.md) item 7 for the split hint. [ADR 0036](0036-library-records-host-inventory-and-host-operations.md) item 1 for the library folder.
 - Source: [observations of the user journeys](../research/2026-11-18-user-journeys/observations.md) O10, O12, O13, O14, O15 and O16.
 - Changed by: [ADR 0226](0226-the-typed-start-folder-the-program-name-the-root-order-and-person-tabs.md) items 1 to 4, 7 and 8, on 2026-11-19. Item 7: People, File hosts and Settings are at the bottom in both layouts. Item 10: the folder dialog starts at the typed folder.
+- Changed by: [ADR 0228](0228-undo-in-the-bar-a-notice-that-stays-and-the-rc28-check-findings.md) items 11 and 12, on 2026-11-20. Item 8: the button is "‹ Overview", at the left of the select menu of the tabs.
 
 ## Context
 

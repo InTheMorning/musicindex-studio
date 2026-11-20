@@ -7,6 +7,7 @@
 - Technical choices: the planning model selected items 3 to 8. The operator closed the note "consider 'retire it first'" on 2026-11-14 with no change.
 - Changes: [ADR 0131](0131-delete-a-feed-from-its-file-host.md) items 1, 4, 6 and 9.
 - Uses: [ADR 0198](0198-the-review-of-a-delete-names-the-delete-and-a-deleted-feed-shows-only-what-it-can-do.md) item 4: the UI adds no rule that the core holds.
+- Changed by: [ADR 0228](0228-undo-in-the-bar-a-notice-that-stays-and-the-rc28-check-findings.md) items 20 to 22, on 2026-11-20. Items 4 and 6: a leftover copy at an address that Music Index does not read gets `removal_done: true`.
 
 ## Context
 

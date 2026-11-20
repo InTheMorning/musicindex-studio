@@ -218,3 +218,11 @@ test('a leftover copy shows the row of the delete and the line of ADR 0228 item 
     assert.equal(leftoverLine(value), null, `ADR 0228 item 20: only a leftover copy has the line. ${fix}`);
   }
 });
+
+test('the first delete sheet does not show the error of an earlier try', () => {
+  const source = readFileSync(new URL('../ui/editor.js', import.meta.url), 'utf8');
+  assert.match(source, /dismissed\.current = errorNow\.current/,
+    'ADR 0230 item 24: the open handler of FeedDelete must keep the error that is there when the first sheet opens. Restore it in crates/api/ui/editor.js.');
+  assert.match(source, /error=\$\{action\.error === dismissed\.current \? null : action\.error\}/,
+    'ADR 0230 item 24: the first sheet must hide the dismissed error. Restore it in crates/api/ui/editor.js.');
+});

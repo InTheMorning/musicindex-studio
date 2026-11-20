@@ -2508,10 +2508,20 @@ function FeedDelete({ feed, draft, onListChanged }) {
   const keepDeleteDraft = useRef(false);
   const deleteDraftStarted = useRef(false);
   const action = useAction();
+  // The first sheet shows no error of an earlier try (ADR 0230 item 24).
+  // `errorNow` is the error of the last render. `dismissed` is the error
+  // that was there when the sheet opened.
+  const errorNow = useRef(null);
+  errorNow.current = action.error;
+  const dismissed = useRef(null);
   const firstRef = useSheet(firstOpen);
   const finalRef = useSheet(finalOpen);
   useEffect(() => {
-    const open = (event) => { if (event.detail === feed.id) setFirstOpen(true); };
+    const open = (event) => {
+      if (event.detail !== feed.id) return;
+      dismissed.current = errorNow.current;
+      setFirstOpen(true);
+    };
     window.addEventListener('studio-open-feed-delete', open);
     return () => window.removeEventListener('studio-open-feed-delete', open);
   }, [feed.id]);
@@ -2621,7 +2631,7 @@ function FeedDelete({ feed, draft, onListChanged }) {
               setFirstOpen(false); window.dispatchEvent(new CustomEvent(OPEN_FEED_MOVE, { detail: feed.id }));
             } : () => { setFirstOpen(false); openFinal(); }}>
             <span class="text"><span class="label">${choice.title}</span><span class="summary">${choice.text}</span></span><span class="go">›</span></button>`)}
-        </div><${DomainLine} domain=${feed.address_host} /><${ErrorNotice} error=${action.error} /></div>
+        </div><${DomainLine} domain=${feed.address_host} /><${ErrorNotice} error=${action.error === dismissed.current ? null : action.error} /></div>
       <footer><button class="button" type="button" onClick=${() => firstRef.current.close()}>Cancel</button></footer>
     </dialog>
     <dialog ref=${finalRef} class="sheet small" aria-labelledby="delete-feed-title" onClose=${discardDelete}>

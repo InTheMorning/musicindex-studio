@@ -5471,10 +5471,14 @@ fn release_move_json(plan: &ReleaseMovePlan) -> Value {
         })
     };
     let starts = |f: &FileMove, prefix: &str| f.file.media_type.starts_with(prefix);
+    // The old copies of a file that is on the target already count too
+    // (ADR 0230 item 22).
     let mut from: Vec<i64> = plan
         .files
         .iter()
-        .flat_map(|f| f.old_copies.iter().map(|copy| copy.connector_id.0))
+        .flat_map(|f| f.old_copies.iter())
+        .chain(plan.target_copies.iter().flat_map(|c| c.old_copies.iter()))
+        .map(|copy| copy.connector_id.0)
         .collect();
     from.sort_unstable();
     from.dedup();
@@ -5659,6 +5663,7 @@ pub(crate) async fn move_release(
             .limited(body.what);
         apply_release_move(w, &hosts, feed_id, &plan, wait_days, body.replace)?;
         if plan.default_changes {
+            w.collection.keep_files_connector(feed_id)?;
             w.collection
                 .set_files_connector(feed_id, Some(plan.target))?;
         }

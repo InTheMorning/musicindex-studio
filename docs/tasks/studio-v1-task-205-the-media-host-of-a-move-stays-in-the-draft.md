@@ -2,7 +2,7 @@
 
 Decision: [ADR 0230](../adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 20 to 24.
 
-Status: Open.
+Status: Done. The human check on real data is open.
 
 ## Problem
 
@@ -51,3 +51,17 @@ Visual:
 - Read `/home/citizen/.agents/skills/asd-ste100/SKILL.md` before you write a comment.
 - Do not commit. Leave the change in the working tree and report the changed files and the check results.
 - Do not make an architecture decision. When this task does not answer a question, stop and report.
+
+## Result
+
+Built in the working tree. Gate passes.
+
+- Migration `files_connector_kept` in `collection.rs`. NULL means no kept value, and 0 means that the release had no file host. `keep_files_connector` and `restore_files_connector` are new. `delete_draft` clears the kept value. `pipeline::discard_draft` puts the value back.
+- `move_release` keeps the value before it sets the new one.
+- `release_move_json` counts the old copies of `target_copies` in `from_connector_ids`. A hold needs an old copy, so a plan with no old copy keeps no hold.
+- `FeedDelete` in `editor.js` hides the error that was there when the first sheet opened. `app.js` is unchanged.
+- Tests: three API tests in `tests.rs` and one Node test in `feeddelete.test.mjs`.
+
+Visual check (2026-11-20): a drive-ui screenshot at 1280 px shows the move sheet with no defect. The test data has two folder hosts. The test data cannot show the row "Old files", because its media files are not in the library. The API test `the_plan_gives_the_old_copies_of_a_file_that_the_target_holds` proves item 22.
+
+Open: the human check on real data. **Move This Release…** with "Media files only" to bastone for the test album shows "Old files" and the check box.

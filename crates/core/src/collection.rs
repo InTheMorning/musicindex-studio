@@ -692,6 +692,12 @@ CREATE TABLE delete_undo (
     snapshot TEXT NOT NULL
 );
 ",
+    // ADR 0230 items 20 and 21: the file host of the release before the
+    // first move of a draft. NULL means that the draft kept no value, and 0
+    // means that the release had no file host.
+    r"
+ALTER TABLE feeds ADD COLUMN files_connector_kept INTEGER;
+",
 ];
 
 /// `root` as a relative path under `data_dir`, when it is a folder inside
@@ -3005,6 +3011,41 @@ impl Collection {
         Ok(())
     }
 
+    /// Keep the file host of the release before a move of a draft changes
+    /// it (ADR 0230 item 20). A kept value stays, so two moves in one draft
+    /// keep the value from before the first move.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn keep_files_connector(&self, id: FeedId) -> Result<(), CollectionError> {
+        self.db.execute(
+            "UPDATE feeds SET files_connector_kept = \
+             COALESCE(files_connector_kept, COALESCE(files_connector_id, 0)) WHERE id = ?1",
+            [id.0],
+        )?;
+        Ok(())
+    }
+
+    /// Put back the file host that [`Self::keep_files_connector`] kept, and
+    /// clear the kept value (ADR 0230 item 21). With no kept value, nothing
+    /// changes. A file host that Studio removed in the meantime gives no
+    /// file host.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn restore_files_connector(&self, id: FeedId) -> Result<(), CollectionError> {
+        self.db.execute(
+            "UPDATE feeds SET files_connector_id = \
+             (SELECT id FROM connectors WHERE id = feeds.files_connector_kept), \
+             files_connector_kept = NULL \
+             WHERE id = ?1 AND files_connector_kept IS NOT NULL",
+            [id.0],
+        )?;
+        Ok(())
+    }
+
     /// Replace the configuration of a connector. The configuration must
     /// contain no secret.
     ///
@@ -3090,6 +3131,12 @@ impl Collection {
         // The grants that the draft asks for go out with the draft
         // (ADR 0054 item 12).
         self.remove_draft_grants(id)?;
+        // A write ends the draft, so the kept file host goes out with it
+        // (ADR 0230 item 21). A discard puts the value back before this.
+        self.db.execute(
+            "UPDATE feeds SET files_connector_kept = NULL WHERE id = ?1",
+            [id.0],
+        )?;
         self.db
             .execute("DELETE FROM drafts WHERE feed_id = ?1", [id.0])?;
         Ok(())

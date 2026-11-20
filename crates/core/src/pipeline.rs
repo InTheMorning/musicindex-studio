@@ -6437,6 +6437,9 @@ pub fn discard_draft(collection: &Collection, id: FeedId) -> Result<(), Pipeline
     collection.remove_draft_feed_delete(id)?;
     collection.remove_signing_plan(id)?;
     collection.remove_draft_grants(id)?;
+    // A move of the draft changed the file host of the release. The discard
+    // puts back the earlier value (ADR 0230 item 21).
+    collection.restore_files_connector(id)?;
     // A delete record that is still there means that a restore write did not
     // finish (a write removes the record). The feed goes back to the state
     // after the delete: read-only, with the record. A writable feed with no

@@ -15891,6 +15891,80 @@ async fn a_move_to_a_host_with_a_copy_of_a_file_sends_no_upload() {
     assert!(url.starts_with("https://backup.example/"), "{url}");
 }
 
+async fn files_host_of(app: &App, id: i64) -> Value {
+    let (_, files) = call(app, "GET", &format!("/api/v1/feeds/{id}/files"), None).await;
+    files["files_connector_id"].clone()
+}
+
+async fn discard_the_draft(app: &App, id: i64) {
+    let (status, body) = call(app, "DELETE", &format!("/api/v1/feeds/{id}/draft"), None).await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
+}
+
+/// ADR 0230 items 20 and 21: a discard puts back the file host from before
+/// the move, and two moves in one draft keep the value from before the
+/// first move. A write keeps the new value.
+#[tokio::test]
+async fn a_discard_puts_back_the_file_host_that_a_move_changed() {
+    let app = move_app();
+    let (id, _, home, backup, _folder) = album_on_home(&app).await;
+    let before = files_host_of(&app, id).await;
+
+    move_scoped(&app, id, backup, "files").await;
+    assert_eq!(files_host_of(&app, id).await, backup);
+    discard_the_draft(&app, id).await;
+    assert_eq!(files_host_of(&app, id).await, before);
+
+    // Two moves in one draft keep the first value.
+    move_scoped(&app, id, backup, "files").await;
+    move_scoped(&app, id, home, "files").await;
+    assert_eq!(files_host_of(&app, id).await, home);
+    discard_the_draft(&app, id).await;
+    assert_eq!(files_host_of(&app, id).await, before);
+
+    // A write keeps the new value, and a later discard does not undo it.
+    move_scoped(&app, id, backup, "files").await;
+    write_the_draft(&app, id).await;
+    assert_eq!(files_host_of(&app, id).await, backup);
+    discard_the_draft(&app, id).await;
+    assert_eq!(files_host_of(&app, id).await, backup);
+}
+
+/// ADR 0230 item 22: the plan gives the old copies of a file that is on the
+/// target already.
+#[tokio::test]
+async fn the_plan_gives_the_old_copies_of_a_file_that_the_target_holds() {
+    let app = move_app();
+    let (id, _, home, backup, folder) = album_on_home(&app).await;
+    std::fs::create_dir_all(folder.path().join("album")).unwrap();
+    std::fs::copy(
+        media_path("tagged.mp3"),
+        folder.path().join("album/tagged.mp3"),
+    )
+    .unwrap();
+    let (status, _) = call(&app, "POST", &format!("/api/v1/hosts/{backup}/scan"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    let plan_path = format!("/api/v1/feeds/{id}/move/plan?connector_id={backup}&what=files");
+    let (_, plan) = call(&app, "GET", &plan_path, None).await;
+    assert_eq!(plan["on_target"], 1, "{plan}");
+    assert_eq!(plan["from_connector_ids"], json!([home]), "{plan}");
+}
+
+/// ADR 0230 item 23: a move with no old copy keeps no hold, also with
+/// `delete_later` true.
+#[tokio::test]
+async fn a_move_with_no_old_copy_keeps_no_hold() {
+    let app = move_app();
+    let (id, _, _, backup, _folder) = album_on_home(&app).await;
+    move_release(&app, id, backup, false, 30).await;
+    let diff = move_release(&app, id, backup, true, 30).await;
+    let operations = diff["operations"].as_array().unwrap();
+    assert!(
+        !operations.iter().any(|op| op["kind"] == "hold"),
+        "{operations:?}"
+    );
+}
+
 /// ADR 0177 item 3: a move takes only the part that "What moves" names.
 async fn move_scoped(app: &App, id: i64, to: i64, what: &str) -> Value {
     let (status, diff) = call(

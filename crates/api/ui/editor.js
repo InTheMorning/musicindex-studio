@@ -1929,6 +1929,9 @@ export const OPEN_REVIEW = 'studio-open-review';
 export const OPEN_MERGE = 'studio-open-merge';
 export const OPEN_FEED_MOVE = 'studio-open-feed-move';
 export const OPEN_DELETE_REVIEW = 'studio-open-delete-review';
+// Sent after a write, with the ID of the written feed in `detail.id`. The
+// outside checks read that feed again (task 210 item 3).
+export const OUTSIDE_RECHECK = 'studio-outside-recheck';
 
 // A sheet opens with showModal() when `open` turns true, and closes with
 // close() when `open` turns false. The close event covers the Escape key,
@@ -2082,6 +2085,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
     onWritten(feed);
     // The feed page loads the new announcements.
     window.dispatchEvent(new Event(ANNOUNCE_RELOAD));
+    window.dispatchEvent(new CustomEvent(OUTSIDE_RECHECK, { detail: { id: feed.id } }));
     if (deletion || diff.grants.length > 0) {
       ref.current.close();
     } else {

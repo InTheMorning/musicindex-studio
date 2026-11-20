@@ -255,8 +255,10 @@ const STATE_MARKS = {
 };
 
 // A feed is not checked when it has no result, or the read did not succeed
-// (ADR 0165 item 2).
+// (ADR 0165 item 2). A feed with a done delete has no file to read, so it is
+// never not checked (task 210 item 1).
 function isUnchecked(results, feed) {
+  if (feed.host_deleted === true) return false;
   const check = results && results[feed.id];
   return !check || check.read !== true;
 }

@@ -7,7 +7,7 @@ import { UI_SCALES, SCALE_KEY, normalizeScale, measureWindowUnits } from './uisc
 import { LOCK_HINT, lockChoiceText } from './vaultlock.js';
 import { serverFilesRows, sizeText, SERVER_FILES_NOTE } from './assets.js';
 import { failedLine } from './failures.js';
-import { OPEN_MERGE, OPEN_FEED_MOVE, MoveAllSheet, AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, AnnounceChoice, UndoButtons, useUndoKeys, DeleteUndoBar } from './editor.js';
+import { OPEN_MERGE, OPEN_FEED_MOVE, MoveAllSheet, AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, OUTSIDE_RECHECK, AnnounceChoice, UndoButtons, useUndoKeys, DeleteUndoBar } from './editor.js';
 import {
   recipientKey,
   outcomeText, blockedText, operationLine, nameOf, writableIds, firstOpenId, initialStatuses, refreshedStatuses, startWrite,
@@ -3432,6 +3432,10 @@ function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImp
   const { feeds } = useContext(OutsideContext);
   const feed = panel.feed;
   const feedMark = useStateMark(feeds.filter((item) => item.id === feed.id));
+  // A click on the head box also checks the feed when its mark is "Not
+  // checked" (task 210 item 2).
+  const openHead = useOpenAndCheck(feeds.filter((item) => item.id === feed.id), feedMark,
+    () => { if (!feed.first) go({ name: 'feed', id: feed.id, page: feed.page }); });
   const releases = panel.items.find((item) => item.id === 'releases');
   const rest = panel.items.filter((item) => item.id !== 'releases');
   const childRows = rest.filter((item) => !item.heading);
@@ -3454,7 +3458,7 @@ function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImp
     ${releases && html`<button class="row" type="button" ...${rowAttrs(0, null)} onClick=${up}><${Chevron} direction="back" />${releases.label}</button>`}
     <button class="outline-feed" type="button" ...${rowAttrs(feedIndex, null, 'tree')} aria-expanded="true" aria-current=${currentAttr(feed)}
       aria-label=${`${feed.label}${changedFeeds.has(feed.id) ? ', changes in the library folder' : ''}${feedMark ? `, ${feedMark.text}` : ''}`}
-      onClick=${() => { if (!feed.first) go({ name: 'feed', id: feed.id, page: feed.page }); }}>
+      onClick=${openHead}>
       <${ArtWithDot} dot=${feed.dot}><${ImageThumb} url=${feed.image} glow=${feed.glow} className="outline-cover" always /><//>
       <div class="text">
         <span class="title">${feed.title}${changedFeeds.has(feed.id) && html`<span class="change-mark"></span>`}</span>
@@ -5013,7 +5017,9 @@ function useOutsideChecks(feeds, key) {
   const [results, setResults] = useState({});
   const [running, setRunning] = useState(() => new Set());
   const runningRef = useRef(new Set());
-  const signature = feeds === null ? null : feeds.map((feed) => feed.id).join(',');
+  // A feed with a done delete has no file, so the load check does not read it
+  // (task 210 item 1).
+  const signature = feeds === null ? null : feeds.filter((feed) => feed.host_deleted !== true).map((feed) => feed.id).join(',');
   useEffect(() => {
     if (signature === null || signature === '') return undefined;
     let live = true;
@@ -5040,6 +5046,13 @@ function useOutsideChecks(feeds, key) {
       }
     });
   };
+  // A write sends the ID of the written feed. The feed is checked again, so
+  // the result from before the write does not stay (task 210 item 3).
+  useEffect(() => {
+    const recheck = (event) => check([{ id: event.detail.id }]);
+    window.addEventListener(OUTSIDE_RECHECK, recheck);
+    return () => window.removeEventListener(OUTSIDE_RECHECK, recheck);
+  }, []);
   return { results, running, check };
 }
 

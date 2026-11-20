@@ -348,3 +348,21 @@ test('ADR 0229 item 7: the tag of a podping line has a short time', () => {
   assert.ok(!tagTime(sameDay, now).includes('2026'), 'ADR 0229 item 7: on the same day the tag gives no date.');
   assert.equal(tagTime(otherDay, now), new Date(otherDay * 1000).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }), 'ADR 0229 item 7: on a different day the tag gives a short date and time.');
 });
+
+test('A feed with a done delete is not "not checked" (task 210 item 1)', () => {
+  const deleted = feedOf(1, { host_deleted: true });
+  assert.equal(stateMark([deleted], {}), null);
+  assert.deepEqual(feedsToCheck([deleted, feedOf(2)], {}).map((feed) => feed.id), [2]);
+});
+
+test('The outline head checks a feed, and a write checks the written feed (task 210 items 2 and 3)', () => {
+  const app = readFileSync(new URL('../ui/app.js', import.meta.url), 'utf8');
+  const editor = readFileSync(new URL('../ui/editor.js', import.meta.url), 'utf8');
+  const start = app.indexOf('function Outline');
+  const outline = app.slice(start, app.indexOf('function LevelPage', start));
+  assert.match(outline, /useOpenAndCheck\(/, 'Task 210 item 2: the head box of Outline checks a feed that is not checked. Use useOpenAndCheck in Outline in crates/api/ui/app.js.');
+  const fix = 'Task 210 item 3: a write sends OUTSIDE_RECHECK and useOutsideChecks listens for it. Fix ReviewSheet in editor.js and useOutsideChecks in app.js.';
+  assert.match(editor, /new CustomEvent\(OUTSIDE_RECHECK, \{ detail: \{ id: feed\.id \} \}\)/, fix);
+  assert.match(app, /addEventListener\(OUTSIDE_RECHECK,/, fix);
+  assert.match(app, /removeEventListener\(OUTSIDE_RECHECK,/, fix);
+});

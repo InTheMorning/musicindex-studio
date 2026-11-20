@@ -103,8 +103,8 @@ export function parentCard(feeds, publisherId) {
   };
 }
 
-// The kind that a track count gives (ADR 0230 item 14). This is the
-// customary split of the music stores. Music Index does not give a count
+// The kind that a track count gives (ADR 0230 item 14). The split is the
+// rule of ADR 0213 item 11, as `release_kind_shown` in the core applies it. Music Index does not give a count
 // in the values of a feed yet, so a pick leaves the kind as it is.
 export function kindOfTrackCount(count) {
   if (!Number.isInteger(count) || count < 1) return null;

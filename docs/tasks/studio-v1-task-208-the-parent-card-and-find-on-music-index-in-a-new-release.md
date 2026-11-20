@@ -2,7 +2,7 @@
 
 Decision: [ADR 0230](../adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 8 to 16 and item 33.
 
-Status: Done. Two points are open for the operator. Refer to the Result.
+Status: Done. A human check of the Music Index search stays open. Refer to the Result.
 
 ## Problem
 
@@ -66,8 +66,8 @@ Answers to the open points:
 - A request with `from` is ignored, not refused. The route struct has no `deny_unknown_fields`. An API test checks this.
 - The search result of `/musicindex/search` gives `title`, `artist` and `image_url`. The route `/musicindex/values/{guid}` adds `website` and `feed_url`.
 - Music Index gives no description and no track count in these answers. A pick leaves out "Kind" and the description. The code uses them when they are present.
-- The rule that a track count gives a kind (1 to 3 single, 4 to 6 EP, more album) is a choice of this task. ADR 0230 item 14 does not name it. It needs a review.
-- ADR 0230 item 9 says the list has artist pages and label pages. The route accepts only an artist page (ADR 0213 item 7). The list has artist pages only. It needs a decision.
+- The rule that a track count gives a kind (1 to 3 single, 4 to 6 EP, more album) is the rule of ADR 0213 item 11, which `release_kind_shown` in `crates/core/src/feed.rs` applies. `kindOfTrackCount` uses the same split. Closed on 2026-11-20 by the main session: no new rule.
+- ADR 0230 item 9 says the list has artist pages and label pages. The route accepts only an artist page (ADR 0213 item 7). The list has artist pages only. Closed: ADR 0231 item 6 corrects ADR 0230 item 9, and the list has no label page.
 
 Checks:
 
@@ -78,4 +78,3 @@ Checks:
 Open:
 
 - The sandbox has no network. Thus the search results and a pick from Music Index are not checked. This is a human check.
-- The operator must decide two points: the track-count rule for "Kind", and the artist-only list of item 9 (refer to the open points above). Until then, the code keeps the artist-only list and the track-count rule.

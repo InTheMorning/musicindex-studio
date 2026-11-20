@@ -149,7 +149,7 @@ test('the choices of a found release give Title, Artist name and Kind (ADR 0230 
 });
 
 test('the kind follows the track count (ADR 0230 item 14)', () => {
-  const owner = 'ADR 0230 item 14: Kind comes from a track count only when Music Index gives one. Fix kindOfTrackCount in crates/api/ui/addfeeds.js.';
+  const owner = 'ADR 0230 item 14 and ADR 0213 item 11: Kind comes from a track count only when Music Index gives one. Fix kindOfTrackCount in crates/api/ui/addfeeds.js.';
   assert.deepEqual([1, 3, 4, 6, 7, 20].map(kindOfTrackCount), ['single', 'single', 'ep', 'ep', 'album', 'album'], owner);
   assert.deepEqual([0, -1, 2.5, undefined, null, '5'].map(kindOfTrackCount), [null, null, null, null, null, null], owner);
 });

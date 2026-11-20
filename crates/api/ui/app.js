@@ -7,7 +7,7 @@ import { UI_SCALES, SCALE_KEY, normalizeScale, measureWindowUnits } from './uisc
 import { LOCK_HINT, lockChoiceText } from './vaultlock.js';
 import { serverFilesRows, sizeText, SERVER_FILES_NOTE } from './assets.js';
 import { failedLine } from './failures.js';
-import { OPEN_MERGE, OPEN_FEED_MOVE, MoveAllSheet, AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, AnnounceChoice, UndoButtons, useUndoKeys } from './editor.js';
+import { OPEN_MERGE, OPEN_FEED_MOVE, MoveAllSheet, AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, AnnounceChoice, UndoButtons, useUndoKeys, DeleteUndoBar } from './editor.js';
 import {
   recipientKey,
   outcomeText, blockedText, operationLine, nameOf, writableIds, firstOpenId, initialStatuses, refreshedStatuses, startWrite,
@@ -28,7 +28,7 @@ import { CONFIRMS, confirmButtons } from './confirms.js';
 import { changeTitle, afterDiscard, changeLine } from './people.js';
 import { makeSettingsDraft, changeSetting, settingsDraftView, discardSettings, saveSettings, asksSettingsLeave } from './settingsdraft.js';
 import { makeHistory } from './undohistory.js';
-import { UndoNoticeProvider, useUndoNotice, undoNoticeText } from './undonotice.js';
+import { DeleteUndoProvider, useDeleteUndo, undoNoticeText } from './undonotice.js';
 
 // The undo history of the Settings draft. It stays when the user opens a
 // different page and comes back (ADR 0227 item 7).
@@ -2040,7 +2040,7 @@ export function useLeaveGuard(active, guard) {
 // before ADR 0029.
 function ReadOnlyFeed({ feed, onChanged, onRemoved }) {
   const { busy, error, run } = useAction();
-  const undoNotice = useUndoNotice();
+  const deleteUndo = useDeleteUndo();
   const kind = feedKind(feed);
   const refresh = () => run(async () => onChanged(await api(`/feeds/${feed.id}/refresh`, { method: 'POST' })));
   const remove = async () => {
@@ -2049,11 +2049,9 @@ function ReadOnlyFeed({ feed, onChanged, onRemoved }) {
       const info = await api(`/feeds/${feed.id}/remove-info`);
       if (!await askConfirm(CONFIRMS.removeFeed(name, info.pending))) return;
       const result = await api(`/feeds/${feed.id}`, { method: 'DELETE' });
-      if (result.undoable) undoNotice.show(undoNoticeText.feedRemoved(feed.title || 'Untitled feed'), async () => {
-        await api('/undo', { method: 'POST' });
-        onRemoved();
-      });
-      else undoNotice.dismiss();
+      if (result.undoable) deleteUndo.record(undoNoticeText.feedRemoved(feed.title || 'Untitled feed'),
+        () => api(`/feeds/${feed.id}`, { method: 'DELETE' }));
+      else deleteUndo.clear();
       onRemoved();
     });
   };
@@ -3548,7 +3546,7 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
   // A collection with no feed starts at the Welcome page (ADR 0119 item 1).
   if (!inGroup && showWelcome(feeds)) return html`<${WelcomePage} connectors=${connectors} feeds=${feeds} onAdded=${onAddedFeed} />`;
   return html`<div>
-    <${Bar}><span class="bar-title">${title}</span><//>
+    <${Bar}><span class="bar-title">${title}</span><${DeleteUndoBar} /><//>
     <section class="releases">
       <div class="releases-head">
         <h1>${title}</h1>
@@ -5637,7 +5635,7 @@ function App() {
       window.dispatchEvent(new Event(UNLOCKED));
     }
   };
-  return html`<${UndoNoticeProvider} api=${api}>${body}<${ConfirmHost} />${unlockAsk && (view === 'shell' || view === 'local') && html`<${UnlockSheet} session=${session} reason=${unlockAsk.reason} onDone=${closeUnlock} />`}</${UndoNoticeProvider}>`;
+  return html`<${DeleteUndoProvider} api=${api}>${body}<${ConfirmHost} />${unlockAsk && (view === 'shell' || view === 'local') && html`<${UnlockSheet} session=${session} reason=${unlockAsk.reason} onDone=${closeUnlock} />`}</${DeleteUndoProvider}>`;
 }
 
 watchFileDrags(window, document.documentElement);

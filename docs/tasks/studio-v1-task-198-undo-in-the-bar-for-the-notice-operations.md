@@ -2,7 +2,7 @@
 
 Decision: [ADR 0228](../adr/0228-undo-in-the-bar-a-notice-that-stays-and-the-rc28-check-findings.md) items 1 to 7.
 
-Status: Open.
+Status: Done.
 
 ## Problem
 
@@ -48,3 +48,11 @@ Visual (the main session):
 - Read `/home/citizen/.agents/skills/asd-ste100/SKILL.md` before you write a comment.
 - Do not commit. Leave the change in the working tree and report the changed files and the check results.
 - Do not make an architecture decision. When this task does not answer a question, stop and report.
+
+## Result
+
+- A delegate run made the change. The main session used `afterNicknameSave` again in the nickname step in place of a copy of it.
+- The history has a second kind of step: an operation step with the functions `undo` and `redo` (`recordOperation` and `perform` in `undohistory.js`). The delete step of the app is in `undonotice.js` (`makeDeleteUndo`). The People page and the Releases page show it with `DeleteUndoBar`.
+- Choices of the delegate run: the bar of a list page shows no buttons until a delete step exists. After **Undo**, the status text is empty, and **Redo** stays available. A delete with no core record removes the step.
+- Walks: `.studio-dev/walk/u198-1280.json` and `u198-390.json` with `setup-194.py`. The nickname "Annie", **Undo** and **Redo** change the title. After Delete Person, the People bar shows "Ann Bell is deleted.", and **Undo** puts Ann Bell back in the list. **Redo** deletes her again. Remove from Collection shows its text in the Releases bar, and **Undo** puts the release back.
+- Open: no walk changes the menu **Kind**, and no UI test asserts the routes of the nickname and **Kind** steps. The repository has no render tests.

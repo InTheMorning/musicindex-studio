@@ -1,70 +1,88 @@
-// The Undo notice after an immediate local operation (ADR 0227 items 13 to
-// 19). The shell shows one notice at a time, for 10 seconds.
-import { html, useCallback, useContext, useEffect, useRef, useState, createContext } from './vendor/htm-preact-standalone.module.js';
+// The undo step of a delete (ADR 0228 items 3 to 5 and 7). Delete Person and
+// Remove from Collection add one step to a history of the app. The page that
+// opens after the delete shows that step in its bar, as **Undo** and **Redo**.
+import { html, useCallback, useContext, useRef, useState, createContext } from './vendor/htm-preact-standalone.module.js';
+import { makeHistory } from './undohistory.js';
 
-const UndoNoticeContext = createContext(null);
+const DeleteUndoContext = createContext(null);
 
-// The texts of the notice (ADR 0227 item 13).
+// The status texts of the bar (ADR 0228 item 3).
 export const undoNoticeText = Object.freeze({
   personDeleted: (name) => `${name} is deleted.`,
   feedRemoved: (title) => `${title} is removed from your collection.`,
-  kindChanged: (kind) => `The kind is now ${kind || 'not set'}.`,
-  nicknameChanged: (nickname) => `The nickname is now ${nickname || 'not set'}.`,
 });
 
-// The `show` and `dismiss` functions of the shell notice.
-export function useUndoNotice() {
-  return useContext(UndoNoticeContext);
+// The model of the bar: the status text, and if **Undo** and **Redo** work.
+// `changed` gets no argument and runs after each change of the model. `done`
+// runs after a successful undo or redo, so that the pages read their data
+// again. The step stays while the app is open. A new delete replaces it
+// (item 4). When the core fails to undo or redo, the model gives the error
+// text of the core, and the step goes (item 5).
+export function makeDeleteUndo(api, { changed = () => {}, done = () => {} } = {}) {
+  const history = makeHistory({ limit: 1 });
+  let text = '';
+  let failure = null;
+  const model = () => ({
+    text: failure !== null ? failure : (history.canUndo ? text : ''),
+    error: failure !== null,
+    canUndo: history.canUndo,
+    canRedo: history.canRedo,
+  });
+  const run = async (direction) => {
+    const step = direction === 'undo' ? history.undo(null) : history.redo(null);
+    if (step === null) return;
+    failure = null;
+    changed();
+    try {
+      await history.perform(step, direction);
+      done();
+    } catch (error) {
+      failure = (error && error.message) || 'Studio could not undo this action.';
+    }
+    changed();
+  };
+  return {
+    model,
+    // `redo` sends the same delete again. It asks for no confirmation.
+    record(statusText, redo) {
+      history.clear();
+      failure = null;
+      text = statusText;
+      history.recordOperation({
+        undo: () => api('/undo', { method: 'POST' }),
+        redo,
+      });
+      changed();
+    },
+    // A delete with no core record removes the step.
+    clear() {
+      history.clear();
+      failure = null;
+      changed();
+    },
+    undo: () => run('undo'),
+    redo: () => run('redo'),
+  };
 }
 
-// Holds the notice of the shell. A new notice replaces the old one (item 15).
-// When the notice ends, the core deletes its undo record (item 16). When an
-// undo fails, the notice shows the error and no Undo (item 19).
-export function UndoNoticeProvider({ api, children }) {
-  const [notice, setNotice] = useState(null);
-  const timer = useRef(null);
-  const current = useRef(null);
-  const clear = useCallback(async (discard = true) => {
-    clearTimeout(timer.current);
-    timer.current = null;
-    current.current = null;
-    setNotice(null);
-    if (discard) {
-      try { await api('/undo', { method: 'DELETE' }); } catch (_) {}
-    }
-  }, [api]);
-  const show = useCallback((text, undo = null, duration = 10000) => {
-    clearTimeout(timer.current);
-    current.current = { text, undo };
-    setNotice(current.current);
-    timer.current = duration === null ? null : setTimeout(() => { clear(true); }, duration);
-  }, [clear]);
-  const dismiss = useCallback(() => {
-    clearTimeout(timer.current);
-    timer.current = null;
-    current.current = null;
-    setNotice(null);
-  }, []);
-  const runUndo = async () => {
-    const active = current.current;
-    if (!active || !active.undo) return;
-    try {
-      await active.undo();
-      window.dispatchEvent(new Event('studio-undo-complete'));
-      await clear(true);
-    } catch (error) {
-      clearTimeout(timer.current);
-      current.current = { text: error.message || 'Studio could not undo this action.', undo: null };
-      setNotice(current.current);
-      timer.current = setTimeout(() => { clear(true); }, 10000);
-    }
-  };
-  useEffect(() => () => {
-    clearTimeout(timer.current);
-    if (current.current) api('/undo', { method: 'DELETE' }).catch(() => {});
-  }, [api]);
-  const value = { show, dismiss };
-  return html`<${UndoNoticeContext.Provider} value=${value}>${children}
-    ${notice && html`<div class="notice undo-notice" role="status"><span>${notice.text}</span>
-      ${notice.undo && html`<button class="button action" type="button" onClick=${runUndo}>Undo</button>`}</div>`}<//>`;
+// The `model`, `record`, `undo` and `redo` of the delete step.
+export function useDeleteUndo() {
+  return useContext(DeleteUndoContext);
+}
+
+// Holds the one delete step of the app.
+export function DeleteUndoProvider({ api, children }) {
+  const [model, setModel] = useState({ text: '', error: false, canUndo: false, canRedo: false });
+  const control = useRef(null);
+  if (control.current === null) {
+    control.current = makeDeleteUndo(api, {
+      changed: () => setModel(control.current.model()),
+      done: () => window.dispatchEvent(new Event('studio-undo-complete')),
+    });
+  }
+  const undo = useCallback(() => control.current.undo(), []);
+  const redo = useCallback(() => control.current.redo(), []);
+  const record = useCallback((statusText, redoStep) => control.current.record(statusText, redoStep), []);
+  const value = { model, record, undo, redo };
+  return html`<${DeleteUndoContext.Provider} value=${value}>${children}<//>`;
 }

@@ -37,7 +37,7 @@ The operator did the human check of rc.28 on 2026-11-20. These findings need a d
 2. A change of the nickname is one step of the history of the person page. A change of the menu **Kind** is one step of the history of the feed editor. Each change continues to save at the time of the change (ADR 0194, ADR 0213 items 13 and 16). **Undo** sends the value before the change through the same route, and **Redo** sends the new value again.
 3. After Delete Person or Remove from Collection, the page that opens has **Undo** and **Redo** in its bar. The position of the draft status shows "{name} is deleted." or "{title} is removed from your collection." **Undo** puts back the rows with their IDs (ADR 0227 item 16). **Redo** does the delete again with no confirmation sheet, because the user confirmed it one time.
 4. The undo of a delete stays while the app is open. The next operation of item 3 replaces it. When the core deleted the record (ADR 0227 item 16), **Undo** shows the error of ADR 0227 item 19.
-5. The page of item 3 is the page that Studio opens after the delete: People after Delete Person, and the page of the group after Remove from Collection. On a different page, the bar shows the buttons of that page.
+5. The page of item 3 is the page that Studio opens after the delete: People after Delete Person, and Releases after Remove from Collection. On a different page, the bar shows the buttons of that page.
 6. The confirmation sheets stay (ADR 0227 item 14). Remove from Collection with pending files or pending host operations stays with no undo (ADR 0227 item 17).
 7. One base component keeps the history of each page (ADR 0227 item 12). A step of items 2 and 3 is a step of that component. A page does not keep a second history.
 

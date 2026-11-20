@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef, useCallback } from './vendor/htm-preact-standalone.module.js';
 import { api } from './app.js';
 import { withSavedCover } from './cover.js';
-import { makeHistory, focusedField } from './undohistory.js';
+import { makeHistory, focusedField, isOperationStep } from './undohistory.js';
 
 const histories = new Map();
 
@@ -130,6 +130,8 @@ export function useDraft(feedId) {
   const history = feedId === null ? null : historyFor(feedId);
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
+  // The error text of an operation step that failed, or null (ADR 0228 item 5).
+  const [stepError, setStepError] = useState(null);
   const [model, setModel] = useState(null);
   const [changed, setChanged] = useState(false);
   // Whether the core says that the feed is hidden from apps (ADR 0065 item 9).
@@ -185,6 +187,7 @@ export function useDraft(feedId) {
     setBad(badFields(draft));
     setStatus('saved');
     setError(null);
+    setStepError(null);
   };
 
   // A load after Write, Discard or a route other than the draft save clears
@@ -285,6 +288,7 @@ export function useDraft(feedId) {
   }, [feedId]);
 
   const update = useCallback((change) => {
+    setStepError(null);
     history.record(current.current, focusedField(), Date.now());
     current.current = change(current.current);
     setCanUndo(history.canUndo);
@@ -297,10 +301,36 @@ export function useDraft(feedId) {
     timer.current = setTimeout(flush, SAVE_DELAY);
   }, [flush, history]);
 
+  // Adds a step for an operation that saves through its own route, such as
+  // the menu Kind (ADR 0228 item 2). The step holds `undo` and `redo`.
+  const recordOperation = useCallback((step) => {
+    if (history === null) return;
+    setStepError(null);
+    history.recordOperation(step);
+    setCanUndo(history.canUndo);
+    setCanRedo(history.canRedo);
+  }, [history]);
+
+  // Runs one side of an operation step. A failure removes the step and gives
+  // its error text to the bar (ADR 0228 item 5).
+  const runStep = useCallback(async (step, direction) => {
+    setStepError(null);
+    setCanUndo(history.canUndo);
+    setCanRedo(history.canRedo);
+    try {
+      await history.perform(step, direction);
+    } catch (e) {
+      setStepError((e && e.message) || 'Studio could not undo this action.');
+    }
+    setCanUndo(history.canUndo);
+    setCanRedo(history.canRedo);
+  }, [history]);
+
   // Restore the prior model and save it (ADR 0227 items 5 and 9).
   const undo = useCallback(() => {
     const previous = history.undo(current.current);
     if (previous === null) return;
+    if (isOperationStep(previous)) { runStep(previous, 'undo'); return; }
     current.current = previous;
     setModel(previous);
     setCanUndo(history.canUndo);
@@ -309,12 +339,13 @@ export function useDraft(feedId) {
     setStatus('waiting');
     clearTimeout(timer.current);
     timer.current = setTimeout(flush, SAVE_DELAY);
-  }, [flush, history]);
+  }, [flush, history, runStep]);
 
   // Restore the next model and save it (ADR 0227 items 5 and 9).
   const redo = useCallback(() => {
     const next = history.redo(current.current);
     if (next === null) return;
+    if (isOperationStep(next)) { runStep(next, 'redo'); return; }
     current.current = next;
     setModel(next);
     setCanUndo(history.canUndo);
@@ -323,7 +354,7 @@ export function useDraft(feedId) {
     setStatus('waiting');
     clearTimeout(timer.current);
     timer.current = setTimeout(flush, SAVE_DELAY);
-  }, [flush, history]);
+  }, [flush, history, runStep]);
 
-  return { model, changed, hidden, op3Tracks, grantBlocked, liveProblems, streamTypes, hasHost, draftState, bad, status, error, edits, update, flush, load, show, undo, redo, canUndo, canRedo };
+  return { model, changed, hidden, op3Tracks, grantBlocked, liveProblems, streamTypes, hasHost, draftState, bad, status, error, edits, update, flush, load, show, undo, redo, canUndo, canRedo, recordOperation, stepError };
 }

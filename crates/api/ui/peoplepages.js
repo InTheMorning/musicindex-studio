@@ -2,9 +2,9 @@
 // the pages and call the API. The functions of `people.js` give each text
 // and each state, and the core applies each rule (ADR 0042, ADR 0065).
 import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
-import { useSheet, NostrKeyRow, NostrSheet, UndoButtons, useUndoKeys } from './editor.js';
-import { makeHistory, focusedField } from './undohistory.js';
-import { useUndoNotice, undoNoticeText } from './undonotice.js';
+import { useSheet, NostrKeyRow, NostrSheet, UndoButtons, useUndoKeys, DeleteUndoBar } from './editor.js';
+import { makeHistory, focusedField, isOperationStep } from './undohistory.js';
+import { useDeleteUndo, undoNoticeText } from './undonotice.js';
 
 // One undo history for each person. It stays when the user opens a different
 // page and comes back (ADR 0227 item 7).
@@ -256,7 +256,7 @@ export function PeoplePage({ feeds, go, sort, reversed, onOrder }) {
         onClick=${() => go({ name: 'wallet', recipient })} />`;
     })} />`,
   };
-  return html`<div><${Bar}><span class="bar-title">People</span><//><section class="section">
+  return html`<div><${Bar}><span class="bar-title">People</span><${DeleteUndoBar} /><//><section class="section">
     <${ErrorNotice} error=${error} />
     ${data === null && !error && html`<p class="empty" role="status">Loading the people…</p>`}
     ${sections.map((id) => html`<${Fragment} key=${id}>${sectionViews[id]()}<//>`)}
@@ -870,7 +870,7 @@ function FillRow({ row, checked, onToggle }) {
 // `pageSequence('person')`.
 export function PersonPage({ id, feeds, go, view, tab: requestedTab }) {
   const { data, error, run, reload } = usePerson(id);
-  const undoNotice = useUndoNotice();
+  const deleteUndo = useDeleteUndo();
   const [suggestions, setSuggestions] = useState([]);
   const [sheet, setSheet] = useState(null);
   const [linking, setLinking] = useState(null);
@@ -955,6 +955,10 @@ export function PersonPage({ id, feeds, go, view, tab: requestedTab }) {
   const [saving, setSaving] = useState(false);
   const [nicknameOpen, setNicknameOpen] = useState(false);
   const [saveFailure, setSaveFailure] = useState(null);
+  // The error text of an operation step that failed (ADR 0228 item 5), and a
+  // counter that draws the page again after a step changes the history.
+  const [stepError, setStepError] = useState(null);
+  const [, setStepTick] = useState(0);
   // The line of each filled field. Save, Discard and a new read clear it.
   const [sources, setSources] = useState({});
   useEffect(() => {
@@ -970,15 +974,31 @@ export function PersonPage({ id, feeds, go, view, tab: requestedTab }) {
   const dirty = keys.length > 0;
   const update = (patch) => {
     setSaveFailure(null);
+    setStepError(null);
     const before = latest.current || values || saved;
     history.record(before, focusedField(), Date.now());
     latest.current = { ...before, ...patch };
     setValues(latest.current);
   };
-  // Undo and Redo set the pending values of the step (ADR 0227 item 5).
-  const step = (state) => { if (state) { latest.current = state; setValues(state); setSaveFailure(null); } };
-  const undo = () => step(history.undo(latest.current || values || saved));
-  const redo = () => step(history.redo(latest.current || values || saved));
+  // Undo and Redo set the pending values of the step (ADR 0227 item 5). A
+  // nickname saves at once, so a step of values keeps the saved nickname. A
+  // step of the nickname runs its own route (ADR 0228 item 2).
+  const runStep = async (found, direction) => {
+    setStepError(null);
+    setStepTick((n) => n + 1);
+    try {
+      await history.perform(found, direction);
+    } catch (e) {
+      setStepError((e && e.message) || 'Studio could not undo this action.');
+    }
+    setStepTick((n) => n + 1);
+  };
+  const step = (state, direction) => {
+    if (isOperationStep(state)) { runStep(state, direction); return; }
+    if (state) { latest.current = { ...state, nickname: saved.nickname }; setValues(latest.current); setSaveFailure(null); setStepError(null); }
+  };
+  const undo = () => step(history.undo(latest.current || values || saved), 'undo');
+  const redo = () => step(history.redo(latest.current || values || saved), 'redo');
   useUndoKeys(undo, redo);
   const discard = () => { history.clear(); latest.current = null; setValues(saved); setSaveFailure(null); setSources({}); };
   // A fill makes pending changes, and closes the values sheet (ADR 0117 item 14).
@@ -1080,9 +1100,9 @@ export function PersonPage({ id, feeds, go, view, tab: requestedTab }) {
   const deletePerson = () => run(async () => {
     if (!await askConfirm(CONFIRMS.deletePerson(person.name))) return;
     const result = await api(`/people/${id}`, { method: 'DELETE' });
-    if (result.undoable) undoNotice.show(undoNoticeText.personDeleted(person.name), async () => {
-      await api('/undo', { method: 'POST' });
-    });
+    if (result.undoable) deleteUndo.record(undoNoticeText.personDeleted(person.name),
+      () => api(`/people/${id}`, { method: 'DELETE' }));
+    else deleteUndo.clear();
     go({ name: 'people' });
   });
   const sections = {
@@ -1216,7 +1236,7 @@ export function PersonPage({ id, feeds, go, view, tab: requestedTab }) {
   const renderSection = (section) => html`<${Fragment} key=${section.id}>${sections[section.id]()}<//>`;
   return html`<div><${Bar}><span class="bar-title">${displayName(shown || person)}</span>
     <div class="draft-toolbar"><${UndoButtons} canUndo=${history.canUndo} canRedo=${history.canRedo} undo=${undo} redo=${redo} />
-      <span class=${saveFailure ? 'draft-status field-error' : 'draft-status'} role="status">${saveFailure || pendingStatus(keys.length)}</span>
+      <span class=${stepError || saveFailure ? 'draft-status field-error' : 'draft-status'} role="status">${stepError || saveFailure || pendingStatus(keys.length)}</span>
       <button class="button discard" type="button" disabled=${!dirty || saving} onClick=${discard}>Discard</button>
       <button class="button primary" type="button" disabled=${!dirty || saving} onClick=${save}>Save</button></div><//><section class="section">
     <${ErrorNotice} error=${error} />
@@ -1242,17 +1262,19 @@ export function PersonPage({ id, feeds, go, view, tab: requestedTab }) {
   <${ValuesSheet} personId=${person.id} row=${picked} feeds=${feeds} shown=${shown}
     onBack=${() => { setPicked(null); setFinding(person.name); }} onClose=${() => setPicked(null)} onFill=${fill} />
   <${NicknameSheet} open=${nicknameOpen} value=${shown.nickname} onChange=${async (nickname) => {
-    const previousNickname = shown.nickname;
-    const next = afterNicknameSave(saved, shown, nickname);
-    await api(`/people/${id}`, { method: 'PATCH', body: nicknameBody(saved, nickname) });
-    setSavedOverride(next.saved);
-    setValues(next.shown);
-    undoNotice.show(undoNoticeText.nicknameChanged(nickname), async () => {
-      await api(`/people/${id}`, { method: 'PATCH', body: nicknameBody(next.saved, previousNickname) });
-      const restored = afterNicknameSave(next.saved, next.shown, previousNickname);
-      setSavedOverride(restored.saved);
-      setValues(restored.shown);
-    });
+    const previousNickname = saved.nickname;
+    const base = saved;
+    // Each side of the step sends the nickname with the saved values of the
+    // time of the change. A save of the person clears the history.
+    const send = async (value) => {
+      await api(`/people/${id}`, { method: 'PATCH', body: nicknameBody(base, value) });
+      setSavedOverride(afterNicknameSave(base, base, value).saved);
+      if (latest.current) latest.current = afterNicknameSave(base, latest.current, value).shown;
+      setValues((current) => (current ? afterNicknameSave(base, current, value).shown : current));
+    };
+    await send(nickname);
+    history.recordOperation({ undo: () => send(previousNickname), redo: () => send(nickname) });
+    setStepTick((n) => n + 1);
   }}
     onClose=${() => setNicknameOpen(false)} />
   ${offers.length > 0 && html`<${CreditSheet} key=${`${offers[0].kind}${offers[0].feedId}`} offer=${offers[0]} person=${person}

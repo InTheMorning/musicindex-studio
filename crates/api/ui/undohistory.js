@@ -1,6 +1,19 @@
 // The undo history of the edits of one page (ADR 0227 items 1, 4, 6 and
 // 11). `record` takes the state before an edit, the key of the field or
 // null, and the time in ms. Typing in one field is one step until a pause.
+// `recordOperation` adds a step for an operation that saves through its own
+// route (ADR 0228 items 2, 3 and 7). Such a step holds the functions `undo`
+// and `redo`. `undo` and `redo` of the history give that step as it is, and
+// the page runs it with `perform`.
+class OperationStep {
+  constructor(undo, redo) {
+    this.undo = undo;
+    this.redo = redo;
+  }
+}
+
+export const isOperationStep = (value) => value instanceof OperationStep;
+
 export function makeHistory({ limit = 100, pause = 1000 } = {}) {
   const undoSteps = [];
   const redoSteps = [];
@@ -20,13 +33,37 @@ export function makeHistory({ limit = 100, pause = 1000 } = {}) {
       canUndo = undoSteps.length > 0;
       canRedo = false;
     },
+    recordOperation({ undo, redo }) {
+      redoSteps.length = 0;
+      undoSteps.push(new OperationStep(undo, redo));
+      if (undoSteps.length > limit) undoSteps.shift();
+      lastField = null;
+      lastTime = null;
+      canUndo = true;
+      canRedo = false;
+    },
+    // Runs one side of an operation step. When the route fails, the step
+    // goes from the history and the error goes to the caller (ADR 0228 item 5).
+    async perform(step, direction) {
+      try {
+        await step[direction]();
+      } catch (error) {
+        for (const steps of [undoSteps, redoSteps]) {
+          const at = steps.indexOf(step);
+          if (at >= 0) steps.splice(at, 1);
+        }
+        canUndo = undoSteps.length > 0;
+        canRedo = redoSteps.length > 0;
+        throw error;
+      }
+    },
     undo(current) {
       if (!undoSteps.length) return null;
       // The next edit starts a new step, also in the same field.
       lastField = null;
       lastTime = null;
-      redoSteps.push(current);
       const previous = undoSteps.pop();
+      redoSteps.push(isOperationStep(previous) ? previous : current);
       canUndo = undoSteps.length > 0;
       canRedo = true;
       return previous;
@@ -36,8 +73,8 @@ export function makeHistory({ limit = 100, pause = 1000 } = {}) {
       // The next edit starts a new step, also in the same field.
       lastField = null;
       lastTime = null;
-      undoSteps.push(current);
       const next = redoSteps.pop();
+      undoSteps.push(isOperationStep(next) ? next : current);
       canUndo = true;
       canRedo = redoSteps.length > 0;
       return next;

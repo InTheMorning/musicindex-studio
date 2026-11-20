@@ -3,7 +3,7 @@
 // edits the typed model of the draft. Each list entry carries its key, and
 // the draft saves automatically.
 import { html, useState, useEffect, useRef, createContext, useContext } from './vendor/htm-preact-standalone.module.js';
-import { useUndoNotice, undoNoticeText } from './undonotice.js';
+import { useDeleteUndo, undoNoticeText } from './undonotice.js';
 import { CONFIRMS } from './confirms.js';
 import { VIEWS, VIEW_LABELS, VIEW_HINTS, normalizeView, shownLines, localTimeNote, runs, commonIndent, stripIndent, moreLabel, fieldRows, guardRow, changeKeys, MERGE_TITLE, MERGE_INTRO, MERGE_HEADINGS, mergeRows, mergeReady, showsExamine, streamProblemRows } from './review.js';
 import { LoadErrorNotice, onSegmentKey, dropAreaClass, useFileDrop, api, saveTicket, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ChoiceSelect, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext, Icon, AddFeedRowSheet, inDesktopApp, NavContext } from './app.js';
@@ -33,7 +33,7 @@ import { coverOf, coverConflict } from './cover.js';
 import { platformBlocks } from './listing.js';
 import { deleteWrite } from './feeddelete.js';
 import { pageSequence } from './pages.js';
-import { RELEASE_KINDS, releaseKindOptions, shouldAddTracksAfterNewRelease } from './addfeeds.js';
+import { releaseKindOptions, shouldAddTracksAfterNewRelease } from './addfeeds.js';
 import { nextStep, firstStart, releaseAdd, releaseArtistChoices, FIRST_STEPS, HOST_STEP } from './welcome.js';
 import {
   fileState, fileStatus, canDownloadToDevice, canCopyFile, missingCount, missingNotice, reviewNotice, dayText,
@@ -2330,6 +2330,7 @@ function VersionsSheet({ feedId, draft, open, onClose }) {
 // long status of the review sheet. `draft.changed` from the server also
 // counts the pending host operations (ADR 0036 item 14).
 function toolbarStatus(draft) {
+  if (draft.stepError) return { text: draft.stepError, error: true };
   if (draft.status === 'idle' || draft.status === 'loading') return { text: 'Loading…' };
   if (draft.status === 'waiting' || draft.status === 'saving') return { text: 'Saving…' };
   if (draft.status === 'failed') return { text: 'Not saved', error: true };
@@ -2392,8 +2393,9 @@ export function UndoButtons({ canUndo, canRedo, undo, redo }) {
 }
 
 // The page takes undo keys before the desktop script. An open sheet keeps its own undo.
-export function useUndoKeys(undo, redo) {
+export function useUndoKeys(undo, redo, enabled = true) {
   useEffect(() => {
+    if (!enabled) return undefined;
     const onKeyDown = (event) => {
       const action = undoKey(event);
       if (!action || event.target?.closest?.('dialog[open]')) return;
@@ -2402,7 +2404,20 @@ export function useUndoKeys(undo, redo) {
     };
     document.addEventListener('keydown', onKeyDown, true);
     return () => document.removeEventListener('keydown', onKeyDown, true);
-  }, [undo, redo]);
+  }, [undo, redo, enabled]);
+}
+
+// The bar controls of the delete step (ADR 0228 items 3 and 6). A page that
+// opens after Delete Person or Remove from Collection shows them in its bar.
+// The bar shows nothing while no delete step exists.
+export function DeleteUndoBar() {
+  const step = useDeleteUndo();
+  const { model } = step;
+  const shown = model.canUndo || model.canRedo || model.text !== '';
+  useUndoKeys(step.undo, step.redo, model.canUndo || model.canRedo);
+  if (!shown) return null;
+  return html`<div class="draft-toolbar"><${UndoButtons} canUndo=${model.canUndo} canRedo=${model.canRedo} undo=${step.undo} redo=${step.redo} />
+    <span class=${`draft-status${model.error ? ' error' : ''}`} role="status">${model.text}</span></div>`;
 }
 
 // ---- The editor pages (ADR 0029 items 5 to 10) ----
@@ -2411,7 +2426,7 @@ export function useUndoKeys(undo, redo) {
 // the former Facts section showed, and the Remove from collection button.
 function FeedFacts({ feed, draft, onRemoved, onListChanged }) {
   const { busy, error, run } = useAction();
-  const undoNotice = useUndoNotice();
+  const deleteUndo = useDeleteUndo();
   // The announcements of the feed, the newest first (ADR 0052 item 20). The
   // list loads when the page opens, after each write, and each 5 seconds
   // while the newest one waits.
@@ -2438,11 +2453,9 @@ function FeedFacts({ feed, draft, onRemoved, onListChanged }) {
       const info = await api(`/feeds/${feed.id}/remove-info`);
       if (!await askConfirm(CONFIRMS.removeFeed(name, info.pending))) return;
       const result = await api(`/feeds/${feed.id}`, { method: 'DELETE' });
-      if (result.undoable) undoNotice.show(undoNoticeText.feedRemoved(feed.title || 'Untitled feed'), async () => {
-        await api('/undo', { method: 'POST' });
-        onListChanged();
-      });
-      else undoNotice.dismiss();
+      if (result.undoable) deleteUndo.record(undoNoticeText.feedRemoved(feed.title || 'Untitled feed'),
+        () => api(`/feeds/${feed.id}`, { method: 'DELETE' }));
+      else deleteUndo.clear();
       onRemoved();
     });
   };
@@ -2820,17 +2833,18 @@ function ExplicitField({ id, model, update }) {
 
 // The menu "Kind" of a release. A change saves at once and is not a part
 // of the draft (ADR 0213 items 13 and 16).
-function ReleaseKindField({ feed, onListChanged }) {
+// The change is one step of the history of the feed editor (ADR 0228 item 2).
+function ReleaseKindField({ feed, draft, onListChanged }) {
   const action = useAction();
-  const undoNotice = useUndoNotice();
   const save = (kind) => action.run(async () => {
-    const label = RELEASE_KINDS.find(([value]) => value === kind)?.[1] || 'From the tracks';
-    await api(`/feeds/${feed.id}/kind`, { method: 'PUT', body: { kind: kind || null } });
-    undoNotice.show(undoNoticeText.kindChanged(label), async () => {
-      await api(`/feeds/${feed.id}/kind`, { method: 'PUT', body: { kind: feed.release_kind || null } });
+    const before = feed.release_kind || null;
+    const after = kind || null;
+    const send = async (value) => {
+      await api(`/feeds/${feed.id}/kind`, { method: 'PUT', body: { kind: value } });
       await onListChanged();
-    });
-    await onListChanged();
+    };
+    await send(after);
+    draft.recordOperation({ undo: () => send(before), redo: () => send(after) });
   });
   // No wrapper: the menu is a direct row of the group, as each other field.
   return html`<${ChoiceSelect} id="release-kind" label="Kind" value=${feed.release_kind || ''}
@@ -2960,7 +2974,7 @@ function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImp
     album: (s) => html`<section class="page-section"><h2>${release ? feedKind(feed).label : 'Album'}</h2>
       <div class="group">
         <${ChannelFields} feedId=${feed.id} draft=${draft} model=${model} update=${update} bad=${bad} artistLabel="Artist" onArtwork=${onArtwork} fields=${s.fields}
-          kindField=${release ? html`<${ReleaseKindField} feed=${feed} onListChanged=${onListChanged} />` : null} />
+          kindField=${release ? html`<${ReleaseKindField} feed=${feed} draft=${draft} onListChanged=${onListChanged} />` : null} />
       </div>
     </section>`,
     publishers: () => html`<${ArtistsAndLabels} feed=${feed} feeds=${feeds} model=${model} update=${update} draft=${draft} go=${go} onListChanged=${onListChanged} />`,

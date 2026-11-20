@@ -78,3 +78,33 @@ test('ADR 0227 item 4: the focused text field gives the key of the step', () => 
   assert.equal(focusedField({ tagName: 'SELECT', id: 'kind' }), null);
   assert.equal(focusedField(null), null);
 });
+
+test('ADR 0228 items 2 and 7: an operation step undoes and redoes through its own functions', async () => {
+  const { isOperationStep } = await import('../ui/undohistory.js');
+  const sent = [];
+  const history = makeHistory();
+  history.record('values-0', 'title', 0);
+  history.recordOperation({ undo: async () => sent.push('kind before'), redo: async () => sent.push('kind after') });
+  assert.equal(history.canUndo, true);
+  const step = history.undo('values-1');
+  assert.equal(isOperationStep(step), true);
+  await history.perform(step, 'undo');
+  assert.deepEqual(sent, ['kind before']);
+  assert.equal(history.canRedo, true);
+  const again = history.redo('values-1');
+  assert.equal(again, step);
+  await history.perform(again, 'redo');
+  assert.deepEqual(sent, ['kind before', 'kind after']);
+  // The step before is a state step, and it keeps its order.
+  history.undo('values-1');
+  assert.equal(history.undo('values-1'), 'values-0');
+});
+
+test('ADR 0228 item 5: a failed operation step leaves the history', async () => {
+  const history = makeHistory();
+  history.recordOperation({ undo: async () => { throw new Error('No.'); }, redo: async () => {} });
+  const step = history.undo(null);
+  await assert.rejects(history.perform(step, 'undo'), /No\./);
+  assert.equal(history.canUndo, false);
+  assert.equal(history.canRedo, false);
+});

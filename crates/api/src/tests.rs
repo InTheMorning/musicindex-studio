@@ -1239,6 +1239,7 @@ async fn the_feed_list_gives_the_link_of_each_feed() {
 }
 
 #[tokio::test]
+#[expect(clippy::too_many_lines, reason = "the test follows one user flow")]
 async fn a_new_release_keeps_its_kind_and_inherits_the_newest_artists_pages() {
     let (app, connector) = publisher_app().await;
     let make_publisher = |path: &str, name: &str, role: &str| {
@@ -1293,6 +1294,29 @@ async fn a_new_release_keeps_its_kind_and_inherits_the_newest_artists_pages() {
         [newest_id],
     )
     .unwrap();
+    // After a write, the three pages have no draft. The create must start
+    // each draft before it adds the link (ADR 0231 item 11).
+    // The library folder of each page holds its written XML, so that the
+    // page model stays known with no draft.
+    for (page, name) in [
+        (&artist, "artist"),
+        (&label, "label"),
+        (&hosting, "hosting"),
+    ] {
+        let page_id = page["id"].as_i64().unwrap();
+        let (status, body) = write_with_own_diff(&app, page_id).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(listed(&app, page_id).await["draft_state"], "none");
+        db.execute(
+            "UPDATE feeds SET folder = ?1 WHERE id = ?2",
+            rusqlite::params![name, page_id],
+        )
+        .unwrap();
+        let folder = app.data.path().join("library").join(name);
+        std::fs::create_dir_all(&folder).unwrap();
+        let xml = format!("{name}.xml");
+        std::fs::copy(app.feeds.path().join(&xml), folder.join(&xml)).unwrap();
+    }
 
     let mut body = new_feed_body(connector, "new-release.xml", "New release", None, None);
     body["kind"] = json!("single");
@@ -1331,6 +1355,29 @@ async fn a_new_release_keeps_its_kind_and_inherits_the_newest_artists_pages() {
         !linked_guids.contains(&old_label_guid.as_str()),
         "{new_model}"
     );
+    // Review of the new release offers each of the three pages, and only
+    // the artist page has the note of an artist page.
+    let (status, diff) = call(&app, "GET", &format!("/api/v1/feeds/{new_id}/diff"), None).await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    let mut offered: Vec<_> = diff["also_write"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|page| {
+            (
+                page["id"].as_i64().unwrap(),
+                page["artist"].as_bool().unwrap(),
+            )
+        })
+        .collect();
+    offered.sort_unstable();
+    let mut expected = vec![
+        (artist_id, true),
+        (label["id"].as_i64().unwrap(), false),
+        (hosting["id"].as_i64().unwrap(), false),
+    ];
+    expected.sort_unstable();
+    assert_eq!(offered, expected, "{diff}");
     for page in [&artist, &label, &hosting] {
         let page_model = draft_model(&app, page["id"].as_i64().unwrap()).await;
         let page_links = page_model["remote_items"].as_array().unwrap();
@@ -1367,6 +1414,114 @@ async fn a_first_release_links_only_its_artist_page() {
         links[0]["feed_guid"],
         draft_model(&app, artist["id"].as_i64().unwrap()).await["podcast_guid"]
     );
+}
+
+#[tokio::test]
+async fn a_new_release_starts_the_draft_of_a_written_artist_page() {
+    let (app, connector) = publisher_app().await;
+    let artist = make_artist_page(&app, connector, "artist.xml", "Artist").await;
+    let artist_id = artist["id"].as_i64().unwrap();
+    let (status, body) = write_with_own_diff(&app, artist_id).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(listed(&app, artist_id).await["draft_state"], "none");
+
+    // The create gives no `no_draft` error, and the artist page has the link.
+    let release = make_release(
+        &app,
+        connector,
+        "release.xml",
+        "Release",
+        "Artist",
+        artist_id,
+    )
+    .await;
+    let release_model = draft_model(&app, release["id"].as_i64().unwrap()).await;
+    let artist_model = draft_model(&app, artist_id).await;
+    let links = artist_model["remote_items"].as_array().unwrap();
+    assert_eq!(links.len(), 1, "{artist_model}");
+    assert_eq!(links[0]["feed_guid"], release_model["podcast_guid"]);
+    assert_eq!(listed(&app, artist_id).await["draft_state"], "changed");
+}
+
+#[tokio::test]
+async fn the_diff_of_a_new_release_names_its_artist_page_and_two_writes_leave_no_change() {
+    let (app, connector) = publisher_app().await;
+    let artist = make_artist_page(&app, connector, "artist.xml", "Artist").await;
+    let artist_id = artist["id"].as_i64().unwrap();
+    let (status, body) = write_with_own_diff(&app, artist_id).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let release = make_release(
+        &app,
+        connector,
+        "release.xml",
+        "Release",
+        "Artist",
+        artist_id,
+    )
+    .await;
+    let release_id = release["id"].as_i64().unwrap();
+    let lonely = make_feed(
+        &app,
+        new_feed_body(connector, "lonely.xml", "Lonely", None, None),
+    )
+    .await;
+
+    // A new release names the artist page. A new release with no link, and
+    // the artist page that has a first write, give an empty list.
+    let (status, diff) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{release_id}/diff"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    assert_eq!(
+        diff["also_write"],
+        json!([{ "id": artist_id, "title": "Artist", "artist": true }])
+    );
+    let (_, lonely_diff) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{}/diff", lonely["id"]),
+        None,
+    )
+    .await;
+    assert_eq!(lonely_diff["also_write"], json!([]));
+    let (_, artist_diff) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{artist_id}/diff"),
+        None,
+    )
+    .await;
+    assert_eq!(artist_diff["changed"], true, "{artist_diff}");
+    assert_eq!(artist_diff["also_write"], json!([]));
+
+    // The two writes go one after the other, each with its own diff ID.
+    // Review reads the diff of the artist page before the write of the
+    // release, so that diff ID must stay valid after it.
+    let (status, body) = write_with_own_diff(&app, release_id).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{artist_id}/write"),
+        Some(json!({ "diff_id": artist_diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(listed(&app, artist_id).await["draft_state"], "none");
+    assert_eq!(listed(&app, release_id).await["draft_state"], "none");
+    let (_, after) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{release_id}/diff"),
+        None,
+    )
+    .await;
+    assert_eq!(after["also_write"], json!([]));
+    assert_eq!(after["changed"], false);
 }
 
 #[tokio::test]

@@ -1744,6 +1744,9 @@ fn link_new_release_pages(
     artist_id: FeedId,
     release_id: FeedId,
 ) -> Result<(), ApiError> {
+    // A written artist page has no draft. The link needs one (ADR 0231
+    // item 11).
+    ensure_draft(w, artist_id)?;
     publisher::link(&w.collection, artist_id, release_id)?;
     let feeds = feed_models(w)?;
     let catalog_feeds: Vec<_> = feeds
@@ -1783,6 +1786,9 @@ fn link_new_release_pages(
             .iter()
             .any(|role| matches!(role, PublisherRole::Hosting | PublisherRole::Label))
         {
+            // A written label or hosting page has no draft either (ADR 0231
+            // item 11).
+            ensure_draft(w, *publisher_id)?;
             publisher::link(&w.collection, *publisher_id, release_id)?;
         }
     }
@@ -3618,6 +3624,7 @@ fn diff_json_with_streams(
     let build_date = pipeline::set_build_date(&w.collection, id, checked)?;
     let diff = pipeline::diff_checked(&w.collection, &hosts, &library, streams, id)?;
     let page_refusal = feed_page_refusal(w, id)?;
+    let also_write = also_write_pages(w, &library, id)?;
     // The app of each grant of the draft, for the review sheet (ADR 0110
     // item 19).
     let mut grant_apps = serde_json::Map::new();
@@ -3642,6 +3649,7 @@ fn diff_json_with_streams(
         "grant_apps": grant_apps,
         "build_date": build_date,
         "page_refusal": page_refusal,
+        "also_write": also_write,
         "apps": review_apps(w)?,
         "events": diff
             .events
@@ -3653,6 +3661,29 @@ fn diff_json_with_streams(
             }))
             .collect::<Vec<_>>(),
     })))
+}
+
+/// The publisher feeds that Review of a new release offers to write with
+/// it (ADR 0231 item 7). Each one has a draft with changes and a
+/// `podcast:remoteItem` that names the release. A feed with a first write
+/// gives an empty list.
+fn also_write_pages(w: &Workspace, library: &Library, id: FeedId) -> Result<Vec<Value>, ApiError> {
+    if w.collection.feed(id)?.last_version.is_some() {
+        return Ok(Vec::new());
+    }
+    let mut pages = Vec::new();
+    for page_id in publisher::publishers_linking(&w.collection, library, id)? {
+        if w.collection.draft(page_id)?.is_none()
+            || !pipeline::draft_changed(&w.collection, page_id)?
+        {
+            continue;
+        }
+        let row = w.collection.feed(page_id)?;
+        let (feed, _) = pipeline::draft_model(&w.collection, page_id)?;
+        let artist = row.publisher_roles.contains(&PublisherRole::Artist);
+        pages.push(json!({ "id": page_id.0, "title": feed.title.or(row.title), "artist": artist }));
+    }
+    Ok(pages)
 }
 
 /// Give the page-rule refusal for a draft. A feed-file deletion, a feed

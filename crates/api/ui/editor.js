@@ -50,7 +50,7 @@ import { MOVE_SCOPES, fileHostRows, planRows, stayRows, deleteLabel, deleteAllLa
 import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary, artworkPreview } from './artwork.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, addsAsTrackFile, refusedText, wrongKindText, replacedAddresses, selectedFacts, TRACK_FILES_ACCEPT } from './picker.js';
 import { deleteChoices, leftoverLine, deleteButtonEnabled, retireSteps, retireActions, retireBlockShown, domainLine, DELETE_POINTS, operationNote, refusedDelete } from './feeddelete.js';
-import { writeResult } from './writeresult.js';
+import { writeResult, alsoRows, rowsToWrite, pageWriteFailed, writeInOrder } from './writeresult.js';
 import { undoKey } from './undohistory.js';
 
 // A text where only each web address can break inside a word (musicindex ADR
@@ -2022,7 +2022,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
   // The announcement choice of the footer (ADR 0205 item 19).
   const announce = useAnnounceChoice(refreshDiff);
   // The sheet examines the draft each time that it opens.
-  useEffect(() => { if (open) { setResult(null); examine(); } }, [open]);
+  useEffect(() => { if (open) { setResult(null); setAlsoOff(new Set()); examine(); } }, [open]);
   const removeOperation = (operationId) => run(async () => {
     await api(`/feeds/${feedId}/operations/${operationId}`, { method: 'DELETE' });
     onOpsChanged();
@@ -2074,38 +2074,91 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
   const choice = signerChoice({ hasNip07, remote, events: toSign });
   const needsSigner = choice.kind === 'connect' || choice.kind === 'differs' || choice.kind === 'loading';
   const connected = () => { setConnecting(false); loadRemote(); };
-  const write = () => run(async () => {
-    let feed;
-    let signedEvents = [];
+  // The artist pages that Review writes with a new release (ADR 0231 items 7
+  // to 10). The diff of each page is the diff of its own write.
+  const [alsoDiffs, setAlsoDiffs] = useState(null);
+  const [alsoError, setAlsoError] = useState(null);
+  const [alsoOff, setAlsoOff] = useState(() => new Set());
+  const alsoList = (diff && diff.also_write) || [];
+  const alsoKey = alsoList.map((page) => page.id).join(',');
+  useEffect(() => {
+    let current = true;
+    setAlsoError(null);
+    if (!alsoKey) { setAlsoDiffs({}); return undefined; }
+    setAlsoDiffs(null);
+    Promise.all(alsoList.map(async (page) => [page.id, await api(`/feeds/${page.id}/diff`)]))
+      .then((entries) => { if (current) setAlsoDiffs(Object.fromEntries(entries)); },
+        (e) => { if (current) { setAlsoDiffs({}); setAlsoError(e); } });
+    return () => { current = false; };
+  }, [alsoKey, diff && diff.id]);
+  // The write waits until Review has the diff of each page.
+  const alsoPending = alsoList.length > 0 && alsoDiffs === null;
+  const alsoShown = alsoRows(alsoList, alsoDiffs, alsoOff, draft.model && draft.model.title);
+  const toggleAlso = (id, on) => setAlsoOff((prev) => {
+    const next = new Set(prev);
+    if (on) next.delete(id); else next.add(id);
+    return next;
+  });
+  // The write of one artist page signs its own planned events.
+  const writePage = async (row) => {
+    const pageSign = eventsToSign(row.diff);
     try {
-      if (toSign.length > 0) setProgress({ done: 0, total: toSign.length });
-      signedEvents = await signPlanned(toSign, choice, (done, total) => setProgress({ done, total }));
-      feed = await api(`/feeds/${feedId}/write`, { method: 'POST', body: { diff_id: diff.id, signed_events: signedEvents } });
-    } catch (e) {
-      // After a conflict, the diff is not against the hosted file. Hide it
-      // and its write button.
-      if (e.code === 'conflict') setDiff(null);
-      // After an expired plan, the new diff has a new plan.
-      if (e.code === 'plan_expired') setDiff(await api(`/feeds/${feedId}/diff`));
-      // After a refusal of stage 2, the diff is not the same: the move
-      // has a placed file (ADR 0126 item 19). Examine again.
-      if (e.code === 'bad_move_link') {
-        try { setDiff(await api(`/feeds/${feedId}/diff`)); } catch (_) { /* The user can examine again. */ }
-        await checkLinks();
-      }
-      // A signer that fails may be gone. Ask for its state again.
-      if (!hasNip07 && e.code === 'signer_refused') loadRemote();
-      throw e;
+      if (pageSign.length > 0) setProgress({ done: 0, total: pageSign.length });
+      const pageChoice = await currentSignerChoice(pageSign);
+      const signed = await signPlanned(pageSign, pageChoice, (done, total) => setProgress({ done, total }));
+      return await api(`/feeds/${row.id}/write`, { method: 'POST', body: { diff_id: row.diff.id, signed_events: signed } });
     } finally {
       setProgress(null);
     }
-    setDiff(null);
-    await draft.load();
-    onOpsCleared();
-    onWritten(feed);
-    // The feed page loads the new announcements.
-    window.dispatchEvent(new Event(ANNOUNCE_RELOAD));
-    window.dispatchEvent(new CustomEvent(OUTSIDE_RECHECK, { detail: { id: feed.id } }));
+  };
+  const write = () => run(async () => {
+    const pageRows = rowsToWrite(alsoShown);
+    const writeRelease = async () => {
+      let feed;
+      let signedEvents = [];
+      try {
+        if (toSign.length > 0) setProgress({ done: 0, total: toSign.length });
+        signedEvents = await signPlanned(toSign, choice, (done, total) => setProgress({ done, total }));
+        feed = await api(`/feeds/${feedId}/write`, { method: 'POST', body: { diff_id: diff.id, signed_events: signedEvents } });
+      } catch (e) {
+        // After a conflict, the diff is not against the hosted file. Hide it
+        // and its write button.
+        if (e.code === 'conflict') setDiff(null);
+        // After an expired plan, the new diff has a new plan.
+        if (e.code === 'plan_expired') setDiff(await api(`/feeds/${feedId}/diff`));
+        // After a refusal of stage 2, the diff is not the same: the move
+        // has a placed file (ADR 0126 item 19). Examine again.
+        if (e.code === 'bad_move_link') {
+          try { setDiff(await api(`/feeds/${feedId}/diff`)); } catch (_) { /* The user can examine again. */ }
+          await checkLinks();
+        }
+        // A signer that fails may be gone. Ask for its state again.
+        if (!hasNip07 && e.code === 'signer_refused') loadRemote();
+        throw e;
+      } finally {
+        setProgress(null);
+      }
+      return feed;
+    };
+    // The release is written first. When it fails, no page is written. When
+    // a page fails, the release stays written (ADR 0231 item 9).
+    const { feed, pageFeeds } = await writeInOrder({
+      release: writeRelease,
+      pages: pageRows.map((row) => ({ title: row.title, run: () => writePage(row) })),
+      onReleaseWritten: async (feed) => {
+        setDiff(null);
+        await draft.load();
+        onOpsCleared();
+        onWritten(feed);
+        // The feed page loads the new announcements.
+        window.dispatchEvent(new Event(ANNOUNCE_RELOAD));
+        window.dispatchEvent(new CustomEvent(OUTSIDE_RECHECK, { detail: { id: feed.id } }));
+      },
+    });
+    for (const pageFeed of pageFeeds) {
+      window.dispatchEvent(new CustomEvent(OUTSIDE_RECHECK, { detail: { id: pageFeed.id } }));
+    }
+    if (pageFeeds.length > 0) await onListChanged?.();
     if (deletion || diff.grants.length > 0) {
       ref.current.close();
     } else {
@@ -2113,7 +2166,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
       const writtenConnector = targets.find((item) => item.id === writtenConnectorId);
       if (writtenConnector) {
         setResultHostId(writtenConnectorId);
-        setResult(writeResult(feed, writtenConnector, linkedPage));
+        setResult(writeResult(feed, writtenConnector, linkedPage, pageFeeds.map((item) => item.id)));
         setLinkedPage(null);
       }
       else ref.current.close();
@@ -2163,15 +2216,20 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
     }, 1500);
     return () => clearInterval(timer);
   }, [open, waiting, feedId]);
-  const conflict = error && error.code === 'conflict';
-  const conflictText = conflictNotice(error && error.details);
+  // The error of a page that Review wrote after the release has the title of
+  // the page. The release stays written, so no other notice uses that error
+  // (ADR 0231 item 9).
+  const pageFailure = error && error.pageTitle ? error : null;
+  const releaseError = pageFailure ? null : error;
+  const conflict = releaseError && releaseError.code === 'conflict';
+  const conflictText = conflictNotice(releaseError && releaseError.details);
   // The refusal of the check, else the refusal of the last write.
-  const refusal = (links && links.refusal) || refusalOfError(error);
+  const refusal = (links && links.refusal) || refusalOfError(releaseError);
   // Studio cannot write while an address of the draft is not correct. A
   // host operation of `diff` does not block the write on its own: Studio
   // skips a deletion that `diff.blocked` names, and the user sees it here.
   const addressesBlocked = draft.bad.length > 0;
-  const stale = error && error.code === 'diff_not_approved';
+  const stale = releaseError && releaseError.code === 'diff_not_approved';
   // The files that the write sends. On a server that holds no assets,
   // Studio then removes its copies (ADR 0105 item 19).
   const sentCount = diff && !assetMode().holdAssets ? diff.operations.filter((op) => op.kind === 'upload').length : 0;
@@ -2194,7 +2252,9 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
   });
   // The error of a write shows in the footer, directly above the check box
   // "Send a podping" (ADR 0228 item 16).
-  const writeError = conflict
+  const writeError = pageFailure
+    ? html`<${ErrorNotice} error=${pageFailure} action=${pageWriteFailed(pageFailure.pageTitle)} />`
+    : conflict
     ? html`<div class="notice error" role="alert"><strong>${conflictText.heading}</strong>
         ${conflictText.times.map((line) => html`<div>${line}</div>`)}
         ${conflictText.cause}
@@ -2260,6 +2320,15 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
       ${diff && (diff.changed
         ? html`<${DiffView} diff=${diff} />`
         : !hasWork && !pageRefusal && html`<p>The draft is the same as the hosted file.</p>`)}
+      ${diff && alsoShown.length > 0 && html`<div class="group also-write">
+        ${alsoShown.map((row) => html`<div key=${row.id} class="also-write-row">
+          <label class="check"><input type="checkbox" checked=${row.checked} disabled=${busy}
+            onChange=${(e) => toggleAlso(row.id, e.target.checked)} /><span>${row.label}</span></label>
+          <p class="hint">${row.note}</p>
+          ${row.diff.changed && html`<${DiffView} diff=${row.diff} />`}
+        </div>`)}
+      </div>`}
+      ${diff && html`<${ErrorNotice} error=${alsoError} action="Studio could not examine the artist page." />`}
       ${diff && html`<${HostOperations} diff=${diff} connectors=${connectors} onRemove=${removeOperation} onUndoMove=${undoMove} busy=${busy} fromConnectorId=${feedConnectorId} />`}
       ${diff && html`<${ReplaceWarning} move=${diff.feed_move} />`}
       ${diff && html`<${LinkNotices} report=${links} busy=${busy} onRepair=${repair} />`}
@@ -2305,11 +2374,11 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
       ${!result && html`
       ${!merge && html`<div class="footer-error">${writeError}</div>`}
       ${diff && hasWork && !addressesBlocked && !choosing && html`<${AnnounceFooterChoice} choice=${announce} skip=${announceSkipLine(diff)} />`}
-      ${deletion && diff && hasWork && !addressesBlocked && !choosing && html`<button class="button destructive" type="button" disabled=${busy || waiting || needsSigner || streamRefusal || blocksWrite(links)} onClick=${write}>
+      ${deletion && diff && hasWork && !addressesBlocked && !choosing && html`<button class="button destructive" type="button" disabled=${busy || waiting || needsSigner || streamRefusal || alsoPending || blocksWrite(links)} onClick=${write}>
         ${progress ? signProgressLabel(progress) : busy ? 'Writing…' : deletion.label}</button>`}
       <button class=${`button${deletion ? '' : ' destructive'}`} type="button" disabled=${busy || (!deletion && !draft.changed)} onClick=${discard}>${deletion && deletion.cancel ? deletion.cancel : 'Discard the Draft'}</button>
       ${!deletion && diff && pageRefusal && html`<button class="button primary" type="button" disabled>${busy ? 'Writing…' : 'Write to the File Host'}</button>`}
-      ${!deletion && diff && hasWork && !addressesBlocked && !choosing && html`<button class="button primary" type="button" disabled=${busy || waiting || needsSigner || streamRefusal || blocksWrite(links)} onClick=${write}>
+      ${!deletion && diff && hasWork && !addressesBlocked && !choosing && html`<button class="button primary" type="button" disabled=${busy || waiting || needsSigner || streamRefusal || alsoPending || blocksWrite(links)} onClick=${write}>
         ${progress ? signProgressLabel(progress) : busy ? 'Writing…' : 'Write to the File Host'}</button>`}
       `}
       ${result && html`<button class="button primary" type="button" onClick=${() => ref.current.close()}>Close</button>`}

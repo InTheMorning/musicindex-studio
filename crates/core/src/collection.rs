@@ -705,6 +705,12 @@ CREATE TABLE kept_levels (
     PRIMARY KEY (upper_id, lower_id)
 );
 ",
+    // ADR 0230 item 21: a change set restores the media host state that it
+    // changed, including a saved value from before the change set.
+    r"
+ALTER TABLE change_set_feeds ADD COLUMN before_files_connector_id INTEGER;
+ALTER TABLE change_set_feeds ADD COLUMN before_files_connector_kept INTEGER;
+",
 ];
 
 /// `root` as a relative path under `data_dir`, when it is a folder inside
@@ -3018,6 +3024,49 @@ impl Collection {
         Ok(())
     }
 
+    /// Restore the media host columns saved before a change set.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn restore_files_connector_snapshot(
+        &self,
+        id: FeedId,
+        connector: Option<ConnectorId>,
+        kept: Option<i64>,
+    ) -> Result<(), CollectionError> {
+        self.db.execute(
+            "UPDATE feeds SET files_connector_id = ?2, files_connector_kept = ?3 WHERE id = ?1",
+            params![id.0, connector.map(|c| c.0), kept],
+        )?;
+        Ok(())
+    }
+
+    /// Read the media host columns before a change set changes them.
+    ///
+    /// # Errors
+    ///
+    /// Gives [`CollectionErrorKind::NotFound`] when the feed does not exist,
+    /// and gives a [`CollectionError`] when SQLite fails.
+    pub fn files_connector_snapshot(
+        &self,
+        id: FeedId,
+    ) -> Result<(Option<ConnectorId>, Option<i64>), CollectionError> {
+        self.db
+            .query_row(
+                "SELECT files_connector_id, files_connector_kept FROM feeds WHERE id = ?1",
+                [id.0],
+                |row| Ok((row.get::<_, Option<i64>>(0)?.map(ConnectorId), row.get(1)?)),
+            )
+            .optional()?
+            .ok_or_else(|| {
+                CollectionError::with_kind(
+                    CollectionErrorKind::NotFound,
+                    format!("feed {} does not exist", id.0),
+                )
+            })
+    }
+
     /// Keep the file host of the release before a move of a draft changes
     /// it (ADR 0230 item 20). A kept value stays, so two moves in one draft
     /// keep the value from before the first move.
@@ -4452,6 +4501,10 @@ pub struct ChangeSetFeedRow {
     pub before: Option<DraftRow>,
     /// True when the feed had a draft before the change.
     pub had_draft: bool,
+    /// The media host before the change set changed it.
+    pub before_files_connector_id: Option<ConnectorId>,
+    /// The saved media host before the change set changed it.
+    pub before_files_connector_kept: Option<i64>,
     /// The Unix time when Studio wrote the feed after the change.
     pub written_at: Option<i64>,
 }
@@ -4491,8 +4544,9 @@ impl Collection {
         self.db.execute(
             "INSERT INTO change_set_feeds
                  (change_set_id, feed_id, outcome, before_xml, before_base_xml,
-                  before_base_version, had_draft, written_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                  before_base_version, had_draft, written_at,
+                  before_files_connector_id, before_files_connector_kept)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 change_set,
                 row.feed_id.0,
@@ -4503,7 +4557,9 @@ impl Collection {
                     .as_ref()
                     .and_then(|d| d.base_version.as_ref().map(Version::as_str)),
                 row.had_draft,
-                row.written_at
+                row.written_at,
+                row.before_files_connector_id.map(|c| c.0),
+                row.before_files_connector_kept,
             ],
         )?;
         Ok(())
@@ -4567,7 +4623,8 @@ impl Collection {
     ) -> Result<Vec<ChangeSetFeedRow>, CollectionError> {
         let mut statement = self.db.prepare(
             "SELECT feed_id, outcome, before_xml, before_base_xml, before_base_version,
-                    had_draft, written_at
+                    had_draft, written_at, before_files_connector_id,
+                    before_files_connector_kept
              FROM change_set_feeds WHERE change_set_id = ?1 ORDER BY feed_id",
         )?;
         let rows = statement
@@ -4585,6 +4642,8 @@ impl Collection {
                     }),
                     had_draft: r.get(5)?,
                     written_at: r.get(6)?,
+                    before_files_connector_id: r.get::<_, Option<i64>>(7)?.map(ConnectorId),
+                    before_files_connector_kept: r.get(8)?,
                 })
             })?
             .collect::<Result<_, _>>()?;

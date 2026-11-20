@@ -2,7 +2,7 @@
 
 Decision: [ADR 0230](../adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 20 and 21. This task corrects defects. It makes no new decision.
 
-Status: Open. Start after task 216, because both tasks change `crates/api/src/routes.rs` and `crates/core/src/pipeline.rs`.
+Status: Done.
 
 ## Problem
 
@@ -57,3 +57,31 @@ Human: a repair of the test album with **Move This Release…**, "Media files on
 - Change only the files of the table above and this task file.
 - Do not make an architecture decision. Stop and report a question.
 - Write the section "Result" at the end of this file: each change with file and line, and each check with its result.
+
+## Result
+
+- `crates/api/src/routes.rs:5996` saves the media host before Move All Releases changes it.
+- `crates/api/src/routes.rs:6661` restores the saved media host when the last draft operation is removed.
+- `crates/core/src/pipeline.rs:3278` restores the saved media host when a feed move leaves a draft.
+- `crates/core/src/pipeline.rs:6324` restores the saved media host after confirmation removes a move.
+- `crates/core/src/change_set.rs:1845` saves the two media host columns. `crates/core/src/change_set.rs:2075` restores them on discard.
+- `crates/core/src/collection.rs:711` adds snapshot columns. Its methods read and restore those columns near line 3027.
+- `crates/api/ui/review.js:334` omits empty groups from the Simplified view.
+- `crates/api/src/tests.rs:16633` checks move removal, change set discard, Move All Releases and a canceled feed move.
+- `crates/api/ui-tests/review.test.mjs:214` checks that an empty Remote items group does not show.
+- Before the fix, the Move All Releases API test showed a mismatch. The host value was 1. The target was 2.
+- Before the fix, the empty Remote items UI test showed a label-only group.
+- `cargo test -p studio-core`: completed with no errors.
+- `cargo test -p studio-api`: completed with no errors, 467 tests.
+- `tools/node --test crates/api/ui-tests/review.test.mjs`: completed with no errors, 27 tests.
+- `cargo clippy --workspace --all-targets -- -D warnings`: completed with no errors.
+- `bash tools/gate.sh`: stopped at UI tests. The tests report unmet task 217 expectations in `addfeeds.test.mjs`, `people.test.mjs` and `shell.test.mjs`.
+- No commit was made.
+
+Main session changes after the review:
+
+- `remove_draft_move` in `crates/core/src/pipeline.rs` puts back the media host only when the draft has no host operation. Before, the cancel of a feed move put back the media host while a move of the media files stayed in the draft. The test `a_cancelled_feed_move_keeps_the_media_host_of_a_pending_media_move` replaces the test that asked for that result.
+- `keep_draft_after_failed_confirmation` in `crates/core/src/pipeline.rs` does not put back the media host. That write put the feed on the new host, and the next write requests the files again.
+- Finding 6: the core removes each group with no change (`crates/core/src/review.rs` near line 660), so a filter of empty groups did not correct the finding. The cause: a list group has the heading "Remote items" with no summary, and each row below it has the same label. `fieldRows` in `crates/api/ui/review.js` now gives no heading for such a group. The UI test uses a real remote item change.
+- The red results of the tests for the removal of the last operation and for the discard of a change set are not recorded. The main session did not run them before the correction.
+- `cargo test -p studio-core`, `cargo test -p studio-api` (467 tests), `cargo clippy --workspace --all-targets -- -D warnings` and `tools/node --test crates/api/ui-tests/review.test.mjs` pass after these changes.

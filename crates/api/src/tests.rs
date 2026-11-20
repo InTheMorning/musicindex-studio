@@ -16607,6 +16607,7 @@ async fn discard_of_a_move_change_set_removes_its_host_operations() {
     let app = move_all_app();
     let (id, _, home, backup, _folder) = album_on_home(&app).await;
     let other = second_feed_on_home(&app, home).await;
+    let before = files_host_of(&app, id).await;
     let set = move_all(&app, home, backup).await;
     let set_id = set["id"].as_i64().unwrap();
     let (status, _) = call(
@@ -16625,6 +16626,71 @@ async fn discard_of_a_move_change_set_removes_its_host_operations() {
     assert_ne!(status, StatusCode::INTERNAL_SERVER_ERROR);
     let (_, files) = call(&app, "GET", &format!("/api/v1/feeds/{other}/files"), None).await;
     assert_eq!(files["feed_move"], Value::Null, "{files}");
+    assert_eq!(files_host_of(&app, id).await, before);
+}
+
+#[tokio::test]
+async fn removing_the_last_operation_of_a_media_move_restores_its_host() {
+    let app = move_app();
+    let (id, _, _, backup, _) = album_on_home(&app).await;
+    let before = files_host_of(&app, id).await;
+    let diff = move_scoped(&app, id, backup, "files").await;
+    assert!(!diff["operations"].as_array().unwrap().is_empty(), "{diff}");
+    let operation_ids = {
+        let collection =
+            studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+                .unwrap();
+        collection
+            .draft_operations(studio_core::collection::FeedId(id))
+            .unwrap()
+            .into_iter()
+            .map(|operation| operation.id.0)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(operation_ids.len(), 2);
+    for operation_id in operation_ids {
+        let (status, body) = call(
+            &app,
+            "DELETE",
+            &format!("/api/v1/feeds/{id}/operations/{operation_id}"),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
+    }
+    assert_eq!(files_host_of(&app, id).await, before);
+}
+
+#[tokio::test]
+async fn a_cancelled_feed_move_keeps_the_media_host_of_a_pending_media_move() {
+    let app = move_app();
+    let (id, _, home, backup, _) = album_on_home(&app).await;
+    move_scoped(&app, id, backup, "files").await;
+    for target in [backup, home] {
+        let (status, body) = call(
+            &app,
+            "PUT",
+            &format!("/api/v1/feeds/{id}/feed-host"),
+            Some(json!({ "connector_id": target })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+    }
+    assert_eq!(files_host_of(&app, id).await, backup);
+}
+
+/// ADR 0230 items 20 and 21: a move of all releases sets the media host.
+#[tokio::test]
+async fn a_written_move_of_all_releases_sets_the_media_host() {
+    let app = move_all_app();
+    let (id, _, home, backup, _) = album_on_home(&app).await;
+    move_all(&app, home, backup).await;
+    write_the_draft(&app, id).await;
+    assert_eq!(files_host_of(&app, id).await, backup);
+
+    move_scoped(&app, id, home, "files").await;
+    discard_the_draft(&app, id).await;
+    assert_eq!(files_host_of(&app, id).await, backup);
 }
 
 /// The plan of a move to "Home" for an album whose draft gives the address

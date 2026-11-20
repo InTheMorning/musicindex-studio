@@ -3275,6 +3275,11 @@ fn remove_draft_move(
 ) -> Result<(), PipelineError> {
     let had_move = collection.draft_feed_move(id)?.is_some();
     collection.remove_draft_feed_move(id)?;
+    // ADR 0230 item 21: the media host goes back only when no move of the
+    // media files stays in the draft.
+    if had_move && collection.draft_operations(id)?.is_empty() {
+        collection.restore_files_connector(id)?;
+    }
     let base = Feed::read(&Document::parse_bytes(&draft.base_xml)?).ok();
     let back = base
         .as_ref()

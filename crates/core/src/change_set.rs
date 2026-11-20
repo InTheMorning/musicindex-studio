@@ -1833,6 +1833,8 @@ fn record_change_set(
                     outcome: to_json(&Outcome::not_changed(Cause::InOpenChangeSet))?,
                     before: None,
                     had_draft: collection.draft(feed_id)?.is_some(),
+                    before_files_connector_id: None,
+                    before_files_connector_kept: None,
                     written_at: None,
                 },
             )?;
@@ -1840,6 +1842,8 @@ fn record_change_set(
         }
         let before = collection.draft(feed_id)?;
         let had_draft = before.is_some();
+        let (before_files_connector_id, before_files_connector_kept) =
+            collection.files_connector_snapshot(feed_id)?;
         let outcome = change(feed_id, had_draft)?;
         let kept = if outcome.is_changed() { before } else { None };
         collection.add_change_set_feed(
@@ -1849,6 +1853,8 @@ fn record_change_set(
                 outcome: to_json(&outcome)?,
                 before: kept,
                 had_draft,
+                before_files_connector_id,
+                before_files_connector_kept,
                 written_at: None,
             },
         )?;
@@ -2065,6 +2071,13 @@ pub fn discard_change_set(collection: &Collection, id: i64) -> Result<(), Pipeli
                 }
             }
             _ => remove_new_draft(collection, row.feed_id)?,
+        }
+        if is_move {
+            collection.restore_files_connector_snapshot(
+                row.feed_id,
+                row.before_files_connector_id,
+                row.before_files_connector_kept,
+            )?;
         }
     }
     collection.delete_change_set(id)?;

@@ -5993,6 +5993,12 @@ pub(crate) async fn move_all_releases(
                     if plan.feed_moves || plan.moves_files() {
                         apply_release_move(workspace, &hosts, id, &plan, wait_days, false)?;
                     }
+                    if plan.moves_files() {
+                        workspace.collection.keep_files_connector(id)?;
+                        workspace
+                            .collection
+                            .set_files_connector(id, Some(plan.target))?;
+                    }
                     Ok((plan.feed_moves, plan.files.len() + plan.target_copies.len()))
                 });
                 Ok(match applied {
@@ -6652,6 +6658,9 @@ pub(crate) async fn remove_operation(
         writer(w, id)?;
         w.collection
             .remove_draft_operation(id, DraftOperationId(op))?;
+        if w.collection.draft_operations(id)?.is_empty() {
+            w.collection.restore_files_connector(id)?;
+        }
         Ok(StatusCode::NO_CONTENT)
     })
     .await

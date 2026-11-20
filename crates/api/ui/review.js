@@ -336,7 +336,11 @@ export function fieldRows(groups, profiles) {
     const rowsFor = (change) => rowsOf(group, change, profiles);
     const set = cluster(group);
     if (!set) {
-      return { label, summary: null, more: null, rows: group.changes.flatMap(rowsFor) };
+      const rows = group.changes.flatMap(rowsFor);
+      // A heading with no summary above rows with the same label is a row
+      // with no text. The rows then show without the heading.
+      const heading = rows.every((row) => row.label === label) ? null : label;
+      return { label: heading, summary: null, more: null, rows };
     }
     const first = group.changes[set[0]];
     const covered = new Set(set);

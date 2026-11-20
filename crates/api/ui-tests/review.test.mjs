@@ -211,6 +211,15 @@ test('the simplified view names a change of Hide from apps', () => {
   assert.ok(Object.values(KEY_WORDS).every((word) => !word.includes('Apple Podcasts') && word !== 'Blocks'));
 });
 
+test('the simplified view gives no heading row with no text above a remote item', () => {
+  const change = { op: 'added', path: '', entry: null, name: null, old: null, new: { feedGuid: 'g', title: 'Various & Assorted' } };
+  const [group] = fieldRows([{ kind: 'list', name: 'remote_items', position: null, changes: [change] }], null);
+  assert.equal(group.label, null);
+  assert.equal(group.rows.length, 1);
+  assert.equal(group.rows[0].label, 'Remote items');
+  assert.ok(group.rows[0].text.startsWith('Added'));
+});
+
 test('a word in a summary line keeps sentence case', () => {
   assert.equal(inSentence('Nostr key'), 'Nostr key');
   assert.equal(inSentence('Picture'), 'picture');

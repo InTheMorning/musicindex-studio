@@ -27,6 +27,10 @@ The operator ended the check after step 14. Step 15 of the notes stays open: `do
 ## Findings
 
 1. The buttons **Undo** and **Redo** move to the left or right when the draft status at their right changes its text. The cause is not examined. A possible cause (inference): the buttons and the status are in one row at the right of the bar. Thus the width of the status text sets the position of the buttons.
+
+   Result: the cause is confirmed. In the wide layout, the toolbar is at the right edge of the bar, and the status has no fixed width. A walk at 1280 px put each status text in the Settings bar. The left edge of **Undo** moved from 895 px ("12 changes not saved") to 970 px ("Saving…"). The narrow layout puts the status in its own row, so it is not affected.
+
+   Correction: the draft status has a minimum width of 10.5em in the wide layout. The narrow layout keeps a minimum width of 0. After the correction, the left edge of **Undo** is at 888 px for each of the seven texts. This is a defect correction of ADR 0227 item 2 and needs no decision record. A longer text, for example an error, can move the buttons again.
 2. The operator saw the **Undo** of the notice "{name} is deleted." only after the 10 seconds. The operator expected **Undo** at the top right, where the bar has **Undo** and **Redo**. The notice is at the bottom center of the window (`.undo-notice` in `styles.css`, `position: fixed`, `bottom: 16px`).
 
    Operator direction: the people operations use the same undo and redo as the rest of the app. People data must not look different from feed data. Open: the notice also serves **Remove from Collection** and the menu **Kind** of a release (ADR 0227 item 13). A decision must say if those two also move to the history of the bar. This changes ADR 0227, so it needs a decision record.

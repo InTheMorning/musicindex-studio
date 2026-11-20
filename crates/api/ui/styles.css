@@ -902,7 +902,9 @@ input[type="checkbox"]:disabled { opacity: .5; cursor: default; }
    0029 item 1). */
 .draft-toolbar { display: flex; align-items: center; flex: none; gap: 10px; }
 .draft-toolbar .button { white-space: nowrap; }
-.draft-status { color: var(--muted); font-size: var(--text-callout); font-weight: 500; white-space: nowrap; }
+/* A fixed minimum width keeps Undo and Redo at one position when the
+   status text changes (ADR 0227 item 2). The narrow layout sets it to 0. */
+.draft-status { color: var(--muted); font-size: var(--text-callout); font-weight: 500; white-space: nowrap; min-width: 10.5em; }
 .draft-status.error { color: var(--error); }
 
 /* The review sheet and the versions sheet (ADR 0029 items 2 and 3). A sheet

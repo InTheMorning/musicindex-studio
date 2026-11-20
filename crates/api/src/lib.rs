@@ -383,6 +383,10 @@ fn workspace_router_with_shared(workspace: Workspace) -> (Router, WorkspaceHandl
             delete(routes::remove_saved_recipient),
         )
         .route("/musicindex/search", get(people::search_index))
+        .route(
+            "/musicindex/releases/{guid}",
+            get(people::musicindex_releases),
+        )
         .route("/musicindex/fields", get(people::field_rows))
         .route("/musicindex/artist-names", get(people::artist_names))
         .route("/musicindex/values/{guid}", get(people::index_values))
@@ -403,6 +407,7 @@ fn workspace_router_with_shared(workspace: Workspace) -> (Router, WorkspaceHandl
         .route("/import/msp", post(routes::import_msp))
         .route("/feeds", get(routes::list_feeds).post(routes::add_feed))
         .route("/feeds/new", post(routes::new_album_feed))
+        .route("/feeds/copy-preview", get(routes::feed_copy_preview))
         .route("/feeds/{id}/kind", put(routes::set_release_kind))
         .route("/feeds/{id}/remove-info", get(routes::feed_remove_info))
         .route("/feeds/{id}", delete(routes::delete_feed))

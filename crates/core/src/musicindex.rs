@@ -34,6 +34,8 @@ pub struct SearchHit {
     pub artist: Option<String>,
     /// The address of the feed image.
     pub image_url: Option<String>,
+    /// The feed address.
+    pub feed_url: Option<String>,
 }
 
 /// A track that a feed lists, from musicindex.
@@ -563,6 +565,7 @@ struct SearchItem {
     title: Option<String>,
     release_artist: Option<String>,
     feed_image_url: Option<String>,
+    feed_url: Option<String>,
 }
 
 /// One `payment_routes` entry of a feed or a track response.
@@ -663,6 +666,21 @@ struct PublisherFeedData {
     source_links: Option<Vec<LinkData>>,
     source_ids: Option<Vec<EntityIdData>>,
     payment_routes: Option<Vec<RouteData>>,
+}
+
+#[derive(Deserialize)]
+struct RemoteItemsData {
+    #[serde(default)]
+    remote_items: Vec<RemoteItemData>,
+}
+
+#[derive(Deserialize)]
+struct RemoteItemData {
+    #[serde(alias = "feedGuid")]
+    feed_guid: Option<String>,
+    #[serde(alias = "feedUrl")]
+    feed_url: Option<String>,
+    title: Option<String>,
 }
 
 impl From<PublisherFeedData> for PublisherValues {
@@ -1090,6 +1108,7 @@ impl MusicIndex {
                 title: i.title,
                 artist: i.release_artist,
                 image_url: i.feed_image_url,
+                feed_url: i.feed_url,
             })
             .collect())
     }
@@ -1205,6 +1224,44 @@ impl MusicIndex {
             ),
             Err(e) if e.kind() == WebErrorKind::Status && e.status() == Some(404) => Ok(None),
             Err(e) => Err(e),
+        }
+    }
+
+    /// The feeds that a publisher feed lists as remote items.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`WebError`] when the request fails.
+    pub fn feed_remote_items(&self, feed_guid: &str) -> Result<Option<Vec<SearchHit>>, WebError> {
+        let url = format!("{}/v1/feeds/{}", self.base, filter_guid(feed_guid));
+        match self
+            .web
+            .get_with_query(&url, &[("include", "remote_items")], MAX_RESPONSE_BYTES)
+        {
+            Ok(file) => Ok(
+                serde_json::from_slice::<Envelope<RemoteItemsData>>(&file.bytes)
+                    .ok()
+                    .map(|envelope| {
+                        envelope
+                            .data
+                            .remote_items
+                            .into_iter()
+                            .filter_map(|item| {
+                                Some(SearchHit {
+                                    feed_guid: item.feed_guid?,
+                                    title: item.title,
+                                    artist: None,
+                                    image_url: None,
+                                    feed_url: item.feed_url,
+                                })
+                            })
+                            .collect()
+                    }),
+            ),
+            Err(error) if error.kind() == WebErrorKind::Status && error.status() == Some(404) => {
+                Ok(None)
+            }
+            Err(error) => Err(error),
         }
     }
 }
@@ -1563,6 +1620,24 @@ mod tests {
                 .unwrap(),
             None
         );
+    }
+
+    #[test]
+    fn a_publisher_feed_gives_its_remote_items() {
+        let server = TestServer::start(vec![(
+            "/v1/feeds/c0ffee-01",
+            200,
+            br#"{"data":{"remote_items":[{"feed_guid":"release-1","feed_url":"https://feed.example/a.xml","title":"Album A"},{"feed_guid":"release-2","title":"Album B"}]}}"#.to_vec(),
+        )]);
+        let index = MusicIndex::new(Web::new(), &server.url(""));
+        let hits = index.feed_remote_items("c0ffee-01").unwrap().unwrap();
+        assert_eq!(hits.len(), 2);
+        assert_eq!(hits[0].feed_guid, "release-1");
+        assert_eq!(
+            hits[0].feed_url.as_deref(),
+            Some("https://feed.example/a.xml")
+        );
+        assert_eq!(hits[1].title.as_deref(), Some("Album B"));
     }
 
     fn sent_q(text: &str, plain: bool) -> Option<String> {

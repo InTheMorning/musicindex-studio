@@ -1596,6 +1596,86 @@ pub(crate) struct NewAlbumFeed {
     image: Option<String>,
     /// The website of that release.
     website: Option<String>,
+    /// The feed address to copy.
+    copy_from: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct FeedCopyPreviewQuery {
+    url: String,
+}
+
+fn copy_counts(feed: &Feed) -> (usize, usize) {
+    let tracks = feed.items.len();
+    let recipients = feed
+        .values
+        .iter()
+        .map(|value| value.value.recipients.len())
+        .sum::<usize>()
+        + feed
+            .items
+            .iter()
+            .map(|item| {
+                item.value
+                    .values
+                    .iter()
+                    .map(|value| value.value.recipients.len())
+                    .sum::<usize>()
+            })
+            .sum::<usize>();
+    (tracks, recipients)
+}
+
+struct FeedCopy {
+    feed: Option<Feed>,
+    failed: bool,
+    counts: Option<(usize, usize)>,
+}
+
+/// Read the feed file to copy. The read runs with no lock of the
+/// workspace, because a slow file host must not stop other requests.
+fn read_feed_copy(web: &web::Web, address: Option<&str>) -> FeedCopy {
+    let feed = address.and_then(|url| studio_core::discover::read_feed(web, url).ok());
+    let counts = feed.as_ref().map(|source| copy_counts(&source.feed));
+    FeedCopy {
+        failed: address.is_some() && feed.is_none(),
+        feed: feed.map(|source| source.feed),
+        counts,
+    }
+}
+
+/// Read the feed file of `copy_from` with no lock of the workspace.
+async fn copy_unlocked(shared: &Shared, address: Option<String>) -> Result<FeedCopy, ApiError> {
+    let Some(address) = address else {
+        return Ok(FeedCopy {
+            feed: None,
+            failed: false,
+            counts: None,
+        });
+    };
+    let web = blocking(shared.clone(), move |w| Ok(w.web.clone())).await?;
+    blocking_unlocked(move || Ok(read_feed_copy(&web, Some(&address)))).await
+}
+
+pub(crate) async fn feed_copy_preview(
+    State(shared): State<Shared>,
+    Query(query): Query<FeedCopyPreviewQuery>,
+) -> ApiResult {
+    let web = blocking(shared, move |w| Ok(w.web.clone())).await?;
+    blocking_unlocked(move || {
+        let feed = studio_core::discover::read_feed(&web, &query.url).map_err(|error| {
+            ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "copy_failed",
+                error.message,
+            )
+        })?;
+        let (tracks, recipients) = copy_counts(&feed.feed);
+        Ok(Json(
+            json!({ "author": feed.feed.author, "tracks": tracks, "recipients": recipients }),
+        ))
+    })
+    .await
 }
 
 /// Make a new feed in a connected folder, as a draft with no hosted file
@@ -1604,6 +1684,7 @@ pub(crate) async fn new_album_feed(
     State(shared): State<Shared>,
     Json(body): Json<NewAlbumFeed>,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
+    let copy = copy_unlocked(&shared, body.copy_from.clone()).await?;
     blocking(shared, move |w| {
         let medium = body.medium.as_deref().unwrap_or("music");
         validate_release_kind(body.kind.as_deref(), medium)?;
@@ -1667,10 +1748,14 @@ pub(crate) async fn new_album_feed(
             return Err(ApiError::vault_locked());
         }
         let made = w.connector_of(&row)?;
+        // A copy gives the description, the artwork and the website of the
+        // found feed file (ADR 0233 item 9).
+        let copied = copy.feed.is_some();
         let first = pipeline::FirstValues {
-            description: body.description,
-            image: body.image,
-            website: body.website,
+            description: body.description.filter(|_| !copied),
+            image: body.image.filter(|_| !copied),
+            website: body.website.filter(|_| !copied),
+            copy: copy.feed,
         };
         let id = pipeline::new_feed_with(
             &mut w.collection,
@@ -1686,7 +1771,12 @@ pub(crate) async fn new_album_feed(
         if let Some(upper) = below_id {
             w.collection.add_kept_level(upper, id)?;
         }
-        Ok((StatusCode::CREATED, to_json(w.collection.feed(id)?)?))
+        let mut result = to_json(w.collection.feed(id)?)?;
+        result["copy_failed"] = json!(copy.failed);
+        if let Some((tracks, recipients)) = copy.counts {
+            result["copied"] = json!({ "tracks": tracks, "recipients": recipients });
+        }
+        Ok((StatusCode::CREATED, result))
     })
     .await
 }

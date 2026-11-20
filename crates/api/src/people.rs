@@ -15,6 +15,7 @@ use studio_core::change_set::{
     self, Cause, Outcome, PersonOperation, RecipientKey, RecipientOperation, Wallet,
 };
 use studio_core::collection::{Collection, CollectionError, CollectionErrorKind, FeedId};
+use studio_core::feed::Feed;
 use studio_core::keysend::{self, Lookup};
 use studio_core::lookup;
 use studio_core::people::{
@@ -23,6 +24,7 @@ use studio_core::people::{
 };
 use studio_core::pipeline::{PipelineError, PipelineErrorKind};
 use studio_core::profiles;
+use studio_core::xml::Document;
 
 use crate::error::ApiError;
 use crate::routes::search_request;
@@ -785,15 +787,127 @@ pub(crate) async fn search_index(
             ));
         }
     };
-    let index = blocking(shared, move |w| Ok(w.index.clone())).await?;
-    blocking_unlocked(move || {
+    let (index, marks) = blocking(shared.clone(), move |w| {
+        Ok((w.index.clone(), feed_marks(&w.collection)?))
+    })
+    .await?;
+    let feeds = blocking_unlocked(move || {
         let rows = lookup::search(&index, &request)?;
         let feeds = index.search(&request)?;
-        Ok(Json(
-            json!({ "rows": rows, "feeds": feeds, "note": null, "searched": true }),
-        ))
+        Ok((rows, feeds))
     })
-    .await
+    .await?;
+    let (rows, feeds) = feeds;
+    let marked = mark_feed_hits(&marks, feeds)?;
+    Ok(Json(
+        json!({ "rows": rows, "feeds": marked, "note": null, "searched": true }),
+    ))
+}
+
+#[derive(Debug, Clone)]
+struct FeedMark {
+    id: i64,
+    addresses: Vec<String>,
+    guid: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct FeedMarks {
+    connectors: Vec<studio_core::collection::ConnectorRow>,
+    feeds: Vec<FeedMark>,
+}
+
+fn feed_marks(collection: &Collection) -> Result<FeedMarks, ApiError> {
+    let connectors = collection.connectors()?;
+    let feeds = collection
+        .feeds()?
+        .into_iter()
+        .map(|row| {
+            let mut addresses = Vec::new();
+            if let Some(address) = studio_core::outside::address_of(&row) {
+                addresses.push(address);
+            }
+            addresses.extend(
+                row.address_differences
+                    .into_iter()
+                    .map(|address| address.url),
+            );
+            let bytes = if let Some(draft) = collection.draft(row.id)? {
+                Some(draft.draft_xml)
+            } else {
+                let snapshots = collection.snapshots(row.id)?;
+                snapshots
+                    .first()
+                    .map(|snapshot| collection.snapshot_xml(row.id, snapshot.id))
+                    .transpose()?
+            };
+            let guid = bytes
+                .and_then(|bytes| Document::parse_bytes(&bytes).ok())
+                .and_then(|doc| Feed::read(&doc).ok())
+                .and_then(|feed| feed.podcast_guid);
+            Ok(FeedMark {
+                id: row.id.0,
+                addresses,
+                guid,
+            })
+        })
+        .collect::<Result<Vec<_>, ApiError>>()?;
+    Ok(FeedMarks { connectors, feeds })
+}
+
+fn mark_feed_hits(
+    marks: &FeedMarks,
+    hits: Vec<studio_core::musicindex::SearchHit>,
+) -> Result<Vec<Value>, ApiError> {
+    hits.into_iter()
+        .map(|hit| {
+            let id = marks
+                .feeds
+                .iter()
+                .find(|feed| {
+                    let address_match = hit.feed_url.as_deref().is_some_and(|url| {
+                        feed.addresses
+                            .iter()
+                            .any(|known| url.trim_end_matches('/') == known.trim_end_matches('/'))
+                    });
+                    address_match
+                        || feed
+                            .guid
+                            .as_deref()
+                            .is_some_and(|guid| guid.eq_ignore_ascii_case(&hit.feed_guid))
+                })
+                .map(|feed| feed.id);
+            let yours = hit.feed_url.as_deref().is_some_and(|url| {
+                studio_core::outside::host_for_address(&marks.connectors, url).is_some()
+            });
+            let mut value =
+                serde_json::to_value(hit).map_err(|error| ApiError::internal(error.to_string()))?;
+            value["yours"] = json!(yours);
+            value["in_studio_id"] = id.map_or(Value::Null, |id| json!(id));
+            Ok(value)
+        })
+        .collect()
+}
+
+pub(crate) async fn musicindex_releases(
+    State(shared): State<Shared>,
+    Path(guid): Path<String>,
+) -> ApiResult {
+    let (index, marks) = blocking(shared.clone(), move |w| {
+        Ok((w.index.clone(), feed_marks(&w.collection)?))
+    })
+    .await?;
+    let hits = blocking_unlocked(move || {
+        index.feed_remote_items(&guid)?.ok_or_else(|| {
+            ApiError::new(
+                StatusCode::NOT_FOUND,
+                "not_in_index",
+                format!("Music Index has no feed {guid}"),
+            )
+        })
+    })
+    .await?;
+    Ok(Json(json!({ "feeds": mark_feed_hits(&marks, hits)? })))
 }
 
 /// The query of the field list.

@@ -1079,6 +1079,8 @@ pub struct FirstValues {
     pub image: Option<String>,
     /// The website, as the `link` of the channel.
     pub website: Option<String>,
+    /// The selected feed values and items to copy into the first draft.
+    pub copy: Option<Feed>,
 }
 
 /// Make a new feed as [`new_feed`] does, with the values of `values` in the
@@ -1120,6 +1122,54 @@ pub fn new_feed_with(
         image: kept(values.image.as_deref()),
         ..Feed::default()
     };
+    if let Some(copy) = &values.copy {
+        feed.author = Some(author.to_owned());
+        feed.description.clone_from(&copy.description);
+        feed.rss_image.clone_from(&copy.rss_image);
+        feed.image.clone_from(&copy.image);
+        feed.link.clone_from(&copy.link);
+        feed.values = copy
+            .values
+            .iter()
+            .map(|entry| Entry::new(entry.value.clone()))
+            .collect();
+        if medium == "publisher" {
+            feed.remote_items = copy
+                .remote_items
+                .iter()
+                .map(|entry| Entry::new(entry.value.clone()))
+                .collect();
+        }
+        feed.items = copy
+            .items
+            .iter()
+            .map(|entry| {
+                let mut item = crate::feed::Item {
+                    title: entry.value.title.clone(),
+                    enclosure: entry.value.enclosure.clone(),
+                    duration: entry.value.duration.clone(),
+                    image: entry.value.image.clone(),
+                    images: entry
+                        .value
+                        .images
+                        .iter()
+                        .map(|image| Entry::new(image.value.clone()))
+                        .collect(),
+                    description: entry.value.description.clone(),
+                    values: entry
+                        .value
+                        .values
+                        .iter()
+                        .map(|value| Entry::new(value.value.clone()))
+                        .collect(),
+                    guid: Some(uuid::Uuid::new_v4().to_string()),
+                    ..crate::feed::Item::default()
+                };
+                item.duration_seconds = entry.value.duration_seconds;
+                Entry::new(item)
+            })
+            .collect();
+    }
     if let Some(address) = address.as_deref() {
         set_self_link(&mut feed, address);
     }
@@ -1625,6 +1675,18 @@ pub fn draft_changed(collection: &Collection, id: FeedId) -> Result<bool, Pipeli
         || !collection.draft_operations(id)?.is_empty()
         || collection.draft_feed_move(id)?.is_some()
         || collection.has_draft_feed_delete(id)?)
+}
+
+/// Tell if a draft differs from its base after the build date is ignored.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the feed has no draft or the draft is not a feed.
+pub fn draft_changed_except_build_date(
+    collection: &Collection,
+    id: FeedId,
+) -> Result<bool, PipelineError> {
+    changes_feed(&current_draft(collection, id)?)
 }
 
 /// The typed model of a draft, and its revision.

@@ -16,13 +16,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::change_set::RecipientKey;
 use crate::collection::{Collection, CollectionError, CollectionErrorKind, CreditRow, FeedId, now};
-use crate::feed::{CreditPlace, Recipient, RecipientPlace};
+use crate::feed::{CreditPlace, Feed, Recipient, RecipientPlace};
 use crate::keysend::{self, Lookup, LookupResult};
 use crate::lookup::{is_channel_route, norm_name, save_key_of};
 use crate::musicindex::PublisherValues;
 use crate::net::NetPolicy;
 use crate::profiles;
 use crate::web::Web;
+use crate::xml::Document;
 
 /// The ID of a person.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -3813,8 +3814,9 @@ fn save_delete_undo(
 /// Gives [`CollectionErrorKind::NotFound`] when the feed does not exist.
 pub fn remove_feed(collection: &Collection, id: FeedId) -> Result<(), CollectionError> {
     let pending = feed_has_pending_removal(collection, id)?;
+    let cleanup = release_link_cleanup(collection, id)?;
     let tx = collection.db().unchecked_transaction()?;
-    let snapshot = delete_snapshot(&tx, FEED_DELETE_TABLES, id.0)?;
+    let mut snapshot = delete_snapshot(&tx, FEED_DELETE_TABLES, id.0)?;
     if snapshot["feeds"]["rows"]
         .as_array()
         .is_none_or(Vec::is_empty)
@@ -3827,11 +3829,120 @@ pub fn remove_feed(collection: &Collection, id: FeedId) -> Result<(), Collection
     if pending {
         tx.execute("DELETE FROM delete_undo WHERE id = 1", [])?;
     } else {
+        snapshot["linked_drafts"] = serde_json::to_value(&cleanup.drafts)
+            .map_err(|error| CollectionError::invalid(error.to_string()))?;
         save_delete_undo(&tx, "feed", &snapshot)?;
     }
     tx.execute("DELETE FROM snapshots WHERE feed_id = ?1", [id.0])?;
     tx.execute("DELETE FROM feeds WHERE id = ?1", [id.0])?;
     tx.commit()?;
+    cleanup_release_links(collection, &cleanup)?;
+    Ok(())
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct LinkedDraftSnapshot {
+    id: FeedId,
+    base_version: Option<String>,
+    base_xml: Vec<u8>,
+    draft_xml: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ReleaseLinkCleanup {
+    guid: Option<String>,
+    address: Option<String>,
+    drafts: Vec<LinkedDraftSnapshot>,
+}
+
+fn release_link_cleanup(
+    collection: &Collection,
+    release: FeedId,
+) -> Result<ReleaseLinkCleanup, CollectionError> {
+    let row = collection.feed(release)?;
+    let Some(draft) = collection.draft(release)? else {
+        return Ok(ReleaseLinkCleanup {
+            guid: None,
+            address: None,
+            drafts: Vec::new(),
+        });
+    };
+    if draft.base_version.is_some() || collection.feed_write(release)?.is_some() {
+        return Ok(ReleaseLinkCleanup {
+            guid: None,
+            address: None,
+            drafts: Vec::new(),
+        });
+    }
+    let feed = Feed::read(
+        &Document::parse_bytes(&draft.draft_xml)
+            .map_err(|error| CollectionError::invalid(error.to_string()))?,
+    )
+    .map_err(|error| CollectionError::invalid(error.to_string()))?;
+    let guid = feed.podcast_guid;
+    let address = row.public_url;
+    let mut drafts = Vec::new();
+    for publisher in collection
+        .feeds()?
+        .into_iter()
+        .filter(|feed| feed.medium.as_deref() == Some("publisher"))
+    {
+        let Some(publisher_draft) = collection.draft(publisher.id)? else {
+            continue;
+        };
+        let publisher_feed = Feed::read(
+            &Document::parse_bytes(&publisher_draft.draft_xml)
+                .map_err(|error| CollectionError::invalid(error.to_string()))?,
+        )
+        .map_err(|error| CollectionError::invalid(error.to_string()))?;
+        if publisher_feed.remote_items.iter().any(|item| {
+            guid.as_deref()
+                .is_some_and(|guid| item.value.feed_guid.as_deref() == Some(guid))
+                || address
+                    .as_deref()
+                    .is_some_and(|url| item.value.feed_url.as_deref() == Some(url))
+        }) {
+            drafts.push(LinkedDraftSnapshot {
+                id: publisher.id,
+                base_version: publisher_draft
+                    .base_version
+                    .map(|version| version.to_string()),
+                base_xml: publisher_draft.base_xml,
+                draft_xml: publisher_draft.draft_xml,
+            });
+        }
+    }
+    Ok(ReleaseLinkCleanup {
+        guid,
+        address,
+        drafts,
+    })
+}
+
+fn cleanup_release_links(
+    collection: &Collection,
+    cleanup: &ReleaseLinkCleanup,
+) -> Result<(), CollectionError> {
+    for snapshot in &cleanup.drafts {
+        crate::pipeline::edit_draft(collection, snapshot.id, |feed| {
+            feed.remote_items.retain(|item| {
+                cleanup
+                    .guid
+                    .as_deref()
+                    .is_none_or(|guid| item.value.feed_guid.as_deref() != Some(guid))
+                    && cleanup
+                        .address
+                        .as_deref()
+                        .is_none_or(|url| item.value.feed_url.as_deref() != Some(url))
+            });
+        })
+        .map_err(|error| CollectionError::invalid(error.to_string()))?;
+        let changed = crate::pipeline::draft_changed_except_build_date(collection, snapshot.id)
+            .map_err(|error| CollectionError::invalid(error.to_string()))?;
+        if !changed {
+            collection.delete_draft(snapshot.id)?;
+        }
+    }
     Ok(())
 }
 
@@ -3885,11 +3996,36 @@ pub fn undo_delete(collection: &Collection) -> Result<(), CollectionError> {
         serde_json::from_str(&text).map_err(|error| CollectionError::invalid(error.to_string()))?;
     match operation.as_str() {
         "person" => restore_delete_snapshot(&tx, PERSON_DELETE_TABLES, &snapshot)?,
-        "feed" => restore_delete_snapshot(&tx, FEED_DELETE_TABLES, &snapshot)?,
+        "feed" => {
+            restore_delete_snapshot(&tx, FEED_DELETE_TABLES, &snapshot)?;
+            restore_linked_drafts(collection, &snapshot)?;
+        }
         _ => return Err(CollectionError::invalid("invalid delete undo operation")),
     }
     tx.execute("DELETE FROM delete_undo WHERE id = 1", [])?;
     tx.commit()?;
+    Ok(())
+}
+
+fn restore_linked_drafts(
+    collection: &Collection,
+    snapshot: &serde_json::Value,
+) -> Result<(), CollectionError> {
+    let Some(rows) = snapshot.get("linked_drafts") else {
+        return Ok(());
+    };
+    let drafts: Vec<LinkedDraftSnapshot> = serde_json::from_value(rows.clone())
+        .map_err(|error| CollectionError::invalid(error.to_string()))?;
+    for draft in drafts {
+        collection.save_draft(
+            draft.id,
+            &crate::collection::DraftRow {
+                base_version: draft.base_version.map(crate::connector::Version::new),
+                base_xml: draft.base_xml,
+                draft_xml: draft.draft_xml,
+            },
+        )?;
+    }
     Ok(())
 }
 

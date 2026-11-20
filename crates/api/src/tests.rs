@@ -1444,6 +1444,40 @@ async fn a_new_release_starts_the_draft_of_a_written_artist_page() {
 }
 
 #[tokio::test]
+async fn removing_an_unwritten_release_removes_its_artist_link_and_undo_restores_both() {
+    let (app, connector) = publisher_app().await;
+    let artist = make_artist_page(&app, connector, "artist.xml", "Artist").await;
+    let artist_id = artist["id"].as_i64().unwrap();
+    assert_eq!(write_with_own_diff(&app, artist_id).await.0, StatusCode::OK);
+    let release = make_release(
+        &app,
+        connector,
+        "release.xml",
+        "Release",
+        "Artist",
+        artist_id,
+    )
+    .await;
+    let release_id = release["id"].as_i64().unwrap();
+    let before = draft_model(&app, artist_id).await;
+    assert_eq!(before["remote_items"].as_array().unwrap().len(), 1);
+    let (status, removed) =
+        call(&app, "DELETE", &format!("/api/v1/feeds/{release_id}"), None).await;
+    assert_eq!(status, StatusCode::OK, "{removed}");
+    assert_eq!(listed(&app, artist_id).await["draft_state"], "none");
+    let (status, undone) = call(&app, "POST", "/api/v1/undo", None).await;
+    assert_eq!(status, StatusCode::OK, "{undone}");
+    assert_eq!(
+        draft_model(&app, artist_id).await["remote_items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(draft_model(&app, release_id).await["title"], "Release");
+}
+
+#[tokio::test]
 async fn the_diff_of_a_new_release_names_its_artist_page_and_two_writes_leave_no_change() {
     let (app, connector) = publisher_app().await;
     let artist = make_artist_page(&app, connector, "artist.xml", "Artist").await;
@@ -2548,6 +2582,77 @@ async fn search_gives_feed_hits_from_musicindex() {
     )
     .await;
     assert_eq!(body["feeds"][0]["title"], "Album B");
+}
+
+#[tokio::test]
+async fn a_new_feed_copies_items_and_reports_a_failed_copy_without_refusing_the_make() {
+    let source = web_feeds();
+    source.set("/copy.xml", 200, br#"<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:podcast="https://podcastindex.org/namespace/1.0"><channel><title>Source</title><itunes:author>Source Artist</itunes:author><description>Source notes</description><link>https://artist.example</link><itunes:image href="https://img.example/cover.png"/><podcast:guid>source-feed-guid</podcast:guid><podcast:remoteItem feedGuid="linked-release" feedUrl="https://feed.example/release.xml" medium="music" title="Linked release"/><item><guid>source-item-guid</guid><title>Track A</title><description>Notes A</description><itunes:duration>12</itunes:duration><itunes:image href="https://img.example/track.png"/><enclosure url="https://audio.example/a.mp3" type="audio/mpeg"/><podcast:value type="lightning" method="keysend"><podcast:valueRecipient name="A" type="node" address="02aa" split="100"/></podcast:value></item><item><title>Track B</title><enclosure url="https://audio.example/b.mp3" type="audio/mpeg"/></item></channel></rss>"#.to_vec());
+    let app = app_with_index(&source.url(""));
+    let (_, connector) = call(&app, "POST", "/api/v1/connectors", Some(json!({"kind":"local","name":"Music","root":app.feeds.path(),"base_url":"https://music.example"}))).await;
+    let (status, preview) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/copy-preview?url={}/copy.xml", source.url("")),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{preview}");
+    assert_eq!(preview["tracks"], 2);
+    assert_eq!(preview["recipients"], 1);
+    assert_eq!(preview["author"], "Source Artist");
+    let (status, feed) = call(&app, "POST", "/api/v1/feeds/new", Some(json!({
+        "connector_id": connector["id"], "path":"copied.xml", "title":"New Title", "author":"New Author", "copy_from":format!("{}/copy.xml", source.url(""))
+    }))).await;
+    assert_eq!(status, StatusCode::CREATED, "{feed}");
+    assert_eq!(feed["copied"]["tracks"], 2);
+    let (_, draft) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{}/draft", feed["id"]),
+        None,
+    )
+    .await;
+    assert_eq!(draft["model"]["title"], "New Title");
+    assert_eq!(draft["model"]["author"], "New Author");
+    assert_eq!(draft["model"]["description"], "Source notes");
+    assert_eq!(draft["model"]["image"], "https://img.example/cover.png");
+    assert_eq!(draft["model"]["link"], "https://artist.example");
+    assert_eq!(draft["model"]["items"][0]["title"], "Track A");
+    assert_eq!(
+        draft["model"]["items"][0]["image"],
+        "https://img.example/track.png"
+    );
+    assert_eq!(
+        draft["model"]["items"][0]["enclosure"]["url"],
+        "https://audio.example/a.mp3"
+    );
+    assert_eq!(
+        draft["model"]["items"][0]["values"][0]["recipients"][0]["address"],
+        "02aa"
+    );
+    assert_ne!(draft["model"]["podcast_guid"], "source-feed-guid");
+    assert_ne!(draft["model"]["items"][0]["guid"], "source-item-guid");
+    assert_eq!(draft["model"]["remote_items"], json!([]));
+    let (_, copied_publisher) = call(&app, "POST", "/api/v1/feeds/new", Some(json!({
+        "connector_id": connector["id"], "path":"copied-publisher.xml", "title":"Publisher", "author":"Publisher", "medium":"publisher", "role":"artist", "copy_from":format!("{}/copy.xml", source.url(""))
+    }))).await;
+    let (_, publisher_draft) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{}/draft", copied_publisher["id"]),
+        None,
+    )
+    .await;
+    assert_eq!(
+        publisher_draft["model"]["remote_items"][0]["feed_guid"],
+        "linked-release"
+    );
+    let (status, failed) = call(&app, "POST", "/api/v1/feeds/new", Some(json!({
+        "connector_id": connector["id"], "path":"fallback.xml", "title":"Fallback", "author":"Fallback Artist", "copy_from":"http://127.0.0.1:1/missing.xml"
+    }))).await;
+    assert_eq!(status, StatusCode::CREATED, "{failed}");
+    assert_eq!(failed["copy_failed"], true);
 }
 
 #[tokio::test]
@@ -8029,6 +8134,11 @@ async fn the_one_search_gives_artists_labels_and_other_feeds() {
             "source_ids":[],"payment_routes":[{"recipient_name":"Ann","route_type":"lnaddress","address":"ann@x.example","split":100,"fee":false}]}}"#
             .to_vec(),
     );
+    server.set(
+        "/v1/feeds/c0ffee-10",
+        200,
+        br#"{"data":{"remote_items":[{"feed_guid":"c0ffee-11","feed_url":"https://feed.example/one.xml","title":"One"},{"feed_guid":"c0ffee-12","feed_url":"https://feed.example/two.xml","title":"Two"}]}}"#.to_vec(),
+    );
     let app = app_with_index(&server.url(""));
     let (status, body) = call(&app, "GET", "/api/v1/musicindex/search?q=ann", None).await;
     assert_eq!(status, StatusCode::OK, "ADR 0145 item 3: {body}");
@@ -8039,8 +8149,46 @@ async fn the_one_search_gives_artists_labels_and_other_feeds() {
     assert_eq!(status, StatusCode::OK, "ADR 0145 item 3: {body}");
     assert_eq!(body["website"], "https://ann.example");
     assert_eq!(body["routes"][0]["address"], "ann@x.example");
+    let (status, releases) = call(&app, "GET", "/api/v1/musicindex/releases/c0ffee-10", None).await;
+    assert_eq!(status, StatusCode::OK, "{releases}");
+    assert_eq!(releases["feeds"][0]["feed_guid"], "c0ffee-11");
+    assert_eq!(releases["feeds"][1]["feed_guid"], "c0ffee-12");
+    assert_eq!(releases["feeds"][0]["in_studio_id"], Value::Null);
     let (status, _) = call(&app, "GET", "/api/v1/musicindex/values/c0ffee-02", None).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn the_musicindex_search_marks_connected_and_collected_feeds() {
+    let server = web_feeds();
+    server.set(
+        "/v1/search",
+        200,
+        br#"{"data":[{"entity_type":"feed","entity_id":"c0ffee-44","title":"Album","feed_url":"https://music.example/musicindex-a.xml"}]}"#.to_vec(),
+    );
+    let app = app_with_index(&server.url(""));
+    let (_, connector) = call(&app, "POST", "/api/v1/connectors", Some(json!({
+        "kind":"local", "name":"Music", "root":app.feeds.path(), "base_url":"https://music.example"
+    }))).await;
+    let feed = make_feed(
+        &app,
+        new_feed_body(
+            connector["id"].as_i64().unwrap(),
+            "musicindex-a.xml",
+            "Album",
+            None,
+            None,
+        ),
+    )
+    .await;
+    let (status, body) = call(&app, "GET", "/api/v1/musicindex/search?q=album", None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["feeds"][0]["yours"], true);
+    assert_eq!(body["feeds"][0]["in_studio_id"], feed["id"]);
+    assert_eq!(
+        body["feeds"][0]["feed_url"],
+        "https://music.example/musicindex-a.xml"
+    );
 }
 
 #[tokio::test]

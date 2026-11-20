@@ -2,7 +2,7 @@
 
 Decision: [ADR 0233](../adr/0233-each-add-form-finds-on-music-index-and-copies-the-found-feed.md) items 6 to 9, 11, 13 to 15.
 
-Status: Open.
+Status: Done.
 
 ## Problem
 
@@ -55,3 +55,27 @@ Human: none.
 - Change only the files of the table above, `crates/api/src/lib.rs` for the routes, the test files, and this task file. Do not change `crates/api/ui/`.
 - Do not make an architecture decision. Stop and report a question.
 - Write the section "Result" at the end of this file: each change with file and line, and each check with its result.
+
+## Result
+
+- `crates/core/src/pipeline.rs:1093` copies the selected feed values and items. It gives each copied item a new GUID.
+- `crates/core/src/musicindex.rs:1235` reads remote items from Music Index.
+- `crates/core/src/people.rs:3815` removes links to an unwritten release and saves linked drafts for Undo.
+- `crates/api/src/routes.rs:1645` adds feed copy preview and copy status.
+- `crates/api/src/people.rs:778` adds search marks and release lookup.
+- `crates/api/src/lib.rs:385` registers the new routes.
+- `crates/api/src/tests.rs:1447` checks removal and Undo.
+- `crates/api/src/tests.rs:2588` checks feed copy.
+- `crates/api/src/tests.rs:8120` checks the release lookup.
+- `crates/api/src/tests.rs:8162` checks search marks.
+- `crates/core/src/musicindex.rs:1626` checks remote item reads.
+- `cargo test -p studio-core`: passed.
+- `cargo test -p studio-api`: passed.
+- `cargo clippy --workspace --all-targets -- -D warnings`: passed.
+- `bash tools/gate.sh`: passed.
+- `git diff --check`: passed.
+
+Main session changes after the review:
+
+- The make route and the copy preview read the found feed file with no lock of the workspace (`copy_unlocked` and `read_feed_copy` in `crates/api/src/routes.rs`). Before, a slow file host stopped each other request during the read.
+- `cargo test -p studio-core`, `cargo test -p studio-api`, `cargo clippy --workspace --all-targets -- -D warnings` and `bash tools/gate.sh` pass after this change.

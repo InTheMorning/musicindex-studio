@@ -8,6 +8,7 @@
 - Changes: [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md) item 1. A host that Studio cannot read no longer gives a remote row.
 - Uses: [ADR 0036](0036-library-records-host-inventory-and-host-operations.md) items 7 and 12, [ADR 0148](0148-a-move-keeps-the-old-files-until-the-user-reviews-the-deletion.md) items 2 to 5, [ADR 0177](0177-the-files-page-has-one-way-to-move.md) item 3.
 - Source: finding 9 of the [human checks of 2026-11-11](../reviews/2026-11-11-local-human-test-findings.md).
+- Changed by: [ADR 0231](0231-a-new-release-writes-its-artist-page-and-the-files-of-a-restored-release.md) items 12 to 14, on 2026-11-20. Items 3 and 4: a remote row at the planned address or a copy address of a local row is the same file, and Studio removes it.
 
 ## Context
 

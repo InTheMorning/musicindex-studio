@@ -206,6 +206,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0228: Undo in the bar, a notice that stays, and the rc.28 check findings](adr/0228-undo-in-the-bar-a-notice-that-stays-and-the-rc28-check-findings.md)
 - [ADR 0229: The media host after a follow, a podping again, and empty folders](adr/0229-the-media-host-after-a-follow-a-podping-again-and-empty-folders.md)
 - [ADR 0230: One add menu, the parent of a new release, and the check after rc.29](adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md)
+- [ADR 0231: A new release writes its artist page, and the files of a restored release](adr/0231-a-new-release-writes-its-artist-page-and-the-files-of-a-restored-release.md)
 
 ## Plans
 

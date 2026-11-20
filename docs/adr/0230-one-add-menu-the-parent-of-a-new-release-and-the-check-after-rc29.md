@@ -14,6 +14,7 @@
 - Changes: [ADR 0198](0198-the-review-of-a-delete-names-the-delete-and-a-deleted-feed-shows-only-what-it-can-do.md) items 6 and 9, **Put the File Back** after each done delete (items 27 to 29).
 - Changes: [ADR 0077](../archive/adr/0077-a-new-album-can-start-from-an-album.md), the copy of a release in "Start from". Item 13 removes the copy, and ADR 0077 has no other live rule. ADR 0077 goes to the archive in the commit that removes the copy.
 - Uses: [ADR 0164](0164-the-releases-of-a-publisher-feed-have-an-add-row.md), the add row of a publisher page. [ADR 0211](0211-studio-follows-a-move-that-a-different-studio-made.md) item 16, the notice **Use This File Host**. [ADR 0036](0036-library-records-host-inventory-and-host-operations.md), the remote records.
+- Changed by: [ADR 0231](0231-a-new-release-writes-its-artist-page-and-the-files-of-a-restored-release.md) items 1 to 6 and 14 to 17, on 2026-11-20. Item 9: the parent list has artist pages only. Item 11: the sheet says "Release". Item 27: a notice under the head shows the actions. Items 31 and 32: the corrected repair and the join of the rows with " 2".
 
 ## Context
 

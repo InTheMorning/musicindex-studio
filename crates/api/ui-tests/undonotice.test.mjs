@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readdir, readFile } from 'node:fs/promises';
-import { undoNoticeText, makeDeleteUndo } from '../ui/undonotice.js';
+import { undoNoticeText, makeDeleteUndo, DELETE_UNDO_ACTIONS } from '../ui/undonotice.js';
 
 // A fake route function. It records each call and fails on request.
 function fakeApi(failOn = null) {
@@ -67,5 +67,20 @@ test('ADR 0228 item 1: no module renders the undo notice', async () => {
   for (const name of files) {
     const text = await readFile(new URL(`../ui/${name}`, import.meta.url), 'utf8');
     assert.doesNotMatch(text, /undo-notice/, `ADR 0228 item 1: ${name} renders the bottom notice. Show the delete step in the bar with DeleteUndoBar.`);
+  }
+});
+
+test('ADR 0228 items 3 to 5: each call of useDeleteUndo() names an action of the control', async () => {
+  const control = makeDeleteUndo(async () => {});
+  for (const name of DELETE_UNDO_ACTIONS) {
+    assert.equal(typeof control[name], 'function', `makeDeleteUndo gives no ${name}.`);
+  }
+  const files = (await readdir(new URL('../ui/', import.meta.url))).filter((name) => name.endsWith('.js'));
+  for (const name of files) {
+    const text = await readFile(new URL(`../ui/${name}`, import.meta.url), 'utf8');
+    for (const match of text.matchAll(/deleteUndo\.(\w+)/g)) {
+      assert.ok(match[1] === 'model' || DELETE_UNDO_ACTIONS.includes(match[1]),
+        `ADR 0228 items 3 to 5: ${name} calls deleteUndo.${match[1]}, and useDeleteUndo() does not give it. Add the action to DELETE_UNDO_ACTIONS in crates/api/ui/undonotice.js.`);
+    }
   }
 });

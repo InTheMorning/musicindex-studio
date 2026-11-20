@@ -1,7 +1,7 @@
 // The undo step of a delete (ADR 0228 items 3 to 5 and 7). Delete Person and
 // Remove from Collection add one step to a history of the app. The page that
 // opens after the delete shows that step in its bar, as **Undo** and **Redo**.
-import { html, useCallback, useContext, useRef, useState, createContext } from './vendor/htm-preact-standalone.module.js';
+import { html, useContext, useRef, useState, createContext } from './vendor/htm-preact-standalone.module.js';
 import { makeHistory } from './undohistory.js';
 
 const DeleteUndoContext = createContext(null);
@@ -70,6 +70,11 @@ export function useDeleteUndo() {
   return useContext(DeleteUndoContext);
 }
 
+// The actions that `useDeleteUndo()` gives with `model`. A page calls only
+// these. `clear` was missing once, and **Remove from Collection** then failed
+// after the remove.
+export const DELETE_UNDO_ACTIONS = Object.freeze(['record', 'undo', 'redo', 'clear']);
+
 // Holds the one delete step of the app.
 export function DeleteUndoProvider({ api, children }) {
   const [model, setModel] = useState({ text: '', error: false, canUndo: false, canRedo: false });
@@ -80,9 +85,12 @@ export function DeleteUndoProvider({ api, children }) {
       done: () => window.dispatchEvent(new Event('studio-undo-complete')),
     });
   }
-  const undo = useCallback(() => control.current.undo(), []);
-  const redo = useCallback(() => control.current.redo(), []);
-  const record = useCallback((statusText, redoStep) => control.current.record(statusText, redoStep), []);
-  const value = { model, record, undo, redo };
+  // Each action of the control, made one time, so that a page that calls
+  // it gets the same function at each render.
+  const actions = useRef(null);
+  if (actions.current === null) {
+    actions.current = Object.fromEntries(DELETE_UNDO_ACTIONS.map((name) => [name, (...args) => control.current[name](...args)]));
+  }
+  const value = { model, ...actions.current };
   return html`<${DeleteUndoContext.Provider} value=${value}>${children}<//>`;
 }

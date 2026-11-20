@@ -3638,6 +3638,17 @@ const FEED_DELETE_TABLES: &[(&str, &str)] = &[
     ("person_members", "feed_id"),
 ];
 
+/// Tell if the collection has `table`. The move into the library drops the
+/// old table `draft_files` (`migrate::into_library`), so a list of tables
+/// can name a table that is gone.
+fn table_exists(db: &Connection, table: &str) -> Result<bool, CollectionError> {
+    Ok(db.query_row(
+        "SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1)",
+        [table],
+        |row| row.get(0),
+    )?)
+}
+
 fn delete_snapshot(
     db: &Connection,
     tables: &[(&str, &str)],
@@ -3645,6 +3656,9 @@ fn delete_snapshot(
 ) -> Result<serde_json::Value, CollectionError> {
     let mut snapshot = serde_json::Map::new();
     for (table, key) in tables {
+        if !table_exists(db, table)? {
+            continue;
+        }
         let predicate = match *table {
             "downloads" => "library_file_id IN (SELECT id FROM library_files WHERE feed_id = ?1)",
             "grant_writes" => "grant_id IN (SELECT id FROM show_grants WHERE feed_id = ?1)",
@@ -3693,6 +3707,10 @@ fn restore_delete_snapshot(
     snapshot: &serde_json::Value,
 ) -> Result<(), CollectionError> {
     for (table, _) in tables {
+        // A table that was gone at the delete has no entry.
+        if snapshot.get(*table).is_none() {
+            continue;
+        }
         let entry = &snapshot[*table];
         let columns = entry["columns"]
             .as_array()
@@ -3831,6 +3849,9 @@ pub fn feed_has_pending_removal(
         ("draft_feed_deletes", "feed_id"),
         ("feed_host_deletes", "feed_id"),
     ] {
+        if !table_exists(collection.db(), table)? {
+            continue;
+        }
         let count: i64 = collection.db().query_row(
             &format!("SELECT COUNT(*) FROM {table} WHERE {key} = ?1"),
             [id.0],
@@ -5912,6 +5933,21 @@ mod tests {
         assert!(feed_has_pending_removal(&collection, feed).unwrap());
         remove_feed(&collection, feed).unwrap();
         assert!(undo_delete(&collection).is_err());
+    }
+
+    #[test]
+    fn a_feed_remove_and_its_undo_work_after_the_move_into_the_library() {
+        // The move into the library drops `draft_files`. Remove from
+        // Collection then failed with "no such table: draft_files".
+        let mut collection = Collection::open_in_memory().unwrap();
+        let feed = collection.add_feed(None, None).unwrap();
+        collection.drop_draft_files_table().unwrap();
+
+        assert!(!feed_has_pending_removal(&collection, feed).unwrap());
+        remove_feed(&collection, feed).unwrap();
+        assert!(collection.feed(feed).is_err());
+        undo_delete(&collection).unwrap();
+        assert!(collection.feed(feed).is_ok());
     }
 
     #[test]

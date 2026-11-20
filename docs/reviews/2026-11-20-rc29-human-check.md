@@ -111,3 +111,36 @@ Findings:
 7. The move plan of "new Feed" offers to download and send 2 media files that are on no host. The plan does not say that the files are gone. ADR 0230 item 31 expected that the repair copies no file. That is true only when the files are on the target host.
 
 8. In the sheet **Find on Music Index** of a new release, the group title is "FEEDS" and each result row says "Feed · {artist}". The word "release" is clearer in this sheet. Refer to the operator rule about the word "feed" in labels.
+
+## Desktop Check Of The Commits Up To 2d4fb25
+
+The operator installed the package `0.1.0rc.29.r1028.g2d4fb25-1` on 2026-11-20.
+
+| Step | Result |
+| --- | --- |
+| 1. Build and install the package | Pass. |
+| 2a. The change that HeyCitizen had before the check | The only change was the link to "new Feed" and the build date. This is the change of finding 3 of the check of tasks 205 to 209. The sort menu shows "Page Order". |
+| 2b. **Discard the Draft** on HeyCitizen | Pass. HeyCitizen has no pencil mark and shows "No changes". |
+| 2c. Make the release "check 212" on bastone from the HeyCitizen level | Pass. The create gave no error, and HeyCitizen had no draft before it (ADR 0231 item 11). Studio then opened **Add tracks**. |
+| 2d. Review of "check 212" | Pass. Review shows the check box "Also write HeyCitizen", on, with the note and the change of HeyCitizen (ADR 0231 item 7). |
+| 2e. **Write to the File Host** with "Also write HeyCitizen" on and no podping | Pass. "check 212" shows "No changes". HeyCitizen has no pencil mark in the left panel, and its count is 5 with "check 212" (ADR 0231 items 8 and 10, finding 3 of the check of tasks 205 to 209). |
+| 3. The tab **Files** of "new Feed" (task 213) | Pass. **Library files** has two rows, the OGG file and the WEBP file, each "In use · 0 copies". No name ends in " 2" (ADR 0231 items 12 to 14). |
+| 4. The move plan of "new Feed" with "Media files only" to bastone (task 213) | Pass. The plan gives "1 audio file: The library → bastone · 1.9 MB", "1 image: The library → bastone · 56.4 KB" and "2 files: Not on a file host. Studio sends it from the library." It offers no download (ADR 0231 items 15 and 16). |
+| 5. The repair of "new Feed": **Add to the Draft** and the write, no podping (ADR 0231 item 17) | Pass. **Media files** says "bastone". Each library file says "In use · 1 copy". The head says "No changes". |
+| 6. The dotted circle of "new Feed" (task 210, step 6 of the check of tasks 205 to 209) | Pass. The screenshots of steps 3 and 5 show the head box of "new Feed" with no dotted circle, and the left panel of the page Releases shows no mark "Not checked". |
+
+Findings:
+
+1. On the artist page, the group "Releases" of the left panel has no action that makes a release. The operator wants **＋ Add release** there. A release page has **＋ Add tracks** at the same place.
+
+   The operator wants the same rule at each level of the left panel: a group of the left panel has an add action for the items of that group. A release page has **＋ Add tracks** below its tracks now. Examine each level of the left panel and list the groups that have no add action.
+
+2. On the page of the new release "check 212", the back row of the left panel says **‹ Releases**. The release has the parent HeyCitizen, and the artist page shows **‹ HeyCitizen**. Not examined: which level the back row must open from a new release.
+
+3. After the walk, **Remove from Collection** on "new Feed" gave the error "Studio could not finish this." with the details "deleteUndo.clear is not a function". Cause, examined in the code: `FeedFacts` in `crates/api/ui/editor.js` near line 2559 calls `deleteUndo.clear()` when the remove is not undoable. `DeleteUndoProvider` in `crates/api/ui/undonotice.js` near line 86 gives only `model`, `record`, `undo` and `redo`, with no `clear`. `crates/api/ui/app.js` near line 2112 and `crates/api/ui/peoplepages.js` near line 1106 make the same call. Task 198 (`e9f4434`) made this fault. Inference, not examined: the remove route ran before the error, so the feed can be gone from the collection.
+
+4. On the same screen, the Retire block of "new Feed" shows "Delete the file: The file is deleted." This is correct: after step 5, the operator did **Delete from File Host…** on "new Feed", then **Remove from Collection**. After the error, Studio opened the page Releases by itself. "new Feed" was gone, and HeyCitizen shows 4 releases. Thus the remove was done.
+
+5. Found in the main session check of the fix of finding 3. On a collection where `migrate::into_library` succeeded, **Remove from Collection** fails with HTTP 500 and "no such table: draft_files". That move drops the old table `draft_files`. `feed_has_pending_removal` and `FEED_DELETE_TABLES` in `crates/core/src/people.rs` still read it (`f81e055`, ADR 0227). The real collection of the operator still has the table, so the remove worked there.
+
+Operator choice (2026-11-20, main session): findings 3 and 5 are defect corrections with no new decision. `DeleteUndoProvider` gives each action of `DELETE_UNDO_ACTIONS`, and a node test checks each `deleteUndo` call against that list. The remove and its undo skip a table that is not in the collection, and a core test proves a remove and an undo after the drop of `draft_files`.

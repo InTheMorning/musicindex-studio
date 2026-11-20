@@ -76,3 +76,38 @@ The operator changed the name of the file host "heycitizen" to "CloudFlare". It 
 11. After the delete in step 2, **Library files** of "new Feed" shows "Richard Stallman Free software Song 2.ogg" and "stallman-disappointed 2.webp" as "In use · Not in the library". It also shows "Richard Stallman Free software Song.ogg" as "Not in use · 0 copies". Before the delete, the tab showed "Richard Stallman Free software Song.ogg" on "bastone". The source of the names with " 2" is not examined.
 
 12. After the delete in step 2, the section **Feed** of the tab **Release** of "new Feed" has only **Feed facts** and **Remove from Collection**. It has no block "Retire" and no **Put the File Back**. Thus the operator cannot put the deleted feed file back. The delete sheet said that this was possible. rc.23 step 7 fails.
+
+## Desktop Check Of Tasks 205 To 209
+
+The operator ran the release binary of main at `da76cb0` on the real data.
+
+| Step | Result |
+| --- | --- |
+| 1. Start the binary on the real data | Pass. |
+| 2. The Retire block of "new Feed" (task 206) | Pass. The section **Feed** of the tab **Release** shows **Put the File Back** and **Check Again**. It does not show **Stop Retiring** or **Use This File Host**. |
+| 3. **Put the File Back** on "new Feed" (task 206) | Pass. Review shows a usual write of the full file. It does not show a move of a read-only feed. |
+| 4. Write the file back (ADR 0230 item 30) | Pass. The head has no "READ-ONLY" label, and the section **Feed** has no Retire block. The media files stay deleted from the delete in the earlier check. |
+| 5. The rows with " 2" on the tab **Files** (ADR 0230 item 32) | Fail. After the write, **Library files** still shows "Richard Stallman Free software Song 2.ogg" and "stallman-disappointed 2.webp" as "In use · Not in the library". The rows without " 2" show "Not in use · 0 copies". Refer to finding 4. |
+| 6. A click on the box "new Feed" with the dotted circle (task 209) | Fail. The circle stays dotted. The public address gives HTTP 200, so a check can read the file. Refer to findings 5 and 6. |
+| 7. The data repair of "new Feed": **Move This Release…** with "Media files only" to "bastone" (ADR 0230 item 31) | Stopped at the plan. The plan sends 1 audio file (1.9 MB) and 1 image (0 B) to "bastone", and says "2 files not in the library: Studio downloads them first". The delete of the earlier check removed these files from "bastone". The operator cancelled the sheet. Refer to finding 7. |
+| 8. The plan of the data repair of "HeyCitizen's Test Album" (ADR 0230 item 31) | Pass. The plan shows "7 files: Already on bastone" and "Old files: None". |
+| 9. **Add to the Draft** and the write of the repair (task 205) | Pass. After the write, **Media files** shows "bastone" and the head shows "No changes". |
+| 10. **Find on Music Index** in the form of a new release (task 208) | Pass. The search "heyc" gives the artist row with "This row is not a release" and six results. A click on "The Heycitizen Experience" fills **Title** and **Artist name**. The parent card stays HeyCitizen. The operator closed the form with no release made. |
+
+Findings:
+
+1. The left panel shows the dotted circle ("Not checked") on "new Feed". The circle stays after a click on the item. The feed has no file after the delete, so Studio cannot check it. Thus the mark cannot go. Inference, not examined: `stateMark` in `crates/api/ui/outsidecheck.js` counts a feed with a done delete as a feed that is not checked.
+
+2. The Retire block is in the section **Feed** at the bottom of the tab **Release**. The operator had to scroll to find it. Finding 10 of the earlier check gave the same problem, and ADR 0230 did not move the block.
+
+3. On the page Releases, the row "HeyCitizen" in the left panel shows the pencil mark ("Changes not written"). Each release in the list shows "No changes". The cause is not examined.
+
+4. The rows with " 2" of finding 11 of the earlier check stay after **Put the File Back** and its write. ADR 0230 item 32 expected them to go. Inference, not examined: the binary of `5c763de` made the rows at a start after the delete. Task 206 stops new rows of this kind, but no step removes the rows that exist.
+
+5. On a release page, the head box of the left panel is drawn by `Outline` in `crates/api/ui/app.js` near line 3455. Its click opens the page and starts no check. Task 209 left it out, but ADR 0230 item 17 covers each row with the mark "Not checked".
+
+6. The mark of "new Feed" comes from the check at the start of Studio, when the file was deleted. The write of step 4 did not start a new check. Thus the mark "Not checked" stayed after the file was on the host again.
+
+7. The move plan of "new Feed" offers to download and send 2 media files that are on no host. The plan does not say that the files are gone. ADR 0230 item 31 expected that the repair copies no file. That is true only when the files are on the target host.
+
+8. In the sheet **Find on Music Index** of a new release, the group title is "FEEDS" and each result row says "Feed · {artist}". The word "release" is clearer in this sheet. Refer to the operator rule about the word "feed" in labels.

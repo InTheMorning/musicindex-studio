@@ -2,7 +2,7 @@
 import { html, render, useState, useEffect, useLayoutEffect, useCallback, useRef, useContext, createContext } from './vendor/htm-preact-standalone.module.js';
 import { checkCount, releaseChecklist } from './feedcheck.js';
 import { pageSequence, settingsTabs } from './pages.js';
-import { useFieldList, RowList } from './pickers.js';
+import { useFieldList, RowList, FindOneSheet, PickerLayout } from './pickers.js';
 import { UI_SCALES, SCALE_KEY, normalizeScale, measureWindowUnits } from './uiscale.js';
 import { LOCK_HINT, lockChoiceText } from './vaultlock.js';
 import { serverFilesRows, sizeText, SERVER_FILES_NOTE } from './assets.js';
@@ -20,8 +20,8 @@ import {
   prfOutputOf, passkeyBrowserCode, defaultPasskeyName,
   nip46State, nip46ErrorText, isBunkerAddress, qrSource, UNLOCK_AGAIN_TEXT, needsRecentUnlock,
 } from './account.js';
-import { addChoices, addMenuEntries, ADD_PAGE_TITLE, MAKE_TYPES, RELEASE_KINDS, makeFields, makeTitle, feedFileStart, startChoices, shouldAddTracksAfterNewRelease } from './addfeeds.js';
-import { WELCOME, HOST_STEP, showWelcome, welcomeSteps, pathTexts, hostStepModel, welcomeBody, releaseAdd, libraryResult } from './welcome.js';
+import { addChoices, addMenuEntries, ADD_PAGE_TITLE, MAKE_TYPES, RELEASE_KINDS, makeFields, makeTitle, feedFileStart, parentCard, releaseFindChoices, shouldAddTracksAfterNewRelease } from './addfeeds.js';
+import { WELCOME, HOST_STEP, showWelcome, welcomeSteps, pathTexts, hostStepModel, welcomeBody, releaseAdd, releaseArtistChoices, libraryResult } from './welcome.js';
 import { isLiveItem } from './live.js';
 import { appRowLines, pairingPhase, pairingNotice, doneRemovesApp } from './apps.js';
 import { CONFIRMS, confirmButtons } from './confirms.js';
@@ -1432,90 +1432,107 @@ function AddHostForm({ feeds, onAdded, start, showType = true, startRoot = '', s
   </div>`;
 }
 
-// One form makes each new feed, as a draft with no file on the host yet
-// (ADR 0073 items 5 to 9, ADR 0032 items 6 to 9, ADR 0041 item 2, ADR 0053
+// The card of the parent page of a new release (ADR 0230 items 9 and 10). With
+// no parent, it says so, and the button selects one.
+function ParentCard({ card, onChange }) {
+  return html`<section class="page-section"><div class="group"><div class="link-row static parent-card">
+    ${card && html`<${FeedArt} art=${card.art} glow=${card.glow} dot=${card.dot} />`}
+    <span class="text"><span class="label">${card ? card.title : 'No artist page'}</span>
+      <span class="summary">${card ? card.typeLabel : 'A release needs an artist page.'}</span></span>
+    <button class="button" type="button" onClick=${onChange}>${card ? 'Change…' : 'Select…'}</button>
+  </div></div></section>`;
+}
+
+// The sheet that selects the parent of a new release. The list has the
+// artist pages that can receive the release (ADR 0230 item 9).
+function ParentSheet({ choices, onChoose, onClose }) {
+  const ref = useSheet(true);
+  return html`<dialog ref=${ref} class="sheet small" aria-labelledby="release-parent-title" onClose=${onClose}>
+    <header><h2 id="release-parent-title">Select an artist page</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button></header>
+    <div class="body">
+      ${choices.length > 0
+        ? html`<div class="field"><label for="release-parent">Artist page</label>
+            <select id="release-parent" value="" onChange=${(event) => {
+              const choice = choices.find((row) => row[0] === event.target.value);
+              if (choice) { onChoose(Number(choice[0])); ref.current.close(); }
+            }}>
+              <option value="">Select an artist page</option>
+              ${choices.map(([id, title]) => html`<option value=${id}>${title}</option>`)}</select>
+          </div>`
+        : html`<p class="hint">No artist page is available. Make an artist page first.</p>`}
+    </div>
+  </dialog>`;
+}
+
+// One form makes each new page or release, as a draft with no file on the host
+// yet (ADR 0073 items 5 to 9, ADR 0032 items 6 to 9, ADR 0041 item 2, ADR 0053
 // item 2). "Feed file" starts from the title until the user types in it.
 // `start` gives `title`, `author`, `role` and `publisher_id` (ADR 0119 item 8, ADR 0213 item 7,
-// ADR 0218 item 6).
-// `onKind` gets the type and the role, for the title of the sheet.
+// ADR 0218 item 6). A release shows the parent card first, and the row "Find on
+// Music Index" fills the form from a release (ADR 0230 items 9 to 15).
+// `onKind` gets the type, the role and the name of the parent, for the title of the sheet.
 function MakeFeedForm({ connectors, feeds, startType, start = {}, onAdded, onKind }) {
   const [type, setType] = useState(startType);
   const [connectorId, setConnectorId] = useState(connectors[0] ? connectors[0].id : null);
   const [title, setTitle] = useState(start.title || '');
-  const [author, setAuthor] = useState(start.author || '');
+  const parentStart = parentCard(feeds, start.publisher_id);
+  const [author, setAuthor] = useState(start.author || (parentStart ? parentStart.title : ''));
   const [releaseKind, setReleaseKind] = useState(start.kind || '');
   const [role, setRole] = useState(start.role || null);
   const [typedPath, setTypedPath] = useState(null);
-  const [from, setFrom] = useState('');
   const [authorTyped, setAuthorTyped] = useState(false);
   const [pathOpen, setPathOpen] = useState(false);
+  const [parentId, setParentId] = useState(start.publisher_id ?? null);
+  const [choosing, setChoosing] = useState(false);
+  const [finding, setFinding] = useState(false);
+  // The description, the artwork address and the website of a found release.
+  const [found, setFound] = useState({});
   const { busy, error, run, retry } = useAction();
-  const authorTypedRef = useRef(false);
-  authorTypedRef.current = authorTyped;
-  useEffect(() => { if (onKind) onKind({ type, role }); }, [type, role]);
+  const card = parentCard(feeds, parentId);
+  const isRelease = type === 'album';
+  useEffect(() => { if (onKind) onKind({ type, role, parent: card ? card.title : null }); }, [type, role, card && card.title]);
   const fields = makeFields(type);
   const path = typedPath ?? feedFileStart(title);
   const formError = splitError(error, ['no_public_address', 'file_exists']);
-  const starts = startChoices(feeds);
-  const showFrom = type === 'album' && starts.length > 1;
-  // "Start from" is for the type Album only. Another type clears it.
-  const changeType = (value) => {
-    setType(value);
-    if (value !== 'album') setFrom('');
+  const changeParent = (id) => {
+    setParentId(id);
+    const chosen = parentCard(feeds, id);
+    if (chosen && !authorTyped) setAuthor(chosen.title);
   };
-  // An album gives the start value of "Artist" when the user did not type
-  // there. This is an edit aid. The core makes the copy (ADR 0077, ADR 0065).
-  const changeFrom = async (value) => {
-    setFrom(value);
-    if (!value) return;
-    try {
-      const draft = await api(`/feeds/${value}/draft`);
-      if (!authorTypedRef.current && draft.model && draft.model.author) setAuthor(draft.model.author);
-    } catch (e) {
-      // The start value is optional. The core reports a real error at the save.
-    }
+  // A pick fills the title, the artist name and the kind. It keeps the other values for the first draft.
+  const pick = (values) => {
+    if (values.title) setTitle(values.title);
+    if (values.author) { setAuthor(values.author); setAuthorTyped(true); }
+    if (values.kind) setReleaseKind(values.kind);
+    setFound({ description: values.description, image: values.image, website: values.website });
   };
   // Open "Feed file" when the API gives an error for it.
   useEffect(() => { if (formError.field) setPathOpen(true); }, [formError.field]);
   const submit = (event) => {
     event.preventDefault();
+    if (isRelease && parentId === null) return;
     const name = title;
     run(async () => {
       const body = { connector_id: connectorId, path, title: name, author: fields.authorLabel === null ? name : author, medium: fields.medium };
       if (fields.role) body.role = role;
-      if (type === 'album') {
+      if (isRelease) {
         body.kind = releaseKind || null;
-        body.publisher_id = start.publisher_id;
+        body.publisher_id = parentId;
+        for (const key of ['description', 'image', 'website']) if (found[key]) body[key] = found[key];
       }
-      if (showFrom && from) body.from = Number(from);
-      onAdded(await api('/feeds/new', { method: 'POST', body }), { type, from });
+      onAdded(await api('/feeds/new', { method: 'POST', body }), { type });
     });
   };
   const ready = connectorId !== null && path.trim() && title.trim()
-    && (fields.authorLabel === null || author.trim()) && (!fields.role || role !== null);
-  return html`<form class="form" onSubmit=${submit}>
-    ${type !== 'album' && html`<${ChoiceSelect} id="make-type" label="Type" value=${type} options=${MAKE_TYPES} onChange=${changeType} />`}
-    ${type !== 'album' && connectors.length > 1 && html`<div class="field"><label for="make-host">File host</label>
+    && (fields.authorLabel === null || author.trim()) && (!fields.role || role !== null)
+    && (!isRelease || parentId !== null);
+  const hostField = connectors.length > 1 && html`<div class="field"><label for="make-host">File host</label>
       <select id="make-host" class="button" value=${connectorId}
         onChange=${(e) => setConnectorId(Number(e.target.value))}>
         ${connectors.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
-      </select></div>`}
-    ${type === 'album' && html`<${ChoiceSelect} id="make-kind" label="Kind" value=${releaseKind} options=${RELEASE_KINDS}
-      hint="Studio shows this kind. The feed file has no tag for it." onChange=${setReleaseKind} />`}
-    <${Field} id="make-title" label=${fields.titleLabel} required
-      value=${title} onInput=${(e) => setTitle(e.target.value)} />
-    ${fields.authorLabel !== null && html`<${Field} id="make-author" label=${fields.authorLabel} required
-      value=${author} onInput=${(e) => { setAuthorTyped(true); setAuthor(e.target.value); }} />`}
-    ${showFrom && html`<${ChoiceSelect} id="make-from" label="Start from" value=${from} options=${starts.slice(1)}
-      placeholder=${starts[0][1]} onChange=${changeFrom} />`}
-    ${type === 'album' && connectors.length > 1 && html`<div class="field"><label for="make-host">File host</label>
-      <select id="make-host" class="button" value=${connectorId}
-        onChange=${(e) => setConnectorId(Number(e.target.value))}>
-        ${connectors.map((c) => html`<option value=${c.id}>${c.name}</option>`)}
-      </select></div>`}
-    ${fields.role && html`<${ChoiceSelect} id="make-role" label="Role" value=${role ?? ''} placeholder="Select a role"
-      options=${FIRST_CLASS_ROLES.map((r) => [r, roleWord(r)])} onChange=${(value) => setRole(value || null)} />`}
-    <div class="group"><details class="disclosure" open=${pathOpen} onToggle=${(e) => setPathOpen(e.currentTarget.open)}>
+      </select></div>`;
+  const feedFile = html`<div class="group"><details class="disclosure" open=${pathOpen} onToggle=${(e) => setPathOpen(e.currentTarget.open)}>
       <summary class="link-row"><span class="label">Feed file</span>
         <span class="summary">${path || 'From the title'}</span></summary>
       <div class="form">
@@ -1523,10 +1540,37 @@ function MakeFeedForm({ connectors, feeds, startType, start = {}, onAdded, onKin
           hint="The path of the new feed file in the folder of the file host."
           error=${formError.field} value=${path} onInput=${(e) => setTypedPath(e.target.value)} />
       </div>
-    </details></div>
-    <${ErrorNotice} error=${formError.other} action="Studio could not add the feed." onRetry=${retry} />
+    </details></div>`;
+  const submitRow = html`<${ErrorNotice} error=${formError.other} action="Studio could not make it." onRetry=${retry} />
     <div class="actions"><button class="button primary" type="submit" disabled=${busy || !ready}>
-      ${busy ? fields.busyLabel : fields.button}</button></div>
+      ${busy ? fields.busyLabel : fields.button}</button></div>`;
+  const titleField = html`<${Field} id="make-title" label=${fields.titleLabel} required
+      value=${title} onInput=${(e) => setTitle(e.target.value)} />`;
+  const authorField = fields.authorLabel !== null && html`<${Field} id="make-author" label=${fields.authorLabel} required
+      value=${author} onInput=${(e) => { setAuthorTyped(true); setAuthor(e.target.value); }} />`;
+  if (isRelease) {
+    return html`<${PickerLayout} id="make-release-form" onSubmit=${submit}
+        lead=${html`<${ParentCard} card=${card} onChange=${() => setChoosing(true)} />`}
+        musicindexFirst=${true}
+        musicindex=${{ title: 'Find on Music Index', summary: 'Fill the form from a release.', onOpen: () => setFinding(true) }}
+        fields=${html`<div class="form">${titleField}
+          <${ChoiceSelect} id="make-kind" label="Kind" value=${releaseKind} options=${RELEASE_KINDS}
+            hint="Studio shows this kind. The feed file has no tag for it." onChange=${setReleaseKind} />
+          ${authorField}${hostField}${feedFile}</div>`}
+        notice=${submitRow} lists=${[]} />
+      ${choosing && html`<${ParentSheet} choices=${releaseArtistChoices(feeds)} onChoose=${changeParent} onClose=${() => setChoosing(false)} />`}
+      <${FindOneSheet} open=${finding} choices=${releaseFindChoices} empty="Select a release. This row is not a release."
+        onPick=${pick} onClose=${() => setFinding(false)} />`;
+  }
+  return html`<form class="form" onSubmit=${submit}>
+    <${ChoiceSelect} id="make-type" label="Type" value=${type} options=${MAKE_TYPES} onChange=${setType} />
+    ${hostField}
+    ${titleField}
+    ${authorField}
+    ${fields.role && html`<${ChoiceSelect} id="make-role" label="Role" value=${role ?? ''} placeholder="Select a role"
+      options=${FIRST_CLASS_ROLES.map((r) => [r, roleWord(r)])} onChange=${(value) => setRole(value || null)} />`}
+    ${feedFile}
+    ${submitRow}
   </form>`;
 }
 
@@ -3027,8 +3071,9 @@ function AddFeedSheet({ open, title, connectors, feeds, found, setFound, start, 
   const makeType = ['album', 'publisher', 'show', 'playlist'].includes(open) ? open : null;
   // The type and the role of the open form. A value of an earlier row is not used.
   const [kind, setKind] = useState(null);
-  const now = kind && kind.open === open ? kind : { type: makeType, role: (start || {}).role };
-  const shownTitle = makeType ? makeTitle(now.type, now.role) : title;
+  const startParent = makeType === 'album' ? parentCard(feeds, (start || {}).publisher_id) : null;
+  const now = kind && kind.open === open ? kind : { type: makeType, role: (start || {}).role, parent: startParent && startParent.title };
+  const shownTitle = makeType ? makeTitle(now.type, now.role, now.parent) : title;
   let body = null;
   if (makeType) {
     body = html`<${MakeFeedForm} key=${open} connectors=${connectors} feeds=${feeds} startType=${makeType} start=${start}
@@ -4091,7 +4136,7 @@ function Shell({ vault, onLock, version }) {
   // A new feed opens its page. The list is loaded before the page opens.
   const addedFeed = async (f, makeInfo) => {
     await load();
-    if (f && makeInfo && shouldAddTracksAfterNewRelease(makeInfo.type, makeInfo.from)) setPendingAddTracks(f.id);
+    if (f && makeInfo && shouldAddTracksAfterNewRelease(makeInfo.type)) setPendingAddTracks(f.id);
     go(f ? { name: 'feed', id: f.id } : { name: 'releases' });
   };
   let main;

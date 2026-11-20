@@ -1,7 +1,7 @@
 // The model of the Add One You Have page and of the form that makes a feed (ADR 0073
 // items 1 to 10, ADR 0042). The functions have no Preact and no browser
 // state. `app.js` shows the rows and the form.
-import { compareNames, feedKind } from './shell.js';
+import { feedKind, kindGlow, publisherArt } from './shell.js';
 
 // The rows of the page "Add One You Have" (ADR 0230 item 4). The page has one
 // group. The row "From a file host folder" needs a file host, so it goes out
@@ -62,7 +62,7 @@ export function releaseKindOptions(kindShown, trackCount, liveItemCount = 0) {
 }
 
 const FIELDS = {
-  album: { medium: 'music', titleLabel: 'Album title', authorLabel: 'Artist', role: false, button: 'Make the Release', busyLabel: 'Making the Release…' },
+  album: { medium: 'music', titleLabel: 'Title', authorLabel: 'Artist name', role: false, button: 'Make the Release', busyLabel: 'Making the Release…' },
   publisher: { medium: 'publisher', titleLabel: 'Name', authorLabel: null, role: true, button: 'Make the Page', busyLabel: 'Making the Page…' },
   show: { medium: 'music', titleLabel: 'Show title', authorLabel: 'Artist', role: false, button: 'Make the Show', busyLabel: 'Making the Show…' },
   playlist: { medium: 'musicL', titleLabel: 'Playlist name', authorLabel: 'Author', role: false, button: 'Make the Playlist', busyLabel: 'Making the Playlist…' },
@@ -75,15 +75,63 @@ export function makeFields(type) {
   return FIELDS[type] || FIELDS.album;
 }
 
-// The title of the sheet that makes a feed (ADR 0164 item 7). It follows the
-// type, and the role of a publisher feed. It does not use the word "feed".
+// The title of the sheet that makes a page or a release (ADR 0164 item 7, ADR
+// 0230 item 8). It follows the type, and the role of a publisher page. A
+// release names its parent, when it has one. It does not use the word "feed".
 const PAGE_WORDS = { artist: 'artist page', label: 'label page', hosting: 'hosting page' };
 
-export function makeTitle(type, role) {
+export function makeTitle(type, role, parent) {
   if (type === 'publisher') return `Make a new ${PAGE_WORDS[role] || 'artist or label page'}`;
   if (type === 'show') return 'Make a new show';
   if (type === 'playlist') return 'Make a new playlist';
-  return 'Make a new release';
+  return parent ? `New release for ${parent}` : 'New release';
+}
+
+// The parent card of the form that makes a release (ADR 0230 items 9 and 10):
+// the art, the name and the type of the parent page. It gives `null` when
+// `publisherId` names no page of the list.
+export function parentCard(feeds, publisherId) {
+  const page = (feeds || []).find((feed) => feed.id === publisherId);
+  if (!page) return null;
+  return {
+    id: page.id,
+    title: page.title || page.path || 'Untitled page',
+    typeLabel: feedKind(page).label,
+    dot: feedKind(page).dot,
+    glow: kindGlow(feedKind(page)),
+    art: publisherArt(page, feeds),
+  };
+}
+
+// The kind that a track count gives (ADR 0230 item 14). This is the
+// customary split of the music stores. Music Index does not give a count
+// in the values of a feed yet, so a pick leaves the kind as it is.
+export function kindOfTrackCount(count) {
+  if (!Number.isInteger(count) || count < 1) return null;
+  if (count <= 3) return 'single';
+  return count <= 6 ? 'ep' : 'album';
+}
+
+const hasText = (value) => typeof value === 'string' && value.trim() !== '';
+
+// The choices of a found release (ADR 0230 items 11, 14 and 15). `values` is
+// the answer of `GET /musicindex/values/{guid}`, and `hit` is the row of a
+// release. A row of an artist page or a label page gives no choice. The one
+// choice has only the values that Music Index gives: `title`, `author`,
+// `kind`, `description`, `image` and `website`.
+export function releaseFindChoices(values, hit) {
+  if (!hit) return [];
+  const kind = kindOfTrackCount(values.track_count);
+  const found = {
+    title: hasText(values.title) ? values.title : (hasText(hit.title) ? hit.title : null),
+    author: hasText(hit.artist) ? hit.artist : null,
+    kind,
+    description: hasText(values.description) ? values.description : null,
+    image: hasText(values.image_url) ? values.image_url : null,
+    website: hasText(values.website) ? values.website : null,
+  };
+  const present = Object.fromEntries(Object.entries(found).filter(([, value]) => value !== null));
+  return Object.keys(present).length === 0 ? [] : [{ id: 'release', values: present }];
 }
 
 // The start value of "Feed file" (ADR 0073 item 8). It is an edit aid, not a
@@ -100,18 +148,7 @@ export function feedFileStart(title) {
   return stem === '' ? '' : `${stem}.xml`;
 }
 
-// The values of the select menu "Start from" (ADR 0077 item 1). The first
-// value is an empty album. Then come the music feeds of the list of releases, in
-// the sequence of their titles. A feed with no title uses its address.
-export function startChoices(feeds) {
-  const albums = (feeds || [])
-    .filter((feed) => (feed.medium || '').toLowerCase() === 'music')
-    .map((feed) => [String(feed.id), feed.title || feed.path || 'Untitled feed']);
-  albums.sort((a, b) => compareNames(a[1], b[1]));
-  return [['', 'Empty album'], ...albums];
-}
-
-// A new album with no source needs its first track at once.
-export function shouldAddTracksAfterNewRelease(type, from) {
-  return type === 'album' && !from;
+// A new release has no track, so it needs its first track at once.
+export function shouldAddTracksAfterNewRelease(type) {
+  return type === 'album';
 }

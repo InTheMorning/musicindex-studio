@@ -218,23 +218,28 @@ export function PickFold({ id, title, note, lead, rows, startOpen = foldStartsOp
 // (ADR 0169 item 1), the layout has no pinned section. `musicindex` gives the
 // title, the summary and `onOpen` of its row, and an optional `note` below the
 // row. Each entry of `lists` has a
-// title and rows.
-export function PickerLayout({ id, onSubmit, fields, notice, musicindex, lists }) {
+// title and rows. `lead` is a section before the form, as the parent card of a
+// new release (ADR 0230 item 9). With `musicindexFirst`, the row of Music Index
+// comes before the form (ADR 0230 item 11).
+export function PickerLayout({ id, onSubmit, fields, notice, musicindex, lists, lead, musicindexFirst = false }) {
   const form = useRef(null);
   // A selection fills the form, so the form must be in view. At narrow width it
   // scrolls with the list.
   const showForm = (e) => {
     if (form.current && e.target.closest('button.link-row:not(:disabled)')) form.current.scrollIntoView({ block: 'nearest' });
   };
-  return html`<form class="body" id=${id} onSubmit=${onSubmit}>
-    ${fields && html`<section class="page-section pinned-form" ref=${form}>${fields}</section>`}
-    ${notice}
-    <section class="page-section"><h2>From Music Index</h2>
+  const indexSection = html`<section class="page-section"><h2>From Music Index</h2>
       <div class="group"><button class="link-row" type="button" onClick=${musicindex.onOpen}>
         <span class="text"><span class="label">${musicindex.title}</span>
           <span class="summary">${musicindex.summary}</span></span>
         <span class="go" aria-hidden="true">›</span></button></div>
-      ${musicindex.note && html`<p class="hint" role="status">${musicindex.note}</p>`}</section>
+      ${musicindex.note && html`<p class="hint" role="status">${musicindex.note}</p>`}</section>`;
+  return html`<form class="body" id=${id} onSubmit=${onSubmit}>
+    ${lead}
+    ${musicindexFirst && indexSection}
+    ${fields && html`<section class="page-section pinned-form" ref=${form}>${fields}</section>`}
+    ${notice}
+    ${!musicindexFirst && indexSection}
     ${lists.filter((list) => list.rows.length > 0).map((list) => html`<${PickFold} key=${list.title} title=${list.title} rows=${list.rows} onClick=${showForm} />`)}
   </form>`;
 }

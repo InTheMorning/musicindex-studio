@@ -1,6 +1,6 @@
 # Studio v1 Task 053b: "Start From" In The Form
 
-Parent: [task 053](studio-v1-task-053-album-from-album.md). Decision: [ADR 0077](../adr/0077-a-new-album-can-start-from-an-album.md) items 1 to 3.
+Parent: [task 053](studio-v1-task-053-album-from-album.md). Decision: [ADR 0077](../archive/adr/0077-a-new-album-can-start-from-an-album.md) items 1 to 3.
 
 Status: Complete - 2026-10-28. The four commit checks pass.
 

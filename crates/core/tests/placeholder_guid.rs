@@ -330,28 +330,6 @@ fn a_new_public_address_gives_the_real_guid_to_a_written_feed_with_no_draft() {
     );
 }
 
-#[test]
-fn copy_feed_with_no_public_address_gets_a_placeholder_guid() {
-    let mut s = setup();
-    let source = new_album(&mut s, "album.xml");
-    let copy = pipeline::copy_feed(
-        &mut s.collection,
-        s.hosts.get(s.private).unwrap(),
-        s.private,
-        "copy.xml",
-        "Copy",
-        "Artist",
-        source,
-    )
-    .unwrap();
-    let row = s.collection.feed(copy).unwrap();
-    assert_eq!(row.public_url, None);
-    let guid = draft_guid(&s, copy).expect("a copy has a GUID");
-    assert!(pipeline::has_placeholder_guid(&guid));
-    let (feed, _) = pipeline::draft_model(&s.collection, copy).unwrap();
-    assert_eq!(feed.atom_links.len(), 0, "a copy has no self link");
-}
-
 /// Import one track into the release folder `folder` of `id`, and add it to
 /// the draft. Gives the address of the track in the draft.
 fn add_track(s: &mut Setup, id: FeedId, folder: &str) -> String {

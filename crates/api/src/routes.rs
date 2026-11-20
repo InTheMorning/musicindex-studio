@@ -1582,13 +1582,17 @@ pub(crate) struct NewAlbumFeed {
     medium: Option<String>,
     /// `artist` or `label`. A publisher feed needs it (ADR 0041 item 1).
     role: Option<String>,
-    /// The ID of the source album. The new feed is a copy of its draft
-    /// (ADR 0077 item 4).
-    from: Option<i64>,
     /// The kind kept for the new release (ADR 0213 item 10).
     kind: Option<String>,
     /// The artist page that starts the new release (ADR 0213 items 1 and 7).
     publisher_id: Option<i64>,
+    /// The description of a release that the user found on Music Index
+    /// (ADR 0230 item 15).
+    description: Option<String>,
+    /// The artwork address of that release.
+    image: Option<String>,
+    /// The website of that release.
+    website: Option<String>,
 }
 
 /// Make a new feed in a connected folder, as a draft with no hosted file
@@ -1659,38 +1663,21 @@ pub(crate) async fn new_album_feed(
             return Err(ApiError::vault_locked());
         }
         let made = w.connector_of(&row)?;
-        let id = if let Some(from) = body.from {
-            // A copy starts only from an album, and makes an album
-            // (ADR 0077 item 4). The checks come before any draft starts.
-            let source = FeedId(from);
-            if medium != "music" || w.collection.feed(source)?.medium.as_deref() != Some("music") {
-                return Err(ApiError::new(
-                    StatusCode::UNPROCESSABLE_ENTITY,
-                    "invalid_feed",
-                    "a copy starts from an album and makes an album",
-                ));
-            }
-            ensure_draft(w, source)?;
-            pipeline::copy_feed(
-                &mut w.collection,
-                made.as_ref(),
-                row.id,
-                &body.path,
-                title,
-                author,
-                source,
-            )?
-        } else {
-            pipeline::new_feed(
-                &mut w.collection,
-                made.as_ref(),
-                row.id,
-                &body.path,
-                title,
-                author,
-                medium,
-            )?
+        let first = pipeline::FirstValues {
+            description: body.description,
+            image: body.image,
+            website: body.website,
         };
+        let id = pipeline::new_feed_with(
+            &mut w.collection,
+            made.as_ref(),
+            row.id,
+            &body.path,
+            title,
+            author,
+            medium,
+            &first,
+        )?;
         finish_new_feed(w, id, medium, kind, role, artist_id)?;
         Ok((StatusCode::CREATED, to_json(w.collection.feed(id)?)?))
     })

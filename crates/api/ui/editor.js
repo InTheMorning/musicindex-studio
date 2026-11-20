@@ -2746,28 +2746,6 @@ function publisherLine(entry, match, index) {
   return parts.join(' · ');
 }
 
-function ReleaseArtistPicker({ choices, onChoose, onCreateArtist, onClose }) {
-  const ref = useSheet(true);
-  return html`<dialog ref=${ref} class="sheet small" aria-labelledby="release-artist-title" onClose=${onClose}>
-    <header><h2 id="release-artist-title">Add a release</h2>
-      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button></header>
-    <div class="body"><p class="hint">Select an artist page for this release.</p>
-      ${choices.length > 0
-        ? html`<div class="field"><label for="label-release-artist">Artist</label>
-            <select id="label-release-artist" value="" onChange=${(event) => {
-              const id = event.target.value;
-              const choice = choices.find((row) => row[0] === id);
-              if (choice) onChoose(Number(id), choice[1]);
-            }}>
-              <option value="">Select an artist page</option>
-              ${choices.map(([id, title]) => html`<option value=${id}>${title}</option>`)}</select>
-          </div>`
-        : html`<p class="hint">No artist page is available. Make an artist page first.</p>
-            <div class="actions"><button class="button primary" type="button" onClick=${onCreateArtist}>Make an Artist Page</button></div>`}
-    </div>
-  </dialog>`;
-}
-
 // The cover field of a channel (ADR 0060). It shows the cover of the model
 // and keeps the form of the feed on a change. When the two cover tags have
 // different addresses, it shows the second address with an action that
@@ -3986,7 +3964,6 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
   const [chosen, setChosen] = useState('');
   // The row of the Add feeds page that is open, from the first steps (ADR 0119).
   const [addOpen, setAddOpen] = useState(null);
-  const [releaseStart, setReleaseStart] = useState(null);
   // The members of this feed, from `GET /feeds/{id}/members` (ADR 0118 item 9).
   const [members, setMembers] = useState([]);
   const [membersError, setMembersError] = useState(null);
@@ -4171,12 +4148,12 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
       await onListChanged();
     }
     // A new release with no track opens the import sheet (ADR 0224 item 7).
-    if (f && makeInfo && nav && shouldAddTracksAfterNewRelease(makeInfo.type, makeInfo.from)) nav.addTracksNext(f.id);
+    if (f && makeInfo && nav && shouldAddTracksAfterNewRelease(makeInfo.type)) nav.addTracksNext(f.id);
     go(f ? { name: 'feed', id: f.id } : { name: 'releases' });
   };
   const artistChoices = releaseArtistChoices(feeds);
   const addReleaseFromLabel = () => {
-    setAddOpen(artistChoices.length > 0 ? 'release' : 'publisher');
+    setAddOpen(artistChoices.length > 0 ? 'release-form' : 'publisher');
   };
   return html`<${ChangedNotices} changed=${changed} go=${go} />
     ${first === 'album' && html`<div class="group first-step">
@@ -4189,12 +4166,9 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, onListChang
     ${first === 'label' && html`<div class="group">${FIRST_STEPS.label.map((step) => html`<button class="link-row" type="button" key=${step.open}
       onClick=${() => step.open === 'album' ? addReleaseFromLabel() : setAddOpen(step.open)}><span class="step-icon" aria-hidden="true"><${Icon} name=${step.icon} /></span>
       <span class="text"><span class="label">${step.title}</span><span class="summary">${step.line}</span></span><span class="go" aria-hidden="true">›</span></button>`)}</div>`}
-    ${addOpen === 'release' && html`<${ReleaseArtistPicker} choices=${artistChoices}
-      onChoose=${(publisherId, name) => { setReleaseStart({ author: name, publisher_id: publisherId }); setAddOpen('release-form'); }}
-      onCreateArtist=${() => setAddOpen('publisher')} onClose=${() => setAddOpen(null)} />`}
     ${addOpen === 'release-form' && html`<${AddFeedRowSheet} open="album" connectors=${connectors} feeds=${feeds}
-      start=${releaseStart} onAdded=${addedFeed} onClose=${() => { setAddOpen(null); setReleaseStart(null); }} />`}
-    ${addOpen && !['release', 'release-form'].includes(addOpen) && html`<${AddFeedRowSheet} open=${addOpen} connectors=${connectors} feeds=${feeds}
+      start=${{}} onAdded=${addedFeed} onClose=${() => setAddOpen(null)} />`}
+    ${addOpen && addOpen !== 'release-form' && html`<${AddFeedRowSheet} open=${addOpen} connectors=${connectors} feeds=${feeds}
       start=${firstStart(first, addOpen, model, feed.id)} onAdded=${addedFeed} onClose=${() => setAddOpen(null)} />`}
     ${showSections(pageSequence('publisher'), shown)}`;
 }

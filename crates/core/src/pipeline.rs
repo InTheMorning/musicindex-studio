@@ -1022,6 +1022,14 @@ pub fn has_placeholder_guid(guid: &str) -> bool {
     guid.starts_with("pending-")
 }
 
+/// The trimmed text of an optional value, or `None` when it is empty.
+fn kept(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+        .map(str::to_owned)
+}
+
 /// Make a new feed in a connected folder, as a draft with no hosted
 /// file (ADR 0032 items 6 to 9).
 ///
@@ -1048,6 +1056,48 @@ pub fn new_feed(
     author: &str,
     medium: &str,
 ) -> Result<FeedId, PipelineError> {
+    new_feed_with(
+        collection,
+        connector,
+        connector_id,
+        path,
+        title,
+        author,
+        medium,
+        &FirstValues::default(),
+    )
+}
+
+/// The optional values that a new feed gets in its first draft, for example
+/// from a release that the user found on Music Index (ADR 0230 item 15). An
+/// empty value is left out.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct FirstValues {
+    /// The `description` of the channel.
+    pub description: Option<String>,
+    /// The address of the artwork, as `itunes:image`.
+    pub image: Option<String>,
+    /// The website, as the `link` of the channel.
+    pub website: Option<String>,
+}
+
+/// Make a new feed as [`new_feed`] does, with the values of `values` in the
+/// first draft.
+///
+/// # Errors
+///
+/// Gives the errors of [`new_feed`].
+#[allow(clippy::too_many_arguments)]
+pub fn new_feed_with(
+    collection: &mut Collection,
+    connector: &dyn Connector,
+    connector_id: ConnectorId,
+    path: &str,
+    title: &str,
+    author: &str,
+    medium: &str,
+    values: &FirstValues,
+) -> Result<FeedId, PipelineError> {
     let address = connector.public_url(path);
     if connector.read(path)?.is_some() {
         return Err(PipelineError::new(
@@ -1065,6 +1115,9 @@ pub fn new_feed(
         podcast_guid: Some(guid),
         medium: Some(medium.to_owned()),
         language: Some("en".to_owned()),
+        description: kept(values.description.as_deref()),
+        link: kept(values.website.as_deref()),
+        image: kept(values.image.as_deref()),
         ..Feed::default()
     };
     if let Some(address) = address.as_deref() {
@@ -1074,87 +1127,6 @@ pub fn new_feed(
     let id = collection.add_feed(None, Some((connector_id, path)))?;
     collection.set_address(id, AddressSource::Folder, address.as_deref())?;
     collection.set_new_feed(id, title, medium)?;
-    collection.save_draft(
-        id,
-        &DraftRow {
-            base_version: None,
-            base_xml: Vec::new(),
-            draft_xml: doc.write().into_bytes(),
-        },
-    )?;
-    Ok(id)
-}
-
-/// Make a new album feed from the draft of a source album (ADR 0077).
-///
-/// The checks are those of [`new_feed`]. The copy keeps each field and each
-/// track of the source draft, with the changes of ADR 0077 item 6: the sent
-/// `title` and `author`, the feed GUID of the new address, a new random GUID
-/// for each track, and the new address in the `atom:link` with
-/// `rel="self"`. The copy has no `podcast:txt` except the artist key
-/// (`purpose="npub"`), no publisher reference, no live item and no
-/// `itunes:new-feed-url`. An OP3 prefix with the GUID of the source gets the
-/// GUID of the copy. The copy makes no library file and no host operation.
-/// The source draft does not change.
-///
-/// # Errors
-///
-/// Gives the errors of [`new_feed`], and [`PipelineErrorKind::NoDraft`] when
-/// the source has no draft.
-pub fn copy_feed(
-    collection: &mut Collection,
-    connector: &dyn Connector,
-    connector_id: ConnectorId,
-    path: &str,
-    title: &str,
-    author: &str,
-    source: FeedId,
-) -> Result<FeedId, PipelineError> {
-    let address = connector.public_url(path);
-    if connector.read(path)?.is_some() {
-        return Err(PipelineError::new(
-            PipelineErrorKind::FileExists,
-            format!("a file exists at {path} already"),
-        ));
-    }
-    let draft = current_draft(collection, source)?;
-    let mut doc = Document::parse_bytes(&draft.draft_xml)?;
-    let mut feed = Feed::read(&doc)?;
-    let new_guid = address
-        .as_deref()
-        .map_or_else(placeholder_guid, podcast_guid_for_url);
-    let old_guid = feed.podcast_guid.clone();
-    feed.title = Some(title.to_owned());
-    feed.author = Some(author.to_owned());
-    feed.podcast_guid = Some(new_guid.clone());
-    feed.new_feed_url = None;
-    // A copy keeps no date of its source and gets one at its first diff
-    // (ADR 0127 item 18).
-    feed.last_build_date = None;
-    feed.publisher = None;
-    feed.live_items.clear();
-    feed.txts.retain(|t| t.purpose.as_deref() == Some("npub"));
-    match &address {
-        Some(address) => {
-            for link in &mut feed.atom_links {
-                if link.value.rel.as_deref() == Some("self") {
-                    link.value.href = Some(address.clone());
-                }
-            }
-        }
-        // A feed with a placeholder GUID has no `self` link (ADR 0122 item 5).
-        None => feed
-            .atom_links
-            .retain(|link| link.value.rel.as_deref() != Some("self")),
-    }
-    for entry in &mut feed.items {
-        entry.value.guid = Some(uuid::Uuid::new_v4().to_string());
-    }
-    swap_op3_prefixes(&mut feed, old_guid.as_deref(), &new_guid);
-    feed.write(&mut doc)?;
-    let id = collection.add_feed(None, Some((connector_id, path)))?;
-    collection.set_address(id, AddressSource::Folder, address.as_deref())?;
-    collection.set_new_feed(id, title, "music")?;
     collection.save_draft(
         id,
         &DraftRow {
@@ -3403,9 +3375,9 @@ fn hosted_copy_names_placeholder(library: &Library, row: &FeedRow) -> bool {
         })
 }
 
-/// True when the draft of `row` gives `url` as an address. A copy of an
-/// album has a draft but no hosted file. Its draft keeps the files of its
-/// source in use (ADR 0077 item 8). A feed with no draft gives `false`.
+/// True when the draft of `row` gives `url` as an address. A new feed has a
+/// draft but no hosted file, and its draft can refer to the file of another
+/// feed. A feed with no draft gives `false`.
 fn feed_draft_refers(collection: &Collection, row: &FeedRow, url: &str) -> bool {
     draft_model(collection, row.id)
         .is_ok_and(|(feed, _)| feed_addresses(&feed).iter().any(|address| address == url))

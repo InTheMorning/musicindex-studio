@@ -2,7 +2,7 @@
 
 Decision: [ADR 0230](../adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 8 to 16 and item 33.
 
-Status: Open. Start after task 207, because both change `crates/api/ui/app.js`.
+Status: Done. Two points are open for the operator. Refer to the Result.
 
 ## Problem
 
@@ -48,3 +48,34 @@ Visual:
 - Read `/home/citizen/.agents/skills/asd-ste100/SKILL.md` before you write a comment or a label.
 - Do not commit. Leave the change in the working tree and report the changed files and the check results.
 - Do not make an architecture decision. When this task does not answer a question, stop and report.
+
+## Result
+
+Changes 1 to 6 are done. Change 6 moves ADR 0077 to the archive and updates the links to it, the document index and `AGENTS.md`.
+
+- The release form shows the parent card first. With no parent, the card says "No artist page" and has **Select…**. **Make the Release** stays off.
+- The sheet title is "New release for {parent}" or "New release".
+- The row "Find on Music Index" follows the card. It uses `FindOneSheet` and `PickerLayout`, which has the new options `lead` and `musicindexFirst`.
+- The fields are "Title", "Kind", "Artist name", "File host" and "Feed file". A parent change sets "Artist name" until the user types in it.
+- "Start from", `startChoices`, the route field `from`, `copy_feed` and their tests are removed.
+- The route takes the optional `description`, `image` and `website`. `pipeline::new_feed_with` puts them in the first draft as `description`, `itunes:image` and `link`.
+- `ReleaseArtistPicker` in `editor.js` is removed. **Select…** and **Change…** use the new `ParentSheet` in `app.js`.
+
+Answers to the open points:
+
+- A request with `from` is ignored, not refused. The route struct has no `deny_unknown_fields`. An API test checks this.
+- The search result of `/musicindex/search` gives `title`, `artist` and `image_url`. The route `/musicindex/values/{guid}` adds `website` and `feed_url`.
+- Music Index gives no description and no track count in these answers. A pick leaves out "Kind" and the description. The code uses them when they are present.
+- The rule that a track count gives a kind (1 to 3 single, 4 to 6 EP, more album) is a choice of this task. ADR 0230 item 14 does not name it. It needs a review.
+- ADR 0230 item 9 says the list has artist pages and label pages. The route accepts only an artist page (ADR 0213 item 7). The list has artist pages only. It needs a decision.
+
+Checks:
+
+- Mechanical: the Node tests (920 pass), the API tests for the first-draft values and for `from`, and `bash tools/gate.sh` pass.
+- Visual (2026-11-20): drive-ui screenshots at 1280 px and 390 px on a copy of the real data. With no parent, the form shows "New release" and the card "No artist page".
+- Visual, continued: **Select…** opens the sheet with HeyCitizen. After the selection, the title is "New release for HeyCitizen", the card shows HeyCitizen and Artist, and "Artist name" is HeyCitizen. **Find on Music Index** opens the search sheet. `$edges()` gives no finding.
+
+Open:
+
+- The sandbox has no network. Thus the search results and a pick from Music Index are not checked. This is a human check.
+- The operator must decide two points: the track-count rule for "Kind", and the artist-only list of item 9 (refer to the open points above). Until then, the code keeps the artist-only list and the track-count rule.

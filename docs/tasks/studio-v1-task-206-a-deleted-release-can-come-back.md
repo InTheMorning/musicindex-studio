@@ -2,7 +2,7 @@
 
 Decision: [ADR 0230](../adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 25 to 30.
 
-Status: Open.
+Status: Done. The human check is open.
 
 ## Problem
 
@@ -54,3 +54,23 @@ Visual:
 - Read `/home/citizen/.agents/skills/asd-ste100/SKILL.md` before you write a comment.
 - Do not commit. Leave the change in the working tree and report the changed files and the check results.
 - Do not make an architecture decision. When this task does not answer a question, stop and report.
+
+## Result
+
+Mechanical changes:
+
+- `crates/api/ui/feeddelete.js`: the third row and the first state point say "Music Index does not hold this feed". The new function `retireBlockShown` is true for a feed with a done delete.
+- `crates/api/ui/editor.js`: `retiring` and `activeRetire` read `feed.host_deleted`. A deleted feed reads the retire state and shows the Retire block with **Put the File Back** and **Check Again**. It has no **Stop Retiring**.
+- `crates/api/src/routes.rs`: `host_for_address` is false when `row.host_deleted` is true.
+- `crates/api/src/workspace.rs`: `record_remote_files_with` returns for a feed with a done delete. The write of a delete and `record_all_remote_files` both use this function.
+- Tests: `a_deleted_feed_makes_no_remote_rows_and_the_restore_gives_its_path_again` in `crates/api/src/tests/feed_retire.rs`, and cases in `feeddelete.test.mjs` and `outsidecheck.test.mjs`.
+
+The state point has no final period, as the other state points have none.
+
+Item 30 is already true. The write of a restore calls `remove_feed_host_delete` and `restore_feed_location` in `crates/core/src/pipeline.rs`, so the feed has its host and path again. The route `write_feed` in `crates/api/src/routes.rs` then calls `record_remote_files`. The new API test checks the host and the path.
+
+A media address that differs from the planned address of its local file still gives a row with " 2" while the feed has a host. This rule is the same for each feed. Item 30 does not change it.
+
+Visual check (2026-11-20): a temporary ignored API test made a deleted release that is not hidden, with the real delete route and write. The drive-ui screenshots of the tab Release at 1280 px and 390 px show the Retire block with **Put the File Back** and **Check Again**. **Stop Retiring** and **Use This File Host** do not show. `$edges()` gives no finding. The test is removed.
+
+Open: the human check. Delete a test release that is not hidden, then **Put the File Back**. After the write, examine the file list for rows with " 2". The rows of finding 11 go only when their address is not in the feed. If they stay, use **Remove from Collection** (ADR 0230 item 32).

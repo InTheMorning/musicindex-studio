@@ -309,6 +309,8 @@ test('ADR 0211: read-only host notice gives its text and action', () => {
   assert.deepEqual(readOnlyHostNotice(feedOf(1, { host_for_address: true })),
     { text: 'A connected file host gives the address of this feed. Use it to edit the feed here.', button: 'Use This File Host', use: true },
     `ADR 0211 item 16: a connected file host for the address gives Use This File Host. ${fix}`);
+  assert.equal(readOnlyHostNotice(feedOf(1, { host_deleted: true, host_for_address: false })), null,
+    `ADR 0230 item 28: a feed with a done delete has no Use This File Host notice. The API gives host_for_address false for it. Fix host_for_address in crates/api/src/routes.rs.`);
   assert.equal(readOnlyHostNotice(feedOf(1)), null,
     `ADR 0211 item 15: a different read-only feed has no notice. ${fix}`);
   assert.equal(readOnlyHostNotice(feedOf(1, { connector_id: 3 })), null);

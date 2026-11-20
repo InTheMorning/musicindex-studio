@@ -1467,8 +1467,11 @@ pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
             value["followed_move"] = json!(
                 row.connector_id.is_none() && !w.collection.pointers_of_feed(row.id)?.is_empty()
             );
+            // A feed with a done delete has no file on a host, so no host
+            // can take its address (ADR 0230 item 28).
             value["host_for_address"] = json!(
                 row.connector_id.is_none()
+                    && !row.host_deleted
                     && row
                         .public_url
                         .as_deref()

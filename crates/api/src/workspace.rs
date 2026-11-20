@@ -2045,6 +2045,16 @@ impl Workspace {
             if row.folder.is_none() {
                 return Ok(());
             }
+            // A feed with a done delete has no file on a host. Its media
+            // files stay as they are (ADR 0230 item 29).
+            if self
+                .collection
+                .feed_host_delete(id)
+                .map_err(|e| e.to_string())?
+                .is_some()
+            {
+                return Ok(());
+            }
             // A failed merge does not stop the remote records.
             if let Err(message) = self.merge_duplicate_files(id) {
                 eprintln!(

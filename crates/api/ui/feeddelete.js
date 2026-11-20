@@ -19,7 +19,7 @@ const DELETE_CHOICES = [
   {
     action: 'delete',
     title: 'Remove the file',
-    text: 'Music Index removed the entry.',
+    text: 'Music Index does not hold this feed.',
     destructive: true,
   },
 ];
@@ -55,10 +55,18 @@ export function domainLine(host, deleted = false) {
 // The state points of the last sheet (ADR 0131 item 10). The third point
 // gives the button name apart, so that the sheet shows it in bold.
 export const DELETE_POINTS = [
-  { mark: '✓', text: 'Music Index removed the entry' },
+  { mark: '✓', text: 'Music Index does not hold this feed' },
   { mark: '✓', text: 'Studio keeps a copy of the feed' },
   { mark: '↺', text: 'You can put the file back later with', button: 'Put the File Back', after: 'on this feed' },
 ];
+
+// The Retire block shows when the feed asks to be removed, and for each feed
+// with a done delete, also when its draft does not hide the feed (ADR 0230
+// item 27).
+export function retireBlockShown(state, hostDeleted) {
+  if (!state) return false;
+  return state.ask !== 'no' || hostDeleted === true || state.delete === 'done';
+}
 
 // The buttons of the Retire block, in their sequence (ADR 0198 item 9).
 export function retireActions(state) {

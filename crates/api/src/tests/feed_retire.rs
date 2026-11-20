@@ -584,3 +584,101 @@ async fn a_guid_at_another_address_is_a_leftover_copy_and_the_delete_draft_passe
     .await;
     assert_eq!(status, StatusCode::CONFLICT, "{body}");
 }
+
+/// The paths of the file list of a feed.
+async fn file_paths(app: &App, id: i64) -> Vec<String> {
+    let (status, files) = call(app, "GET", &format!("/api/v1/feeds/{id}/files"), None).await;
+    assert_eq!(status, StatusCode::OK, "{files}");
+    let rows = files
+        .as_array()
+        .or_else(|| files["files"].as_array())
+        .unwrap_or_else(|| panic!("the file list has an unknown shape: {files}"));
+    let mut paths: Vec<String> = rows
+        .iter()
+        .map(|row| row["path"].as_str().unwrap_or_default().to_owned())
+        .collect();
+    paths.sort();
+    paths
+}
+
+async fn feed_row(app: &App, id: i64) -> Value {
+    let (_, rows) = call(app, "GET", "/api/v1/feeds", None).await;
+    rows.as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["id"] == id)
+        .unwrap()
+        .clone()
+}
+
+// A plain 404 of the index lets the delete pass for a feed that is not
+// hidden. The deleted feed keeps its media rows, takes no notice of a host,
+// and gets its path again after the restore write (ADR 0230 items 28 to 30).
+#[tokio::test]
+async fn a_deleted_feed_makes_no_remote_rows_and_the_restore_gives_its_path_again() {
+    let index = CountingIndex::start(404, "{}");
+    let (app, id) = app_with(&index.url(), &feed_xml("Album", &guid_tag())).await;
+    // A local library file of the release, as an import makes it. It
+    // replaces the remote row that the first read made for the enclosure.
+    {
+        let collection =
+            studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+                .unwrap();
+        for file in collection
+            .library_files(studio_core::collection::FeedId(id))
+            .unwrap()
+        {
+            collection.remove_library_file(file.id).unwrap();
+        }
+    }
+    plant_library_file(&app, id, "album", "one.mp3", b"audio");
+    let base = format!("/api/v1/feeds/{id}");
+    let before = file_paths(&app, id).await;
+    let original = feed_row(&app, id).await;
+    assert_eq!(original["host_deleted"], false);
+
+    let (status, draft) = call(
+        &app,
+        "POST",
+        &format!("{base}/delete/draft"),
+        Some(json!({ "with_files": true })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{draft}");
+    approve_and_write(&app, id, &draft).await;
+
+    let deleted = feed_row(&app, id).await;
+    assert_eq!(deleted["host_deleted"], true);
+    assert_eq!(
+        deleted["host_for_address"], false,
+        "ADR 0230 item 28: a feed with a done delete has no host for its address. Fix host_for_address in crates/api/src/routes.rs."
+    );
+    assert_eq!(state(&app, id).await["delete"], "done");
+    let after = file_paths(&app, id).await;
+    assert_eq!(
+        after, before,
+        "ADR 0230 item 29: the delete must not add remote rows. Skip feeds with a done delete in record_remote_files_with in crates/api/src/workspace.rs."
+    );
+    assert!(
+        after.iter().all(|path| !path.contains(" 2")),
+        "ADR 0230 item 29: no row has ' 2' in its name. Fix record_remote_files_with in crates/api/src/workspace.rs. {after:?}"
+    );
+
+    let (status, restore) = call(&app, "POST", &format!("{base}/delete/restore"), None).await;
+    assert_eq!(status, StatusCode::OK, "{restore}");
+    approve_and_write(&app, id, &restore).await;
+    let restored = feed_row(&app, id).await;
+    assert_eq!(restored["host_deleted"], false);
+    assert_eq!(
+        restored["connector_id"], original["connector_id"],
+        "ADR 0230 item 30: the restore write gives the feed its host again."
+    );
+    assert_eq!(
+        restored["path"], original["path"],
+        "ADR 0230 item 30: the restore write gives the feed its path again."
+    );
+    assert!(
+        file_paths(&app, id).await.contains(&"one.mp3".to_owned()),
+        "ADR 0230 item 30: after the restore the file list keeps the original row."
+    );
+}

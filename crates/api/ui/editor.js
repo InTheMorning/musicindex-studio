@@ -49,7 +49,7 @@ import { shortType as formatLabel, propertiesSummary, propertiesOpen, propertyRo
 import { MOVE_SCOPES, fileHostRows, planRows, stayRows, deleteLabel, deleteAllLabel, DELETE_NOTE_ON, DELETE_NOTE_OFF, waitLabel, waitingView, readyNotice, partMoveNotice, existsRefusalView, addDisabled, replacesCopyNote, replaceWarning, indexNeedsRead, INDEX_READ_AGAIN_MS } from './releasemove.js';
 import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary, artworkPreview } from './artwork.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, addsAsTrackFile, refusedText, wrongKindText, replacedAddresses, selectedFacts, TRACK_FILES_ACCEPT } from './picker.js';
-import { deleteChoices, leftoverLine, deleteButtonEnabled, retireSteps, retireActions, domainLine, DELETE_POINTS, operationNote, refusedDelete } from './feeddelete.js';
+import { deleteChoices, leftoverLine, deleteButtonEnabled, retireSteps, retireActions, retireBlockShown, domainLine, DELETE_POINTS, operationNote, refusedDelete } from './feeddelete.js';
 import { writeResult } from './writeresult.js';
 import { undoKey } from './undohistory.js';
 
@@ -2535,7 +2535,7 @@ function FeedDelete({ feed, draft, onListChanged }) {
       .catch(() => { if (request === deleteStateRequest.current) setDeleteState(null); });
     return () => { deleteStateRequest.current += 1; };
   }, [firstOpen, feed.id]);
-  const retiring = retireOpen || Boolean(draft && draft.hidden);
+  const retiring = retireOpen || Boolean(draft && draft.hidden) || Boolean(feed.host_deleted);
   // A write changes the version of the feed, and a delete sets
   // `host_deleted`. Each of them reads the retire state again, so the steps
   // do not show the state before the write (finding 6 of the rc.22 test).
@@ -2609,7 +2609,7 @@ function FeedDelete({ feed, draft, onListChanged }) {
   const usedStays = rows ? rows.stays.filter((file) => file.reason === 'used_by_feeds').length : 0;
   const fileNoun = (count, singular, plural) => `${count} ${count === 1 ? singular : plural}`;
   const steps = retire && retireSteps(retire);
-  const activeRetire = retire && retire.ask !== 'no';
+  const activeRetire = retireBlockShown(retire, feed.host_deleted);
   return html`
     ${activeRetire && html`<div class="retire-head"><span class="label">Retire</span><span class="summary">Studio cannot check Podcast Index.</span></div>
       <div class="retire-domain"><${DomainLine} domain=${feed.address_host} deleted=${Boolean(feed.host_deleted)} /></div>

@@ -2,7 +2,7 @@
 
 Decision: [ADR 0229](../adr/0229-the-media-host-after-a-follow-a-podping-again-and-empty-folders.md) items 1 to 3.
 
-Status: Open.
+Status: Done.
 
 ## Problem
 
@@ -42,3 +42,14 @@ Visual: none. The main session examines the tab **Files** with the desktop drive
 - Do not make an architecture decision. When this task does not answer a question, stop and report.
 
 ## Result
+
+Changed:
+
+- `crates/core/src/outside.rs`: new function `media_host`. It gives the one connected host that gives each enclosure address of a feed, or `None`. `follow_move_read` calls `set_files_connector` with that host after `set_feed_location`. With `None`, the release files host stays.
+- Two core tests: `follow_move_read_sets_the_files_host_to_the_host_of_each_media_address` and `follow_move_read_keeps_the_files_host_when_a_media_address_has_no_host`.
+
+The delegate did not change `outside_use_host`, because the collection keeps no enclosure addresses. The main session then changed it: the route reads the public address of the feed with `read_public` before it takes the lock, as `outside_follow` does. When the read gives a feed, the route applies `media_host`. A failed read keeps the release files host and the route succeeds (ADR 0229 item 2).
+
+Note: `set_feed_location` fills an empty files host with the old connector. A kept host in the second test is thus the old connector.
+
+Checks: `cargo test -p studio-core follow_move` passes (5 tests). `bash tools/gate.sh` passes after the change of the main session.

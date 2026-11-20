@@ -2128,8 +2128,22 @@ pub(crate) async fn outside_use_host(
     State(shared): State<Shared>,
     Path(id): Path<i64>,
 ) -> ApiResult {
+    let feed_id = FeedId(id);
+    let (web, url) = blocking(Arc::clone(&shared), move |w| {
+        let row = w.collection.feed(feed_id)?;
+        Ok((w.web.clone(), row.public_url))
+    })
+    .await?;
+    // Read the feed to find the host of its media files (ADR 0229 item 1).
+    // A failed read keeps the release files host (ADR 0229 item 2).
+    let read = match url {
+        Some(url) => {
+            blocking_unlocked(move || Ok(studio_core::discover::read_public(&web, &url).ok()))
+                .await?
+        }
+        None => None,
+    };
     blocking(shared, move |w| {
-        let feed_id = FeedId(id);
         let row = w.collection.feed(feed_id)?;
         // As `outside_keep`, the route needs only that the feed exists. It
         // changes the collection, and it writes nothing to a host.
@@ -2147,6 +2161,12 @@ pub(crate) async fn outside_use_host(
         };
         w.collection
             .set_feed_location(feed_id, connector_id, &path, row.public_url.as_deref())?;
+        if let Some(media) = read
+            .as_ref()
+            .and_then(|read| outside::media_host(&connectors, &read.feed))
+        {
+            w.collection.set_files_connector(feed_id, Some(media))?;
+        }
         Ok(Json(json!({})))
     })
     .await

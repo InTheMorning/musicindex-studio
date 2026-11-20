@@ -272,6 +272,32 @@ pub fn host_for_address(
     })
 }
 
+/// Find the one connected file host that gives each enclosure address of the
+/// feed (ADR 0229 items 1 and 2). A feed with no enclosure gives `None`. An
+/// address with no host, or with a different host, gives `None`.
+#[must_use]
+pub fn media_host(
+    connectors: &[crate::collection::ConnectorRow],
+    feed: &Feed,
+) -> Option<ConnectorId> {
+    let mut host = None;
+    for entry in &feed.items {
+        let Some(url) = entry
+            .value
+            .enclosure
+            .as_ref()
+            .and_then(|enclosure| enclosure.url.as_deref())
+        else {
+            continue;
+        };
+        let (connector, _) = host_for_address(connectors, url)?;
+        if *host.get_or_insert(connector) != connector {
+            return None;
+        }
+    }
+    host
+}
+
 /// Why Studio refused to follow a move.
 #[derive(Debug)]
 pub enum FollowMoveError {
@@ -311,6 +337,13 @@ pub fn follow_move_read(
         collection
             .set_feed_location(row.id, *connector_id, path, Some(&read.url))
             .map_err(FollowMoveError::Collection)?;
+        // The release files host follows the media only when one host gives
+        // each media address. Else it stays (ADR 0229 items 1 and 2).
+        if let Some(media) = media_host(&connectors, &read.feed) {
+            collection
+                .set_files_connector(row.id, Some(media))
+                .map_err(FollowMoveError::Collection)?;
+        }
     } else {
         collection
             .clear_feed_location(row.id)
@@ -547,6 +580,7 @@ pub fn index_difference(row: &FeedRow, found: &IndexFeed) -> Option<String> {
 mod tests {
     use super::*;
     use crate::connector::LocalFolder;
+    use std::fmt::Write as _;
 
     const FEED: &str = "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\" xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\"><channel><title>A</title><podcast:guid>g</podcast:guid>ITEM</channel></rss>";
 
@@ -655,6 +689,94 @@ mod tests {
             stored_result(&collection, id).unwrap(),
             OutsideResult::Same,
             "ADR 0211 item 14. Fix: end the moved result after the follow."
+        );
+    }
+
+    fn move_bytes_with_media(guid: &str, new_url: &str, media: &[&str]) -> Vec<u8> {
+        let mut items = String::new();
+        for (n, url) in media.iter().enumerate() {
+            let _ = write!(
+                items,
+                "<item><title>T{n}</title><guid>i{n}</guid><enclosure url=\"{url}\" length=\"1\" type=\"audio/mpeg\"/></item>"
+            );
+        }
+        format!(
+            "<rss xmlns:podcast=\"https://podcastindex.org/namespace/1.0\" xmlns:itunes=\"http://www.itunes.com/dtds/podcast-1.0.dtd\"><channel><title>Album</title><podcast:guid>{guid}</podcast:guid><itunes:new-feed-url>{new_url}</itunes:new-feed-url>{items}</channel></rss>"
+        )
+        .into_bytes()
+    }
+
+    /// Follow a move to a connected host. The feed gives `media` addresses.
+    /// Gives the release files host before and after the follow.
+    fn follow_with_media(
+        media: impl Fn(&str, &str) -> Vec<String>,
+    ) -> (
+        Option<ConnectorId>,
+        Option<ConnectorId>,
+        ConnectorId,
+        ConnectorId,
+    ) {
+        let server = crate::testing::TestServer::start(Vec::new());
+        let mut collection = Collection::open_in_memory().unwrap();
+        let old_root = tempfile::tempdir().unwrap();
+        let new_root = tempfile::tempdir().unwrap();
+        let old_base = server.url("/old");
+        let new_base = server.url("/new");
+        let new_url = format!("{new_base}/album.xml");
+        let addresses = media(&old_base, &new_base);
+        let refs: Vec<&str> = addresses.iter().map(String::as_str).collect();
+        server.set(
+            "/new/album.xml",
+            200,
+            move_bytes_with_media("g-1", &new_url, &refs),
+        );
+        let (old_id, _) = linked_feed(&collection, old_root.path(), "Old", &old_base);
+        let (new_id, _) = linked_feed(&collection, new_root.path(), "New", &new_base);
+        let id = collection
+            .add_feed(
+                Some(&format!("{old_base}/album.xml")),
+                Some((old_id, "album.xml")),
+            )
+            .unwrap();
+        let read = crate::discover::read_public(&Web::new(), &new_url).unwrap();
+        collection
+            .record_state(id, &read.feed, &read.version)
+            .unwrap();
+        let row = collection.feed(id).unwrap();
+        let before = row.files_connector_id;
+        follow_move_read(&mut collection, &row, &read).unwrap();
+        (
+            before,
+            collection.feed(id).unwrap().files_connector_id,
+            old_id,
+            new_id,
+        )
+    }
+
+    #[test]
+    fn follow_move_read_sets_the_files_host_to_the_host_of_each_media_address() {
+        let (_, after, _, new_id) =
+            follow_with_media(|_, new| vec![format!("{new}/a.mp3"), format!("{new}/b.mp3")]);
+        assert_eq!(
+            after,
+            Some(new_id),
+            "ADR 0229 item 1. Fix: set the files host to the host that gives each media address."
+        );
+    }
+
+    #[test]
+    fn follow_move_read_keeps_the_files_host_when_a_media_address_has_no_host() {
+        // `set_feed_location` fills an empty files host with the old host.
+        let (_, after, old_id, _) = follow_with_media(|_, new| {
+            vec![
+                format!("{new}/a.mp3"),
+                "https://elsewhere.example/b.mp3".to_owned(),
+            ]
+        });
+        assert_eq!(
+            after,
+            Some(old_id),
+            "ADR 0229 item 2. Fix: keep the files host when one media address has no host."
         );
     }
 

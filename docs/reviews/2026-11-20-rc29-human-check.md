@@ -144,3 +144,9 @@ Findings:
 5. Found in the main session check of the fix of finding 3. On a collection where `migrate::into_library` succeeded, **Remove from Collection** fails with HTTP 500 and "no such table: draft_files". That move drops the old table `draft_files`. `feed_has_pending_removal` and `FEED_DELETE_TABLES` in `crates/core/src/people.rs` still read it (`f81e055`, ADR 0227). The real collection of the operator still has the table, so the remove worked there.
 
 Operator choice (2026-11-20, main session): findings 3 and 5 are defect corrections with no new decision. `DeleteUndoProvider` gives each action of `DELETE_UNDO_ACTIONS`, and a node test checks each `deleteUndo` call against that list. The remove and its undo skip a table that is not in the collection, and a core test proves a remove and an undo after the drop of `draft_files`.
+
+Operator choice (2026-11-20, main session, from drawings of findings 1 and 2):
+
+- Finding 1: each group of the left panel below an open feed gets an add row at its end. This applies to the level and to the page of an artist or a label. The group "Releases" gets **＋ Add release**, and the group "Artists" of a label level gets **＋ Add artist**. A group with no rows still shows, with only its add row. The top panel does not change, and the page Releases keeps its **＋ Add** menu.
+- Finding 2: the back row of a new release opens the level where the user made the release. A release made from HeyCitizen shows **‹ HeyCitizen**. A release made from the top page Releases shows **‹ Releases**. Cause: `addedFeed` in `crates/api/ui/app.js` opens the new feed with no `from`.
+- Open, not decided: `releaseAdd` in `crates/api/ui/welcome.js` gives a start only for an artist page, so **＋ Add release** of a label needs a start value. **＋ Add artist** of a label must link the new artist below that label.

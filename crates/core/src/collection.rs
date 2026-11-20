@@ -698,6 +698,13 @@ CREATE TABLE delete_undo (
     r"
 ALTER TABLE feeds ADD COLUMN files_connector_kept INTEGER;
 ",
+    r"
+CREATE TABLE kept_levels (
+    upper_id INTEGER NOT NULL REFERENCES feeds(id) ON DELETE CASCADE,
+    lower_id INTEGER NOT NULL REFERENCES feeds(id) ON DELETE CASCADE,
+    PRIMARY KEY (upper_id, lower_id)
+);
+",
 ];
 
 /// `root` as a relative path under `data_dir`, when it is a folder inside
@@ -3093,6 +3100,46 @@ impl Collection {
         tx.execute("DELETE FROM snapshots WHERE feed_id = ?1", [id.0])?;
         tx.execute("DELETE FROM feeds WHERE id = ?1", [id.0])?;
         tx.commit()?;
+        Ok(())
+    }
+
+    /// Keep a level link in the collection only: `lower` is below `upper`
+    /// (ADR 0232 item 9). No feed file gets the link.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn add_kept_level(&self, upper: FeedId, lower: FeedId) -> Result<(), CollectionError> {
+        self.db.execute(
+            "INSERT OR IGNORE INTO kept_levels (upper_id, lower_id) VALUES (?1, ?2)",
+            params![upper.0, lower.0],
+        )?;
+        Ok(())
+    }
+
+    /// List the publisher level links kept in the collection.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn kept_levels(&self) -> Result<Vec<(FeedId, FeedId)>, CollectionError> {
+        let mut statement = self
+            .db
+            .prepare("SELECT upper_id, lower_id FROM kept_levels ORDER BY upper_id, lower_id")?;
+        let rows = statement.query_map([], |row| Ok((FeedId(row.get(0)?), FeedId(row.get(1)?))))?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+    }
+
+    /// Remove one publisher level link kept in the collection.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn remove_kept_level(&self, upper: FeedId, lower: FeedId) -> Result<(), CollectionError> {
+        self.db.execute(
+            "DELETE FROM kept_levels WHERE upper_id = ?1 AND lower_id = ?2",
+            params![upper.0, lower.0],
+        )?;
         Ok(())
     }
 

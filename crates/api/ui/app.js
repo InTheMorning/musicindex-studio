@@ -55,7 +55,7 @@ import {
   mediumKind, feedKind, FIRST_CLASS_ROLES, roleWord, kindGlow, isEditable, isReadOnly, isPublisher, trackKey, isTrack,
   leftPanel, releasesList, listQuery, queryText, sortLabel, sortEntries, mosaicCells, otherFeedText, feedCover,
   startNav, pushNav, backNav, forwardNav, releasesView, canBack, canForward, setScroll,
-  isFeedView, openFeedView, navAtWidth, pageTabs, tabsFit, showsRootButtons, rootNav, segmentKey, levelFeedSet, isTabChange } from './shell.js';
+  isFeedView, openFeedView, newFeedView, navAtWidth, pageTabs, tabsFit, showsRootButtons, rootNav, segmentKey, levelFeedSet, isTabChange } from './shell.js';
 import {
   eventsToSign, signErrorText,
   npubOf, addressLines, linesText, invalidConfigField, blossomDefaultName, siteAddress, siteNameFromGuid, isNsec,
@@ -1517,6 +1517,7 @@ function MakeFeedForm({ connectors, feeds, startType, start = {}, onAdded, onKin
     run(async () => {
       const body = { connector_id: connectorId, path, title: name, author: fields.authorLabel === null ? name : author, medium: fields.medium };
       if (fields.role) body.role = role;
+      if (fields.role && start.below_id != null) body.below_id = start.below_id;
       if (isRelease) {
         body.kind = releaseKind || null;
         body.publisher_id = parentId;
@@ -3295,10 +3296,10 @@ function ChangeSetPage({ id, go, onChanged }) {
 // At 760 px or less the left panel is not shown: its content is the root
 // page and the outline page of the stack (ADR 0039 item 11, musicindex ADR
 // 0030 R-SHELL-2).
-function LeftPanel({ panel, draft, changedFeeds, go, showReleases, onAdding, onImporting, onLock }) {
+function LeftPanel({ panel, draft, changedFeeds, go, showReleases, onAdding, onImporting, onAddFeedRow, onLock }) {
   if (panel.kind === 'level') {
     return html`<header><${Brand} /><${ThemeToggle} /></header>
-      <div class="sidebar-scroll"><${Level} panel=${panel} go=${go} back /></div>
+      <div class="sidebar-scroll"><${Level} panel=${panel} go=${go} back onAddFeedRow=${onAddFeedRow} /></div>
       <${LeftPanelFooter} panel=${panel} go=${go} onLock=${onLock} />`;
   }
   if (panel.kind === 'destinations') {
@@ -3309,7 +3310,7 @@ function LeftPanel({ panel, draft, changedFeeds, go, showReleases, onAdding, onI
   return html`<header><${Brand} /><${ThemeToggle} /></header>
     <div class="sidebar-scroll">
       <${Outline} panel=${panel} draft=${draft} changedFeeds=${changedFeeds} go=${go} showReleases=${showReleases}
-        onAdding=${onAdding} onImporting=${onImporting} />
+        onAdding=${onAdding} onImporting=${onImporting} onAddFeedRow=${onAddFeedRow} />
     </div>
     <${LeftPanelFooter} panel=${panel} go=${go} onLock=${onLock} />`;
 }
@@ -3376,7 +3377,12 @@ function LevelRow({ item, set, label, count, attrs, onOpen }) {
 // `back` is true, the head of the feed, the feeds directly below it under
 // their role headings, then its releases. The head opens the feed page, and
 // a release opens its outline at narrow width.
-function Level({ panel, go, back }) {
+function AddTreeRow({ item, attrs, onAdd }) {
+  return html`<button class="row node add" type="button" ...${attrs} onClick=${() => onAdd(item)}>
+    <span class="num">＋</span><span class="row-label">${item.label}</span></button>`;
+}
+
+function Level({ panel, go, back, onAddFeedRow = () => {} }) {
   const narrow = useNarrow();
   const [current, setCurrent] = useState(null);
   const { feeds } = useContext(OutsideContext);
@@ -3387,7 +3393,7 @@ function Level({ panel, go, back }) {
   let cursor = back ? 1 : 0;
   const headIndex = cursor++;
   // A different level can have fewer rows, so the current row stays in range.
-  const total = cursor + panel.sections.reduce((n, section) => n + section.items.length, 0) + panel.releases.length;
+  const total = cursor + panel.sections.reduce((n, section) => n + section.items.length + (section.add ? 1 : 0), 0) + panel.releases.length + 1;
   const currentIndex = current === null || current >= total ? (back ? 0 : headIndex) : current;
   // A row with no child rows has no `aria-expanded` (musicindex ADR 0061
   // R-LISTKEY-2 item 1).
@@ -3407,20 +3413,22 @@ function Level({ panel, go, back }) {
       <h2 class="panel-heading">${section.heading}</h2>
       ${section.items.map((item) => { const index = cursor++; return html`<${LevelRow} item=${item} set=${panelSet(feeds, item.id)} label=${item.label} count=${item.count}
         attrs=${rowAttrs(index, headIndex)} onOpen=${() => go(item.view)} />`; })}
+      ${section.add && html`<${AddTreeRow} item=${section.add} attrs=${rowAttrs(cursor++, headIndex)} onAdd=${onAddFeedRow} />`}
     </div>`)}
-    ${panel.releases.length > 0 && html`<div class="destination-group">
+    ${html`<div class="destination-group">
       <h2 class="panel-heading">Releases</h2>
       ${panel.releases.map((item) => { const index = cursor++; return html`<${LevelRow} item=${item} set=${feeds.filter((feed) => feed.id === item.id)} label=${item.title}
         attrs=${rowAttrs(index, headIndex)} onOpen=${() => go(openFeedView(item.id, narrow, item.from))} />`; })}
+      <${AddTreeRow} item=${panel.releaseAdd} attrs=${rowAttrs(cursor++, headIndex)} onAdd=${onAddFeedRow} />
     </div>`}</div>`;
 }
 
 // A level as a page of a narrow window (ADR 0088 item 7). Back opens the
 // page below it in the stack.
-function LevelPage({ panel, go }) {
+function LevelPage({ panel, go, onAddFeedRow }) {
   return html`<div class="panel-page">
     <${Bar}><span class="bar-title">${panel.head.title}</span><//>
-    <section class="section outline-page"><${Level} panel=${panel} go=${go} back=${false} /></section>
+    <section class="section outline-page"><${Level} panel=${panel} go=${go} back=${false} onAddFeedRow=${onAddFeedRow} /></section>
   </div>`;
 }
 
@@ -3428,7 +3436,7 @@ function LevelPage({ panel, go }) {
 // type label, then one row for each item. The left panel shows it at a wide
 // width, and the outline page shows it at a narrow width. `showReleases` is
 // given at a wide width only, where the item "Releases" is in the panel.
-function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImporting }) {
+function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImporting, onAddFeedRow = () => {} }) {
   const [current, setCurrent] = useState(null);
   const { feeds } = useContext(OutsideContext);
   const feed = panel.feed;
@@ -3474,6 +3482,7 @@ function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImp
         }
         if (item.action) {
           const open = () => {
+            if (item.action === 'add-feed') { onAddFeedRow(item); return; }
             go({ name: 'feed', id: feed.id, page: 'album' });
             if (item.action === 'add-tracks') onImporting(true);
             else onAdding(item.action === 'add-live' ? 'live' : true);
@@ -3535,7 +3544,7 @@ function RootPage({ panel, go, onLock }) {
 
 // The outline page of a narrow window (ADR 0039 item 11a). Its bar has the
 // back control, the title of the feed and the draft toolbar of the feed.
-function OutlinePage({ feed, panel, draft, changedFeeds, feeds, go, onAdding, onImporting, onChanged, onListChanged, connectors }) {
+function OutlinePage({ feed, panel, draft, changedFeeds, feeds, go, onAdding, onImporting, onAddFeedRow, onChanged, onListChanged, connectors }) {
   // A host operation can change the draft XML. After it, the shell saves the
   // edits of the user and loads the draft again (ADR 0036 item 14).
   const opsChanged = async () => {
@@ -3548,7 +3557,7 @@ function OutlinePage({ feed, panel, draft, changedFeeds, feeds, go, onAdding, on
     <//>
     <section class="section outline-page">
       <${Outline} panel=${panel} draft=${draft} changedFeeds=${changedFeeds} go=${go} showReleases=${null}
-        onAdding=${onAdding} onImporting=${onImporting} />
+        onAdding=${onAdding} onImporting=${onImporting} onAddFeedRow=${onAddFeedRow} />
     </section>
   </div>`;
 }
@@ -3584,7 +3593,7 @@ export function LetterBar({ letters, idOf }) {
 // `marked` is the feed that the last Back selection left marked. With a
 // `group`, the page shows the releases of one destination below Releases,
 // and the sort of that page is `groupSort` (ADR 0085 items 4 to 6).
-function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, groupReversed, changedFeeds, onQuery, onGroupSort, onOpen, onAddFeed, onAddedFeed }) {
+function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, groupReversed, changedFeeds, onQuery, onGroupSort, onOpen, onAddFeed, onAddedFeed, from }) {
   const inGroup = group !== undefined;
   // The search text stays in the page and not in the address (ADR 0223
   // item 6). A different feed group starts with no text.
@@ -3607,7 +3616,7 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
   const hideAdd = inGroup && !headFeed;
   const addedRelease = (f, makeInfo) => {
     setAdding(null);
-    onAddedFeed(f, makeInfo);
+    onAddedFeed(f, makeInfo, (adding && adding.from) || from);
   };
   // A feed group keeps its own sort and direction (ADR 0085 item 8).
   const pickSort = (id, reversed) => {
@@ -3630,7 +3639,7 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
           ${hasUnfilteredRows && html`<${SortMenu} sorts=${releases.sorts} sort=${releases.sort} reversed=${releases.reversed} onSort=${pickSort} />`}
           ${hasUnfilteredRows && viewButton('rows', 'Rows', html`<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>`)}
           ${hasUnfilteredRows && viewButton('tiles', 'Tiles', html`<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"></rect><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"></rect><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"></rect><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"></rect></svg>`)}
-          ${!hideAdd && html`<${AddMenu} release=${more} hasHost=${connectors.length > 0} onOpenForm=${setAdding} onOther=${onAddFeed} />`}
+          ${!hideAdd && html`<${AddMenu} release=${more} hasHost=${connectors.length > 0} from=${from} onOpenForm=${setAdding} onOther=${onAddFeed} />`}
           ${head && head.id !== null && html`<button class="button" type="button" onClick=${() => onOpen(head.id)}>${head.typeLabel} Page</button>`}
         </div>`}
       </div>
@@ -3661,7 +3670,7 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
         ? html`<div class="empty-releases"><p class="empty">No releases are linked yet.</p></div>`
         : html`<div class="empty-releases">
             <p class="empty">No releases yet.</p>
-            <div class="actions"><${AddMenu} release=${more} hasHost=${connectors.length > 0} onOpenForm=${setAdding} onOther=${onAddFeed} /></div>
+            <div class="actions"><${AddMenu} release=${more} hasHost=${connectors.length > 0} from=${from} onOpenForm=${setAdding} onOther=${onAddFeed} /></div>
           </div>`}
     </section>
     ${adding && html`<${AddFeedRowSheet} open=${adding.open} connectors=${connectors} feeds=${feeds}
@@ -3672,10 +3681,10 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
 // The add menu of Releases and of the page of a publisher (ADR 0230 items 1
 // to 4). `release` is the add action of an artist page, or null. With no
 // connected file host, a make entry opens the page that connects one.
-function AddMenu({ release, hasHost, onOpenForm, onOther }) {
+function AddMenu({ release, hasHost, from, onOpenForm, onOther }) {
   const items = addMenuEntries(release);
   return html`<${MenuControl} className="add-menu" buttonLabel="＋ Add" accessibleName="Add" menuLabel="Add" items=${items}
-    onSelect=${(entry) => (entry.open && hasHost ? onOpenForm({ open: entry.open, start: entry.start }) : onOther())} />`;
+    onSelect=${(entry) => (entry.open && hasHost ? onOpenForm({ open: entry.open, start: entry.start, from }) : onOther(from))} />`;
 }
 
 // The feed of an open level comes before its releases, in the same view
@@ -3881,6 +3890,7 @@ function Shell({ vault, onLock, version }) {
   const [error, setError] = useState(null);
   // The Add a track sheet, by the left panel and by the album page (ADR 0029 item 7).
   const [adding, setAdding] = useState(false);
+  const [addingFeed, setAddingFeed] = useState(null);
   // The import sheet, by the left panel and by the album page (task 018d).
   const [importing, setImporting] = useState(false);
   const [pendingAddTracks, setPendingAddTracks] = useState(null);
@@ -4157,10 +4167,14 @@ function Shell({ vault, onLock, version }) {
   });
 
   // A new feed opens its page. The list is loaded before the page opens.
-  const addedFeed = async (f, makeInfo) => {
+  const addedFeed = async (f, makeInfo, from = view.from) => {
     await load();
     if (f && makeInfo && shouldAddTracksAfterNewRelease(makeInfo.type)) setPendingAddTracks(f.id);
-    go(f ? { name: 'feed', id: f.id } : { name: 'releases' });
+    go(f ? newFeedView(f.id, from) : { name: 'releases' });
+  };
+  const openAddFeedRow = (item) => {
+    if (!connectors.length) { go({ name: 'add-feed', from: item.from }); return; }
+    setAddingFeed(item);
   };
   let main;
   // A screen with no bar of its own gets one.
@@ -4193,7 +4207,7 @@ function Shell({ vault, onLock, version }) {
     main = html`<${AddFeeds} connectors=${connectors} feeds=${feeds} go=${go} onAdded=${addedFeed} />`;
   } else if (selected && view.name === 'outline') {
     main = html`<${OutlinePage} feed=${selected} panel=${panel} draft=${draft} changedFeeds=${changedFeeds} feeds=${feeds} go=${go}
-      onAdding=${setAdding} onImporting=${setImporting} onChanged=${() => load()} onListChanged=${() => load()} connectors=${connectors} />`;
+      onAdding=${setAdding} onImporting=${setImporting} onAddFeedRow=${openAddFeedRow} onChanged=${() => load()} onListChanged=${() => load()} connectors=${connectors} />`;
   } else if (selected) {
     main = html`<${FeedDetail} feed=${selected} feeds=${feeds} draft=${draft} view=${view} go=${go}
       adding=${adding} onAdding=${setAdding} importing=${importing} onImporting=${setImporting} onChanged=${() => load()}
@@ -4201,7 +4215,7 @@ function Shell({ vault, onLock, version }) {
       onRemoved=${async () => { await load(); go({ name: 'releases' }, { replace: true }); }} connectors=${connectors}
       differences=${differences.filter((d) => d.feed_id === selected.id)} onRescan=${rescan} />`;
   } else if (narrow && panel.kind === 'level') {
-    main = html`<${LevelPage} panel=${panel} go=${go} />`;
+    main = html`<${LevelPage} panel=${panel} go=${go} onAddFeedRow=${openAddFeedRow} />`;
   } else {
     // A release of a level goes back to that level (ADR 0088 item 6).
     const from = view.name === 'releases' && typeof view.group === 'number'
@@ -4210,14 +4224,15 @@ function Shell({ vault, onLock, version }) {
       group=${view.name === 'releases' ? view.group : undefined} groupSort=${view.sort} groupReversed=${view.reversed === true}
       onGroupSort=${(sort, reversed) => go({ ...view, sort, reversed }, { replace: true })}
       changedFeeds=${changedFeeds} onQuery=${changeList}
-      onOpen=${(id) => go(openFeedView(id, narrow, from))} onAddFeed=${() => go({ name: 'add-feed' })} onAddedFeed=${addedFeed} />`;
+      onOpen=${(id) => go(openFeedView(id, narrow, from))} onAddFeed=${(addFrom) => go({ name: 'add-feed', from: addFrom })}
+      onAddedFeed=${addedFeed} from=${from} />`;
   }
 
   const navValue = { coarse, canBack: canBack(nav), canForward: canForward(nav), back, forward, setLeaveGuard,
     rootButtons: showsRootButtons(nav, narrow), toRoot, go,
     // A new release opens with the import sheet "Add tracks" (ADR 0224 item 7).
     addTracksNext: setPendingAddTracks };
-  const panelProps = { panel, draft, changedFeeds, go, showReleases, onAdding: setAdding, onImporting: setImporting, onLock: lock };
+  const panelProps = { panel, draft, changedFeeds, go, showReleases, onAdding: setAdding, onImporting: setImporting, onAddFeedRow: openAddFeedRow, onLock: lock };
   return html`<${NavContext.Provider} value=${navValue}><${OutsideContext.Provider} value=${outsideValue}><div class="shell">
     ${!narrow && html`<nav class="sidebar" aria-label="Collection">
       <${LeftPanel} ...${panelProps} />
@@ -4233,6 +4248,9 @@ function Shell({ vault, onLock, version }) {
       </div>`}
       ${main}
     </main>
+    ${addingFeed && html`<${AddFeedRowSheet} open=${addingFeed.open} connectors=${connectors} feeds=${feeds}
+      start=${addingFeed.start} onAdded=${(f, info) => { setAddingFeed(null); addedFeed(f, info, addingFeed.from); }}
+      onClose=${() => setAddingFeed(null)} />`}
   </div><//><//>`;
 }
 

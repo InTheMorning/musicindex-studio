@@ -379,7 +379,8 @@ pub struct Catalog {
 /// first role of the set decides: hosting, then label, then each other
 /// role at the rank of an artist. A feed with the roles artist and label
 /// is one feed at the rank of an artist.
-fn rank(roles: &[PublisherRole]) -> u8 {
+#[must_use]
+pub fn rank(roles: &[PublisherRole]) -> u8 {
     match roles.iter().min() {
         Some(PublisherRole::Hosting) => 3,
         Some(PublisherRole::Label) => 2,
@@ -394,6 +395,16 @@ fn rank(roles: &[PublisherRole]) -> u8 {
 /// only also counts. The result has the sequence of `feeds`.
 #[must_use]
 pub fn catalogs(feeds: &[(FeedRow, Option<Feed>)]) -> Vec<Catalog> {
+    catalogs_with_kept(feeds, &[])
+}
+
+/// Give the catalog of each feed, including links that Studio keeps only in
+/// the collection (ADR 0232 item 10).
+#[must_use]
+pub fn catalogs_with_kept(
+    feeds: &[(FeedRow, Option<Feed>)],
+    kept: &[(FeedId, FeedId)],
+) -> Vec<Catalog> {
     let parties: Vec<Party> = feeds
         .iter()
         .map(|(row, model)| Party {
@@ -460,7 +471,7 @@ pub fn catalogs(feeds: &[(FeedRow, Option<Feed>)]) -> Vec<Catalog> {
         }
         result[release].publishers = named.iter().map(|&index| feeds[index].0.id).collect();
     }
-    link_levels(feeds, &mut result);
+    link_levels(feeds, &mut result, kept);
     result
 }
 
@@ -511,17 +522,22 @@ pub fn release_levels(
 /// items 1 and 2). Feed B is below feed A when B has a lower rank and the
 /// two share a release. B is directly below A when no feed C is below A
 /// with B below C.
-fn link_levels(feeds: &[(FeedRow, Option<Feed>)], result: &mut [Catalog]) {
+fn link_levels(
+    feeds: &[(FeedRow, Option<Feed>)],
+    result: &mut [Catalog],
+    kept: &[(FeedId, FeedId)],
+) {
     let publishers: Vec<usize> = (0..feeds.len())
         .filter(|&index| feeds[index].0.medium.as_deref() == Some("publisher"))
         .collect();
     let rank_of = |index: usize| rank(&feeds[index].0.publisher_roles);
     let below = |lower: usize, upper: usize| {
         rank_of(lower) < rank_of(upper)
-            && result[lower]
-                .releases
-                .iter()
-                .any(|release| result[upper].releases.contains(release))
+            && (kept.contains(&(feeds[upper].0.id, feeds[lower].0.id))
+                || result[lower]
+                    .releases
+                    .iter()
+                    .any(|release| result[upper].releases.contains(release)))
     };
     let mut links = Vec::new();
     for &upper in &publishers {

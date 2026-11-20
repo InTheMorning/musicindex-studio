@@ -188,13 +188,15 @@ function outlineItems(feed, view, model, narrow, feeds) {
     // pages (ADR 0135 item 4).
     const byId = new Map((feeds || []).map((f) => [f.id, f]));
     const owned = (feed.release_ids || []).map((id) => byId.get(id)).filter(Boolean);
-    if (owned.length > 0) items.push({ id: 'releases-heading', label: 'Releases', heading: true });
-    const level = { group: feed.id, trail: from ? [...from.trail, from.group] : [] };
+    items.push({ id: 'releases-heading', label: 'Releases', heading: true });
+    const level = pageLevel(feed.id, from);
     owned.forEach((release) => items.push({
       id: `release:${release.id}`,
       label: displayTitle(release),
       target: openFeedView(release.id, narrow, level),
     }));
+    items.push({ id: 'add-release', label: 'Add release', action: 'add-feed', open: 'album',
+      start: releaseStart(feed, feed.title) || {}, from: level });
     return items;
   }
   // A playlist has no track pages, so its tracks are a tab (ADR 0053 item 4).
@@ -429,6 +431,21 @@ function feedLevel(owner, view, feeds) {
   const byId = new Map(feeds.map((feed) => [feed.id, feed]));
   const from = { group: owner.id, trail };
   const children = (owner.child_ids || []).map((id) => byId.get(id)).filter(Boolean);
+  const rank = headingIndex(owner);
+  const addHeadings = rank === 0 ? ['Labels', 'Artists'] : rank === 1 ? ['Artists'] : [];
+  const sections = headed(children, (feed) => ({
+    id: feed.id,
+    label: displayTitle(feed),
+    dot: feedKind(feed).dot,
+    glow: kindGlow(feedKind(feed)),
+    art: publisherArt(feed, feeds),
+    count: (feed.release_ids || []).length,
+    view: { name: 'releases', group: feed.id, trail: [...trail, owner.id] },
+  }));
+  for (const heading of addHeadings) {
+    if (!sections.some((section) => section.heading === heading)) sections.push({ heading, items: [] });
+  }
+  sections.sort((a, b) => HEADINGS.findIndex((entry) => entry[1] === a.heading) - HEADINGS.findIndex((entry) => entry[1] === b.heading));
   return {
     kind: 'level',
     back: { label: trail.length > 0 ? titleOf(feeds, trail[trail.length - 1]) : 'Releases', view: upView(trail, owner.id) },
@@ -441,21 +458,37 @@ function feedLevel(owner, view, feeds) {
       dot: feedKind(owner).dot,
       from,
     },
-    sections: headed(children, (feed) => ({
-      id: feed.id,
-      label: displayTitle(feed),
-      dot: feedKind(feed).dot,
-      glow: kindGlow(feedKind(feed)),
-      art: publisherArt(feed, feeds),
-      count: (feed.release_ids || []).length,
-      view: { name: 'releases', group: feed.id, trail: [...trail, owner.id] },
-    })),
+    sections: sections.map((section) => ({ ...section,
+      add: section.heading === 'Artists' ? { add: 'artist', label: 'Add artist', open: 'publisher', start: { role: 'artist', below_id: owner.id }, from }
+        : section.heading === 'Labels' ? { add: 'label', label: 'Add label', open: 'publisher', start: { role: 'label', below_id: owner.id }, from } : null })),
+    releaseAdd: { add: 'release', label: 'Add release', open: 'album', start: releaseStart(owner, owner.title) || {}, from },
+    from,
     releases: (owner.release_ids || []).map((id) => byId.get(id)).filter(Boolean).map((feed) => ({
       id: feed.id,
       title: displayTitle(feed),
       from,
     })),
   };
+}
+
+// The start values of a new release of a publisher feed (ADR 0164 items 1
+// and 2, ADR 0232 item 4). Only a writable artist page is the start parent.
+// Other feeds give null.
+export function releaseStart(feed, name) {
+  if (!feed || !isPublisher(feed) || !feed.connector_id || !(feed.publisher_roles || []).includes('artist')) return null;
+  return { author: name || '', publisher_id: feed.id };
+}
+
+// The level of the page of publisher feed `id` that opened with `from`. A
+// release row of its outline and a new feed of the page go back to this
+// level (ADR 0215 item 6, ADR 0232 item 8).
+export function pageLevel(id, from) {
+  return { group: id, trail: from ? [...(from.trail || []), from.group] : [] };
+}
+
+// The page of a new feed keeps the level that opened its add form.
+export function newFeedView(id, from) {
+  return { name: 'feed', id, ...(from ? { from } : {}) };
 }
 
 // The destinations below Releases (ADR 0085 items 1 and 3, ADR 0088 item

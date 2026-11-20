@@ -5,6 +5,7 @@
 - Owner: operator
 - Accepted: 2026-11-17. The operator accepted the consolidation of each changed decision (musicindex-research `df7b823`). This ADR restates each live rule of ADR 0088, with each change from a subsequent ADR. It keeps the item numbers of ADR 0088.
 - Supersedes: [ADR 0088](../archive/adr/0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md), The Left Panel Shows The Levels Of The Publisher Feeds.
+- Changed by: [ADR 0232](0232-each-group-below-an-open-feed-has-an-add-row.md) items 9 to 12 add a link that only Studio keeps to item 2. Items 1 to 7 add the add rows to item 5. Item 8 gives the level of a new feed to item 6.
 - Uses: Stophammer ADR 0069 §4 (`co_credited_feeds`) and §"A direct link between a label feed and an artist feed".
 - Uses: musicindex ADR 0036 R-ROLE-1 and musicindex ADR 0081 R-CURATOR-1 item 1 for the sequence of the roles.
 - Uses: these current ADRs own a part of this area. This ADR names each one at its item. [ADR 0085](0085-each-artist-and-label-is-a-destination.md) (the destinations), [ADR 0069](0069-the-outline-head-opens-the-feed-page.md) (the outline head), [ADR 0089](0089-the-left-panel-shows-the-art-of-each-publisher-feed.md) (the art of a row), [ADR 0090](0090-studio-names-the-feeds-that-it-does-not-edit.md) ("Other feeds" and "No role"), [ADR 0181](0181-a-level-shows-the-state-of-its-own-feed.md) (the tile of the level feed).

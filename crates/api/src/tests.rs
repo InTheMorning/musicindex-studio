@@ -1729,6 +1729,113 @@ async fn a_link_starts_the_draft_of_a_written_release_with_no_draft() {
 }
 
 #[tokio::test]
+async fn a_new_artist_can_keep_a_level_below_a_label() {
+    let (app, connector) = publisher_app().await;
+    let label = make_feed(
+        &app,
+        new_feed_body(
+            connector,
+            "label.xml",
+            "Label",
+            Some("publisher"),
+            Some("label"),
+        ),
+    )
+    .await;
+    let label_id = label["id"].as_i64().unwrap();
+    let mut body = new_feed_body(
+        connector,
+        "artist.xml",
+        "Artist",
+        Some("publisher"),
+        Some("artist"),
+    );
+    body["below_id"] = json!(label_id);
+    let artist = make_feed(&app, body).await;
+    let artist_id = artist["id"].as_i64().unwrap();
+    let (_, feeds) = call(&app, "GET", "/api/v1/feeds", None).await;
+    let label = feeds
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|feed| feed["id"] == label_id)
+        .unwrap();
+    assert_eq!(label["child_ids"], json!([artist_id]));
+
+    let artist_below = new_feed_body(
+        connector,
+        "other-artist.xml",
+        "Other Artist",
+        Some("publisher"),
+        Some("artist"),
+    );
+    let mut artist_below = artist_below;
+    artist_below["below_id"] = json!(artist_id);
+    let (status, response) = call(&app, "POST", "/api/v1/feeds/new", Some(artist_below)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{response}");
+    assert_eq!(response["error"]["code"], "invalid_below");
+}
+
+#[tokio::test]
+async fn a_shared_release_removes_the_kept_level() {
+    let (app, connector) = publisher_app().await;
+    let label = make_feed(
+        &app,
+        new_feed_body(
+            connector,
+            "label.xml",
+            "Label",
+            Some("publisher"),
+            Some("label"),
+        ),
+    )
+    .await;
+    let label_id = label["id"].as_i64().unwrap();
+    let mut body = new_feed_body(
+        connector,
+        "artist.xml",
+        "Artist",
+        Some("publisher"),
+        Some("artist"),
+    );
+    body["below_id"] = json!(label_id);
+    let artist_id = make_feed(&app, body).await["id"].as_i64().unwrap();
+    let release = make_feed(
+        &app,
+        new_feed_body(connector, "release.xml", "Release", None, None),
+    )
+    .await;
+    let release_id = release["id"].as_i64().unwrap();
+    for publisher_id in [label_id, artist_id] {
+        let (status, body) = call(
+            &app,
+            "POST",
+            &format!("/api/v1/feeds/{publisher_id}/links"),
+            Some(json!({ "release": release_id })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+    }
+    // With the kept link gone, the unlink of the label leaves no level.
+    let (status, body) = call(
+        &app,
+        "DELETE",
+        &format!("/api/v1/feeds/{label_id}/links/{release_id}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (_, feeds) = call(&app, "GET", "/api/v1/feeds", None).await;
+    let label = feeds
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|feed| feed["id"] == label_id)
+        .unwrap();
+    assert_eq!(label["child_ids"], json!([]));
+}
+
+#[tokio::test]
 async fn a_link_gives_422_for_a_music_feed_and_409_for_a_read_only_feed() {
     let (app, connector) = publisher_app().await;
     let label = make_feed(

@@ -207,6 +207,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0229: The media host after a follow, a podping again, and empty folders](adr/0229-the-media-host-after-a-follow-a-podping-again-and-empty-folders.md)
 - [ADR 0230: One add menu, the parent of a new release, and the check after rc.29](adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md)
 - [ADR 0231: A new release writes its artist page, and the files of a restored release](adr/0231-a-new-release-writes-its-artist-page-and-the-files-of-a-restored-release.md)
+- [ADR 0232: Each group below an open feed has an add row](adr/0232-each-group-below-an-open-feed-has-an-add-row.md)
 
 ## Plans
 

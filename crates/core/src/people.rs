@@ -3636,6 +3636,7 @@ const FEED_DELETE_TABLES: &[(&str, &str)] = &[
     ("feed_host_deletes", "feed_id"),
     ("feed_writes", "feed_id"),
     ("person_members", "feed_id"),
+    ("kept_levels", "upper_id"),
 ];
 
 /// Tell if the collection has `table`. The move into the library drops the
@@ -3662,6 +3663,7 @@ fn delete_snapshot(
         let predicate = match *table {
             "downloads" => "library_file_id IN (SELECT id FROM library_files WHERE feed_id = ?1)",
             "grant_writes" => "grant_id IN (SELECT id FROM show_grants WHERE feed_id = ?1)",
+            "kept_levels" => "upper_id = ?1 OR lower_id = ?1",
             _ => "",
         };
         let query = if predicate.is_empty() {

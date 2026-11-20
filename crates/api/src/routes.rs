@@ -1429,7 +1429,8 @@ pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
             feeds.push((row, feed));
         }
         // The links of each feed give its destination (ADR 0085).
-        let catalogs = publisher::catalogs(&feeds);
+        let kept = w.collection.kept_levels()?;
+        let catalogs = publisher::catalogs_with_kept(&feeds, &kept);
         let mut rows = Vec::new();
         for ((row, feed), catalog) in feeds.iter().zip(catalogs) {
             let state = draft_state(w, row)?;
@@ -1586,6 +1587,8 @@ pub(crate) struct NewAlbumFeed {
     kind: Option<String>,
     /// The artist page that starts the new release (ADR 0213 items 1 and 7).
     publisher_id: Option<i64>,
+    /// The publisher feed above a new publisher feed (ADR 0232 item 9).
+    below_id: Option<i64>,
     /// The description of a release that the user found on Music Index
     /// (ADR 0230 item 15).
     description: Option<String>,
@@ -1658,6 +1661,7 @@ pub(crate) async fn new_album_feed(
         } else {
             None
         };
+        let below_id = validate_below_page(w, medium, role, body.below_id)?;
         let row = w.collection.connector(ConnectorId(body.connector_id))?;
         if row.secret_ref.is_some() && w.vault.is_none() {
             return Err(ApiError::vault_locked());
@@ -1679,9 +1683,42 @@ pub(crate) async fn new_album_feed(
             &first,
         )?;
         finish_new_feed(w, id, medium, kind, role, artist_id)?;
+        if let Some(upper) = below_id {
+            w.collection.add_kept_level(upper, id)?;
+        }
         Ok((StatusCode::CREATED, to_json(w.collection.feed(id)?)?))
     })
     .await
+}
+
+fn validate_below_page(
+    w: &Workspace,
+    medium: &str,
+    role: Option<PublisherRole>,
+    below_id: Option<i64>,
+) -> Result<Option<FeedId>, ApiError> {
+    let Some(id) = below_id else {
+        return Ok(None);
+    };
+    let invalid = || {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "invalid_below",
+            "below_id must name a publisher feed with a higher rank",
+        )
+    };
+    let Some(role) = role.filter(|_| medium == "publisher") else {
+        return Err(invalid());
+    };
+    let upper_id = FeedId(id);
+    let upper = w.collection.feed(upper_id).map_err(|_| invalid())?;
+    // The first role gives the rank (ADR 0215 item 1).
+    if upper.medium.as_deref() != Some("publisher")
+        || publisher::rank(&upper.publisher_roles) <= publisher::rank(&[role])
+    {
+        return Err(invalid());
+    }
+    Ok(Some(upper_id))
 }
 
 fn finish_new_feed(
@@ -1753,7 +1790,8 @@ fn link_new_release_pages(
         .iter()
         .map(|(row, model)| (row.clone(), Some(model.clone())))
         .collect();
-    let catalogs = publisher::catalogs(&catalog_feeds);
+    let kept = w.collection.kept_levels()?;
+    let catalogs = publisher::catalogs_with_kept(&catalog_feeds, &kept);
     let newest = feeds
         .iter()
         .enumerate()
@@ -1790,6 +1828,30 @@ fn link_new_release_pages(
             // item 11).
             ensure_draft(w, *publisher_id)?;
             publisher::link(&w.collection, *publisher_id, release_id)?;
+        }
+    }
+    remove_shared_kept_levels(w)?;
+    Ok(())
+}
+
+fn remove_shared_kept_levels(w: &Workspace) -> Result<(), ApiError> {
+    let feeds = feed_models(w)?;
+    let catalog_feeds: Vec<_> = feeds
+        .iter()
+        .map(|(row, model)| (row.clone(), Some(model.clone())))
+        .collect();
+    let kept = w.collection.kept_levels()?;
+    let catalogs = publisher::catalogs_with_kept(&catalog_feeds, &kept);
+    for (upper, lower) in kept {
+        let upper_index = feeds.iter().position(|(row, _)| row.id == upper);
+        let lower_index = feeds.iter().position(|(row, _)| row.id == lower);
+        if let (Some(upper_index), Some(lower_index)) = (upper_index, lower_index)
+            && catalogs[upper_index]
+                .releases
+                .iter()
+                .any(|release| catalogs[lower_index].releases.contains(release))
+        {
+            w.collection.remove_kept_level(upper, lower)?;
         }
     }
     Ok(())
@@ -2955,6 +3017,7 @@ pub(crate) async fn add_link(
         ensure_draft(w, release_id)?;
         let before = before_change(w, &[publisher_id, release_id])?;
         publisher::link(&w.collection, publisher_id, release_id)?;
+        remove_shared_kept_levels(w)?;
         changed_json(w, &before)
     })
     .await
@@ -7307,10 +7370,11 @@ pub(crate) async fn feed_level(State(shared): State<Shared>, Path(id): Path<i64>
             let model = files_feed(w, row.id).ok().flatten();
             feeds.push((row, model));
         }
+        let kept = w.collection.kept_levels()?;
         let catalogs: std::collections::HashMap<FeedId, publisher::Catalog> = feeds
             .iter()
             .map(|(row, _)| row.id)
-            .zip(publisher::catalogs(&feeds))
+            .zip(publisher::catalogs_with_kept(&feeds, &kept))
             .collect();
         let ids: Vec<i64> = change_set::level_feeds(&catalogs, id)
             .into_iter()

@@ -1,7 +1,7 @@
 // The Welcome page of a new user and the first steps of an artist page or a
 // label page (ADR 0119, task 083). The functions have no Preact and no browser
 // state. `app.js` and `editor.js` show the rows and the sheets.
-import { isPublisher } from './shell.js';
+import { isPublisher, releaseStart } from './shell.js';
 import { feedFileStart } from './addfeeds.js';
 
 // The texts of the Welcome page (ADR 0119 items 2 and 3).
@@ -137,8 +137,8 @@ export function nextStep(feed) {
 // and 6, ADR 0213 item 4). A writable artist page gets the action. The page
 // of the feed shows it only with no first-step row.
 export function releaseAdd(feed, name) {
-  if (!feed || !isPublisher(feed) || !feed.connector_id || !(feed.publisher_roles || []).includes('artist')) return null;
-  return { label: 'Add a Release', start: { author: name || '', publisher_id: feed.id } };
+  const start = releaseStart(feed, name);
+  return start && { label: 'Add a Release', start };
 }
 
 // The artist pages that can receive a new release. A read-only page cannot

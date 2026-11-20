@@ -705,6 +705,86 @@ fn the_levels_follow_the_rank_and_the_shared_releases() {
 }
 
 #[test]
+fn a_kept_link_places_a_new_feed_below_its_label() {
+    let mut s = setup();
+    let label = new_feed(&mut s, "label.xml", "Label", "publisher");
+    s.collection
+        .set_publisher_roles(label, &[PublisherRole::Label], true)
+        .unwrap();
+    let artist = new_feed(&mut s, "artist.xml", "Artist", "publisher");
+    s.collection
+        .set_publisher_roles(artist, &[PublisherRole::Artist], true)
+        .unwrap();
+    s.collection.add_kept_level(label, artist).unwrap();
+    let feeds: Vec<_> = s
+        .collection
+        .feeds()
+        .unwrap()
+        .into_iter()
+        .map(|row| (row, None))
+        .collect();
+    let kept = s.collection.kept_levels().unwrap();
+    let catalogs = publisher::catalogs_with_kept(&feeds, &kept);
+    let of = |id: FeedId| {
+        let index = feeds.iter().position(|(row, _)| row.id == id).unwrap();
+        &catalogs[index]
+    };
+    assert_eq!(of(label).children, vec![artist]);
+    assert_eq!(of(artist).parents, vec![label]);
+    s.collection.add_kept_level(artist, label).unwrap();
+    let reverse = s.collection.kept_levels().unwrap();
+    let catalogs = publisher::catalogs_with_kept(&feeds, &reverse);
+    let of = |id: FeedId| {
+        let index = feeds.iter().position(|(row, _)| row.id == id).unwrap();
+        &catalogs[index]
+    };
+    assert!(!of(artist).children.contains(&label));
+    assert!(!of(label).parents.contains(&artist));
+}
+
+#[test]
+fn the_remove_of_a_feed_removes_its_kept_link_and_the_undo_gives_it_back() {
+    let mut s = setup();
+    let hosting = new_feed(&mut s, "hosting.xml", "Hosting", "publisher");
+    s.collection
+        .set_publisher_roles(hosting, &[PublisherRole::Hosting], true)
+        .unwrap();
+    let label = new_feed(&mut s, "label.xml", "Label", "publisher");
+    s.collection
+        .set_publisher_roles(label, &[PublisherRole::Label], true)
+        .unwrap();
+    let artist = new_feed(&mut s, "artist.xml", "Artist", "publisher");
+    s.collection
+        .set_publisher_roles(artist, &[PublisherRole::Artist], true)
+        .unwrap();
+    s.collection.add_kept_level(hosting, label).unwrap();
+    s.collection.add_kept_level(label, artist).unwrap();
+    s.collection.add_kept_level(hosting, artist).unwrap();
+    // The artist is directly below the label only (ADR 0215 item 2).
+    let feeds: Vec<_> = s
+        .collection
+        .feeds()
+        .unwrap()
+        .into_iter()
+        .map(|row| (row, None))
+        .collect();
+    let catalogs = publisher::catalogs_with_kept(&feeds, &s.collection.kept_levels().unwrap());
+    let index = |id: FeedId| feeds.iter().position(|(row, _)| row.id == id).unwrap();
+    assert_eq!(catalogs[index(hosting)].children, vec![label]);
+    assert_eq!(catalogs[index(artist)].parents, vec![label]);
+
+    studio_core::people::remove_feed(&s.collection, artist).unwrap();
+    assert_eq!(s.collection.kept_levels().unwrap(), vec![(hosting, label)]);
+    studio_core::people::undo_delete(&s.collection).unwrap();
+    assert_eq!(
+        s.collection.kept_levels().unwrap(),
+        vec![(hosting, label), (hosting, artist), (label, artist)]
+    );
+    s.collection.delete_feed(label).unwrap();
+    assert_eq!(s.collection.kept_levels().unwrap(), vec![(hosting, artist)]);
+}
+
+#[test]
 fn a_feed_with_the_roles_artist_and_label_is_one_feed_at_the_artist_rank() {
     let mut s = setup();
     let own = new_feed(&mut s, "own.xml", "Own", "publisher");

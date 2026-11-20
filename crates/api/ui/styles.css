@@ -2528,12 +2528,12 @@ button.outline-feed {
 .podping-line > .podping-url { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .podping-line > .mono.podping-url { flex: 1 1 0; }
 /* At narrow width the tag with its time, the address and the button do not
-   fit on one row. A sent line with the button then shows only its tag and
-   the button. The text of the notice gives the time. */
+   fit on one row. A line with the button then shows no address. A sent line
+   also shows no time, because the text of the notice gives it. */
 @media (max-width: 760px) {
   .podping-line.has-action:not(.wrap) .podping-time,
-  .podping-line.has-action:not(.wrap) > .podping-url { display: none; }
-  .podping-line.has-action:not(.wrap) { justify-content: space-between; }
+  .podping-line.has-action > .mono.podping-url { display: none; }
+  .podping-line.has-action { justify-content: space-between; }
 }
 /* A failed line always has its button, so it can wrap and show all of its
    error text. */

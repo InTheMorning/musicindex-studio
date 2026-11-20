@@ -58,3 +58,5 @@ The main session corrected the layout after its screenshots at 1280 px and 390 p
 - The write notice keeps the greatest height that it had for the same write. At 390 px the waiting state was 204 px and the no reply state 179 px, because their bold text has a different length. A change of the window size starts the measure again.
 
 Checks: UI tests pass, the .mjs syntax check passes for outsidecheck.js and app.js, `bash tools/gate.sh` passes. The screenshots show no fit finding at 390 px and 761 px. They come from a test page that renders the notices with the real `outsidecheck.js` and `styles.css`, not from the app.
+
+Desktop check (main session, 2026-11-20): the release binary on a private Xvfb, with a copy of the operator data that has a write and a podping of the test album (`.studio-dev/d30`). At 1280 px and 400 px, the waiting notice became the no reply notice after the wait, and the content below the notice stayed at the same position. At 400 px the address of a failed line shrank to one letter. Thus at 760 px or less, a line with the button now shows no address. A failed line keeps its time.

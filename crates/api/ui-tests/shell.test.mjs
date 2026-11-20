@@ -272,8 +272,8 @@ test('each sort has its reversed name (musicindex ADR 0043 R-LIST-7 item 5)', ()
   assert.equal(sortLabel('newest', true), 'Oldest');
   assert.equal(sortLabel('az', false), 'A to Z');
   assert.equal(sortLabel('az', true), 'Z to A');
-  assert.equal(sortLabel('order', false), 'Feed Order');
-  assert.equal(sortLabel('order', true), 'Feed Order, Reversed');
+  assert.equal(sortLabel('order', false), 'Page Order');
+  assert.equal(sortLabel('order', true), 'Page Order, Reversed');
 });
 
 test('the query text holds only the values that are not the default', () => {
@@ -800,7 +800,7 @@ test('the sort menu names both directions of each sort', () => {
   const labels = (sorts) => sortEntries(sorts).map((e) => e.label);
   assert.deepEqual(labels(['newest', 'az']), ['Newest', 'Oldest', 'A to Z', 'Z to A']);
   assert.deepEqual(labels(['order', 'newest', 'az']),
-    ['Feed Order', 'Feed Order, Reversed', 'Newest', 'Oldest', 'A to Z', 'Z to A']);
+    ['Page Order', 'Page Order, Reversed', 'Newest', 'Oldest', 'A to Z', 'Z to A']);
   assert.deepEqual(sortEntries(['az'])[1], { sort: 'az', reversed: true, label: 'Z to A' });
 });
 

@@ -6,7 +6,7 @@
 - Accepted: 2026-11-08 by the operator, through the orchestrator session, with musicindex ADR 0054.
 - Uses: musicindex ADR 0054 R-LIST-13 and R-LIST-14, musicindex ADR 0043 R-LIST-6.
 - Changes: [ADR 0153](0153-the-people-list-has-a-sort-and-names-sort-with-numbers.md) item 1, and the reverse icon of task 094 on Releases.
-- Changed by: [ADR 0231](0231-a-new-release-writes-its-artist-page-and-the-files-of-a-restored-release.md) items 4 and 5, on 2026-11-20. Item 1: "Page Order" replaces "Feed Order" when musicindex records the same name.
+- Changed by: [ADR 0231](0231-a-new-release-writes-its-artist-page-and-the-files-of-a-restored-release.md) items 4 and 5, on 2026-11-20. Item 1: "Page Order" replaces "Feed Order", as in musicindex ADR 0054.
 
 ## Context
 

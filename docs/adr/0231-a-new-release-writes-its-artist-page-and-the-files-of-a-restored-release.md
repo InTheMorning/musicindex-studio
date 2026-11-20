@@ -9,7 +9,7 @@
 - Changes: [ADR 0230](0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 9, 11, 27, 31 and 32 (items 1 to 6 and items 14 to 17).
 - Changes: [ADR 0205](0205-publisher-feeds-announcements-and-show-grants.md) item 8, the write of the two feeds of a link (items 7 to 10).
 - Changes: [ADR 0179](0179-a-release-keeps-one-library-record-for-each-file.md) items 3 and 4, the join of a remote row and a local row (items 11 to 13).
-- Changes: [ADR 0155](0155-the-sort-menu-names-both-directions.md) item 1 and [ADR 0153](0153-the-people-list-has-a-sort-and-names-sort-with-numbers.md) item 7, the name of the sort "Feed Order" (item 4). This change waits for item 5.
+- Changes: [ADR 0155](0155-the-sort-menu-names-both-directions.md) item 1 and [ADR 0153](0153-the-people-list-has-a-sort-and-names-sort-with-numbers.md) item 7, the name of the sort "Feed Order" (items 4 and 5).
 - Uses: [ADR 0007](0007-draft-diff-write-and-announce.md), the write of a draft. [ADR 0036](0036-library-records-host-inventory-and-host-operations.md), the planned address of a library file. [ADR 0148](0148-a-move-keeps-the-old-files-until-the-user-reviews-the-deletion.md) items 2 and 3, the files of a move plan. [ADR 0198](0198-the-review-of-a-delete-names-the-delete-and-a-deleted-feed-shows-only-what-it-can-do.md), the Retire block. [ADR 0213](0213-a-release-starts-on-the-page-of-its-artist.md) item 17, the link to an artist page.
 
 ## Context
@@ -42,7 +42,7 @@ The operator did the desktop check of tasks 205 to 209 on 2026-11-20, with the r
 ### Page Order
 
 4. The sort "Feed Order" has the name "Page Order", and its reversed direction has the name "Page Order, Reversed". The accessible name of the menu uses the same words.
-5. Item 4 starts when musicindex records the same name for the three apps. The main session sends the proposal to the orchestrator session. Until then, Studio keeps "Feed Order". Open: the decision of musicindex.
+5. musicindex records the same names for the three apps in its ADR 0054 R-LIST-13 item 2 and R-LIST-14 item 3 (musicindex commit `c325b6b`, operator choice of 2026-11-20). The tracks of a release use "Track Order" in the Reverse toggle of R-LIST-14. Studio has no such toggle now, so Studio does not use "Track Order".
 
 ### The Parent Of A New Release
 
@@ -74,7 +74,7 @@ The operator did the desktop check of tasks 205 to 209 on 2026-11-20, with the r
 - The tab **Files** of a restored release shows each file once.
 - A move plan offers no download that cannot work.
 - A deleted release shows what the user can do at the top of each tab.
-- Studio keeps the sort name of the other two apps until musicindex changes it.
+- The three apps use the sort name "Page Order".
 
 ## Alternatives Considered
 
@@ -82,7 +82,7 @@ The operator did the desktop check of tasks 205 to 209 on 2026-11-20, with the r
 - Only a tooltip on the pencil mark. Not chosen by the operator: it is easy to miss.
 - Move the Retire block to the top of the tab **Release**. Not chosen by the operator: the notice shows on each tab.
 - Join a remote row to a local row only by the media host of the draft. Not chosen: finding 4 has rows on a different host.
-- Change "Feed Order" in Studio now. Not chosen: the three apps use one name (musicindex ADR 0054).
+- Change "Feed Order" in Studio before musicindex. Not chosen: the three apps use one name (musicindex ADR 0054).
 
 ## Checks
 

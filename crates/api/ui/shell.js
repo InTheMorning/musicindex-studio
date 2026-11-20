@@ -601,8 +601,8 @@ const GROUP_SORTS = ['order', 'newest', 'az'];
 
 // The names of each sort (ADR 0039 item 2a, ADR 0085 item 4). A reversed list
 // names its reversed order (musicindex ADR 0043 R-LIST-7 item 5).
-const SORT_LABELS = { order: 'Feed Order', newest: 'Newest', az: 'A to Z' };
-const REVERSED_SORT_LABELS = { order: 'Feed Order, Reversed', newest: 'Oldest', az: 'Z to A' };
+const SORT_LABELS = { order: 'Page Order', newest: 'Newest', az: 'A to Z' };
+const REVERSED_SORT_LABELS = { order: 'Page Order, Reversed', newest: 'Oldest', az: 'Z to A' };
 
 // The name of a sort, in the usual order or in the reversed order.
 export function sortLabel(sort, reversed) {

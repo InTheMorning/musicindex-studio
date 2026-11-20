@@ -39,11 +39,12 @@ export function fileHostRows(feed, files, connectors) {
   ];
 }
 
-// The file host or the file hosts that give the old files. Studio can know
-// only the addresses of a file that is on no known file host.
+// The file host or the file hosts that give the old files. A file in the
+// library that is on no file host goes from the library (ADR 0231 item 16).
+// Studio can know only the addresses of a file that is on no known file host.
 function fromText(plan, connectors) {
   const ids = plan.from_connector_ids;
-  if (ids.length === 0) return 'Their addresses';
+  if (ids.length === 0) return plan.from_library > 0 ? 'The library' : 'Their addresses';
   return ids.length === 1 ? hostName(connectors, ids[0]) : counted(ids.length, 'file host', 'file hosts');
 }
 
@@ -69,6 +70,9 @@ export function planRows(plan, connectors) {
   if (plan.download.count > 0) {
     rows.push({ label: `${counted(plan.download.count, 'file', 'files')} not in the library`, value: 'Studio downloads them first' });
   }
+  if (plan.from_library > 0) {
+    rows.push({ label: counted(plan.from_library, 'file', 'files'), value: 'Not on a file host. Studio sends it from the library.' });
+  }
   if (plan.on_target > 0) {
     rows.push({ label: counted(plan.on_target, 'file', 'files'), value: `Already on ${to}` });
   }
@@ -84,13 +88,16 @@ export function planRows(plan, connectors) {
   return rows;
 }
 
+// The text of each cause. The core gives the name of the file host as `host`
+// for a file that is gone from its file host (ADR 0231 item 15).
 const STAY_TEXT = {
-  not_in_library: 'Not in the library, so it does not move.',
-  not_written: 'Not on a file host yet. Write the draft first.',
+  not_in_library: () => 'Not in the library, so it does not move.',
+  not_written: () => 'Not on a file host yet. Write the draft first.',
+  gone_from_host: (stay) => `Not on ${stay.host || 'its file host'}. Studio cannot download it.`,
 };
 
 // The rows of the files that do not move (ADR 0148 item 3).
-export const stayRows = (plan) => plan.stays.map((stay) => ({ name: stay.name, text: STAY_TEXT[stay.reason] || '' }));
+export const stayRows = (plan) => plan.stays.map((stay) => ({ name: stay.name, text: (STAY_TEXT[stay.reason] || (() => ''))(stay) }));
 
 // The label of the check box of the deletion (ADR 0148 item 5).
 export function deleteLabel(plan, connectors) {

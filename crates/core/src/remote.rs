@@ -6,9 +6,11 @@
 //! address of the feed a library file with `local` false and no SHA-256.
 //! It changes no file on disk.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
-use crate::collection::{Collection, CollectionError, CollectionErrorKind, FeedId, LibraryFile};
+use crate::collection::{
+    Collection, CollectionError, CollectionErrorKind, FeedId, LibraryFile, LibraryFileId,
+};
 use crate::feed::Feed;
 use crate::inventory::{self, Hosts, InventoryError, InventoryErrorKind};
 use crate::library::is_plain_name;
@@ -42,6 +44,13 @@ struct Facts {
 /// with `local` false for each other address. It removes each row with
 /// `local` false whose address is no longer in `feed`, with its download
 /// record.
+///
+/// A row with `local` false, no SHA-256 and no removal time is a second
+/// row of a local file when its address is the planned address of that
+/// file on a connected host, or the address of a copy of that file. The
+/// function gives the address to the local row as its `source_url` and
+/// removes the remote row. It keeps a remote row that a draft operation
+/// names (ADR 0231 items 12 and 13).
 ///
 /// When a read of the planned address or of the copies of a local library
 /// file fails, the function gives up and adds no row (ADR 0179 item 1).
@@ -80,8 +89,11 @@ pub fn record_remote_files(
         }
     }
 
-    // The addresses that have a library file already.
+    // The addresses that have a library file already. `claims` holds the
+    // addresses that a local file has on a connected host, as its planned
+    // address or as the address of a copy (ADR 0231 item 12).
     let mut known: HashSet<String> = HashSet::new();
+    let mut claims: HashMap<String, LibraryFileId> = HashMap::new();
     for file in &kept {
         known.extend(file.source_url.clone());
         if !file.local {
@@ -92,10 +104,22 @@ pub fn record_remote_files(
             Err(error) if error.kind() == InventoryErrorKind::NoHost => {}
             Err(error) => return Err(read_failed(file, &error)),
         }
+        for connector_id in hosts.ids() {
+            let planned = inventory::planned_path_on(collection, hosts, &row, file, connector_id)
+                .map_err(|error| read_failed(file, &error))?;
+            if let Some(url) = planned.url {
+                claims.entry(url).or_insert(file.id);
+            }
+        }
         let copies = inventory::copies(collection, hosts, file)
             .map_err(|error| read_failed(file, &error))?;
-        known.extend(copies.into_iter().filter_map(|copy| copy.url));
+        for url in copies.into_iter().filter_map(|copy| copy.url) {
+            claims.entry(url).or_insert(file.id);
+        }
     }
+    known.extend(claims.keys().cloned());
+
+    report.removed += join_remote_rows(collection, feed_id, &mut kept, &claims)?;
 
     // The paths in the release folder that are in use. The feed XML is in
     // the same folder.
@@ -135,6 +159,47 @@ pub fn record_remote_files(
         report.added += 1;
     }
     Ok(report)
+}
+
+/// Join each remote row of `kept` to the local row that claims its address,
+/// and give the count of removed rows. The function takes the joined rows out
+/// of `kept`. A remote row that a draft operation names stays (ADR 0231
+/// items 12 and 13).
+fn join_remote_rows(
+    collection: &Collection,
+    feed_id: FeedId,
+    kept: &mut Vec<LibraryFile>,
+    claims: &HashMap<String, LibraryFileId>,
+) -> Result<usize, CollectionError> {
+    let in_draft: HashSet<LibraryFileId> = collection
+        .draft_operations(feed_id)?
+        .into_iter()
+        .filter_map(|operation| operation.library_file_id)
+        .collect();
+    let mut joined = Vec::new();
+    for file in kept.iter() {
+        let is_remote_row = !file.local && file.sha256.is_none() && file.removed_at.is_none();
+        let Some(url) = file.source_url.as_deref().filter(|_| is_remote_row) else {
+            continue;
+        };
+        let Some(&local_id) = claims.get(url) else {
+            continue;
+        };
+        if in_draft.contains(&file.id) {
+            continue;
+        }
+        if kept
+            .iter()
+            .find(|other| other.id == local_id)
+            .is_some_and(|local| local.source_url.as_deref() != Some(url))
+        {
+            collection.set_library_file_source_url(local_id, url)?;
+        }
+        collection.remove_library_file(file.id)?;
+        joined.push(file.id);
+    }
+    kept.retain(|file| !joined.contains(&file.id));
+    Ok(joined.len())
 }
 
 /// The error for a failed read of the host of a local library file
@@ -685,5 +750,209 @@ mod tests {
             .map(|f| f.path)
             .collect();
         assert_eq!(remote, ["other.mp3"]);
+    }
+
+    /// A feed with a local file on a first host, and a second connected
+    /// host. The remote row of the feed address is at the planned address
+    /// of the local file on the second host (ADR 0231 item 12).
+    struct Joined {
+        _dirs: Vec<tempfile::TempDir>,
+        collection: Collection,
+        hosts: Hosts,
+        feed_id: FeedId,
+        local: LibraryFileId,
+        remote: LibraryFileId,
+        address: String,
+        feed: Feed,
+    }
+
+    fn joined() -> Joined {
+        let first = tempfile::tempdir().unwrap();
+        let second = tempfile::tempdir().unwrap();
+        let mut collection = Collection::open_in_memory().unwrap();
+        let home = collection
+            .add_connector("local", "Home", "{}", None)
+            .unwrap();
+        let other = collection
+            .add_connector(
+                "local",
+                "Other",
+                &LocalFolder::new(second.path(), Some("https://n.example/b".into())).config(),
+                None,
+            )
+            .unwrap();
+        let mut hosts = Hosts::new();
+        hosts.insert(
+            home,
+            Box::new(LocalFolder::new(
+                first.path(),
+                Some("https://m.example".into()),
+            )),
+        );
+        hosts.insert(
+            other,
+            Box::new(LocalFolder::new(
+                second.path(),
+                Some("https://n.example/b".into()),
+            )),
+        );
+        let feed_id = collection
+            .add_feed(None, Some((home, "album.xml")))
+            .unwrap();
+        collection.set_feed_folder(feed_id, "album").unwrap();
+        let sha = crate::digest::sha256_hex(&[b"music"]);
+        let local = collection
+            .add_library_file(
+                feed_id,
+                "one.mp3",
+                5,
+                Some(&sha),
+                "audio/mpeg",
+                true,
+                None,
+                None,
+            )
+            .unwrap();
+        let row = collection.feed(feed_id).unwrap();
+        let file = collection.library_file(local).unwrap();
+        let address = inventory::planned_path_on(&collection, &hosts, &row, &file, other)
+            .unwrap()
+            .url
+            .unwrap();
+        assert!(address.starts_with("https://n.example/b/"), "{address}");
+        let remote = collection
+            .add_library_file(
+                feed_id,
+                "one 2.mp3",
+                5,
+                None,
+                "audio/mpeg",
+                false,
+                Some(&address),
+                None,
+            )
+            .unwrap();
+        let feed = parse(&format!(
+            r#"<rss version="2.0"><channel><title>A</title>
+            <item><guid>1</guid><enclosure url="{address}" length="5" type="audio/mpeg"/></item>
+            </channel></rss>"#
+        ));
+        Joined {
+            _dirs: vec![first, second],
+            collection,
+            hosts,
+            feed_id,
+            local,
+            remote,
+            address,
+            feed,
+        }
+    }
+
+    #[test]
+    fn a_remote_row_at_the_planned_address_on_a_second_host_joins_the_local_row() {
+        let j = joined();
+        let report = record_remote_files(&j.collection, &j.hosts, j.feed_id, &j.feed).unwrap();
+        assert_eq!(
+            report,
+            RemoteReport {
+                added: 0,
+                removed: 1
+            }
+        );
+        let files = j.collection.library_files(j.feed_id).unwrap();
+        assert_eq!(files.len(), 1, "ADR 0231 item 12: one row for one file.");
+        assert_eq!(files[0].id, j.local);
+        assert_eq!(files[0].source_url.as_deref(), Some(j.address.as_str()));
+
+        let again = record_remote_files(&j.collection, &j.hosts, j.feed_id, &j.feed).unwrap();
+        assert_eq!(again, RemoteReport::default());
+        assert_eq!(j.collection.library_files(j.feed_id).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn a_remote_row_that_a_draft_operation_names_stays() {
+        let j = joined();
+        let connector = j.hosts.ids().next().unwrap();
+        j.collection
+            .add_draft_operation(
+                j.feed_id,
+                crate::collection::DraftOperationKind::Delete,
+                Some(j.remote),
+                connector,
+                "one 2.mp3",
+            )
+            .unwrap();
+        let report = record_remote_files(&j.collection, &j.hosts, j.feed_id, &j.feed).unwrap();
+        assert_eq!(report, RemoteReport::default());
+        assert!(
+            j.collection.library_file(j.remote).is_ok(),
+            "ADR 0231 item 13: a draft operation keeps the remote row."
+        );
+        assert_eq!(
+            j.collection.library_file(j.local).unwrap().source_url,
+            None,
+            "the local row does not change while the remote row stays"
+        );
+    }
+
+    #[test]
+    fn a_remote_row_at_the_address_of_a_copy_joins_the_local_row() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("copy.mp3"), b"music").unwrap();
+        let mut collection = Collection::open_in_memory().unwrap();
+        let home = collection
+            .add_connector("local", "Home", "{}", None)
+            .unwrap();
+        let mut hosts = Hosts::new();
+        hosts.insert(
+            home,
+            Box::new(LocalFolder::new(
+                dir.path(),
+                Some("https://m.example".into()),
+            )),
+        );
+        scan(&collection, &hosts, home).unwrap();
+        let feed_id = collection
+            .add_feed(None, Some((home, "album.xml")))
+            .unwrap();
+        collection.set_feed_folder(feed_id, "album").unwrap();
+        let sha = crate::digest::sha256_hex(&[b"music"]);
+        let local = collection
+            .add_library_file(
+                feed_id,
+                "one.mp3",
+                5,
+                Some(&sha),
+                "audio/mpeg",
+                true,
+                None,
+                None,
+            )
+            .unwrap();
+        let address = "https://m.example/copy.mp3";
+        collection
+            .add_library_file(
+                feed_id,
+                "copy.mp3",
+                5,
+                None,
+                "audio/mpeg",
+                false,
+                Some(address),
+                None,
+            )
+            .unwrap();
+        let feed = parse(&format!(
+            r#"<rss version="2.0"><channel><title>A</title>
+            <item><guid>1</guid><enclosure url="{address}" length="5" type="audio/mpeg"/></item>
+            </channel></rss>"#
+        ));
+        let report = record_remote_files(&collection, &hosts, feed_id, &feed).unwrap();
+        assert_eq!(report.removed, 1);
+        let files = collection.library_files(feed_id).unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].id, local);
+        assert_eq!(files[0].source_url.as_deref(), Some(address));
     }
 }

@@ -17,6 +17,7 @@ use crate::digest::sha256_file;
 use crate::inventory::{self, Hosts, InventoryError};
 use crate::library::{Library, file_stamp};
 use crate::media::plain_address;
+use crate::outside;
 use crate::web::{Web, WebError, WebErrorKind};
 
 /// The default of each download limit setting, 2 GiB (ADR 0036 item 17).
@@ -116,9 +117,44 @@ pub enum Source {
     },
 }
 
+/// The connected file host that gives the address of a remote file, when
+/// the host has no copy of the file (ADR 0231 item 15). The bytes are not
+/// at the address, so no download can work. Gives `None` for a file in the
+/// library, for a file with no address, for an address on no connected
+/// file host, and for a file that has a copy on a host.
+///
+/// # Errors
+///
+/// Gives a [`DownloadError`] when the collection or a host fails.
+pub fn gone_from_host(
+    collection: &Collection,
+    hosts: &Hosts,
+    file: &LibraryFile,
+) -> Result<Option<crate::collection::ConnectorId>, DownloadError> {
+    let Some(connector_id) = host_of_address(collection, file)? else {
+        return Ok(None);
+    };
+    Ok(inventory::copies(collection, hosts, file)?
+        .is_empty()
+        .then_some(connector_id))
+}
+
+/// The connected file host that gives the address of a remote file.
+fn host_of_address(
+    collection: &Collection,
+    file: &LibraryFile,
+) -> Result<Option<crate::collection::ConnectorId>, DownloadError> {
+    let Some(url) = file.source_url.as_deref().filter(|_| !file.local) else {
+        return Ok(None);
+    };
+    Ok(outside::host_for_address(&collection.connectors()?, url)
+        .map(|(connector_id, _)| connector_id))
+}
+
 /// The source of a remote file: its first copy on a connected host, else
-/// its `source_url`. Gives `None` when the file has neither (ADR 0038
-/// item 8).
+/// its `source_url`. Gives `None` when the file has neither, and when its
+/// address is on a connected host that has no copy (ADR 0038 item 8, ADR
+/// 0231 item 15).
 ///
 /// # Errors
 ///
@@ -136,6 +172,9 @@ pub fn source_of(
             connector_id: copy.connector_id,
             path: copy.path,
         }));
+    }
+    if host_of_address(collection, file)?.is_some() {
+        return Ok(None);
     }
     Ok(file.source_url.as_deref().map(|url| Source::Web {
         url: plain_address(url).into_owned(),
@@ -415,6 +454,49 @@ mod tests {
         );
         let none = remote(&s, "c.mp3", None);
         assert_eq!(source_of(&s.collection, &hosts, &none).unwrap(), None);
+    }
+
+    #[test]
+    fn an_address_on_a_connected_host_with_no_copy_has_no_source() {
+        let s = setup();
+        let host_dir = tempfile::tempdir().unwrap();
+        std::fs::write(host_dir.path().join("a.mp3"), b"bytes").unwrap();
+        let folder = LocalFolder::new(host_dir.path(), Some("https://cdn.example".to_owned()));
+        let connector = s
+            .collection
+            .add_connector("local", "host", &folder.config(), None)
+            .unwrap();
+        let mut hosts = Hosts::new();
+        hosts.insert(connector, Box::new(folder));
+        inventory::scan(&s.collection, &hosts, connector).unwrap();
+
+        let gone = remote(&s, "gone.mp3", Some("https://cdn.example/gone.mp3"));
+        assert_eq!(
+            source_of(&s.collection, &hosts, &gone).unwrap(),
+            None,
+            "ADR 0231 item 15: an address on a connected host with no copy has no source."
+        );
+        assert_eq!(
+            gone_from_host(&s.collection, &hosts, &gone).unwrap(),
+            Some(connector)
+        );
+        let there = remote(&s, "a.mp3", Some("https://cdn.example/a.mp3"));
+        assert_eq!(
+            source_of(&s.collection, &hosts, &there).unwrap(),
+            Some(Source::Host {
+                connector_id: connector,
+                path: "a.mp3".to_owned()
+            })
+        );
+        assert_eq!(gone_from_host(&s.collection, &hosts, &there).unwrap(), None);
+        let web = remote(&s, "b.mp3", Some("https://other.example/b.mp3"));
+        assert_eq!(
+            source_of(&s.collection, &hosts, &web).unwrap(),
+            Some(Source::Web {
+                url: "https://other.example/b.mp3".to_owned()
+            })
+        );
+        assert_eq!(gone_from_host(&s.collection, &hosts, &web).unwrap(), None);
     }
 
     #[test]

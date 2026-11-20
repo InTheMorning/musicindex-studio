@@ -5216,6 +5216,24 @@ pub(crate) async fn add_operation(
     .await
 }
 
+/// A file or an address that a move does not change.
+struct Stay {
+    name: String,
+    reason: &'static str,
+    /// The name of the file host, for a file that is gone from it.
+    host: Option<String>,
+}
+
+impl Stay {
+    fn new(name: &str, reason: &'static str) -> Self {
+        Self {
+            name: name.to_owned(),
+            reason,
+            host: None,
+        }
+    }
+}
+
 /// One file of a release that a move takes to a different file host.
 struct FileMove {
     file: LibraryFile,
@@ -5244,6 +5262,28 @@ struct TargetCopy {
     /// Each address in the feed that the address of the copy replaces.
     old_addresses: Vec<String>,
     to_url: String,
+}
+
+impl FileMove {
+    /// True when the file is in the library and has no copy on a file host.
+    /// The move sends it from the library (ADR 0231 item 16).
+    fn is_from_library(&self) -> bool {
+        self.file.local && self.old_copies.is_empty()
+    }
+}
+
+/// The stay of a remote file that is gone from its file host: the bytes are
+/// not at its address, and the library has none. The file does not move
+/// (ADR 0231 item 15). Gives `None` for each other file.
+fn gone_stay(w: &Workspace, hosts: &Hosts, file: &LibraryFile) -> Result<Option<Stay>, ApiError> {
+    let Some(host) = download::gone_from_host(&w.collection, hosts, file)? else {
+        return Ok(None);
+    };
+    let name = w.collection.connector(host)?.name;
+    Ok(Some(Stay {
+        host: Some(name),
+        ..Stay::new(&file.path, "gone_from_host")
+    }))
 }
 
 /// Each address of `file` that the feed uses: the address of each copy in
@@ -5277,8 +5317,9 @@ struct ReleaseMovePlan {
     /// `on_target`.
     target_copies: Vec<TargetCopy>,
     on_target: u64,
-    /// Each file or address that does not move, with its cause.
-    stays: Vec<(String, &'static str)>,
+    /// Each file or address that does not move, with its cause and, for a
+    /// file that is gone from its file host, the name of the host.
+    stays: Vec<Stay>,
     /// True when the move sets a new default file host for the release
     /// (ADR 0177 item 4).
     default_changes: bool,
@@ -5296,6 +5337,13 @@ struct Unwritten {
 }
 
 impl ReleaseMovePlan {
+    /// The count of files in `files` that are in the library and have no copy
+    /// on a file host. The move sends each one from the library (ADR 0231
+    /// item 16).
+    fn library_count(&self) -> usize {
+        self.files.iter().filter(|m| m.is_from_library()).count()
+    }
+
     /// True when the plan changes the address or the host of a release file.
     fn moves_files(&self) -> bool {
         !self.files.is_empty() || !self.target_copies.is_empty()
@@ -5305,7 +5353,7 @@ impl ReleaseMovePlan {
     /// until the write of the draft.
     fn keep_unwritten(&mut self) {
         for file in self.unwritten.drain(..) {
-            self.stays.push((file.path, "not_written"));
+            self.stays.push(Stay::new(&file.path, "not_written"));
         }
     }
 
@@ -5324,6 +5372,15 @@ impl ReleaseMovePlan {
         }
         self
     }
+}
+
+/// The file host of the feed file before a move: the host of a draft feed
+/// move, else the host of the feed row.
+fn feed_host_of(w: &Workspace, feed_row: &FeedRow) -> Result<Option<ConnectorId>, ApiError> {
+    Ok(w.collection
+        .draft_feed_move(feed_row.id)?
+        .map(|m| m.connector_id)
+        .or(feed_row.connector_id))
 }
 
 /// The plan to move a release to `target`. This changes nothing.
@@ -5384,7 +5441,7 @@ fn release_move_plan(
                         to_url,
                     });
                 } else {
-                    stays.push((file.path.clone(), "not_written"));
+                    stays.push(Stay::new(&file.path, "not_written"));
                 }
             }
             continue;
@@ -5402,6 +5459,10 @@ fn release_move_plan(
             });
             continue;
         }
+        if let Some(stay) = gone_stay(w, hosts, &file)? {
+            stays.push(stay);
+            continue;
+        }
         let download = check_download(w, hosts, &file)?;
         let to_path = planned_path_on(&w.collection, hosts, feed_row, &file, target)?.path;
         let to_url = reference_url(&w.collection, hosts, feed_row, &file, target)?;
@@ -5414,16 +5475,12 @@ fn release_move_plan(
             download,
         });
     }
-    for address in &addresses {
-        if !known_addresses.iter().any(|known| known == address) {
-            stays.push((address.clone(), "not_in_library"));
-        }
-    }
-    let feed_from = w
-        .collection
-        .draft_feed_move(id)?
-        .map(|m| m.connector_id)
-        .or(feed_row.connector_id);
+    stays.extend(
+        (addresses.iter())
+            .filter(|address| !known_addresses.contains(address))
+            .map(|address| Stay::new(address, "not_in_library")),
+    );
+    let feed_from = feed_host_of(w, feed_row)?;
     let blossom = target_row.kind == "blossom";
     Ok(ReleaseMovePlan {
         target,
@@ -5485,7 +5542,8 @@ fn release_move_json(plan: &ReleaseMovePlan) -> Value {
         "download": part(&|f| f.download),
         "on_target": plan.on_target,
         "from_connector_ids": from,
-        "stays": plan.stays.iter().map(|(name, reason)| json!({ "name": name, "reason": reason })).collect::<Vec<_>>(),
+        "from_library": plan.library_count(),
+        "stays": plan.stays.iter().map(|s| json!({ "name": s.name, "reason": s.reason, "host": s.host })).collect::<Vec<_>>(),
         "default_changes": plan.default_changes,
         "new_files": plan.unwritten.len(),
         "nothing_to_move": !plan.feed_moves && !plan.moves_files() && !plan.default_changes,

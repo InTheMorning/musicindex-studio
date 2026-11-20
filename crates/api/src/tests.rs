@@ -16217,6 +16217,93 @@ async fn discard_of_a_move_change_set_removes_its_host_operations() {
     assert_eq!(files["feed_move"], Value::Null, "{files}");
 }
 
+/// The plan of a move to "Home" for an album whose draft gives the address
+/// `image` for the cover. `add` makes the rows for this address.
+async fn plan_with_cover(
+    image: &str,
+    add: impl FnOnce(&studio_core::collection::Collection, studio_core::collection::FeedId),
+) -> Value {
+    let app = move_app();
+    let (id, _, home, _, _folder) = album_on_home(&app).await;
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    model["image"] = json!(image);
+    let (status, _) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    {
+        let collection =
+            studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+                .unwrap();
+        add(&collection, studio_core::collection::FeedId(id));
+    }
+    let plan_path = format!("/api/v1/feeds/{id}/move/plan?connector_id={home}");
+    let (status, plan) = call(&app, "GET", &plan_path, None).await;
+    assert_eq!(status, StatusCode::OK, "{plan}");
+    plan
+}
+
+/// ADR 0231 item 15: a remote file at an address on a connected file host,
+/// with no copy on that host, does not move and does not download.
+#[tokio::test]
+async fn the_plan_does_not_download_a_file_that_is_gone_from_its_file_host() {
+    let plan = plan_with_cover("https://backup.example/cover.jpg", |collection, feed| {
+        collection
+            .add_library_file(
+                feed,
+                "cover.jpg",
+                0,
+                None,
+                "image/jpeg",
+                false,
+                Some("https://backup.example/cover.jpg"),
+                None,
+            )
+            .unwrap();
+    })
+    .await;
+    assert_eq!(plan["download"]["count"], 0, "{plan}");
+    assert_eq!(plan["images"]["count"], 0, "{plan}");
+    assert!(
+        plan["stays"].as_array().unwrap().iter().any(|stay| {
+            stay["name"] == "cover.jpg"
+                && stay["reason"] == "gone_from_host"
+                && stay["host"] == "Backup"
+        }),
+        "ADR 0231 item 15: the plan names the file and the host. {plan}"
+    );
+}
+
+/// ADR 0231 item 16: a library file with no copy on a file host moves from
+/// the library.
+#[tokio::test]
+async fn the_plan_sends_a_file_with_no_copy_on_a_file_host_from_the_library() {
+    let plan = plan_with_cover("https://backup.example/cover.jpg", |collection, feed| {
+        collection
+            .add_library_file(
+                feed,
+                "cover.jpg",
+                4,
+                Some("aabbccdd"),
+                "image/jpeg",
+                true,
+                Some("https://backup.example/cover.jpg"),
+                None,
+            )
+            .unwrap();
+    })
+    .await;
+    assert_eq!(plan["images"]["count"], 1, "{plan}");
+    assert_eq!(plan["from_library"], 1, "{plan}");
+    assert_eq!(plan["download"]["count"], 0, "{plan}");
+}
+
 /// ADR 0148 item 19: a draft that already moves the feed file stays out, and
 /// its row gives the cause.
 #[tokio::test]

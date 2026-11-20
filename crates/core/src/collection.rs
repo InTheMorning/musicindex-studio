@@ -3471,6 +3471,31 @@ impl Collection {
         Ok(())
     }
 
+    /// Give a library file the address that a feed uses for it. This
+    /// changes no other column (ADR 0231 item 12).
+    ///
+    /// # Errors
+    ///
+    /// Gives [`CollectionErrorKind::NotFound`] when the file does not
+    /// exist.
+    pub fn set_library_file_source_url(
+        &self,
+        id: LibraryFileId,
+        source_url: &str,
+    ) -> Result<(), CollectionError> {
+        let changed = self.db.execute(
+            "UPDATE library_files SET source_url = ?2 WHERE id = ?1",
+            params![id.0, source_url],
+        )?;
+        if changed == 0 {
+            return Err(CollectionError::with_kind(
+                CollectionErrorKind::NotFound,
+                format!("library file {} does not exist", id.0),
+            ));
+        }
+        Ok(())
+    }
+
     /// Record that a removed pending file has its bytes again: `local`
     /// becomes true, `imported_at` is now and `removed_at` goes (ADR 0105
     /// item 10).

@@ -169,3 +169,18 @@ test('planRows says that no old file stays when the move copies no file', () => 
   assert.ok(none({ audio: { count: 1, bytes: 5 } }), 'A file moves from an address.');
   assert.ok(none({ nothing_to_move: true }), 'Nothing moves.');
 });
+
+test('stayRows names the file host of a file that is gone from it (ADR 0231 item 15)', () => {
+  const gone = { ...plan, stays: [{ name: 'cover.jpg', reason: 'gone_from_host', host: 'Old Host' }] };
+  assert.deepEqual(stayRows(gone), [{ name: 'cover.jpg', text: 'Not on Old Host. Studio cannot download it.' }]);
+  assert.equal(stayRows({ ...plan, stays: [{ name: 'a', reason: 'gone_from_host', host: null }] })[0].text, 'Not on its file host. Studio cannot download it.');
+});
+
+test('planRows sends a file that is on no file host from the library (ADR 0231 item 16)', () => {
+  const library = { ...plan, from_library: 2, from_connector_ids: [], download: empty };
+  const rows = planRows(library, hosts);
+  assert.deepEqual(rows.find((r) => r.label === '2 files'), { label: '2 files', value: 'Not on a file host. Studio sends it from the library.' });
+  assert.match(rows.find((r) => r.label === '12 audio files').value, /^The library → New Host · /);
+  assert.ok(!rows.some((r) => r.value === 'Studio downloads them first'));
+  assert.ok(!planRows(plan, hosts).some((r) => r.value.includes('from the library')));
+});

@@ -26,6 +26,7 @@ pub fn run_all(make: Make<'_>) {
     delete_with_the_current_stamp_removes_the_file(make);
     delete_with_an_old_stamp_is_a_conflict(make);
     delete_of_an_absent_file_is_not_found(make);
+    delete_of_the_last_file_in_a_folder_keeps_the_other_files(make);
     a_path_out_of_the_host_is_invalid(make);
     sha256_when_given_is_the_sha256_of_the_bytes(make);
     set_redirect_without_the_ability_is_unsupported(make);
@@ -247,6 +248,38 @@ pub fn delete_with_the_current_stamp_removes_the_file(make: Make<'_>) {
     assert!(
         bytes_of(&*connector, "one.txt").is_none(),
         "delete with the current stamp must remove the file"
+    );
+}
+
+/// `delete` of one file leaves the other files of the host, and `delete`
+/// of the last file leaves no file, with each folder level in the path.
+pub fn delete_of_the_last_file_in_a_folder_keeps_the_other_files(make: Make<'_>) {
+    let connector = make();
+    for path in ["a/b/one.mp3", "a/two.mp3"] {
+        connector
+            .write(path, b"x", &Expected::Absent)
+            .expect("write must work");
+    }
+    let stamp_of = |path: &str| {
+        connector
+            .stat(path)
+            .expect("stat must give Ok")
+            .expect("stat must give the file")
+            .stamp
+    };
+    connector
+        .delete("a/b/one.mp3", &stamp_of("a/b/one.mp3"))
+        .expect("delete must work");
+    let list = connector.list().expect("list must work");
+    let paths: Vec<&str> = list.files.iter().map(|f| f.path.as_str()).collect();
+    assert_eq!(paths, ["a/two.mp3"], "delete must keep the other file");
+    connector
+        .delete("a/two.mp3", &stamp_of("a/two.mp3"))
+        .expect("delete must work");
+    let list = connector.list().expect("list must work");
+    assert!(
+        list.files.is_empty(),
+        "delete of the last file must leave no file"
     );
 }
 

@@ -2,7 +2,7 @@
 
 Decision: [ADR 0229](../adr/0229-the-media-host-after-a-follow-a-podping-again-and-empty-folders.md) items 8 to 11.
 
-Status: Open.
+Status: Done.
 
 ## Problem
 
@@ -43,3 +43,9 @@ Visual: none. The human check deletes a test file on the real SFTP host.
 - Do not make an architecture decision. When this task does not answer a question, stop and report.
 
 ## Result
+
+The local and the SFTP connector now remove each empty folder after `delete`, from the folder of the file up to the root. They stop at the first folder that has content. They never remove the root. A failure only goes to `eprintln!`, the logger of the core, and `delete` still succeeds. The SFTP wire has a new `rmdir` request (RMDIR). The doc comment of `Connector::delete` gives the rule. S3, Blossom and nsite are unchanged.
+
+Tests added: the suite check `delete_of_the_last_file_in_a_folder_keeps_the_other_files` (in `run_all` and as one test each in the local and SFTP tests), and a local test and an SFTP test that check the folders `a/b`, `a` and the root.
+
+Checks: `cargo test -p` of the core, filter `connector`, 231 passed. `bash tools/gate.sh` passed.

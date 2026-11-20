@@ -843,7 +843,20 @@ impl Connector for SftpHost {
                     format!("{path} changed on the host"),
                 ));
             }
-            wire.remove(&target.full)
+            wire.remove(&target.full)?;
+            // Remove each folder that the delete made empty (ADR 0229
+            // items 8 to 11). The first failure ends the work. The server
+            // refuses a folder that has content, so rmdir is a safe check.
+            for depth in (1..segments.len()).rev() {
+                let folder = self.full_path(&segments[..depth]);
+                if let Err(error) = wire.rmdir(&folder) {
+                    if !matches!(error.kind(), ConnectorErrorKind::NotFound) {
+                        eprintln!("studio: the folder {folder} stays on the host: {error}");
+                    }
+                    break;
+                }
+            }
+            Ok(())
         })
     }
 }
@@ -1226,6 +1239,28 @@ mod tests {
     }
 
     #[test]
+    fn delete_removes_each_empty_folder_but_not_the_root() {
+        let mut server = TestSshd::start();
+        let (host, root) = host(&mut server);
+        host.write("a/b/one.mp3", b"1", &Expected::Absent)
+            .expect("write");
+        host.write("a/two.mp3", b"2", &Expected::Absent)
+            .expect("write");
+        let stamp = host
+            .stat("a/b/one.mp3")
+            .expect("stat")
+            .expect("a file")
+            .stamp;
+        host.delete("a/b/one.mp3", &stamp).expect("delete");
+        assert!(!root.join("a/b").exists());
+        assert!(root.join("a").exists());
+        let stamp = host.stat("a/two.mp3").expect("stat").expect("a file").stamp;
+        host.delete("a/two.mp3", &stamp).expect("delete");
+        assert!(!root.join("a").exists());
+        assert!(root.exists());
+    }
+
+    #[test]
     fn a_path_through_a_symbolic_link_gives_invalid_path() {
         let mut server = TestSshd::start();
         let (host, root) = host(&mut server);
@@ -1356,6 +1391,11 @@ mod tests {
     #[test]
     fn suite_delete_with_the_current_stamp_removes_the_file() {
         suite_check(suite::delete_with_the_current_stamp_removes_the_file);
+    }
+
+    #[test]
+    fn suite_delete_of_the_last_file_in_a_folder_keeps_the_other_files() {
+        suite_check(suite::delete_of_the_last_file_in_a_folder_keeps_the_other_files);
     }
 
     #[test]

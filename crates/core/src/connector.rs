@@ -391,6 +391,12 @@ pub trait Connector {
     /// stamp. Studio reads the stamp from its inventory, so it does not
     /// delete a file that changed after the scan (ADR 0036 item 16).
     ///
+    /// The local and the SFTP connector then remove the folder of the file
+    /// when it is empty, and each empty parent folder below the root of the
+    /// host. They stop at the first folder that has content and never remove
+    /// the root. A failure to remove a folder does not change the result
+    /// (ADR 0229 items 8 to 11). Other connectors have no folders to remove.
+    ///
     /// # Errors
     ///
     /// Gives [`ConnectorErrorKind::Conflict`] when the file on the host has

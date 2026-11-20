@@ -298,6 +298,26 @@ impl Connector for LocalFolder {
             ));
         }
         fs::remove_file(&full).map_err(|e| io_error(&full, &e))?;
+        // Remove each folder that the delete made empty, below the root
+        // (ADR 0229 items 8 to 11). The OS refuses a folder that has
+        // content, so remove_dir is a safe check. The first failure ends
+        // the work and does not change the result.
+        let mut folder = full.parent();
+        while let Some(current) = folder.filter(|f| *f != self.root && f.starts_with(&self.root)) {
+            if let Err(error) = fs::remove_dir(current) {
+                if !matches!(
+                    error.kind(),
+                    ErrorKind::DirectoryNotEmpty | ErrorKind::NotFound
+                ) {
+                    eprintln!(
+                        "studio: the folder {} stays on the host: {error}",
+                        current.display()
+                    );
+                }
+                break;
+            }
+            folder = current.parent();
+        }
         Ok(())
     }
 
@@ -469,6 +489,24 @@ mod tests {
     }
 
     #[test]
+    fn delete_removes_each_empty_folder_but_not_the_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let folder = LocalFolder::new(dir.path(), None);
+        folder
+            .write("a/b/one.mp3", b"1", &Expected::Absent)
+            .unwrap();
+        folder.write("a/two.mp3", b"2", &Expected::Absent).unwrap();
+        let stamp = folder.stat("a/b/one.mp3").unwrap().unwrap().stamp;
+        folder.delete("a/b/one.mp3", &stamp).unwrap();
+        assert!(!dir.path().join("a/b").exists());
+        assert!(dir.path().join("a").exists());
+        let stamp = folder.stat("a/two.mp3").unwrap().unwrap().stamp;
+        folder.delete("a/two.mp3", &stamp).unwrap();
+        assert!(!dir.path().join("a").exists());
+        assert!(dir.path().exists());
+    }
+
+    #[test]
     fn a_path_out_of_the_folder_gives_an_error() {
         let dir = tempfile::tempdir().unwrap();
         let folder = LocalFolder::new(dir.path().join("inner"), None);
@@ -577,6 +615,11 @@ mod tests {
     #[test]
     fn suite_delete_with_the_current_stamp_removes_the_file() {
         suite_check(suite::delete_with_the_current_stamp_removes_the_file);
+    }
+
+    #[test]
+    fn suite_delete_of_the_last_file_in_a_folder_keeps_the_other_files() {
+        suite_check(suite::delete_of_the_last_file_in_a_folder_keeps_the_other_files);
     }
 
     #[test]

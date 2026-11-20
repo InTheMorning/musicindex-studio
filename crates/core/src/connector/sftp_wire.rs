@@ -27,6 +27,7 @@ const FXP_OPENDIR: u8 = 11;
 const FXP_READDIR: u8 = 12;
 const FXP_REMOVE: u8 = 13;
 const FXP_MKDIR: u8 = 14;
+const FXP_RMDIR: u8 = 15;
 const FXP_RENAME: u8 = 18;
 const FXP_STATUS: u8 = 101;
 const FXP_HANDLE: u8 = 102;
@@ -293,6 +294,14 @@ impl SftpWire {
         let mut body = Vec::new();
         put_string(&mut body, path.as_bytes());
         let response = self.call(FXP_REMOVE, &body)?;
+        done(&response, false)
+    }
+
+    /// Remove a folder. The server refuses a folder that has content.
+    pub(crate) fn rmdir(&mut self, path: &str) -> Result<(), ConnectorError> {
+        let mut body = Vec::new();
+        put_string(&mut body, path.as_bytes());
+        let response = self.call(FXP_RMDIR, &body)?;
         done(&response, false)
     }
 

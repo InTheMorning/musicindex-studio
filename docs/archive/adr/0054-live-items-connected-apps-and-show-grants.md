@@ -4,7 +4,7 @@
 
 - Status: Superseded by ADR 0205
 - Date: 2026-10-26
-- Changed by: [ADR 0135](../../adr/0135-the-panel-holds-the-content-and-the-page-has-tabs.md). The live shows are on the tab Live Shows, not in the outline.
+- Changed by: [ADR 0135](0135-the-panel-holds-the-content-and-the-page-has-tabs.md). The live shows are on the tab Live Shows, not in the outline.
 - Owner: operator
 - Changed by: [ADR 0161](../../adr/0161-a-live-item-needs-a-stream-and-a-content-link-is-recommended.md). Item 4: Studio refuses a live item with no stream or with a stream type that does not agree with the stream address. A live item with no content link gets a warning, not a refusal. The mechanical check of the content link refusal is gone.
 - Changed by: [ADR 0058](../../adr/0058-grant-vaults-and-connected-apps-on-the-server.md) items 12 and 16 supersede item 16 for a locked vault and item 9 for the server. A granted write uses a grant vault.

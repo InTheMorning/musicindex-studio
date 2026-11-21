@@ -1610,7 +1610,7 @@ select.position:focus { background: var(--fill); }
   font-weight: 600;
   box-shadow: inset 0 1px 0 var(--gloss-hi), inset 0 0 0 1px var(--gloss-edge);
 }
-/* The tabs of the page of a feed (ADR 0135). */
+/* The tabs of the page of a feed (ADR 0239). */
 .page-tabs { margin: 0 32px 8px; max-width: 816px; }
 /* The closed menu is as wide as its longest option, and its left edge is the
    left edge of the tabs (ADR 0197 item 4). `.page-tabs-host` is the column

@@ -9,7 +9,7 @@
 - Changed by: [ADR 0219](0219-a-release-checklist-and-a-check-of-the-address-type.md) items 1 to 5, on 2026-11-19. Item 7: five new finding kinds for an incomplete release and a wrong address type.
 - Changed by: [ADR 0224](0224-a-finding-that-stops-the-write-and-a-new-release-opens-add-tracks.md) items 1 to 3, on 2026-11-19. Item 3: the levels get **Stop** for a finding that makes Review refuse the write.
 - Source: [research request on a feed check with repairs](../plans/research-feed-check-request.md), item F1 and the section "A Self Link In Each Feed". Research note `research_notes/studio/improving-the-state-of-feeds.md` in `../musicindex-research`, recommendation 1.
-- Uses: [ADR 0007](0007-draft-diff-write-and-announce.md), [ADR 0008](0008-feed-types-and-feed-identity.md), [ADR 0021](0021-public-address-of-a-feed.md), [ADR 0023](0023-web-addresses-and-audio-file-facts.md), [ADR 0065](0065-the-core-applies-each-feed-rule.md), [ADR 0126](0126-studio-refuses-a-bad-move-link.md), [ADR 0130](0130-the-facts-of-an-audio-file-stay-locked.md), [ADR 0135](0135-the-panel-holds-the-content-and-the-page-has-tabs.md).
+- Uses: [ADR 0007](0007-draft-diff-write-and-announce.md), [ADR 0008](0008-feed-types-and-feed-identity.md), [ADR 0021](0021-public-address-of-a-feed.md), [ADR 0023](0023-web-addresses-and-audio-file-facts.md), [ADR 0065](0065-the-core-applies-each-feed-rule.md), [ADR 0126](0126-studio-refuses-a-bad-move-link.md), [ADR 0130](0130-the-facts-of-an-audio-file-stay-locked.md), [ADR 0239](0239-the-panel-holds-the-content-and-the-page-has-tabs.md).
 - Changed by: [ADR 0228](0228-undo-in-the-bar-a-notice-that-stays-and-the-rc28-check-findings.md) item 13, on 2026-11-20. Item 17: the tab label is "Issues ({n})".
 
 ## Context
@@ -87,7 +87,7 @@ On 2026-11-04 the operator selected Form A of the mockups in `.studio-dev/mockup
 
 ### The Page
 
-17. Form A goes into the tabs of ADR 0135. The page of an album, an artist, a label or a playlist gets the tab **Check** before **Settings**. The tab label has the count of the findings, for example "Check 5". With no finding, the label is "Check", with no count. At 760 px or less, the select menu of the tabs gives the same label (ADR 0135 item 6).
+17. Form A goes into the tabs of ADR 0239. The page of an album, an artist, a label or a playlist gets the tab **Check** before **Settings**. The tab label has the count of the findings, for example "Check 5". With no finding, the label is "Check", with no count. When the tabs are a select menu, the menu gives the same label (ADR 0239 item 6).
 18. The count of the tab is the count of the local findings and of the last reads in this session of Studio. The API keeps the last read facts of each feed in memory until the feed changes or Studio stops.
 19. The page has the text of Form A first: "Studio does not change the feed until you select a button. Each change goes to the draft, and you review it before the write." Then each finding is one row with its level, its title, its reason and one button. A read-only feed has no button (item 20), so its page does not show this text.
 20. A read-only feed shows its findings with no button. A connected app or a show grant can wait for a draft: a granted change stops while the feed has a draft with changes (ADR 0054 item 16). When the feed has a grant, the page says this above the rows.

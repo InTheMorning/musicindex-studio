@@ -9,7 +9,7 @@
 - Applies: musicindex ADR 0059 R-SET-1 to R-SET-5, at musicindex `9c81ccd`.
 - Revised: 2026-11-10. Items 17 and 18 apply musicindex ADR 0059 R-SET-3 item 6.
 - Changes: [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) item 10.
-- Uses: [ADR 0135](0135-the-panel-holds-the-content-and-the-page-has-tabs.md) item 6 for the narrow tabs. [ADR 0116](0116-the-page-of-a-person-has-save-and-discard.md) items 8 and 10 for the leave question. [ADR 0165](0165-the-left-panel-marks-the-state-of-each-feed.md) item 2 for the pencil.
+- Uses: [ADR 0239](0239-the-panel-holds-the-content-and-the-page-has-tabs.md) item 6 for the narrow tabs. [ADR 0116](0116-the-page-of-a-person-has-save-and-discard.md) items 8 and 10 for the leave question. [ADR 0165](0165-the-left-panel-marks-the-state-of-each-feed.md) item 2 for the pencil.
 
 ## Context
 
@@ -28,7 +28,7 @@ musicindex ADR 0059 gives the shared layout of Settings for Studio and v4vmm. Th
     - **Apps**: Connected apps.
     - **Data**: Collections, Move Studio and Library on the desktop. On a server: Library, or "Files on this server" when the server holds no assets.
 2. The desktop app has four tabs, and a server has five.
-3. At 760 px or less, the tabs are one select menu, as on a feed page (ADR 0135 item 6).
+3. When the tabs do not fit their column, they are one select menu, as on a feed page (ADR 0239 item 6).
 4. The page opens on General. The open tab is part of the view, so Back and Forward go between tabs.
 5. `crates/api/ui/pages.js` gives the tabs and the sections of each tab. The sections of one tab keep the tier order of ADR 0071 item 1, and the tier test examines each tab.
 

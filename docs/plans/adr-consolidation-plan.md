@@ -30,7 +30,7 @@ The links that stay between areas:
 
 - ADR 0091 changes ADR 0039 items 1, 5 and 11. ADR 0207 cites ADR 0206 for the destinations.
 - ADR 0092 changes ADR 0039 and ADR 0091. It stays current, and its "Changes:" lines point to the archive.
-- ADR 0135 and ADR 0071 change ADRs in two areas. They stay current.
+- ADR 0135 and ADR 0071 change ADRs in two areas. ADR 0071 stays current. ADR 0239 consolidated ADR 0135 on 2026-11-21.
 
 ## Steps
 

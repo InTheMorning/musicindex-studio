@@ -2443,7 +2443,7 @@ function useTabsFit(labelKey) {
   return { host, probe, fit };
 }
 
-// The tabs of the page of a feed (ADR 0135), or the `tabs` of a different
+// The tabs of the page of a feed (ADR 0239), or the `tabs` of a different
 // page with `current` and `onSelect`, such as Settings (ADR 0166 item 3). They
 // are a segmented control when each segment can hold its longest label on one
 // line. Else they are one select menu, so that no label breaks (ADR 0197).

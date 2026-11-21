@@ -117,7 +117,7 @@ test('Lock Studio shows only when the vault is open', () => {
   assert.equal(panel.bottom[1].current, true);
 });
 
-test('an open album gives the outline of ADR 0135 item 1', () => {
+test('an open album gives the outline of ADR 0239 item 1', () => {
   const panel = leftPanel({ view: { name: 'feed', id: 1, page: 'track', track: 'g-1' }, feeds: [album], model, vaultOpen: true });
   assert.equal(panel.kind, 'outline');
   assert.deepEqual(panel.feed, {
@@ -405,7 +405,7 @@ test('a musicL feed is a playlist, with no regard to case', () => {
 test('a playlist has only its head in the outline', () => {
   const playlist = { ...album, id: 4, medium: 'musicL' };
   const panel = leftPanel({ view: { name: 'feed', id: 4, page: 'tracks' }, feeds: [playlist], model, vaultOpen: false });
-  assert.deepEqual(labels(panel.items), ['Releases'], 'ADR 0135 item 4: a playlist has no track pages.');
+  assert.deepEqual(labels(panel.items), ['Releases'], 'ADR 0239 item 4: a playlist has no track pages.');
 });
 
 test('the tabs fit at the exact width and not at 1 px less', () => {
@@ -426,7 +426,7 @@ test('each tab segment has the width of the longest label', () => {
 
 test('the page of a feed gives the tabs of its type', () => {
   const tabs = (feed, view) => pageTabs(feed, { name: 'feed', id: feed.id, ...view }).map((tab) => tab.label);
-  const owner = 'ADR 0135 item 2: check pageTabs in shell.js.';
+  const owner = 'ADR 0239 item 2: check pageTabs in shell.js.';
   assert.deepEqual(tabs(album), ['Release', 'Live Shows', 'Value Routes', 'Credits', 'Files', 'Issues', 'Settings'], 'ADR 0225 item 1: the first tab of a release is "Release". Check pageTabs in shell.js.');
   assert.equal(tabs({ ...album, kind_shown: 'single' })[0], 'Release', 'ADR 0225 item 1: the first tab does not show the kind. Check pageTabs in shell.js.');
   const artist = { ...publisher, publisher_roles: ['artist'], roles_confirmed: true };
@@ -451,7 +451,7 @@ test('the tab Issues comes before Settings and shows the count of the findings',
 });
 
 test('a track page has no tabs, and the page of a show keeps the tab Live Shows', () => {
-  const owner = 'ADR 0135 items 3 and 5: check pageTabs in shell.js.';
+  const owner = 'ADR 0239 items 3 and 5: check pageTabs in shell.js.';
   assert.deepEqual(pageTabs(album, { name: 'feed', id: 1, page: 'track', track: 'g-1' }), [], owner);
   const current = (page) => pageTabs(album, { name: 'feed', id: 1, page }).filter((tab) => tab.current).map((tab) => tab.page);
   assert.deepEqual(current(undefined), ['album'], owner);

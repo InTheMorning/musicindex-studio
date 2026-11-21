@@ -5,8 +5,8 @@
 - Owner: operator, with the technical choices of the planning model
 - Accepted: 2026-11-13 by the operator, through the questionnaire after the human test of 0.1.0-rc.22. The operator selected "Switch to the menu", "Label above value" and "Fit menu, native list".
 - Technical choices: items 2, 5, 6 and 8 and the width of item 7 are choices of the planning model.
-- Changes: [ADR 0157](0157-the-page-tabs-are-a-segmented-control.md) item 3, [ADR 0135](0135-the-panel-holds-the-content-and-the-page-has-tabs.md) item 6 and [ADR 0166](0166-settings-has-tabs-and-one-save-bar.md) item 3. The menu no longer starts at a window width of 760 px. It starts when the tabs do not fit their column.
-- Changes: [ADR 0135](0135-the-panel-holds-the-content-and-the-page-has-tabs.md), The Panel Holds The Content And The Page Has Tabs. ADR 0135 names the changed items.
+- Changes: [ADR 0157](0157-the-page-tabs-are-a-segmented-control.md) item 3, [ADR 0135](../archive/adr/0135-the-panel-holds-the-content-and-the-page-has-tabs.md) item 6 and [ADR 0166](0166-settings-has-tabs-and-one-save-bar.md) item 3. The menu no longer starts at a window width of 760 px. It starts when the tabs do not fit their column.
+- Changes: [ADR 0135](../archive/adr/0135-the-panel-holds-the-content-and-the-page-has-tabs.md), The Panel Holds The Content And The Page Has Tabs. ADR 0135 names the changed items.
 - Changes: [ADR 0166](0166-settings-has-tabs-and-one-save-bar.md), Settings Has Tabs And One Save Bar. ADR 0166 names the changed items.
 - Uses: musicindex ADR 0051 R-SEG-1 items 4 and 5, and musicindex ADR 0065 R-FIT-2 and R-FIT-3.
 - Source: finding 1 and finding 2 of the [human test findings of 0.1.0-rc.22](../reviews/2026-11-13-rc22-human-test-findings.md).

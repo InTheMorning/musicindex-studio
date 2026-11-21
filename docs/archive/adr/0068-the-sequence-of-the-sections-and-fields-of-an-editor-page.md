@@ -4,7 +4,7 @@
 
 - Status: Superseded by ADR 0206
 - Date: 2026-10-27
-- Changed by: [ADR 0135](../../adr/0135-the-panel-holds-the-content-and-the-page-has-tabs.md). The first page has no rows for the pages that are now tabs.
+- Changed by: [ADR 0135](0135-the-panel-holds-the-content-and-the-page-has-tabs.md). The first page has no rows for the pages that are now tabs.
 - Owner: operator
 - Accepted: 2026-10-27 by the operator.
 - Changed by: [ADR 0071](../../adr/0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) item 15 replaces item 11 and the mechanical check. The sequences of items 2 to 9 are the start values of the model module. The module now owns the sequence, and the tier test of ADR 0071 item 6 is the guard.

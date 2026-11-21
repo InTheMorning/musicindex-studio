@@ -3741,7 +3741,7 @@ function ContentLinks({ id, links, onChange }) {
 // The page of one live item. It edits the show, the stream, the content
 // links, the live value and the value routes. "Go live" and "End the show"
 // change the draft and open the review sheet (ADR 0054 items 3 and 5).
-// The tab "Live Shows" of an album (ADR 0135 item 5): one row for each show,
+// The tab "Live Shows" of an album (ADR 0239 item 5): one row for each show,
 // then the button that opens the sheet "Add a live show".
 function LiveShowsPage({ feed, model, go, onAdding }) {
   const lives = model.live_items || [];

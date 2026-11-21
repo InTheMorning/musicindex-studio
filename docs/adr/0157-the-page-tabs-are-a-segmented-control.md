@@ -6,7 +6,7 @@
 - Changed by: [ADR 0197](0197-the-tabs-and-the-field-rows-follow-the-editor-column.md). The tabs are a select menu when they do not fit their column, not at a window width of 760 px.
 - Accepted: 2026-11-08 by the operator, through the orchestrator session. The tabs of a feed page must look like the scope control of the search page of musicindex.org.
 - Uses: musicindex ADR 0051 R-SEG-1 and R-SELECT-1, and the tokens of `../musicindex-assets` that it gives.
-- Changes: [ADR 0135](0135-the-panel-holds-the-content-and-the-page-has-tabs.md) item 6, the look of a selected tab.
+- Changes: [ADR 0135](../archive/adr/0135-the-panel-holds-the-content-and-the-page-has-tabs.md) item 6, the look of a selected tab.
 
 ## Context
 

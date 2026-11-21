@@ -5,7 +5,7 @@
 - Owner: operator
 - Accepted: 2026-11-19 by the operator, in the human check of the AppImage of `98d8bfa`. The operator gave the two labels.
 - Bar: opposite choice by mistake. The first tab used the kind of the release, and the first section used "Album". An agent can make the same choice again.
-- Changes: [ADR 0135](0135-the-panel-holds-the-content-and-the-page-has-tabs.md) item 2. The first tab of an album is "Release", not "Album" (item 1).
+- Changes: [ADR 0135](../archive/adr/0135-the-panel-holds-the-content-and-the-page-has-tabs.md) item 2. The first tab of an album is "Release", not "Album" (item 1).
 - Uses: [ADR 0213](0213-a-release-starts-on-the-page-of-its-artist.md) items 13 to 15 and [ADR 0223](0223-a-split-in-shares-or-percent-a-release-search-and-one-tap-on-a-phone.md) item 11, for the kind that Studio shows.
 
 ## Context

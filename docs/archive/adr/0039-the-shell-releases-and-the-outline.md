@@ -4,7 +4,7 @@
 
 - Status: Superseded by ADR 0206
 - Date: 2026-10-25
-- Changed by: [ADR 0135](../../adr/0135-the-panel-holds-the-content-and-the-page-has-tabs.md). The pages of a feed are tabs on its page, and the outline holds its content.
+- Changed by: [ADR 0135](0135-the-panel-holds-the-content-and-the-page-has-tabs.md). The pages of a feed are tabs on its page, and the outline holds its content.
 - Owner: operator
 - Changes: [ADR 0029](../../adr/0029-editor-pages-toolbar-and-three-levels.md) items 5, 6 and 15, and its situational invariant "The sidebar tree has two levels".
 - Revised: 2026-10-25 by operator decision. Item 1 pins Hosts and Lock Studio to the bottom of the left panel. They always show, also with the outline of item 5 (musicindex ADR 0027 R-SHELL-1 item 4).

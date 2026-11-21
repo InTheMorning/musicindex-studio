@@ -115,7 +115,6 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0132: A person can be part of many artists and labels](adr/0132-a-person-can-be-part-of-many-artists-and-labels.md)
 - [ADR 0133: The share bar shows the divisions of a payment](adr/0133-the-share-bar-shows-the-divisions-of-a-payment.md)
 - [ADR 0134: A UI scale and larger release tiles](adr/0134-a-ui-scale-and-larger-release-tiles.md)
-- [ADR 0135: The panel holds the content and the page has tabs](adr/0135-the-panel-holds-the-content-and-the-page-has-tabs.md)
 - [ADR 0136: One announcement choice at the write](adr/0136-one-announcement-choice-at-the-write.md)
 - [ADR 0137: The people list fills Nostr keys and open entries](adr/0137-the-people-list-fills-nostr-keys-and-open-entries.md)
 - [ADR 0138: The names of a wallet address and the correction of a wrong key](adr/0138-the-names-of-a-wallet-address-and-the-correction-of-a-wrong-key.md)
@@ -214,6 +213,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0236: The release notes are for testers, and the operator checks are in a review file](adr/0236-the-release-notes-are-for-testers-and-the-operator-checks-are-in-a-review-file.md)
 - [ADR 0237: The README shows a few screenshots in the dark theme](adr/0237-the-readme-shows-a-few-screenshots-in-the-dark-theme.md)
 - [ADR 0238: A found release gives the page of each role](adr/0238-a-found-release-gives-the-page-of-each-role.md)
+- [ADR 0239: The panel holds the content and the page has tabs](adr/0239-the-panel-holds-the-content-and-the-page-has-tabs.md)
 
 ## Plans
 
@@ -630,6 +630,7 @@ Superseded decisions. Read them for research only. They bind no change.
 - [ADR 0077: A new album can start from an album](archive/adr/0077-a-new-album-can-start-from-an-album.md), replaced by ADR 0230
 - [ADR 0027: The recipient picker](archive/adr/0027-the-recipient-picker.md), superseded by ADR 0207
 - [ADR 0073: The add pages ask one question at a time](archive/adr/0073-the-add-pages-ask-one-question-at-a-time.md), superseded by ADR 0212
+- [ADR 0135: The panel holds the content and the page has tabs](archive/adr/0135-the-panel-holds-the-content-and-the-page-has-tabs.md), superseded by ADR 0239
 - [ADR 0038: Published feeds, downloads, the folder scan and feed moves](archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md), superseded by ADR 0204
 - [ADR 0039: The shell, Releases and the outline of a feed](archive/adr/0039-the-shell-releases-and-the-outline.md), superseded by ADR 0206
 - [ADR 0041: Publisher feeds and two-way links](archive/adr/0041-publisher-feeds-and-two-way-links.md), superseded by ADR 0205

@@ -166,7 +166,7 @@ function isCurrentPage(view, page, track) {
   return page !== 'track' || view.track === track;
 }
 
-// The entries of the outline of an open feed (ADR 0135 item 1). The head of
+// The entries of the outline of an open feed (ADR 0239 item 1). The head of
 // the outline opens the first page of the feed, so no entry is for that page
 // (ADR 0069). At narrow width there is no "Releases" entry, because Back
 // opens Releases (ADR 0039 item 11a).
@@ -185,7 +185,7 @@ function outlineItems(feed, view, model, narrow, feeds) {
   });
   if (isPublisher(feed)) {
     // The panel of a publisher feed lists its releases, and the tabs hold its
-    // pages (ADR 0135 item 4).
+    // pages (ADR 0239 item 4).
     const byId = new Map((feeds || []).map((f) => [f.id, f]));
     const owned = (feed.release_ids || []).map((id) => byId.get(id)).filter(Boolean);
     items.push({ id: 'releases-heading', label: 'Releases', heading: true });
@@ -216,7 +216,7 @@ function outlineItems(feed, view, model, narrow, feeds) {
   return items;
 }
 
-// The tabs of the page of a feed (ADR 0135 items 2 to 6). A track page has no
+// The tabs of the page of a feed (ADR 0239 items 2 to 6). A track page has no
 // tabs. The page of one live show keeps the tab "Live Shows". The labels use
 // title case (musicindex ADR 0085 R-CASE-1). The tab Check comes before
 // Settings, and its label has the count of the findings (ADR 0174 item 17).
@@ -332,7 +332,7 @@ export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, 
       typeLabel: feedKind(feed).label,
       dot: feedKind(feed).dot,
       // The head opens the first page (ADR 0069). It stays selected on each
-      // tab of the feed (ADR 0135 item 3).
+      // tab of the feed (ADR 0239 item 3).
       page: 'album',
       first: isCurrentPage(view, 'album'),
       current: view.name === 'feed' && view.page !== 'track',

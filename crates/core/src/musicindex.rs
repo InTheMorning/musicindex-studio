@@ -98,6 +98,11 @@ pub struct PublisherValues {
     pub npub: Option<String>,
     /// Each payment route of the feed, as a recipient.
     pub routes: Vec<Recipient>,
+    /// `podcast:guid` of the publisher page that Music Index gives for this
+    /// feed (ADR 0238 item 2).
+    pub publisher_feed_guid: Option<String>,
+    /// The title of that publisher page.
+    pub publisher_feed_title: Option<String>,
 }
 
 /// One credit of a feed or a track in musicindex (ADR 0146 item 8).
@@ -666,6 +671,8 @@ struct PublisherFeedData {
     source_links: Option<Vec<LinkData>>,
     source_ids: Option<Vec<EntityIdData>>,
     payment_routes: Option<Vec<RouteData>>,
+    publisher_feed_guid: Option<String>,
+    publisher_feed_title: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -710,6 +717,8 @@ impl From<PublisherFeedData> for PublisherValues {
                 .into_iter()
                 .map(Recipient::from)
                 .collect(),
+            publisher_feed_guid: data.publisher_feed_guid,
+            publisher_feed_title: data.publisher_feed_title,
         }
     }
 }

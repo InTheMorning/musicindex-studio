@@ -2943,6 +2943,133 @@ async fn a_new_feed_copies_items_and_reports_a_failed_copy_without_refusing_the_
     assert_eq!(failed["copy_failed"], true);
 }
 
+const FOUND_FEED: &str = r#"<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:podcast="https://podcastindex.org/namespace/1.0"><channel><title>Found Album</title><itunes:author>Found Artist</itunes:author><itunes:owner><itunes:name>Found Owner</itunes:name></itunes:owner><link>https://found.example</link><itunes:image href="https://img.example/cover.png"/><podcast:guid>FOUND_GUID</podcast:guid><podcast:medium>music</podcast:medium><podcast:value type="lightning" method="keysend"><podcast:valueRecipient name="A" type="node" address="02aa" split="100"/></podcast:value><item><guid>i1</guid><title>Track A</title><enclosure url="https://audio.example/a.mp3" type="audio/mpeg"/></item></channel></rss>"#;
+
+async fn found_draft(app: &App, id: &Value) -> Value {
+    let (_, draft) = call(app, "GET", &format!("/api/v1/feeds/{id}/draft"), None).await;
+    draft
+}
+
+/// ADR 0238 items 1, 4, 6 and 8: an Artist page from a found release that is
+/// not in the collection has the link, the recipients and no items.
+#[tokio::test]
+async fn an_artist_page_from_a_found_release_has_a_remote_item_and_the_recipients() {
+    let source = web_feeds();
+    source.set(
+        "/found.xml",
+        200,
+        FOUND_FEED.replace("FOUND_GUID", "found-guid").into_bytes(),
+    );
+    let app = app_with_index(&source.url(""));
+    let (_, connector) = call(&app, "POST", "/api/v1/connectors", Some(json!({"kind":"local","name":"Music","root":app.feeds.path(),"base_url":"https://music.example"}))).await;
+    let address = format!("{}/found.xml", source.url(""));
+    let (status, preview) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/copy-preview?found=true&url={address}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{preview}");
+    assert!(preview.get("owner_name").is_none());
+    assert_eq!(preview["guid"], "found-guid");
+    assert_eq!(preview["pages"], json!([]));
+    let page = make_feed(&app, json!({
+        "connector_id": connector["id"], "path":"artist.xml", "title":"Found Artist", "author":"Found Artist",
+        "medium":"publisher", "role":"artist", "from_found": address
+    })).await;
+    let draft = found_draft(&app, &page["id"]).await;
+    let model = &draft["model"];
+    assert_eq!(model["link"], "https://found.example");
+    assert_eq!(model["items"], json!([]));
+    assert_eq!(model["image"], Value::Null);
+    assert_eq!(model["values"][0]["recipients"][0]["address"], "02aa");
+    assert_eq!(model["remote_items"][0]["feed_guid"], "found-guid");
+    assert_eq!(model["remote_items"][0]["feed_url"], address);
+    assert_eq!(model["remote_items"][0]["title"], "Found Album");
+    assert_eq!(model["remote_items"][0]["medium"], "music");
+}
+
+/// ADR 0238 item 4: the Hosting page has no recipients, no website and no items.
+#[tokio::test]
+async fn a_hosting_page_from_a_found_release_has_no_recipients_website_or_items() {
+    let source = web_feeds();
+    source.set(
+        "/found.xml",
+        200,
+        FOUND_FEED.replace("FOUND_GUID", "found-guid").into_bytes(),
+    );
+    let app = app_with_index(&source.url(""));
+    let (_, connector) = call(&app, "POST", "/api/v1/connectors", Some(json!({"kind":"local","name":"Music","root":app.feeds.path(),"base_url":"https://music.example"}))).await;
+    let page = make_feed(&app, json!({
+        "connector_id": connector["id"], "path":"hosting.xml", "title":"Found Owner", "author":"Found Owner",
+        "medium":"publisher", "role":"hosting", "from_found": format!("{}/found.xml", source.url(""))
+    })).await;
+    let model = &found_draft(&app, &page["id"]).await["model"];
+    assert_eq!(model["values"], json!([]));
+    assert_eq!(model["link"], Value::Null);
+    assert_eq!(model["items"], json!([]));
+    assert_eq!(model["remote_items"][0]["feed_guid"], "found-guid");
+}
+
+/// ADR 0238 item 6: a found release in the collection is linked in both drafts.
+#[tokio::test]
+async fn a_page_from_a_found_release_in_the_collection_links_both_drafts() {
+    let source = web_feeds();
+    let app = app_with_index(&source.url(""));
+    let (_, connector) = call(&app, "POST", "/api/v1/connectors", Some(json!({"kind":"local","name":"Music","root":app.feeds.path(),"base_url":"https://music.example"}))).await;
+    let connector_id = connector["id"].as_i64().unwrap();
+    let artist = make_artist_page(&app, connector_id, "first.xml", "First Artist").await;
+    let release = make_release(
+        &app,
+        connector_id,
+        "found.xml",
+        "Found Album",
+        "First Artist",
+        artist["id"].as_i64().unwrap(),
+    )
+    .await;
+    let release_guid = found_draft(&app, &release["id"]).await["model"]["podcast_guid"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    source.set(
+        "/found.xml",
+        200,
+        FOUND_FEED.replace("FOUND_GUID", &release_guid).into_bytes(),
+    );
+    let page = make_feed(&app, json!({
+        "connector_id": connector["id"], "path":"second.xml", "title":"Found Artist", "author":"Found Artist",
+        "medium":"publisher", "role":"artist", "from_found": format!("{}/found.xml", source.url(""))
+    })).await;
+    let page_model = &found_draft(&app, &page["id"]).await["model"];
+    let items = page_model["remote_items"].as_array().unwrap();
+    assert_eq!(items.len(), 1, "{page_model}");
+    assert_eq!(items[0]["feed_guid"], release_guid.as_str());
+    let release_model = &found_draft(&app, &release["id"]).await["model"];
+    let links = release_model["publisher"]["remote_items"]
+        .as_array()
+        .unwrap();
+    assert_eq!(links.len(), 2, "{release_model}");
+}
+
+/// ADR 0238 item 7: a found feed makes only a publisher page, and not with a copy.
+#[tokio::test]
+async fn a_found_feed_with_the_medium_music_is_refused() {
+    let source = web_feeds();
+    let app = app_with_index(&source.url(""));
+    let (_, connector) = call(&app, "POST", "/api/v1/connectors", Some(json!({"kind":"local","name":"Music","root":app.feeds.path(),"base_url":"https://music.example"}))).await;
+    let (status, body) = call(&app, "POST", "/api/v1/feeds/new", Some(json!({
+        "connector_id": connector["id"], "path":"x.xml", "title":"X", "author":"X", "from_found": format!("{}/found.xml", source.url(""))
+    }))).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(
+        body["error"]["code"].as_str().or(body["code"].as_str()),
+        Some("invalid_feed"),
+        "{body}"
+    );
+}
+
 #[tokio::test]
 async fn an_msp_backup_needs_the_vault_and_keeps_its_token_there() {
     let server = web_feeds();

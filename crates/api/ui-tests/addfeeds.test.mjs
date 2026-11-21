@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { addMenuEntries, addSearchRows, addRowIsArtist, addSheetRows, addResultMark, addFoundValues, makeFields, makeTitle, feedFileStart, parentCard, MAKE_TYPES, RELEASE_KINDS } from '../ui/addfeeds.js';
+import { addMenuEntries, addSearchRows, addRowIsArtist, addSheetRows, addResultMark, addFoundValues, foundPageValues, foundPages, foundIndexPage, makeFields, makeTitle, feedFileStart, parentCard, MAKE_TYPES, RELEASE_KINDS } from '../ui/addfeeds.js';
 
 import { releaseAdd } from '../ui/welcome.js';
 
@@ -116,7 +116,7 @@ test('the release form has no "Start from" and no route field from (ADR 0230 ite
   const owner = 'ADR 0230 item 13: the copy of a release is gone. Remove "Start from", startChoices and the field from. Do not bring them back.';
   const source = readFileSync(new URL('../ui/app.js', import.meta.url), 'utf8');
   const addfeeds = readFileSync(new URL('../ui/addfeeds.js', import.meta.url), 'utf8');
-  assert.doesNotMatch(source, /Start from|startChoices|body\.from/, owner);
+  assert.doesNotMatch(source, /Start from|startChoices|body\.from(?!_found)\b/, owner);
   assert.doesNotMatch(addfeeds, /Start from|startChoices/, owner);
 });
 
@@ -160,3 +160,63 @@ test('the add sheet uses the Music Index routes and removes the old row message'
   assert.doesNotMatch(source, /name === 'add-feed'/);
 });
 
+
+const releasePreview = { author: 'Ann', link: 'https://ann.example', recipients: 2, title: 'Album B' };
+
+test('a found release gives the artist form the artist, the website and the recipients', () => {
+  const owner = 'ADR 0238 item 4: the Artist form takes author, link and recipients. Fix foundPageValues in crates/api/ui/addfeeds.js.';
+  const values = foundPageValues('artist', releasePreview, {});
+  assert.equal(values.title, 'Ann', owner);
+  assert.equal(values.website, 'https://ann.example', owner);
+  assert.equal(values.copiesRecipients, true, owner);
+  assert.equal(values.line, 'Takes the artist of Album B. Links Album B to this page.', owner);
+  assert.equal(values.emptyLine, '', owner);
+});
+
+test('a found release gives the label form no value and asks for the name', () => {
+  const owner = 'ADR 0238 items 4 and 5: the Label form has no start value. Fix foundPageValues in crates/api/ui/addfeeds.js.';
+  const values = foundPageValues('label', releasePreview, {});
+  assert.deepEqual([values.title, values.website, values.copiesRecipients], ['', '', false], owner);
+  assert.equal(values.emptyLine, 'Album B does not name its label. Type the name.', owner);
+});
+
+test('a found release gives the hosting form no value and asks for the host', () => {
+  const owner = 'ADR 0238 items 4 and 5: the host is a person, not the owner of the feed. Fix foundPageValues in crates/api/ui/addfeeds.js.';
+  const values = foundPageValues('hosting', releasePreview, {});
+  assert.deepEqual([values.title, values.website, values.copiesRecipients], ['', '', false], owner);
+  assert.equal(values.emptyLine, 'Type the name of the person who hosts Album B.', owner);
+});
+
+test('the page of Music Index is an artist page when its title is the artist', () => {
+  const owner = 'ADR 0238 item 2: the page that Music Index gives for a found feed. Fix foundIndexPage in crates/api/ui/addfeeds.js.';
+  const values = { publisher_feed_guid: 'p1', publisher_feed_title: 'Brandon James Seyferth' };
+  assert.deepEqual(foundIndexPage(values, 'brandon james  seyferth'), { feed_guid: 'p1', feed_url: null, title: 'Brandon James Seyferth', rel: 'artist' }, owner);
+  assert.equal(foundIndexPage(values, 'Someone Else').rel, null, owner);
+  assert.equal(foundIndexPage({}, 'Ann'), null, owner);
+  assert.equal(foundIndexPage(null, 'Ann'), null, owner);
+});
+
+test('an unread feed gives only the artist name to the artist form', () => {
+  const owner = 'ADR 0238 item 7: with no feed file only the Artist form gets a value. Fix foundPageValues in crates/api/ui/addfeeds.js.';
+  const failed = { failed: true, title: 'Album B', author: '' };
+  const artist = foundPageValues('artist', failed, { artist: 'Ann' });
+  assert.equal(artist.title, 'Ann', owner);
+  assert.equal(artist.website, '', owner);
+  assert.equal(artist.line, 'Studio could not read the feed file of Album B. Only the name is copied.', owner);
+  assert.equal(foundPageValues('hosting', failed, { artist: 'Ann' }).title, '', owner);
+  assert.equal(foundPageValues('label', failed, { artist: 'Ann' }).title, '', owner);
+});
+
+test('the page list keeps the pages of the role and the pages with no role', () => {
+  const owner = 'ADR 0238 item 2: keep the pages with the role or with no rel. Fix foundPages in crates/api/ui/addfeeds.js.';
+  const pages = [
+    { feed_guid: 'a', rel: 'artist' },
+    { feed_guid: 'b', rel: 'label' },
+    { feed_guid: 'c' },
+    { feed_guid: 'd', rel: 'artist label' },
+    { rel: 'artist' },
+  ];
+  assert.deepEqual(foundPages(pages, 'artist').map((p) => p.feed_guid), ['a', 'c', 'd'], owner);
+  assert.deepEqual(foundPages(pages, 'hosting').map((p) => p.feed_guid), ['c'], owner);
+  assert.deepEqual(foundPages(null, 'artist'), [], owner);
+});

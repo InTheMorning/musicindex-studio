@@ -20,7 +20,7 @@ import {
   prfOutputOf, passkeyBrowserCode, defaultPasskeyName,
   nip46State, nip46ErrorText, isBunkerAddress, qrSource, UNLOCK_AGAIN_TEXT, needsRecentUnlock,
 } from './account.js';
-import { addMenuEntries, addSearchRows, addRowIsArtist, addSheetRows, addResultMark, addFoundValues, MAKE_TYPES, RELEASE_KINDS, makeFields, makeTitle, feedFileStart, parentCard, shouldAddTracksAfterNewRelease } from './addfeeds.js';
+import { addMenuEntries, addSearchRows, addRowIsArtist, addSheetRows, addResultMark, addFoundValues, foundPageValues, foundPages, foundIndexPage, MAKE_TYPES, RELEASE_KINDS, makeFields, makeTitle, feedFileStart, parentCard, shouldAddTracksAfterNewRelease } from './addfeeds.js';
 import { WELCOME, HOST_STEP, showWelcome, welcomeSteps, pathTexts, hostStepModel, welcomeBody, releaseAdd, releaseArtistChoices, libraryResult } from './welcome.js';
 import { isLiveItem } from './live.js';
 import { appRowLines, pairingPhase, pairingNotice, doneRemovesApp } from './apps.js';
@@ -1473,13 +1473,15 @@ function AddFindSheet({ open, type, role, parent, connectors, onPick, onAdded, o
   const ref = useSheet(open);
   const [query, setQuery] = useState('');
   const [artist, setArtist] = useState(null);
+  // ADR 0238 item 2: the pages that a found feed names.
+  const [pages, setPages] = useState(null);
   const [problem, setProblem] = useState(null);
   const [busy, setBusy] = useState(false);
   const search = useLookup(query, '/musicindex/search');
   const fields = useFieldList({ id: 'add-find-query', value: query, setValue: setQuery });
   const address = /^https?:\/\//i.test(query.trim());
   useEffect(() => {
-    if (open) { setArtist(null); setProblem(null); }
+    if (open) { setArtist(null); setPages(null); setProblem(null); }
   }, [open]);
   const close = () => ref.current.close();
   const working = async (step) => {
@@ -1517,7 +1519,32 @@ function AddFindSheet({ open, type, role, parent, connectors, onPick, onAdded, o
     onPick({ row: { ...row, feed_url: url }, preview, values });
     close();
   });
+  // ADR 0238 items 1, 2 and 7: in a page form, a found feed makes a new page
+  // of the role. A page that the feed names shows first.
+  const found = (row) => working(async () => {
+    // The values of Music Index also give the page of the feed (ADR 0238 item 2).
+    let values = {};
+    try { values = await api(`/musicindex/values/${encodeURIComponent(row.feed_guid)}`); } catch (_) { values = {}; }
+    const url = row.feed_url || values.feed_url;
+    const title = row.title || values.title || url || '';
+    let preview;
+    try {
+      if (!url) throw Object.assign(new Error('no address'), { code: 'copy_failed' });
+      preview = { ...(await api(`/feeds/copy-preview?found=true&url=${encodeURIComponent(url)}`)), title, url };
+    } catch (error) {
+      if (error.code !== 'copy_failed') throw error;
+      preview = { author: row.artist || '', title, url, failed: true };
+    }
+    const picked = { found: { url, guid: row.feed_guid, title, artist: row.artist || '' }, preview, values };
+    const indexPage = foundIndexPage(values, row.artist || preview.author);
+    const named = (preview.pages || []).some((page) => indexPage && page.feed_guid === indexPage.feed_guid);
+    const list = foundPages([...(indexPage && !named ? [indexPage] : []), ...(preview.pages || [])], role);
+    if (list.length > 0) { setPages({ list, picked }); return; }
+    onPick(picked);
+    close();
+  });
   const pick = (row, isFeed) => {
+    if (type === 'publisher' && role && isFeed) { found(row); return; }
     if (row.in_studio_id != null) { onOpen(Number(row.in_studio_id)); close(); return; }
     if (row.yours && row.feed_url) { addAddress(row.feed_url); return; }
     // ADR 0233 item 13: an artist row of the form of a release gives the releases of that artist.
@@ -1534,15 +1561,24 @@ function AddFindSheet({ open, type, role, parent, connectors, onPick, onAdded, o
     <header><h2 id="add-find-title">Find on Music Index</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${close}>✕</button></header>
     <div class="body">
-      ${artist
+      ${pages && html`<section class="page-section"><${RowList}>
+        <button class="link-row" type="button" onClick=${() => { setPages(null); setProblem(null); }}>
+          <span class="text"><span class="label">‹ Results</span><span class="summary">${pages.picked.found.title}</span></span></button>
+        ${pages.list.map((page) => html`<button key=${page.feed_guid || page.feed_url} class="link-row" type="button" disabled=${busy}
+          onClick=${() => copy({ feed_url: page.feed_url, feed_guid: page.feed_guid, title: page.title })}>
+          <span class="text"><span class="label">${page.title || page.feed_url}</span></span><span class="go" aria-hidden="true">›</span></button>`)}
+        <button class="link-row" type="button" disabled=${busy} onClick=${() => { onPick(pages.picked); close(); }}>
+          <span class="text"><span class="label">${`Make a new ${role} page from ${pages.picked.found.title}`}</span></span></button>
+      <//></section>`}
+      ${pages ? null : artist
         ? html`<section class="page-section"><${RowList}><button class="link-row" type="button" onClick=${() => { setArtist(null); setProblem(null); }}>
             <span class="text"><span class="label">‹ Results</span><span class="summary">${artist.row.title || ''}</span></span></button><//></section>`
         : html`<section class="page-section pinned-form"><div class="group rows"><${Field} id="add-find-query" label="Name or feed address" type="search" autofocus value=${query} ...${fields.input}>${fields.list}<//></div>
           ${address && html`<div class="actions"><button class="button" type="button" disabled=${busy} onClick=${() => addAddress(query.trim())}>Add This Address</button></div>`}</section>`}
       <${ErrorNotice} error=${problem} />
       ${busy && html`<p class="empty" role="status">Reading the feed…</p>`}
-      <${SearchResults} query=${artist ? 'artist' : query} search=${shown} listOpen=${!artist && fields.open} disabled=${busy}
-        markOf=${addResultMark} onPick=${pick} />
+      ${!pages && html`<${SearchResults} query=${artist ? 'artist' : query} search=${shown} listOpen=${!artist && fields.open} disabled=${busy}
+        markOf=${addResultMark} onPick=${pick} />`}
       <section class="page-section"><${RowList}>
         ${addSheetRows(connectors.length > 0).map((row) => html`<button key=${row.id} class="link-row" type="button"
           onClick=${() => { onImport(row.id); close(); }}><span class="text"><span class="label">${row.title}</span></span><span class="go" aria-hidden="true">›</span></button>`)}
@@ -1575,6 +1611,8 @@ function MakeFeedForm({ connectors, feeds, startType, start = {}, onAdded, onKin
   const [finding, setFinding] = useState(false);
   const [copyFrom, setCopyFrom] = useState(null);
   const [copyPreview, setCopyPreview] = useState(null);
+  // ADR 0238 items 5 and 6: the found feed that starts a page.
+  const [foundPage, setFoundPage] = useState(null);
   const [foundValues, setFoundValues] = useState({});
   const [importMode, setImportMode] = useState(null);
   const { busy, error, run, retry } = useAction();
@@ -1589,7 +1627,20 @@ function MakeFeedForm({ connectors, feeds, startType, start = {}, onAdded, onKin
     const chosen = parentCard(feeds, id);
     if (chosen && !authorTyped) setAuthor(chosen.title);
   };
-  const pick = ({ row, preview, values: indexValues }) => {
+  const pick = ({ row, preview, values: indexValues, found }) => {
+    if (found) {
+      // ADR 0238 items 4 and 6: the page takes the values of its role. It
+      // copies no tracks and keeps no copy address.
+      const page = foundPageValues(role, preview, { artist: found.artist });
+      setTitle(page.title);
+      setAuthorTyped(true);
+      setCopyFrom(null);
+      setCopyPreview(null);
+      setFoundValues(page.website ? { website: page.website } : {});
+      setFoundPage({ found, page });
+      return;
+    }
+    setFoundPage(null);
     const values = addFoundValues(row, preview, indexValues);
     if (values.title) setTitle(values.title);
     if (values.author) { setAuthor(values.author); setAuthorTyped(true); }
@@ -1613,6 +1664,12 @@ function MakeFeedForm({ connectors, feeds, startType, start = {}, onAdded, onKin
       }
       for (const key of ['description', 'image', 'website']) if (foundValues[key]) body[key] = foundValues[key];
       if (copyFrom) body.copy_from = copyFrom;
+      // ADR 0238 items 1 and 6: the address and the Music Index values of the found feed.
+      if (foundPage) {
+        if (foundPage.found.url) body.from_found = foundPage.found.url;
+        body.found_guid = foundPage.found.guid;
+        body.found_title = foundPage.found.title;
+      }
       const result = await api('/feeds/new', { method: 'POST', body });
       onAdded(result, { type, copied: Boolean(copyFrom), copyFailed: result.copy_failed === true, copyTitle: copyPreview?.title });
     });
@@ -1635,6 +1692,9 @@ function MakeFeedForm({ connectors, feeds, startType, start = {}, onAdded, onKin
       </div>
     </details></div>`;
   const submitRow = html`<${ErrorNotice} error=${formError.other} action="Studio could not make it." onRetry=${retry} />
+    ${foundPage && html`<p class="hint">${foundPage.page.line}</p>`}
+    ${foundPage && foundPage.page.copiesRecipients && html`<p class="hint">${`The payments go to the recipients of ${foundPage.found.title}. Examine them on Value Routes before the write.`}</p>`}
+    ${foundPage && foundPage.page.emptyLine && html`<p class="hint">${foundPage.page.emptyLine}</p>`}
     ${copyPreview && !copyPreview.failed && html`<p class="hint">${`Copies ${copyPreview.tracks} tracks and ${copyPreview.recipients} payment recipients from ${copyPreview.title || ''}.`}</p>`}
     ${copyPreview && copyPreview.failed && html`<p class="hint">${`Studio could not read the feed file of ${copyPreview.title || ''}. No tracks and no payment recipients are copied.`}</p>`}
     ${copyPreview && !copyPreview.failed && card && copyPreview.author && copyPreview.author !== card.title

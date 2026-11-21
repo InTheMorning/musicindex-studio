@@ -6120,6 +6120,8 @@ mod tests {
                 recipient_type: Some("lnaddress".to_owned()),
                 ..Recipient::default()
             }],
+            publisher_feed_guid: None,
+            publisher_feed_title: None,
         }
     }
 

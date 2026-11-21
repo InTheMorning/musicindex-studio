@@ -148,6 +148,8 @@ const HOST_ALLOWED = [
   "['host', 'Hosts']",
   "p.role || 'host'",
   'Empty means host.',
+  // The person of the hosting role (ADR 0238 item 5).
+  'Type the name of the person who hosts',
   // The network names of a server (ADR 0092 item 4).
   'Studio uses the host name when you leave this empty.',
   'Studio uses the host name of the first server when you leave this empty.',

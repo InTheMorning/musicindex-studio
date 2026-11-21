@@ -1690,11 +1690,134 @@ pub(crate) struct NewAlbumFeed {
     website: Option<String>,
     /// The feed address to copy.
     copy_from: Option<String>,
+    /// The address of a found feed that gives the values of a new page
+    /// (ADR 0238 items 1 and 7).
+    from_found: Option<String>,
+    /// The GUID of the found feed from Music Index. It names the link when
+    /// Studio cannot read the feed file (ADR 0238 item 7).
+    found_guid: Option<String>,
+    /// The title of the found feed from Music Index, for the same link.
+    found_title: Option<String>,
 }
 
 #[derive(Deserialize)]
 pub(crate) struct FeedCopyPreviewQuery {
     url: String,
+    /// True for a found feed of a page form. The route then reads the feed
+    /// file also on a connected host (ADR 0238 item 2).
+    found: Option<bool>,
+}
+
+/// The pages that a feed names in `podcast:publisher` (ADR 0238 item 2).
+fn found_pages(feed: &Feed) -> Vec<Value> {
+    feed.publisher
+        .as_ref()
+        .map(|publisher| {
+            publisher
+                .remote_items
+                .iter()
+                .map(|entry| {
+                    json!({
+                        "feed_guid": entry.value.feed_guid,
+                        "feed_url": entry.value.feed_url,
+                        "title": entry.value.title,
+                        "rel": entry.value.rel,
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// The start values of a new page from a found feed (ADR 0238 items 4, 6
+/// and 8). The Artist page gets the website and the channel recipients. The
+/// Label page and the Hosting page get no website and no recipients.
+/// No role gets an image, a description or items.
+fn found_first_values(
+    role: PublisherRole,
+    address: &str,
+    found: &FeedCopy,
+    body: &NewAlbumFeed,
+    link: bool,
+) -> pipeline::FirstValues {
+    let feed = found.feed.as_ref();
+    let website = match role {
+        PublisherRole::Artist => feed
+            .and_then(|feed| feed.link.clone())
+            .or_else(|| body.website.clone()),
+        _ => None,
+    };
+    let channel_values = match (role, feed) {
+        (PublisherRole::Artist, Some(feed)) => feed
+            .values
+            .iter()
+            .map(|entry| entry.value.clone())
+            .collect(),
+        _ => Vec::new(),
+    };
+    let remote_item = if link {
+        found_remote_item(role, address, feed, body)
+    } else {
+        None
+    };
+    pipeline::FirstValues {
+        website,
+        channel_values,
+        remote_item,
+        ..pipeline::FirstValues::default()
+    }
+}
+
+/// The GUID of the found feed, from its file or from Music Index.
+fn found_guid(feed: Option<&Feed>, body: &NewAlbumFeed) -> Option<String> {
+    feed.and_then(|feed| feed.podcast_guid.clone())
+        .or_else(|| body.found_guid.clone())
+        .filter(|guid| !guid.trim().is_empty())
+}
+
+/// The `podcast:remoteItem` of the found feed (ADR 0238 items 6 and 7). It
+/// needs a GUID.
+fn found_remote_item(
+    role: PublisherRole,
+    address: &str,
+    feed: Option<&Feed>,
+    body: &NewAlbumFeed,
+) -> Option<studio_core::feed::RemoteItem> {
+    let guid = found_guid(feed, body)?;
+    Some(studio_core::feed::RemoteItem {
+        feed_guid: Some(guid),
+        feed_url: Some(address.to_owned()),
+        title: feed
+            .and_then(|feed| feed.title.clone())
+            .or_else(|| body.found_title.clone()),
+        medium: Some(
+            feed.and_then(|feed| feed.medium.clone())
+                .unwrap_or_else(|| "music".to_owned()),
+        ),
+        rel: Some(role.as_str().to_owned()),
+        ..studio_core::feed::RemoteItem::default()
+    })
+}
+
+/// The release of the collection that has `guid` (ADR 0238 item 6). The
+/// GUID of a draft comes from the draft.
+fn collection_release_with_guid(w: &Workspace, guid: &str) -> Result<Option<FeedId>, ApiError> {
+    for row in w.collection.feeds()? {
+        if !matches!(row.medium.as_deref(), Some("music" | "musicL")) {
+            continue;
+        }
+        let row_guid = if w.collection.draft(row.id)?.is_some() {
+            pipeline::draft_model(&w.collection, row.id)
+                .ok()
+                .and_then(|(feed, _)| feed.podcast_guid)
+        } else {
+            row.podcast_guid.clone()
+        };
+        if row_guid.as_deref() == Some(guid) {
+            return Ok(Some(row.id));
+        }
+    }
+    Ok(None)
 }
 
 fn copy_counts(feed: &Feed) -> (usize, usize) {
@@ -1756,6 +1879,7 @@ pub(crate) async fn feed_copy_preview(
     // ADR 0233 item 6: the search of Music Index gives no feed address, so
     // the mark "Yours" of a found feed comes from this preview.
     let url = query.url.clone();
+    let found = query.found.unwrap_or(false);
     let (web, yours) = blocking(shared, move |w| {
         let connectors = w.collection.connectors()?;
         Ok((
@@ -1764,7 +1888,7 @@ pub(crate) async fn feed_copy_preview(
         ))
     })
     .await?;
-    if yours {
+    if yours && !found {
         return Ok(Json(json!({ "yours": true })));
     }
     blocking_unlocked(move || {
@@ -1776,11 +1900,90 @@ pub(crate) async fn feed_copy_preview(
             )
         })?;
         let (tracks, recipients) = copy_counts(&feed.feed);
-        Ok(Json(
-            json!({ "author": feed.feed.author, "tracks": tracks, "recipients": recipients, "yours": false }),
-        ))
+        let mut preview = json!({
+            "author": feed.feed.author,
+            "tracks": tracks,
+            "recipients": recipients,
+            "yours": yours,
+        });
+        if found {
+            // ADR 0238 items 2 and 4: the values of the found feed for a
+            // page, and the pages that it names.
+            preview["link"] = json!(feed.feed.link);
+            preview["guid"] = json!(feed.feed.podcast_guid);
+            preview["medium"] = json!(feed.feed.medium);
+            preview["pages"] = Value::Array(found_pages(&feed.feed));
+        }
+        Ok(Json(preview))
     })
     .await
+}
+
+/// Link a new page and a found release of the collection (ADR 0238 item 6).
+/// The release can be a written feed with no draft. When the link fails, the
+/// page gets a remote item.
+fn link_found_release(
+    w: &Workspace,
+    page: FeedId,
+    release: FeedId,
+    role: PublisherRole,
+    address: &str,
+    feed: Option<&Feed>,
+    body: &NewAlbumFeed,
+) -> Result<(), ApiError> {
+    let linked =
+        ensure_draft(w, release).is_ok() && publisher::link(&w.collection, page, release).is_ok();
+    if !linked && let Some(link) = found_remote_item(role, address, feed, body) {
+        pipeline::edit_draft(&w.collection, page, |feed| {
+            feed.remote_items.push(Entry::new(link));
+        })?;
+    }
+    Ok(())
+}
+
+/// The first values of a new feed, and the release of the collection that a
+/// found feed names. A found feed in the collection is linked with
+/// `publisher::link`. Another found feed becomes a remote item (ADR 0238
+/// item 6).
+fn first_values_of(
+    w: &Workspace,
+    body: &NewAlbumFeed,
+    copy: Option<Feed>,
+    found: &FeedCopy,
+    role: Option<PublisherRole>,
+) -> Result<(pipeline::FirstValues, Option<FeedId>), ApiError> {
+    let copied = copy.is_some();
+    if let (Some(address), Some(role)) = (&body.from_found, role) {
+        let linked = match found_guid(found.feed.as_ref(), body) {
+            Some(guid) => collection_release_with_guid(w, &guid)?,
+            None => None,
+        };
+        let first = found_first_values(role, address, found, body, linked.is_none());
+        return Ok((first, linked));
+    }
+    let first = pipeline::FirstValues {
+        description: body.description.clone().filter(|_| !copied),
+        image: body.image.clone().filter(|_| !copied),
+        website: body.website.clone().filter(|_| !copied),
+        copy,
+        ..pipeline::FirstValues::default()
+    };
+    Ok((first, None))
+}
+
+/// ADR 0238 item 7: a found feed makes a publisher page, and it does not
+/// come with a copy.
+fn check_found_request(body: &NewAlbumFeed) -> Result<(), ApiError> {
+    if body.from_found.is_some()
+        && (body.medium.as_deref() != Some("publisher") || body.copy_from.is_some())
+    {
+        return Err(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "invalid_feed",
+            "a found feed makes only a publisher page, and not with a copy",
+        ));
+    }
+    Ok(())
 }
 
 /// Make a new feed in a connected folder, as a draft with no hosted file
@@ -1789,7 +1992,9 @@ pub(crate) async fn new_album_feed(
     State(shared): State<Shared>,
     Json(body): Json<NewAlbumFeed>,
 ) -> Result<(StatusCode, Json<Value>), ApiError> {
+    check_found_request(&body)?;
     let copy = copy_unlocked(&shared, body.copy_from.clone()).await?;
+    let found = copy_unlocked(&shared, body.from_found.clone()).await?;
     blocking(shared, move |w| {
         let medium = body.medium.as_deref().unwrap_or("music");
         validate_release_kind(body.kind.as_deref(), medium)?;
@@ -1855,13 +2060,7 @@ pub(crate) async fn new_album_feed(
         let made = w.connector_of(&row)?;
         // A copy gives the description, the artwork and the website of the
         // found feed file (ADR 0233 item 9).
-        let copied = copy.feed.is_some();
-        let first = pipeline::FirstValues {
-            description: body.description.filter(|_| !copied),
-            image: body.image.filter(|_| !copied),
-            website: body.website.filter(|_| !copied),
-            copy: copy.feed,
-        };
+        let (first, linked_release) = first_values_of(w, &body, copy.feed, &found, role)?;
         let id = pipeline::new_feed_with(
             &mut w.collection,
             made.as_ref(),
@@ -1873,6 +2072,11 @@ pub(crate) async fn new_album_feed(
             &first,
         )?;
         finish_new_feed(w, id, medium, kind, role, artist_id)?;
+        if let (Some(release), Some(role), Some(address)) =
+            (linked_release, role, body.from_found.as_deref())
+        {
+            link_found_release(w, id, release, role, address, found.feed.as_ref(), &body)?;
+        }
         if let Some(upper) = below_id {
             w.collection.add_kept_level(upper, id)?;
         }

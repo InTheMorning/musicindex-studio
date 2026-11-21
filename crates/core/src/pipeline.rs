@@ -23,7 +23,9 @@ use crate::connector::{
     PlannedWrite, Version,
 };
 use crate::digest::sha256_hex;
-use crate::feed::{AtomLink, Entry, Feed, FeedError, Item, Person, Recipient, ValueBlock};
+use crate::feed::{
+    AtomLink, Entry, Feed, FeedError, Item, Person, Recipient, RemoteItem, ValueBlock,
+};
 use crate::grant::{self, GrantChange};
 use crate::guid::podcast_guid_for_url;
 use crate::inventory::{self, Hosts, InventoryError, InventoryErrorKind};
@@ -1081,6 +1083,13 @@ pub struct FirstValues {
     pub website: Option<String>,
     /// The selected feed values and items to copy into the first draft.
     pub copy: Option<Feed>,
+    /// The `podcast:value` blocks of the channel. A page that a found feed
+    /// starts gets the payment recipients of that feed here (ADR 0238
+    /// items 4 and 8).
+    pub channel_values: Vec<ValueBlock>,
+    /// The link to the found feed. A page that a found feed starts gets it
+    /// when the feed is not in the collection (ADR 0238 item 6).
+    pub remote_item: Option<RemoteItem>,
 }
 
 /// Make a new feed as [`new_feed`] does, with the values of `values` in the
@@ -1169,6 +1178,16 @@ pub fn new_feed_with(
                 Entry::new(item)
             })
             .collect();
+    }
+    // ADR 0238 items 4 and 6: the values and the link of a found feed.
+    feed.values.extend(
+        values
+            .channel_values
+            .iter()
+            .map(|value| Entry::new(value.clone())),
+    );
+    if let Some(link) = &values.remote_item {
+        feed.remote_items.push(Entry::new(link.clone()));
     }
     if let Some(address) = address.as_deref() {
         set_self_link(&mut feed, address);

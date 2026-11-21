@@ -65,6 +65,48 @@ export function addFoundValues(row, preview = {}, values = {}) {
   return Object.fromEntries(Object.entries(found).filter(([, value]) => value !== ''));
 }
 
+// The start values and the lines of a page form for a found feed (ADR 0238
+// items 4, 5 and 7). `found` is the copy preview with the `title` of the feed.
+// `row` is the row of the search. Only the Artist form gets a value. A feed
+// does not name its label. The host is the person who hosts the feed, and the
+// owner of a feed is frequently a hosting service, so the Hosting form gets no
+// name either.
+export function foundPageValues(role, found = {}, row = {}) {
+  const read = !found.failed;
+  const title = role === 'artist' ? ((read ? found.author : '') || row.artist || '') : '';
+  const name = found.title || '';
+  const ask = role === 'hosting' ? `Type the name of the person who hosts ${name}.` : `${name} does not name its ${role}. Type the name.`;
+  return {
+    title,
+    website: role === 'artist' && read ? found.link || '' : '',
+    copiesRecipients: role === 'artist' && read && found.recipients > 0,
+    line: read ? `Takes the ${role} of ${name}. Links ${name} to this page.` : `Studio could not read the feed file of ${name}. Only the name is copied.`,
+    emptyLine: title === '' ? ask : '',
+  };
+}
+
+// The page that Music Index gives for a found feed, or null (ADR 0238 item 2).
+// `values` is the answer of `/musicindex/values/{guid}`. The page is an artist
+// page when its title is the artist of the feed. Otherwise it has no role.
+export function foundIndexPage(values, artist) {
+  if (!values || !values.publisher_feed_guid) return null;
+  const words = (text) => String(text || '').toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean).join(' ');
+  const title = values.publisher_feed_title || '';
+  const same = title !== '' && words(title) === words(artist);
+  return { feed_guid: values.publisher_feed_guid, feed_url: null, title, rel: same ? 'artist' : null };
+}
+
+// The pages that a found feed names in `podcast:publisher` and that a page form
+// can take (ADR 0238 item 2): the pages with the role of the form, and the
+// pages with no role.
+export function foundPages(pages, role) {
+  return (pages || []).filter((page) => {
+    if (!page.feed_guid && !page.feed_url) return false;
+    const words = String(page.rel || '').split(/[\s,]+/).filter(Boolean).map((word) => word.toLowerCase());
+    return words.length === 0 || words.includes(role);
+  });
+}
+
 // The values of the select menu "Type" in the form that makes a feed.
 export const MAKE_TYPES = [
   ['publisher', 'Artist or label'],

@@ -1,6 +1,6 @@
 # Studio v1 Task 224: Hosting Is A First Role, And A Stray Release Moves To Its Pages
 
-Decision: [ADR 0240](../adr/0240-hosting-is-a-first-role-and-a-stray-release-moves-to-its-pages.md) items 1 to 19.
+Decision: [ADR 0240](../adr/0240-hosting-is-a-first-role-and-a-stray-release-moves-to-its-pages.md) items 1 to 19. Task 225 does items 20 to 25.
 
 Status: Open.
 

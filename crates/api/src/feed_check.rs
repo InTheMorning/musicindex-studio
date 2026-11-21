@@ -35,6 +35,52 @@ fn stored<'a>(w: &'a Workspace, id: FeedId, base_key: &str) -> Option<&'a Networ
         .map(|(_, net)| net)
 }
 
+/// One finding for each page of the collection that the release names and
+/// whose written copy does not list the release (ADR 0234 item 5).
+fn unlisted_findings(w: &Workspace, id: FeedId) -> Result<Vec<serde_json::Value>, ApiError> {
+    let row = w.collection.feed(id)?;
+    if row.last_version.is_none() {
+        return Ok(Vec::new());
+    }
+    let library = w.library().ok();
+    let release = pipeline::written_copy(&w.collection, library.as_ref(), &row);
+    let feeds: Vec<_> = w
+        .collection
+        .feeds()?
+        .into_iter()
+        .map(|page| (page, None))
+        .collect();
+    let pages = crate::routes::unlisted_pages(
+        &w.collection,
+        library.as_ref(),
+        &row,
+        release.as_ref(),
+        &feeds,
+    );
+    Ok(feeds
+        .iter()
+        .map(|(page, _)| page)
+        .filter(|page| pages.contains(&page.id.0))
+        .map(|page| {
+            let page_title = pipeline::written_copy(&w.collection, library.as_ref(), page)
+                .and_then(|feed| feed.title)
+                .or_else(|| page.title.clone())
+                .unwrap_or_else(|| format!("Page {}", page.id.0));
+            json!({
+                "kind": "unlisted_by_page",
+                "level": "notice",
+                "title": format!("{page_title} does not list this release."),
+                "reason": format!("Apps show the release below {page_title} only after a write of {page_title}."),
+                "entry": null,
+                "repair": null,
+                "url": null,
+                "page_id": page.id.0,
+                "page_title": page_title,
+            })
+        })
+        .collect())
+}
+
 /// The findings of the draft: the local findings, and the last read facts
 /// from memory. A read-only feed gives each finding with no repair.
 fn check_json(w: &Workspace, id: FeedId) -> ApiResult {
@@ -74,6 +120,8 @@ fn check_json(w: &Workspace, id: FeedId) -> ApiResult {
             value
         })
         .collect();
+    let mut findings = findings;
+    findings.extend(unlisted_findings(w, id)?);
     Ok(Json(json!({
         "revision": inputs.revision,
         "read_only": read_only,

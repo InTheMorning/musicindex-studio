@@ -3860,27 +3860,18 @@ fn release_link_cleanup(
     release: FeedId,
 ) -> Result<ReleaseLinkCleanup, CollectionError> {
     let row = collection.feed(release)?;
-    let Some(draft) = collection.draft(release)? else {
-        return Ok(ReleaseLinkCleanup {
-            guid: None,
-            address: None,
-            drafts: Vec::new(),
-        });
-    };
-    if draft.base_version.is_some() || collection.feed_write(release)?.is_some() {
-        return Ok(ReleaseLinkCleanup {
-            guid: None,
-            address: None,
-            drafts: Vec::new(),
-        });
-    }
-    let feed = Feed::read(
-        &Document::parse_bytes(&draft.draft_xml)
-            .map_err(|error| CollectionError::invalid(error.to_string()))?,
-    )
-    .map_err(|error| CollectionError::invalid(error.to_string()))?;
-    let guid = feed.podcast_guid;
+    // The guid of the draft, or else of the row. A written release with no
+    // draft also clears its links (ADR 0234 item 11).
+    let draft_guid = collection
+        .draft(release)?
+        .and_then(|draft| Document::parse_bytes(&draft.draft_xml).ok())
+        .and_then(|document| Feed::read(&document).ok())
+        .and_then(|feed| feed.podcast_guid);
+    let guid = draft_guid.or_else(|| row.podcast_guid.clone());
     let address = row.public_url;
+    let library = collection
+        .library_root()?
+        .and_then(|root| crate::library::Library::open(root).ok());
     let mut drafts = Vec::new();
     for publisher in collection
         .feeds()?
@@ -3890,18 +3881,23 @@ fn release_link_cleanup(
         let Some(publisher_draft) = collection.draft(publisher.id)? else {
             continue;
         };
-        let publisher_feed = Feed::read(
-            &Document::parse_bytes(&publisher_draft.draft_xml)
-                .map_err(|error| CollectionError::invalid(error.to_string()))?,
-        )
-        .map_err(|error| CollectionError::invalid(error.to_string()))?;
-        if publisher_feed.remote_items.iter().any(|item| {
-            guid.as_deref()
-                .is_some_and(|guid| item.value.feed_guid.as_deref() == Some(guid))
-                || address
-                    .as_deref()
-                    .is_some_and(|url| item.value.feed_url.as_deref() == Some(url))
-        }) {
+        let Ok(document) = Document::parse_bytes(&publisher_draft.draft_xml) else {
+            continue;
+        };
+        let Ok(publisher_feed) = Feed::read(&document) else {
+            continue;
+        };
+        let has_draft_link = publisher_feed
+            .remote_items
+            .iter()
+            .any(|item| remote_item_names(&item.value, guid.as_deref(), address.as_deref()));
+        let written_lists = crate::pipeline::written_copy(collection, library.as_ref(), &publisher)
+            .is_some_and(|feed| {
+                feed.remote_items
+                    .iter()
+                    .any(|item| remote_item_names(&item.value, guid.as_deref(), address.as_deref()))
+            });
+        if has_draft_link && !written_lists {
             drafts.push(LinkedDraftSnapshot {
                 id: publisher.id,
                 base_version: publisher_draft
@@ -3919,6 +3915,17 @@ fn release_link_cleanup(
     })
 }
 
+fn remote_item_names(
+    item: &crate::feed::RemoteItem,
+    guid: Option<&str>,
+    address: Option<&str>,
+) -> bool {
+    match item.feed_guid.as_deref() {
+        Some(item_guid) => guid == Some(item_guid),
+        None => item.feed_url.as_deref().is_some() && item.feed_url.as_deref() == address,
+    }
+}
+
 fn cleanup_release_links(
     collection: &Collection,
     cleanup: &ReleaseLinkCleanup,
@@ -3926,14 +3933,11 @@ fn cleanup_release_links(
     for snapshot in &cleanup.drafts {
         crate::pipeline::edit_draft(collection, snapshot.id, |feed| {
             feed.remote_items.retain(|item| {
-                cleanup
-                    .guid
-                    .as_deref()
-                    .is_none_or(|guid| item.value.feed_guid.as_deref() != Some(guid))
-                    && cleanup
-                        .address
-                        .as_deref()
-                        .is_none_or(|url| item.value.feed_url.as_deref() != Some(url))
+                !remote_item_names(
+                    &item.value,
+                    cleanup.guid.as_deref(),
+                    cleanup.address.as_deref(),
+                )
             });
         })
         .map_err(|error| CollectionError::invalid(error.to_string()))?;

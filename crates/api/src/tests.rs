@@ -1870,6 +1870,293 @@ async fn a_shared_release_removes_the_kept_level() {
 }
 
 #[tokio::test]
+async fn one_sided_link_changes_only_the_page_draft() {
+    let (app, connector) = publisher_app().await;
+    let page = make_feed(
+        &app,
+        new_feed_body(
+            connector,
+            "one-sided-page.xml",
+            "One-sided page",
+            Some("publisher"),
+            Some("artist"),
+        ),
+    )
+    .await;
+    let release = make_feed(
+        &app,
+        new_feed_body(
+            connector,
+            "one-sided-release.xml",
+            "One-sided release",
+            None,
+            None,
+        ),
+    )
+    .await;
+    let page_id = page["id"].as_i64().unwrap();
+    let release_id = release["id"].as_i64().unwrap();
+    assert_eq!(
+        listed(&app, release_id).await["author"],
+        "One-sided release"
+    );
+    let (_, before) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{release_id}/draft"),
+        None,
+    )
+    .await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{page_id}/links/{release_id}/list"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["page_id"], page_id);
+    let (_, after) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{release_id}/draft"),
+        None,
+    )
+    .await;
+    assert_eq!(before["model"], after["model"]);
+    let (_, page_draft) = call(&app, "GET", &format!("/api/v1/feeds/{page_id}/draft"), None).await;
+    assert_eq!(
+        page_draft["model"]["remote_items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
+#[tokio::test]
+async fn a_written_release_reports_a_written_page_that_does_not_list_it() {
+    let (app, connector) = publisher_app().await;
+    let page = make_artist_page(&app, connector, "missing-page.xml", "Missing Page").await;
+    let page_id = page["id"].as_i64().unwrap();
+    assert_eq!(write_with_own_diff(&app, page_id).await.0, StatusCode::OK);
+    let release = make_release(
+        &app,
+        connector,
+        "missing-release.xml",
+        "Release",
+        "Artist",
+        page_id,
+    )
+    .await;
+    let release_id = release["id"].as_i64().unwrap();
+    discard_the_draft(&app, page_id).await;
+    assert_eq!(
+        write_with_own_diff(&app, release_id).await.0,
+        StatusCode::OK
+    );
+
+    assert_eq!(
+        listed(&app, release_id).await["unlisted_by"],
+        json!([page_id])
+    );
+    let (status, check) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{release_id}/check"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{check}");
+    assert!(
+        check["findings"].as_array().unwrap().iter().any(|finding| {
+            finding["kind"] == "unlisted_by_page"
+                && finding["page_id"] == page_id
+                && finding["page_title"] == "Missing Page"
+        }),
+        "{check}"
+    );
+
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{page_id}/links/{release_id}/list"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(write_with_own_diff(&app, page_id).await.0, StatusCode::OK);
+    assert_eq!(listed(&app, release_id).await["unlisted_by"], json!([]));
+    let (_, check) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{release_id}/check"),
+        None,
+    )
+    .await;
+    assert!(
+        !check["findings"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|f| f["kind"] == "unlisted_by_page"),
+        "{check}"
+    );
+}
+
+#[tokio::test]
+async fn a_written_release_without_a_draft_gives_its_written_author_in_the_feed_list() {
+    let (app, connector) = publisher_app().await;
+    // A release made in Studio has no release folder. Its written copy is
+    // the bytes of its last write (ADR 0234 items 7 and 9).
+    let page = make_artist_page(&app, connector, "author-page.xml", "Author Page").await;
+    let page_id = page["id"].as_i64().unwrap();
+    let release = make_release(
+        &app,
+        connector,
+        "written-author.xml",
+        "Release",
+        "Written Author",
+        page_id,
+    )
+    .await;
+    let id = release["id"].as_i64().unwrap();
+    assert_eq!(write_with_own_diff(&app, id).await.0, StatusCode::OK);
+    discard_the_draft(&app, id).await;
+    assert_eq!(listed(&app, id).await["author"], "Written Author");
+}
+
+#[tokio::test]
+async fn removing_a_written_release_cleans_only_unlisted_page_drafts_and_undo_restores_them() {
+    let (app, connector) = publisher_app().await;
+    let stale = make_artist_page(&app, connector, "stale-page.xml", "Stale Page").await;
+    let current = make_artist_page(&app, connector, "current-page.xml", "Current Page").await;
+    let stale_id = stale["id"].as_i64().unwrap();
+    let current_id = current["id"].as_i64().unwrap();
+    assert_eq!(write_with_own_diff(&app, stale_id).await.0, StatusCode::OK);
+    assert_eq!(
+        write_with_own_diff(&app, current_id).await.0,
+        StatusCode::OK
+    );
+    let release = make_release(
+        &app,
+        connector,
+        "cleanup-release.xml",
+        "Release",
+        "Artist",
+        stale_id,
+    )
+    .await;
+    let release_id = release["id"].as_i64().unwrap();
+    let (_, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{current_id}/links/{release_id}/list"),
+        None,
+    )
+    .await;
+    let _ = body;
+    assert_eq!(
+        write_with_own_diff(&app, release_id).await.0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        write_with_own_diff(&app, current_id).await.0,
+        StatusCode::OK
+    );
+    discard_the_draft(&app, stale_id).await;
+    // Give the stale page a draft link while its written copy remains empty.
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{stale_id}/links/{release_id}/list"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, body) = call(&app, "DELETE", &format!("/api/v1/feeds/{release_id}"), None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(listed(&app, stale_id).await["draft_state"], "none");
+    assert_eq!(
+        draft_model(&app, current_id).await["remote_items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        call(&app, "POST", "/api/v1/undo", None).await.0,
+        StatusCode::OK
+    );
+    assert_eq!(listed(&app, release_id).await["title"], "Release");
+    assert_eq!(
+        draft_model(&app, stale_id).await["remote_items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    assert_eq!(
+        draft_model(&app, current_id).await["remote_items"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
+#[tokio::test]
+async fn a_move_that_adds_nothing_clears_the_kept_media_host() {
+    let app = move_app();
+    let (id, _, home, backup, _) = album_on_home(&app).await;
+    let collection =
+        studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+            .unwrap();
+    collection
+        .set_files_connector(
+            studio_core::collection::FeedId(id),
+            Some(studio_core::collection::ConnectorId(backup)),
+        )
+        .unwrap();
+    collection
+        .keep_files_connector(studio_core::collection::FeedId(id))
+        .unwrap();
+    let diff = move_scoped(&app, id, home, "files").await;
+    assert_eq!(diff["operations"], json!([]), "{diff}");
+    let db = rusqlite::Connection::open(app.data.path().join("collection.sqlite")).unwrap();
+    let (files, kept, operations): (Option<i64>, Option<i64>, i64) = db.query_row(
+        "SELECT f.files_connector_id, f.files_connector_kept, (SELECT COUNT(*) FROM draft_operations WHERE feed_id = f.id) FROM feeds f WHERE f.id = ?1",
+        [id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    ).unwrap();
+    assert_eq!(files, Some(home));
+    assert_eq!(kept, None);
+    assert_eq!(operations, 0);
+}
+
+#[tokio::test]
+async fn a_later_media_move_operation_discard_restores_the_host_from_before_that_move() {
+    let app = move_app();
+    let (id, _, home, backup, _) = album_on_home(&app).await;
+    let collection =
+        studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+            .unwrap();
+    collection
+        .set_files_connector(
+            studio_core::collection::FeedId(id),
+            Some(studio_core::collection::ConnectorId(home)),
+        )
+        .unwrap();
+    collection
+        .clear_files_connector_kept(studio_core::collection::FeedId(id))
+        .unwrap();
+    let diff = move_scoped(&app, id, backup, "files").await;
+    assert!(!diff["operations"].as_array().unwrap().is_empty(), "{diff}");
+    assert_eq!(files_host_of(&app, id).await, json!(backup));
+    discard_the_draft(&app, id).await;
+    assert_eq!(files_host_of(&app, id).await, json!(home));
+}
+
+#[tokio::test]
 async fn a_link_gives_422_for_a_music_feed_and_409_for_a_read_only_feed() {
     let (app, connector) = publisher_app().await;
     let label = make_feed(

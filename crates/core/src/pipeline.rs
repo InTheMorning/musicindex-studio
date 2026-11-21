@@ -3419,6 +3419,24 @@ pub(crate) fn hosted_copy(library: &Library, row: &FeedRow) -> Option<Feed> {
     Feed::read(&doc).ok()
 }
 
+/// The written copy of `row`: the hosted copy in its release folder, or
+/// else the bytes of its last write in the collection (ADR 0234 item 7). A
+/// feed made in Studio has no release folder. Gives `None` when the feed has
+/// neither, or the copy is not a feed.
+#[must_use]
+pub fn written_copy(
+    collection: &Collection,
+    library: Option<&Library>,
+    row: &FeedRow,
+) -> Option<Feed> {
+    library
+        .and_then(|library| hosted_copy(library, row))
+        .or_else(|| {
+            let bytes = collection.written_xml(row.id).ok().flatten()?;
+            Feed::read(&Document::parse_bytes(&bytes).ok()?).ok()
+        })
+}
+
 /// True when the hosted copy of `row` names a placeholder GUID in a
 /// `remoteItem` of the feed or of its publisher (ADR 0122 item 8). A feed
 /// with no hosted copy gives `false`.
@@ -5073,6 +5091,7 @@ fn write_draft_signed_inner(
             .and_then(crate::datetime::parse_rfc2822)
             .map(|moment| moment.seconds),
     )?;
+    collection.record_written_xml(id, &draft.draft_xml)?;
     announce::queue(collection, id, &announcements, &Timing::DEFAULT, now)?;
 
     // The feed is written, so each open change set row of the feed is done.

@@ -2,7 +2,7 @@
 
 Decision: [ADR 0234](../adr/0234-a-new-release-is-written-with-its-pages-and-a-one-sided-link-is-reported.md) items 5 to 7, 9 and 11 to 13.
 
-Status: Open.
+Status: Done.
 
 ## Problem
 
@@ -61,3 +61,58 @@ Human: the next desktop check repeats the discard of a move on the test album.
 - Change only the files of the table above, `crates/api/src/tests.rs`, `crates/api/src/workspace.rs` if necessary, and this task file. Do not change `crates/api/ui/` or `crates/api/ui-tests/`.
 - Do not make an architecture decision. Stop and report a question.
 - Write the section "Result" at the end of this file: each change with file and line, and each check with its result.
+
+## Result
+
+- `crates/api/src/routes.rs:1411` adds `author` and `unlisted_by` to feed rows. `crates/api/src/routes.rs:1545` calculates missing page listings.
+- `crates/api/src/feed_check.rs:87` adds the `unlisted_by_page` result.
+- `crates/core/src/publisher.rs:262` adds the page-only link operation. `crates/api/src/routes.rs:3213` adds its API path. `crates/api/src/lib.rs:414` registers that path.
+- `crates/core/src/people.rs:3858` removes stale page links when a feed leaves the collection. It keeps links that the written page lists.
+- `crates/api/src/routes.rs:6016` clears the kept host when a move adds no operation. `crates/core/src/collection.rs:3097` adds the clear function.
+- `crates/core/src/collection.rs:715` clears kept hosts with no pending move. `crates/core/src/collection.rs:6638` tests the migration.
+- `crates/core/src/pipeline.rs:3415` exposes the existing written-copy reader for API use. `crates/api/src/tests.rs:1873` tests the page-only API path.
+- `cargo check --workspace`: passed.
+- `cargo test -p studio-core`: passed, 881 unit tests and all integration tests.
+- `cargo test -p studio-api`: 466 tests passed. Three unrelated tests reported errors.
+- Three unrelated API tests reported errors.
+- The tests are `an_nsite_host_with_no_d_and_a_feed_gets_the_d_of_the_feed_guid`, `the_outside_check_compares_the_address_of_musicindex_only_on_request` and `the_outside_check_finds_a_change_and_a_move_and_keeps_a_result_after_a_failed_read`.
+- `cargo clippy --workspace --all-targets -- -D warnings`: passed.
+- `bash tools/gate.sh`: stopped at the same three API test errors. It skipped the UI tests.
+- `tools/node --test crates/api/ui-tests/*.test.mjs`: passed, 945 tests.
+- The API test `one_sided_link_changes_only_the_page_draft` returned an OK result.
+- No UI file changed. No commit was made.
+
+## Main Session Changes
+
+- `crates/api/src/routes.rs`: `list_feeds` uses `w.library().ok()`. With `?`, a collection with no library folder got an error for the full list. This caused the three failing API tests.
+- `crates/api/src/feed_check.rs`: `unlisted_findings` uses `routes::unlisted_pages`, so that the list and the check use one comparison. A collection with no library folder gives no finding and no error.
+- `crates/core/src/people.rs`: `release_link_cleanup` takes the guid from the draft, or else from the feed row. A written release with no draft now also clears its links (item 11).
+- `crates/core/src/collection.rs`, `crates/core/src/pipeline.rs`: a feed made in Studio has no release folder, so `hosted_copy` gave no written copy. A screenshot run showed `author` null and `unlisted_by` empty for such a page and release. A migration adds `feed_writes.written_xml`. The write keeps its bytes there (`record_written_xml`). `pipeline::written_copy` gives the library copy, or else these bytes. The list, the check and `release_link_cleanup` use it. ADR 0234 item 7 states this source.
+- `crates/api/src/tests.rs`: the test `a_written_release_without_a_draft_gives_its_written_author_in_the_feed_list` changed the draft with a PUT, and the write then gave 409. It now makes the release with `make_release` and the author "Written Author".
+
+## Follow-Up: The Missing Tests
+
+The Result gives two of the seven tests of the section "Checks". Add the five tests below to `crates/api/src/tests.rs`. Use the fixtures that exist (`publisher_app`, `make_feed`, `new_feed_body`, `listed`, and the write and move tests near the tests of ADR 0230 items 20 and 21, and of task 218). Do not change code outside `crates/api/src/tests.rs`. When a test shows a defect in the code, stop and report it with the test name and the output. Do not correct the code.
+
+1. A written release that names a written artist page in `podcast:publisher`, when the written copy of the page has no remote item for the release: `GET /api/v1/feeds` gives `unlisted_by` with the page id. `GET /api/v1/feeds/{release}/check` gives the finding `unlisted_by_page` with `page_id` and `page_title`. After a write of the page with the item, the list is empty and the check has no such finding.
+2. The feed list gives `author` of a written release with no draft (the value of the written copy).
+3. **Remove from Collection** (`DELETE /api/v1/feeds/{id}`) of a written release with no draft: the release remote item goes out of a page draft whose written copy does not name the release. The draft of a second page whose written copy names the release keeps the item. The undo route gives back the release and the page draft.
+4. A release on host 2 with `files_connector_id` 2 and its media files on host 1. **Move This Release…** with "Media files only" to host 1 (`POST /api/v1/feeds/{id}/move`) gives no draft operation, `files_connector_id` 1 and `files_connector_kept` NULL. Read the columns with the collection of the test workspace, as the tests of task 218 do.
+5. After test 4, a move to host 2 that adds an operation, then the discard of the draft, gives `files_connector_id` 1.
+
+Checks: `cargo test -p studio-api` and `cargo clippy --workspace --all-targets -- -D warnings` pass. Add the test names and results to the end of this section as "Follow-Up Result".
+
+## Follow-Up Result
+
+- `a_written_release_reports_a_written_page_that_does_not_list_it`: failed. `unlisted_by` was `[]`; the test expected `[1]`.
+- `a_written_release_without_a_draft_gives_its_written_author_in_the_feed_list`: failed. Writing the edited draft returned `409`; the test expected `200`.
+- `removing_a_written_release_cleans_only_unlisted_page_drafts_and_undo_restores_them`: passed.
+- `a_move_that_adds_nothing_clears_the_kept_media_host`: passed.
+- `a_later_media_move_operation_discard_restores_the_host_from_before_that_move`: passed.
+- `cargo test -p studio-api`: failed. 472 tests passed and two tests failed.
+- `cargo clippy --workspace --all-targets -- -D warnings`: not run because two API tests failed.
+
+Main session checks after these changes:
+
+- `a_written_release_reports_a_written_page_that_does_not_list_it` failed before the change of `written_copy` (the result above) and passes after it.
+- `cargo test -p studio-core`, `cargo test -p studio-api` (474 tests), `cargo clippy --workspace --all-targets -- -D warnings` and `bash tools/gate.sh` pass.

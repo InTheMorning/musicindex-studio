@@ -4,7 +4,7 @@
 - Date: 2026-11-20
 - Owner: operator
 - Accepted: 2026-11-20 by the operator, after the desktop check of 9af319b (`docs/reviews/2026-11-20-rc29-human-check.md`, section "Desktop Check Of 9af319b", findings 1 to 5). The operator selected items 1, 3, 5 and 8 from drawings in the questionnaire.
-- Technical choices: the main session selected items 2, 4, 6, 7 and 9 to 13. The operator did not receive them as a question.
+- Technical choices: the main session selected items 2, 4, 6, 7 and 9 to 13. The operator did not receive them as a question. On 2026-11-20, before the first push, the main session added the kept bytes of the last write to item 7. A test showed that a feed made in Studio had no written copy.
 - Bar: crosses modules. It changes the core remove, the move route, the feed list, the check, the Review sheet and the level rows. Without this record, an agent can keep ADR 0231 item 10 and let a release go out with no link on its artist page.
 - Changes: [ADR 0231](0231-a-new-release-writes-its-artist-page-and-the-files-of-a-restored-release.md) item 10, the write of a new release without its pages (items 3 and 4).
 - Changes: [ADR 0233](0233-each-add-form-finds-on-music-index-and-copies-the-found-feed.md) item 15, the remove of a release that was never written (item 10).
@@ -36,12 +36,12 @@ The operator did the desktop check of 9af319b on 2026-11-20. These findings need
 
 5. A written release that names a page of the collection in `podcast:publisher`, when the written file of that page does not name the release, has the finding "{page} does not list this release." on **Issues**. The reason is "Apps show the release below {page} only after a write of {page}." Its button is **Write {page}…**.
 6. **Write {page}…** adds the remote item of the release to the draft of the page, when the draft does not have it. Studio starts a draft of the page when it has none. The release does not change. Studio then opens Review of the page.
-7. Studio compares the release with the written file of the page: the copy in the library from the last write or read. A draft of the page does not end the finding, because the file host does not have it yet.
+7. Studio compares the release with the written file of the page: the copy in the library from the last write or read. A feed made in Studio has no release folder and no library copy. For such a feed, the collection keeps the bytes of its last write, and Studio uses them. A draft of the page does not end the finding, because the file host does not have it yet.
 8. The row of the release below that page shows the line "⚠ {page} does not list it yet".
 
 ### The Artist Name Of A Release Row (Finding 3)
 
-9. The feed list gives the artist name of each release: `itunes:author` of the draft, or else of the written file.
+9. The feed list gives the artist name of each release: `itunes:author` of the draft, or else of the written file of item 7.
 10. A release row below an artist page shows the line "Artist: {name}" when that name differs from the title of the artist page. Studio compares the two names with no change of case and with no space at the two ends. A row with the same name or with no name has no such line.
 
 ### The Remove Of A Release Clears A Link That Only A Draft Has (Finding 4)

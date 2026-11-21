@@ -254,6 +254,38 @@ pub fn link(
     Ok(())
 }
 
+/// Add a release to a publisher page without changing the release draft.
+///
+/// # Errors
+///
+/// Gives a [`PublisherError`] when either feed has invalid data or the page draft fails.
+pub fn list_on_page(
+    collection: &Collection,
+    publisher: FeedId,
+    release: FeedId,
+) -> Result<(), PublisherError> {
+    let publisher_row = check_publisher(collection, publisher)?;
+    let release_row = check_release(collection, release)?;
+    check_connector(&publisher_row)?;
+    let publisher_party = party(collection, &publisher_row)?;
+    let release_party = party(collection, &release_row)?;
+    check_named(&publisher_party, "publisher")?;
+    check_named(&release_party, "release")?;
+    let rel = rel_of(&roles(collection, publisher)?);
+    let link = RemoteItem {
+        medium: release_row.medium,
+        feed_guid: release_party.guid.clone(),
+        feed_url: release_party.url.clone(),
+        title: release_party.title.clone(),
+        rel: Some(rel),
+        ..RemoteItem::default()
+    };
+    pipeline::edit_draft(collection, publisher, |feed| {
+        upsert(&mut feed.remote_items, &release_party, link);
+    })?;
+    Ok(())
+}
+
 /// Remove the link between a publisher feed and a release from both
 /// drafts. A `podcast:publisher` with no item goes out of the release
 /// draft. A draft with no matching item is not changed.

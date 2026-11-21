@@ -1408,6 +1408,10 @@ fn set_connector_base_url(
 
 /// The feeds of the collection. Each row has its draft state and its cover
 /// image (ADR 0039 item 2, task 026a).
+#[expect(
+    clippy::too_many_lines,
+    reason = "Feed rows combine stored fields and derived feed values."
+)]
 pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
     blocking(shared, |w| {
         let expired = crate::temporary::expired_areas(w)?;
@@ -1431,6 +1435,13 @@ pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
         // The links of each feed give its destination (ADR 0085).
         let kept = w.collection.kept_levels()?;
         let catalogs = publisher::catalogs_with_kept(&feeds, &kept);
+        // A collection with no library folder still gives its list. Its
+        // rows then have no written copy (ADR 0234 items 5 and 9).
+        let library = if feeds.iter().any(|(row, _)| row.last_version.is_some()) {
+            w.library().ok()
+        } else {
+            None
+        };
         let mut rows = Vec::new();
         for ((row, feed), catalog) in feeds.iter().zip(catalogs) {
             let state = draft_state(w, row)?;
@@ -1443,6 +1454,23 @@ pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
             let mut value =
                 serde_json::to_value(row).map_err(|e| ApiError::internal(e.to_string()))?;
             value["draft_state"] = json!(state);
+            let written = if row.last_version.is_some() {
+                pipeline::written_copy(&w.collection, library.as_ref(), row)
+            } else {
+                None
+            };
+            value["author"] = json!(
+                feed.as_ref()
+                    .and_then(|feed| feed.author.clone())
+                    .or_else(|| written.as_ref().and_then(|feed| feed.author.clone()))
+            );
+            value["unlisted_by"] = json!(unlisted_pages(
+                &w.collection,
+                library.as_ref(),
+                row,
+                written.as_ref(),
+                &feeds
+            ));
             if row.medium.as_deref() == Some("music") {
                 let track_count = feed.as_ref().map_or(0, |model| model.items.len());
                 value["track_count"] = json!(track_count);
@@ -1517,6 +1545,69 @@ pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
         to_json(rows)
     })
     .await
+}
+
+/// The ids of the pages that the written release names and whose written
+/// copy does not list it (ADR 0234 items 5 and 7). A release that was never
+/// written gives none.
+pub(crate) fn unlisted_pages(
+    collection: &studio_core::collection::Collection,
+    library: Option<&studio_core::library::Library>,
+    release_row: &studio_core::collection::FeedRow,
+    release: Option<&Feed>,
+    feeds: &[(studio_core::collection::FeedRow, Option<Feed>)],
+) -> Vec<i64> {
+    let mut unlisted = Vec::new();
+    if !release_row
+        .medium
+        .as_deref()
+        .is_some_and(|medium| medium == "music" || medium == "musicL")
+        || release_row.last_version.is_none()
+    {
+        return unlisted;
+    }
+    let Some(publishers) = release.and_then(|feed| feed.publisher.as_ref()) else {
+        return unlisted;
+    };
+    let release_guid = release
+        .and_then(|feed| feed.podcast_guid.as_deref())
+        .or(release_row.podcast_guid.as_deref());
+    for page_row in feeds
+        .iter()
+        .map(|(page, _)| page)
+        .filter(|page| page.medium.as_deref() == Some("publisher"))
+    {
+        let names_page =
+            publishers
+                .remote_items
+                .iter()
+                .any(|item| match item.value.feed_guid.as_deref() {
+                    Some(guid) => page_row.podcast_guid.as_deref() == Some(guid),
+                    None => {
+                        item.value.feed_url.is_some() && item.value.feed_url == page_row.public_url
+                    }
+                });
+        if !names_page {
+            continue;
+        }
+        let Some(page) = pipeline::written_copy(collection, library, page_row) else {
+            continue;
+        };
+        let lists_release =
+            page.remote_items
+                .iter()
+                .any(|item| match item.value.feed_guid.as_deref() {
+                    Some(guid) => release_guid == Some(guid),
+                    None => {
+                        item.value.feed_url.is_some()
+                            && item.value.feed_url == release_row.public_url
+                    }
+                });
+        if !lists_release {
+            unlisted.push(page_row.id.0);
+        }
+    }
+    unlisted
 }
 
 /// The draft state of a feed: `none`, `new`, `changed` or `unchanged`.
@@ -3122,6 +3213,21 @@ pub(crate) async fn add_link(
         publisher::link(&w.collection, publisher_id, release_id)?;
         remove_shared_kept_levels(w)?;
         changed_json(w, &before)
+    })
+    .await
+}
+
+/// Add a release to a publisher page draft without changing the release.
+pub(crate) async fn list_release_on_page(
+    State(shared): State<Shared>,
+    Path((id, release)): Path<(i64, i64)>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let publisher_id = FeedId(id);
+        check_mediums(w, publisher_id, None)?;
+        ensure_draft(w, publisher_id)?;
+        publisher::list_on_page(&w.collection, publisher_id, FeedId(release))?;
+        Ok(Json(json!({ "page_id": publisher_id.0 })))
     })
     .await
 }
@@ -5908,7 +6014,15 @@ pub(crate) async fn move_release(
             .limited(body.what);
         apply_release_move(w, &hosts, feed_id, &plan, wait_days, body.replace)?;
         if plan.default_changes {
-            w.collection.keep_files_connector(feed_id)?;
+            let adds_operation = plan.feed_moves
+                || !plan.unwritten.is_empty()
+                || !plan.target_copies.is_empty()
+                || !plan.files.is_empty();
+            if adds_operation {
+                w.collection.keep_files_connector(feed_id)?;
+            } else {
+                w.collection.clear_files_connector_kept(feed_id)?;
+            }
             w.collection
                 .set_files_connector(feed_id, Some(plan.target))?;
         }

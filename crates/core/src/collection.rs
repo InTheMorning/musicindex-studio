@@ -711,6 +711,15 @@ CREATE TABLE kept_levels (
 ALTER TABLE change_set_feeds ADD COLUMN before_files_connector_id INTEGER;
 ALTER TABLE change_set_feeds ADD COLUMN before_files_connector_kept INTEGER;
 ",
+    r"
+UPDATE feeds SET files_connector_kept = NULL
+WHERE files_connector_kept IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM draft_operations WHERE draft_operations.feed_id = feeds.id)
+  AND NOT EXISTS (SELECT 1 FROM draft_feed_moves WHERE draft_feed_moves.feed_id = feeds.id);
+",
+    r"
+ALTER TABLE feed_writes ADD COLUMN written_xml BLOB;
+",
 ];
 
 /// `root` as a relative path under `data_dir`, when it is a folder inside
@@ -1976,6 +1985,38 @@ impl Collection {
         Ok(())
     }
 
+    /// Keep the bytes of the last write of a feed. A feed with no release
+    /// folder has no library copy, so these bytes are its written copy
+    /// (ADR 0234 item 7). Call it after [`Self::record_feed_write`].
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn record_written_xml(&self, feed: FeedId, bytes: &[u8]) -> Result<(), CollectionError> {
+        self.db.execute(
+            "UPDATE feed_writes SET written_xml = ?2 WHERE feed_id = ?1",
+            params![feed.0, bytes],
+        )?;
+        Ok(())
+    }
+
+    /// Give the bytes of the last write of a feed, when Studio kept them.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn written_xml(&self, feed: FeedId) -> Result<Option<Vec<u8>>, CollectionError> {
+        Ok(self
+            .db
+            .query_row(
+                "SELECT written_xml FROM feed_writes WHERE feed_id = ?1",
+                [feed.0],
+                |row| row.get::<_, Option<Vec<u8>>>(0),
+            )
+            .optional()?
+            .flatten())
+    }
+
     /// Give the last write of a feed.
     ///
     /// # Errors
@@ -3078,6 +3119,19 @@ impl Collection {
         self.db.execute(
             "UPDATE feeds SET files_connector_kept = \
              COALESCE(files_connector_kept, COALESCE(files_connector_id, 0)) WHERE id = ?1",
+            [id.0],
+        )?;
+        Ok(())
+    }
+
+    /// Clear the file host kept before a draft move.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn clear_files_connector_kept(&self, id: FeedId) -> Result<(), CollectionError> {
+        self.db.execute(
+            "UPDATE feeds SET files_connector_kept = NULL WHERE id = ?1",
             [id.0],
         )?;
         Ok(())
@@ -6613,6 +6667,40 @@ mod tests {
         );
         collection.remove_signing_plan(feed).unwrap();
         assert_eq!(collection.signing_plan(feed).unwrap(), None);
+    }
+
+    #[test]
+    fn migration_clears_kept_hosts_without_pending_move_operations() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("collection.sqlite");
+        let db = Connection::open(&path).unwrap();
+        let previous = migration_index("UPDATE feeds SET files_connector_kept = NULL");
+        for migration in &MIGRATIONS[..previous] {
+            db.execute_batch(migration).unwrap();
+        }
+        db.execute_batch("INSERT INTO connectors (id, kind, name, config, created_at) VALUES (1, 'local', 'Home', '{}', 0);
+            INSERT INTO feeds (id, files_connector_kept, created_at) VALUES (1, 1, 0), (2, 1, 0), (3, 1, 0);
+            INSERT INTO draft_operations (feed_id, kind, connector_id, path, added_at) VALUES (2, 'delete', 1, 'a.mp3', 0);
+            INSERT INTO draft_feed_moves (feed_id, connector_id, path, added_at) VALUES (3, 1, 'feed.xml', 0);")
+            .unwrap();
+        db.pragma_update(None, "user_version", i64::try_from(previous).unwrap())
+            .unwrap();
+        drop(db);
+
+        let collection = Collection::open(&path).unwrap();
+        let kept: Vec<Option<i64>> = (1..=3)
+            .map(|id| {
+                collection
+                    .db()
+                    .query_row(
+                        "SELECT files_connector_kept FROM feeds WHERE id = ?1",
+                        [id],
+                        |row| row.get(0),
+                    )
+                    .unwrap()
+            })
+            .collect();
+        assert_eq!(kept, [None, Some(1), Some(1)]);
     }
 
     #[test]

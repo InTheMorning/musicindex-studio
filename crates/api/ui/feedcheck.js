@@ -173,6 +173,11 @@ export function checkRows(check) {
     const rank = { stop: 0, warning: 1, notice: 2, question: 3 };
     return (rank[a.finding.level] ?? 1) - (rank[b.finding.level] ?? 1) || a.index - b.index;
   }).map(({ finding }) => {
+    if (finding.kind === 'unlisted_by_page') return {
+      key: findingKey(finding), level: LEVELS[finding.level] || finding.level,
+      warning: false, title: finding.title, reason: finding.reason,
+      button: `Write ${finding.page_title}…`, action: 'write-page', pageId: finding.page_id,
+    };
     if (finding.kind === 'copy_other_recipients') return {
       key: findingKey(finding), level: LEVELS[finding.level] || finding.level,
       warning: finding.level === 'warning', title: finding.title, reason: finding.reason,

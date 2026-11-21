@@ -39,7 +39,8 @@ export function alsoRows(also, diffs, off, releaseTitle) {
         id: page.id,
         title,
         diff: diffs[page.id],
-        checked: !(off && off.has(page.id)),
+        checked: true,
+        locked: true,
         label: `Also write ${title}`,
         // A label or hosting page gets its own title in the note.
         note: page.artist === false
@@ -52,6 +53,14 @@ export function alsoRows(also, diffs, off, releaseTitle) {
 // The rows with the check box on, in the order of the list.
 export function rowsToWrite(rows) {
   return rows.filter((row) => row.checked);
+}
+
+export function reviewRemoveLabel(draftState) {
+  return draftState === 'new' ? 'Remove from Collection…' : 'Discard the Draft';
+}
+
+export function discardFailureTitle() {
+  return 'Studio could not discard the draft.';
 }
 
 // The title of the error notice when the write of a page fails.

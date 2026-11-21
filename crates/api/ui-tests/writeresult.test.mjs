@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { writeResult, alsoRows, rowsToWrite, pageWriteFailed, writeInOrder } from '../ui/writeresult.js';
+import { writeResult, alsoRows, rowsToWrite, pageWriteFailed, writeInOrder, reviewRemoveLabel, discardFailureTitle } from '../ui/writeresult.js';
 
 test('a feed with a public address gives its written line and address', () => {
   assert.deepEqual(writeResult(
@@ -53,21 +53,29 @@ test('a linked page that Review wrote has no "also changed" line', () => {
 const also = [{ id: 7, title: 'Artist', artist: true }, { id: 8, title: 'Label', artist: false }];
 const diffs = { 7: { id: 'd7', changed: true }, 8: { id: 'd8', changed: true } };
 
-test('each page has a check box row, on at the start', () => {
+test('each page has a locked check box row, on at the start', () => {
   const rows = alsoRows(also, diffs, new Set(), 'Album');
   assert.deepEqual(rows.map((row) => [row.id, row.checked, row.label, row.note]), [
     [7, true, 'Also write Artist', 'Adds the link to Album on the artist page.'],
     [8, true, 'Also write Label', 'Adds the link to Album on Label.'],
   ]);
+  assert.ok(rows.every((row) => row.locked));
+  assert.deepEqual(rowsToWrite(rows).map((row) => row.id), [7, 8]);
 });
 
-test('a row with the check box off is not written, and a page with no diff has no row', () => {
+test('page check boxes stay on, and a page with no diff has no row', () => {
   const rows = alsoRows(also, { 7: diffs[7] }, new Set([7]), '');
-  assert.deepEqual(rows.map((row) => [row.id, row.checked]), [[7, false]]);
+  assert.deepEqual(rows.map((row) => [row.id, row.checked, row.locked]), [[7, true, true]]);
   assert.equal(rows[0].note, 'Adds the link to this release on the artist page.');
-  assert.deepEqual(rowsToWrite(rows), []);
-  assert.deepEqual(rowsToWrite(alsoRows(also, diffs, new Set([8]), 'Album')).map((row) => row.id), [7]);
+  assert.deepEqual(rowsToWrite(rows).map((row) => row.id), [7]);
+  assert.deepEqual(rowsToWrite(alsoRows(also, diffs, new Set([8]), 'Album')).map((row) => row.id), [7, 8]);
   assert.deepEqual(alsoRows(undefined, diffs, new Set(), 'Album'), []);
+});
+
+test('Review removes a new release and discards other drafts', () => {
+  assert.equal(reviewRemoveLabel('new'), 'Remove from Collection…');
+  assert.equal(reviewRemoveLabel('changed'), 'Discard the Draft');
+  assert.equal(discardFailureTitle(), 'Studio could not discard the draft.');
 });
 
 test('the release is written first and each page after it, in order', async () => {

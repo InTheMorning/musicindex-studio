@@ -7,7 +7,7 @@ import { UI_SCALES, SCALE_KEY, normalizeScale, measureWindowUnits } from './uisc
 import { LOCK_HINT, lockChoiceText } from './vaultlock.js';
 import { serverFilesRows, sizeText, SERVER_FILES_NOTE } from './assets.js';
 import { failedLine } from './failures.js';
-import { OPEN_MERGE, OPEN_FEED_MOVE, MoveAllSheet, AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, OUTSIDE_RECHECK, restoreDeletedFile, checkDeletedAgain, AnnounceChoice, UndoButtons, useUndoKeys, DeleteUndoBar } from './editor.js';
+import { OPEN_MERGE, OPEN_FEED_MOVE, MoveAllSheet, AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, OUTSIDE_RECHECK, restoreDeletedFile, checkDeletedAgain, AnnounceChoice, UndoButtons, useUndoKeys, DeleteUndoBar, removeFeedFromCollection } from './editor.js';
 import {
   recipientKey,
   outcomeText, blockedText, operationLine, nameOf, writableIds, firstOpenId, initialStatuses, refreshedStatuses, startWrite,
@@ -2205,16 +2205,7 @@ function ReadOnlyFeed({ feed, onChanged, onRemoved }) {
   const kind = feedKind(feed);
   const refresh = () => run(async () => onChanged(await api(`/feeds/${feed.id}/refresh`, { method: 'POST' })));
   const remove = async () => {
-    const name = feed.title || feed.path || 'this feed';
-    run(async () => {
-      const info = await api(`/feeds/${feed.id}/remove-info`);
-      if (!await askConfirm(CONFIRMS.removeFeed(name, info.pending))) return;
-      const result = await api(`/feeds/${feed.id}`, { method: 'DELETE' });
-      if (result.undoable) deleteUndo.record(undoNoticeText.feedRemoved(feed.title || 'Untitled feed'),
-        () => api(`/feeds/${feed.id}`, { method: 'DELETE' }));
-      else deleteUndo.clear();
-      onRemoved();
-    });
+    run(() => removeFeedFromCollection(feed, deleteUndo, onRemoved));
   };
   const glow = kindGlow(kind);
   return html`<div>
@@ -3733,7 +3724,9 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
                 <${ArtWithDot} dot=${row.dot}><${ImageThumb} url=${row.image} glow=${row.glow} className="releases-cover" always /><//>
                 <span class="releases-text">
                   <span class="title">${row.title}${changedFeeds.has(row.id) && html`<span class="change-mark"><span class="visually-hidden"> Changes in the library folder</span></span>`}</span>
+                  ${row.artistLine && html`<span class="sub">${row.artistLine}</span>`}
                   <span class="sub">${[row.typeLabel, row.countText, row.hidden ? 'Hidden from apps' : null, releases.view === 'rows' ? row.host : null].filter(Boolean).join(' · ')}</span>
+                  ${row.unlistedLine && html`<span class="sub">${row.unlistedLine}</span>`}
                   ${row.note && html`<span class="sub">${row.note}</span>`}
                   ${outsideMark(outside[row.id]) && html`<span class=${`sub outside-mark ${outsideMark(outside[row.id]).tone}`}><${Icon} name="alert" />${outsideMark(outside[row.id]).text}</span>`}
                   ${releases.view === 'rows' && html`<span class="sub">${row.draftLabel}</span>`}

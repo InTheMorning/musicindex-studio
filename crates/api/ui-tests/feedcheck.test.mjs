@@ -120,6 +120,15 @@ test('warning rows come first and the count includes them', () => {
   assert.equal(checkCount(check([finding('copy_other_recipients', null, { level: 'warning' })])), 1, owner);
 });
 
+test('a one-sided page link opens the page write action', () => {
+  const row = checkRows(check([finding('unlisted_by_page', null, {
+    title: 'HeyCitizen does not list this release.', page_id: 42, page_title: 'HeyCitizen',
+  })]))[0];
+  assert.equal(row.button, 'Write HeyCitizen…');
+  assert.equal(row.action, 'write-page');
+  assert.equal(row.pageId, 42);
+});
+
 test('stop findings come first and stop the write', () => {
   const rows = checkRows(check([
     finding('no_self_link', 'add_the_link'),

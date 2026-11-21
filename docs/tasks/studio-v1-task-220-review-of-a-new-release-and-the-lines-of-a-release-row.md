@@ -2,7 +2,7 @@
 
 Decision: [ADR 0234](../adr/0234-a-new-release-is-written-with-its-pages-and-a-one-sided-link-is-reported.md) items 1 to 3, 5, 6, 8 and 10.
 
-Status: Open.
+Status: Done.
 
 ## Problem
 
@@ -54,3 +54,40 @@ Human: none in this task.
 - `node` is not on the PATH. Use `tools/node`.
 - Do not make an architecture decision. Stop and report a question.
 - Write the section "Result" at the end of this file: each change with file and line, and each check with its result.
+
+## Result
+
+- `crates/api/ui/writeresult.js:32`: each page row starts checked and locked. `:58` selects the removal label and the discard error title.
+- `crates/api/ui/editor.js:1929`: one function removes a feed with the shared confirmation and undo. Review uses it for a new release at `:2189`.
+- `crates/api/ui/editor.js:2349`: Review locks each page check box and shows the new release note. Discard errors use the required title at `:2292`.
+- `crates/api/ui/editor.js:5129`: the page write action calls the API route, opens the page and opens Review.
+- `crates/api/ui/feedcheck.js:176`: `checkRows` gives the page write action and page ID.
+- `crates/api/ui/shell.js:742`: release rows give the artist name and the missing page link line.
+- `crates/api/ui/app.js:3727`: the release row shows the artist name above its kind and the missing link below it. `:2208` uses the shared remove function.
+- `crates/api/ui-tests/writeresult.test.mjs:56`, `feedcheck.test.mjs:123`, and `shell.test.mjs:721` cover the new models. `feeddelete.test.mjs:155` checks the changed Review button.
+- `docs/tasks/studio-v1-task-220-review-of-a-new-release-and-the-lines-of-a-release-row.md`: this Result records the work and checks.
+
+Checks:
+
+- `tools/node --test crates/api/ui-tests/*.test.mjs`: 945 tests pass.
+- Syntax checks pass for `.mjs` copies of `writeresult.js`, `feedcheck.js`, `shell.js`, `app.js` and `editor.js`.
+- `cargo build -p studio-desktop`: passes.
+- The STE checker reports 10 dictionary findings in this Result. They identify technical terms such as `Review`, `action` and `route`.
+- The screenshot harness captured the Releases page and the new release form. Its fit checks found no issue at 390 px or 761 px.
+- The visual check of the Review rows and the two release row lines remains open. The copied collection has no new release, differing artist name or unlisted page.
+- No human check was required. No Rust file was changed for this task.
+
+## Main Session Changes
+
+- `crates/api/ui/editor.js`: each open `DraftToolbar` answered the request to open Review, also the toolbar of a different feed. The toolbar now compares `event.detail.feedId` with its own feed. The action `write-page` sends `feedId: result.page_id`, and it tries for 3 seconds (60 tries) until the page opens Review.
+
+Main session checks, with the fixture `.studio-dev/v-207/data-220` and the steps `s43.json` and `s44.json` (screenshots `out43` and `out44`):
+
+- Review of a new release at 1100 px and 390 px: "Also write Demo Artist" is on and disabled, the text "A new release is written with its pages." is below the rows, and **Remove from Collection…** is in the place of **Discard the Draft**.
+- The level of Demo Artist at 1100 px: the row of Demo Single has "Artist: Matt Finlay" above the kind line and "⚠ Demo Artist does not list it yet" below it.
+- **Issues** of Demo Single has "Demo Artist does not list this release." with **Write Demo Artist…**. The button opens Review of Demo Artist with "Added: Demo Single".
+- `$edges()` gives no finding at 1100 px and at 390 px.
+
+Open:
+
+- At 390 px the level is the left panel. Its release rows show only the title, so the two lines of items 8 and 10 do not show on a phone. **Issues** of the release still shows the finding.

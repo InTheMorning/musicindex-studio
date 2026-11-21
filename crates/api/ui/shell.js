@@ -724,6 +724,7 @@ export function releasesList({ feeds, connectors, sort, view, reversed, marked, 
     const others = (feed.publisher_ids || []).filter((id) => id !== owner.id && !related.has(id)).map(titleOf).filter(Boolean);
     return others.length > 0 ? `Also on ${others.join(', ')}` : null;
   };
+  const artistLevel = owner && (owner.publisher_roles || []).includes('artist');
   const rows = filtered.map((feed) => ({
     id: feed.id,
     title: displayTitle(feed),
@@ -738,6 +739,10 @@ export function releasesList({ feeds, connectors, sort, view, reversed, marked, 
     hidden: feed.hidden === true,
     marked: feed.id === marked,
     note: noteOf(feed),
+    artistLine: artistLevel && typeof feed.author === 'string' && feed.author.trim().toLowerCase() !== displayTitle(owner).trim().toLowerCase()
+      ? `Artist: ${feed.author}` : null,
+    unlistedLine: owner && (feed.unlisted_by || []).includes(owner.id)
+      ? `⚠ ${displayTitle(owner)} does not list it yet` : null,
   }));
   const levelTile = head && head.id !== null ? {
     id: head.id,

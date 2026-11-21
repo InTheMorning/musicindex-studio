@@ -155,7 +155,7 @@ test('ADR 0036 item 13 refusedDelete gives warning rows', () => {
 test('ADR 0198 keeps the destructive review button first and guards the write', () => {
   const editor = readFileSync(new URL('../ui/editor.js', import.meta.url), 'utf8');
   const deleteStart = editor.indexOf('${deletion && diff && hasWork && !addressesBlocked && !choosing && html`<button class="button destructive"');
-  const cancel = editor.indexOf('deletion.cancel : \'Discard the Draft\'');
+  const cancel = editor.indexOf('deletion.cancel : reviewRemoveLabel(');
   const usual = editor.indexOf('${!deletion && diff && hasWork && !addressesBlocked && !choosing && html`<button class="button primary"');
   assert.ok(deleteStart >= 0 && cancel > deleteStart,
     'ADR 0198 items 2 and 3: put the guarded destructive delete before Cancel the Delete.');

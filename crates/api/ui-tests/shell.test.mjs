@@ -718,6 +718,22 @@ test('the level tile model puts the level feed before its releases (ADR 0181 ite
   assert.equal(list.nested, false, 'ADR 0228 item 19: the tiles view has no indent.');
 });
 
+test('artist release rows show a differing artist and a missing page link', () => {
+  const artist = { id: 90, title: 'HeyCitizen', medium: 'publisher', publisher_roles: ['artist'], release_ids: [91, 92, 93] };
+  const feeds = [artist,
+    { id: 91, title: 'Release A', medium: 'music', author: 'Matt Finlay', unlisted_by: [90] },
+    { id: 92, title: 'Release B', medium: 'music', author: 'heycitizen ' },
+    { id: 93, title: 'Release C', medium: 'music' },
+  ];
+  const rows = releasesList({ feeds, connectors: [], sort: 'order', view: 'rows', group: 90 }).rows;
+  assert.deepEqual(rows.map((row) => [row.artistLine, row.unlistedLine]), [
+    ['Artist: Matt Finlay', '⚠ HeyCitizen does not list it yet'],
+    [null, null],
+    [null, null],
+  ]);
+  assert.equal(releasesList({ feeds, connectors: [], sort: 'order', view: 'rows', group: 44 }).rows.some((row) => row.unlistedLine), false);
+});
+
 test('the release rows of a group have an indent below the level row (ADR 0228 item 19)', () => {
   const message = 'ADR 0228 item 19: the rows view of a group sets nested. Use releasesList of crates/api/ui/shell.js.';
   const owner = { ...labelA, draft_state: 'none' };

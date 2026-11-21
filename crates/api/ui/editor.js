@@ -50,7 +50,7 @@ import { MOVE_SCOPES, fileHostRows, planRows, stayRows, deleteLabel, deleteAllLa
 import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary, artworkPreview } from './artwork.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, addsAsTrackFile, refusedText, wrongKindText, replacedAddresses, selectedFacts, TRACK_FILES_ACCEPT } from './picker.js';
 import { deleteChoices, leftoverLine, deleteButtonEnabled, retireSteps, retireActions, retireBlockShown, domainLine, DELETE_POINTS, operationNote, refusedDelete } from './feeddelete.js';
-import { writeResult, alsoRows, rowsToWrite, pageWriteFailed, writeInOrder } from './writeresult.js';
+import { writeResult, alsoRows, rowsToWrite, pageWriteFailed, writeInOrder, reviewRemoveLabel, discardFailureTitle } from './writeresult.js';
 import { undoKey } from './undohistory.js';
 
 // A text where only each web address can break inside a word (musicindex ADR
@@ -1925,6 +1925,18 @@ export const ANNOUNCE_RELOAD = 'studio-announce-reload';
 // A page sends this window event to open the review sheet, for example after
 // "Go live". `DraftToolbar` listens to it.
 export const OPEN_REVIEW = 'studio-open-review';
+
+export async function removeFeedFromCollection(feed, deleteUndo, onRemoved) {
+  const name = feed.title || feed.path || 'this feed';
+  const info = await api(`/feeds/${feed.id}/remove-info`);
+  if (!await askConfirm(CONFIRMS.removeFeed(name, info.pending))) return false;
+  const result = await api(`/feeds/${feed.id}`, { method: 'DELETE' });
+  if (result.undoable) deleteUndo.record(undoNoticeText.feedRemoved(feed.title || 'Untitled feed'),
+    () => api(`/feeds/${feed.id}`, { method: 'DELETE' }));
+  else deleteUndo.clear();
+  await onRemoved?.();
+  return true;
+}
 // Opens the Review sheet on the merge of the hosted file (ADR 0150 item 4).
 export const OPEN_MERGE = 'studio-open-merge';
 export const OPEN_FEED_MOVE = 'studio-open-feed-move';
@@ -2003,6 +2015,8 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
   const [result, setResult] = useState(null);
   const [resultHostId, setResultHostId] = useState(null);
   const [selectedPage, setSelectedPage] = useState('');
+  const [discarding, setDiscarding] = useState(false);
+  const deleteUndo = useDeleteUndo();
   const resultTitle = useRef(null);
   useEffect(() => { if (result) resultTitle.current?.focus(); }, [result]);
   // A diff is for one draft. After a user edit, the diff is not current.
@@ -2013,11 +2027,11 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
   const checkLinks = async () => {
     try { setLinks(await api(`/feeds/${feedId}/link-check`)); } catch (_) { setLinks(null); }
   };
-  const examine = () => run(async () => {
+  const examine = () => { setDiscarding(false); return run(async () => {
     if (!(await draft.flush())) return;
     setDiff(await api(`/feeds/${feedId}/diff`));
     await checkLinks();
-  });
+  }); };
   const refreshDiff = async () => setDiff(await api(`/feeds/${feedId}/diff`));
   // The announcement choice of the footer (ADR 0205 item 19).
   const announce = useAnnounceChoice(refreshDiff);
@@ -2111,7 +2125,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
       setProgress(null);
     }
   };
-  const write = () => run(async () => {
+  const write = () => { setDiscarding(false); return run(async () => {
     const pageRows = rowsToWrite(alsoShown);
     const writeRelease = async () => {
       let feed;
@@ -2171,9 +2185,19 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
       }
       else ref.current.close();
     }
-  });
+  }); };
   const discard = async () => {
+    const feed = feeds.find((item) => item.id === feedId) || {};
+    if (reviewRemoveLabel(feed.draft_state) === 'Remove from Collection…') {
+      setDiscarding(false);
+      run(async () => {
+        const removed = await removeFeedFromCollection(feed, deleteUndo, onListChanged);
+        if (removed) onClose();
+      });
+      return;
+    }
     if (!await askConfirm(CONFIRMS.discardDraft())) return;
+    setDiscarding(true);
     run(async () => {
       await api(`/feeds/${feedId}/draft`, { method: 'DELETE' });
       setDiff(null);
@@ -2265,7 +2289,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
         ? null
         : signErrorText(error && error.code)
           ? html`<div class="notice error" role="alert"><strong>${signErrorText(error.code)}</strong></div>`
-          : html`<${ErrorNotice} error=${error} action=${isPublisher(feeds.find((f) => f.id === feedId) || {}) ? 'Studio could not write the page.' : 'Studio could not write the release.'} onRetry=${retry} />`;
+          : html`<${ErrorNotice} error=${error} action=${discarding ? discardFailureTitle() : isPublisher(feeds.find((f) => f.id === feedId) || {}) ? 'Studio could not write the page.' : 'Studio could not write the release.'} onRetry=${retry} />`;
   const hasWork = !pageRefusal && diff && (diff.changed || diff.operations.length > 0 || diff.blocked.length > 0 || !!diff.feed_move || diff.grants.length > 0);
   return html`<dialog ref=${ref} class="sheet" aria-labelledby="review-title" onClose=${onClose}>
     <header>
@@ -2322,11 +2346,12 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
         : !hasWork && !pageRefusal && html`<p>The draft is the same as the hosted file.</p>`)}
       ${diff && alsoShown.length > 0 && html`<div class="group also-write">
         ${alsoShown.map((row) => html`<div key=${row.id} class="also-write-row">
-          <label class="check"><input type="checkbox" checked=${row.checked} disabled=${busy}
+          <label class="check"><input type="checkbox" checked=${row.checked} disabled=${busy || row.locked}
             onChange=${(e) => toggleAlso(row.id, e.target.checked)} /><span>${row.label}</span></label>
           <p class="hint">${row.note}</p>
           ${row.diff.changed && html`<${DiffView} diff=${row.diff} />`}
         </div>`)}
+        <p class="hint">A new release is written with its pages.</p>
       </div>`}
       ${diff && html`<${ErrorNotice} error=${alsoError} action="Studio could not examine the artist page." />`}
       ${diff && html`<${HostOperations} diff=${diff} connectors=${connectors} onRemove=${removeOperation} onUndoMove=${undoMove} busy=${busy} fromConnectorId=${feedConnectorId} />`}
@@ -2376,7 +2401,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
       ${diff && hasWork && !addressesBlocked && !choosing && html`<${AnnounceFooterChoice} choice=${announce} skip=${announceSkipLine(diff)} />`}
       ${deletion && diff && hasWork && !addressesBlocked && !choosing && html`<button class="button destructive" type="button" disabled=${busy || waiting || needsSigner || streamRefusal || alsoPending || blocksWrite(links)} onClick=${write}>
         ${progress ? signProgressLabel(progress) : busy ? 'Writing…' : deletion.label}</button>`}
-      <button class=${`button${deletion ? '' : ' destructive'}`} type="button" disabled=${busy || (!deletion && !draft.changed)} onClick=${discard}>${deletion && deletion.cancel ? deletion.cancel : 'Discard the Draft'}</button>
+      <button class=${`button${deletion ? '' : ' destructive'}`} type="button" disabled=${busy || (!deletion && !draft.changed)} onClick=${discard}>${deletion && deletion.cancel ? deletion.cancel : reviewRemoveLabel((feeds.find((f) => f.id === feedId) || {}).draft_state)}</button>
       ${!deletion && diff && pageRefusal && html`<button class="button primary" type="button" disabled>${busy ? 'Writing…' : 'Write to the File Host'}</button>`}
       ${!deletion && diff && hasWork && !addressesBlocked && !choosing && html`<button class="button primary" type="button" disabled=${busy || waiting || needsSigner || streamRefusal || alsoPending || blocksWrite(links)} onClick=${write}>
         ${progress ? signProgressLabel(progress) : busy ? 'Writing…' : 'Write to the File Host'}</button>`}
@@ -2461,8 +2486,17 @@ export function DraftToolbar({ feedId, feedConnectorId, draft, onWritten, connec
     await onListChanged?.();
     setOpen('review');
   };
+  // A request for one feed opens only the Review of that feed. The page of a
+  // different feed can still be open when the request comes.
+  const feedIdRef = useRef(feedId);
+  feedIdRef.current = feedId;
   useEffect(() => {
-    const openReview = () => setOpen('review');
+    const openReview = (event) => {
+      const wanted = event.detail?.feedId;
+      if (wanted != null && wanted !== feedIdRef.current) return;
+      setOpen('review');
+      event.detail?.opened?.();
+    };
     window.addEventListener(OPEN_REVIEW, openReview);
     const openMerge = () => { setOpen('review'); setMergeRequest((n) => n + 1); };
     window.addEventListener(OPEN_MERGE, openMerge);
@@ -2548,18 +2582,7 @@ function FeedFacts({ feed, draft, onRemoved, onListChanged }) {
   const announcementText = announcements
     ? announceStatus(announcements, (seconds) => new Date(seconds * 1000).toLocaleString())
     : 'Not loaded yet.';
-  const remove = async () => {
-    const name = feed.title || feed.path || 'this feed';
-    run(async () => {
-      const info = await api(`/feeds/${feed.id}/remove-info`);
-      if (!await askConfirm(CONFIRMS.removeFeed(name, info.pending))) return;
-      const result = await api(`/feeds/${feed.id}`, { method: 'DELETE' });
-      if (result.undoable) deleteUndo.record(undoNoticeText.feedRemoved(feed.title || 'Untitled feed'),
-        () => api(`/feeds/${feed.id}`, { method: 'DELETE' }));
-      else deleteUndo.clear();
-      onRemoved();
-    });
-  };
+  const remove = () => run(() => removeFeedFromCollection(feed, deleteUndo, onRemoved));
   const tag = newFeedAddress(feed);
   // "Remove from Collection" is a row of its own below the facts, so that it
   // shows with the facts closed.
@@ -5091,6 +5114,7 @@ function FilesPage({ feed, connectors, onOpsChanged, reloadKey, differences, onR
 // the new draft in the editor. The reads run when the page opens and at
 // "Check Again".
 function CheckPage({ feed, model, check, go, onOpenFinding }) {
+  const { busy: actionBusy, error: actionError, run } = useAction();
   // The row whose sheet is open (ADR 0175 items 5 and 8), or null.
   const [sheet, setSheet] = useState(null);
   const [copied, setCopied] = useState(false);
@@ -5131,6 +5155,17 @@ function CheckPage({ feed, model, check, go, onOpenFinding }) {
     else if (row.action === 'open-language') openLanguage();
     else if (row.action === 'open-pages' || OPEN_ACTIONS.includes(row.action)) onOpenFinding(row);
     else if (row.action === 'show-copy' || row.action === 'show-ways') { setCopied(false); setSheet(row); }
+    else if (row.action === 'write-page') run(async () => {
+      const result = await api(`/feeds/${row.pageId}/links/${feed.id}/list`, { method: 'POST' });
+      go({ name: 'feed', id: result.page_id });
+      let tries = 0;
+      const openReview = () => {
+        let opened = false;
+        window.dispatchEvent(new CustomEvent(OPEN_REVIEW, { detail: { feedId: result.page_id, opened: () => { opened = true; } } }));
+        if (!opened && tries++ < 60) setTimeout(openReview, 50);
+      };
+      setTimeout(openReview, 50);
+    });
   };
   const closeSheet = () => setSheet(null);
   const copyReport = (report) => {
@@ -5138,7 +5173,8 @@ function CheckPage({ feed, model, check, go, onOpenFinding }) {
   };
   const again = html`<div class="actions"><button class="button" type="button" disabled=${busy}
     onClick=${() => check.readAgain()}>${check.reading ? 'Checking…' : 'Check Again'}</button></div>`;
-  return html`<${ErrorNotice} error=${check.error} />
+  return html`<${ErrorNotice} error=${actionError} action="Studio could not add the release to the page." />
+    <${ErrorNotice} error=${check.error} />
     ${texts.readOnly && html`<p class="hint">${texts.readOnly}</p>`}
     ${texts.grant && html`<div class="notice" role="status">${texts.grant}</div>`}
     ${texts.lead && html`<p class="hint">${texts.lead}</p>`}
@@ -5153,7 +5189,7 @@ function CheckPage({ feed, model, check, go, onOpenFinding }) {
             <span class="sub">${breakableText(row.reason)}</span>
             ${check.refused && check.refused.key === row.key && html`<span class="sub field-error" role="alert">${check.refused.message}</span>`}
           </span>
-          ${row.button && html`<button class="button" type="button" disabled=${busy}
+          ${row.button && html`<button class="button" type="button" disabled=${busy || actionBusy}
             onClick=${() => press(row)}>${check.repairing === row.key ? 'Working…' : row.button}</button>`}
         </div>`)}
       </div>`}

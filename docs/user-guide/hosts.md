@@ -121,7 +121,7 @@ Studio then shows "Studio can now write N feeds through" the file host.
 Those feeds are no longer read-only.
 
 Studio can also list feed files in the folder that are not in your collection.
-Select the feeds and select **Add N Feeds**.
+Select the feeds, then select **Add N to Studio**, where N is the number selected.
 
 ## Change or remove a file host
 
@@ -139,8 +139,10 @@ Studio shows "Feeds use this file host." Move those feeds to a different file ho
 
 ## Studio settings
 
-The settings of Studio are not on the File hosts page. Select **Settings** at the bottom of the left panel. The Settings page has these panels:
+The settings of Studio are not on the File hosts page. Select **Settings** at the bottom of the left panel. The Settings page has these tabs:
 
+- **General**: the lock, the window and the version.
 - **Account**, on a server only. See [Your account on a server](account.md).
-- **Connected apps**. See [Connected apps and show grants](connected-apps.md).
-- **Library**. On the desktop, it shows the library folder. You can set the largest download and the free space to keep, in MB. Select **Save the Limits**.
+- **Nostr**: the **Nostr search relay** for a name search.
+- **Apps**. See [Connected apps and show grants](connected-apps.md).
+- **Data**. The section **Library** has the largest download and the free space to keep, in MB. Change a limit, then select **Save**.

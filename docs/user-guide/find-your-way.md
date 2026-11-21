@@ -7,6 +7,7 @@ Studio has a left panel with these entries:
 - **Releases**
 - Each hosting, label or artist feed that has no feed above it, in its role heading, with the number of its releases
 - **Not linked**, when a release has no artist or label
+- **People** (at the bottom)
 - **File hosts** (at the bottom)
 - **Settings** (at the bottom)
 - **Lock Studio** (at the bottom, when the vault is open)
@@ -25,19 +26,18 @@ The row also tells you the draft state:
 - "Saved, not written"
 - "No changes"
 
-To open a release, select its row.
+Use **Search releases** to find a release by its title or its artist or label page. To open a release, select its row.
 
 ### Sort and view
 
-- Select the sort button, then select **Newest** or **A to Z**. With **A to Z**, a row of letters lets you jump to a group.
+- Select the sort button, then select **Newest**, **Oldest**, **A to Z** or **Z to A**. With **A to Z** or **Z to A**, a row of letters lets you jump to a group.
 - Select **Rows** or **Tiles** to change the view.
 
 Studio remembers the sort and the view in the address of the page.
 
 ### An empty collection
 
-If you have no feeds, the page shows "No releases yet."
-Select **＋ Add**. See [Add feeds that you already have](add-feeds.md).
+A collection with no feeds opens the Welcome page.
 
 ## The levels of your artists and labels
 
@@ -63,10 +63,10 @@ When you open a release from a level, the first row of its outline names that le
 The page on the right shows the releases of the feed that you selected.
 The line below the title shows each role of the feed.
 
-The sort is **Feed Order** at first. This is the sequence of the releases in the feed. You can also select **Newest** or **A to Z**.
+The sort is **Page Order** at first. This is the sequence of the releases in the feed. You can also select **Page Order, Reversed**, **Newest**, **Oldest**, **A to Z** or **Z to A**.
 
 A release of two feeds shows on the page of each feed. The row names the other feed, for example "Also on Some Label". The row does not name a feed above or below the feed of the page.
-Select **Open the Feed** to edit the artist feed or the label feed.
+Select **Artist Page** or **Label Page** to edit that page.
 
 **Not linked** lists the releases that have no artist or label in your collection.
 
@@ -83,9 +83,9 @@ An artist or label feed has its title and its releases. A playlist has its title
 
 Select the title to open the page of the release. The page has tabs:
 
-- An album has **Album**, **Live Shows**, **Value Routes**, **Credits**, **Files** and **Settings**.
+- A music release has **Release**, **Live Shows**, **Value Routes**, **Credits**, **Files**, **Issues** and **Settings**.
 - An artist or label feed has **Artist** or **Label**, **Value Routes**, **Credits**, **Files** and **Settings**.
-- A playlist has **Playlist**, **Tracks**, **Value Routes**, **Files** and **Settings**.
+- A playlist has **Playlist**, **Tracks**, **Value Routes**, **Files**, **Issues** and **Settings**.
 
 In a narrow window, one menu takes the place of the tabs. A track page has no tabs.
 
@@ -94,7 +94,7 @@ Select **Releases** at the top of the outline to go back to the list.
 ## The toolbar
 
 For an editable feed, the toolbar stays at the top of the page.
-It shows the draft state, the button **Versions** and the button **Review**.
+It shows the draft state, the buttons **Undo** and **Redo**, the button **Versions** and the button **Review**.
 
 | Draft status | Meaning |
 | --- | --- |
@@ -113,8 +113,8 @@ They move through the pages that you opened.
 
 When the window is 760 pixels wide or less, Studio shows one page at a time. It opens on **Releases**.
 Select the back button to go to the first page.
-The first page lists **Releases**, the top artists and labels, **File hosts**, **Settings** and **Lock Studio**. On a server with a locked vault, it shows **Unlock Studio**, not **Lock Studio**.
-When you open a release, you see its outline first. Select the title to open the page of the release, then use the menu to change the page.
+The first page lists **Releases**, the top artists and labels, **People**, **File hosts**, **Settings** and **Lock Studio**. On a server with a locked vault, it shows **Unlock Studio**, not **Lock Studio**.
+On a phone, select a release to open its page directly. Select **‹ Overview** to open its outline.
 Use the back button to go back.
 
 ## Changes in the library folder

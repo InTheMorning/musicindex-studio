@@ -5,6 +5,7 @@
 - Owner: operator
 - Accepted: 2026-11-12 by the operator, through the questionnaire. The operator selected the quick start with the installer, and no section "Contribute".
 - Technical choices: items 4, 7 and 8 are choices of the planning model.
+- Changed by: [ADR 0237](0237-the-readme-shows-a-few-screenshots-in-the-dark-theme.md). Item 4: one to four screenshots in the dark theme, and a section "See it" after the quick start.
 - Changes: the rule in `AGENTS.md` that `README.md` holds only links to `docs/user-guide/`. That rule named the global documentation rules as its owner, but no global rule has that text.
 - Source: P1 of the [research note on the README](../plans/research-readme-pilot-request.md), P1. It applies the README contract of the research repository.
 

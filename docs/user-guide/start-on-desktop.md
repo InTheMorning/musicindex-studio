@@ -1,7 +1,7 @@
 # Start Studio on your computer
 
 This page is for the desktop app only.
-The desktop app runs on your computer and opens in your web browser.
+The desktop app opens Studio in its own window. The program `studio-desktop` opens Studio in your web browser.
 
 On a server, you do not start Studio. You open the address of the server and sign in.
 See [Sign in to a Studio server](sign-in.md).
@@ -53,7 +53,7 @@ The app uses the same data folder as `studio-desktop`, and it needs no token fro
 Links to other web sites open in your web browser.
 A download goes to your Downloads folder, and the app shows the name of the file.
 
-The first time that you close the window, Studio asks what to do. Select **Keep in Tray** or **Quit on Close**. To change this later, select **Settings** and find **When I close the window**.
+The first time that you close the window, Studio asks what to do. Select **Keep in Tray** or **Quit on Close**. To change this later, open **Settings**, then **General**. Change **When I close the window**, then select **Save**.
 A connected app can only write while Studio runs.
 If your desktop has no tray, closing the window quits Studio. On i3, run a tray bridge such as `snixembed` to show the icon.
 
@@ -124,12 +124,13 @@ See [Manage the files of a release](release-files.md).
 Studio can make one file with your feeds, drafts, versions, people and vault.
 A person who has this file can read your feeds, drafts, versions and People list. Your passwords and keys stay locked in your vault. Keep this file private.
 
-1. Select **Settings** and find **Move Studio**.
-2. Select **Export Studio**.
-3. Read the facts. Clear **Include the audio and images** to make a smaller file.
-4. Select **Export Studio**, and keep the file that your browser downloads.
+1. Open **Settings**, then **Data**. In **Collections**, select **Actions** for the collection, then **Export…**.
+2. Read the facts. Clear **Include the audio and images** to make a smaller file.
+3. Select **Export Collection**, and keep the file that Studio downloads.
 
-To import a file in the app, open **Settings**, then **Collections**, and select **Import an Account File…**. Studio makes a new collection and opens it. With `studio-desktop`, use `--data-dir` with a new folder.
+With `studio-desktop`, the tab **Data** has the section **Move Studio**. Select **Export Studio** there.
+
+To import a file in the app, open **Settings**, then **Data**, then **Collections**, and select **Import an Account File…**. Studio makes a new collection and opens it. With `studio-desktop`, use `--data-dir` with a new folder.
 An import is possible only while the collection has no feed. It cannot replace data.
 
 1. Open **Releases**. The page is empty.
@@ -146,15 +147,15 @@ If the collection has a feed, Studio shows "This collection has feeds. Import in
 
 ## Collections
 
-The desktop app can keep many collections. Open **Settings**, then **Collections**.
+The desktop app can keep many collections. Open **Settings**, then **Data**, then **Collections**.
 
 - **New Collection…** makes an empty collection, with its own vault and its own passphrase.
-- **Copy This Collection…** makes a copy with the same file hosts and the same passphrase. A write from the copy changes the real feed. Use a copy with care.
+- **Copy…** makes a copy with the same file hosts and the same passphrase. Select **Actions** for the open collection, then **Copy…**. A write from the copy changes the real feed. Use a copy with care.
 - **Import an Account File…** makes a new collection and opens it. Select **Import an Account** on its first page.
 - **Open** restarts Studio on that collection. If a write runs, Studio asks first, as **Quit** does. The vault of the new collection starts locked.
-- **Delete…** removes the local files of a collection. Nothing changes on a file host. You cannot delete the main collection or the open collection.
+- **Delete…** removes the local files of a collection. Nothing changes on a file host. You cannot remove the open collection. You can remove the main collection when a different collection is open.
 
-Only the open collection runs. A connected app can write only to it, and its queued announcements wait until it opens. When the open collection is not the main collection, the left panel shows its name.
+Only the open collection runs. A connected app can write only to it, and its queued announcements wait until it opens. When more than one collection exists, the left panel shows the open collection name.
 
 ## Stop Studio
 

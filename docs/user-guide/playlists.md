@@ -7,12 +7,11 @@ Studio keeps only the links to the tracks. It does not copy the audio.
 
 You need a file host with a public address. See [Connect a file host](hosts.md).
 
-1. Select **Releases** in the left panel. Then select **＋ Add a Feed**.
-2. On the page **Add feeds**, select **Playlist** in the group **Make a new feed**. A sheet opens.
-3. Select the file host in **File host** if you have more than one.
-4. Type the name in **Playlist name**.
-5. Type the author in **Author**.
-6. Select **Make the Playlist**.
+1. On **Releases**, select **＋ Add**, then select **Playlist**.
+2. Select the file host in **File host** if you have more than one.
+3. Type the name in **Playlist name**.
+4. Type the author in **Author**.
+5. Select **Make the Playlist**.
 
 Studio gives the feed file from the name. To change it, open the row **Feed file**.
 
@@ -23,10 +22,11 @@ Write it to make the file. See [Review and write your changes](review-and-write.
 
 A playlist has these tabs:
 
-- **Playlist**. Fields: **Title**, **Author**, **Description**, **Cover image address** (with **Choose…**), **Website** and **Language**. **Feed facts** is also on this page.
+- **Playlist**. Fields: **Title**, **Author**, **Description**, **Website** and **Feed facts**. Open **Artwork** to change **Cover image address**. Open **Settings** to change **Language**.
 - **Tracks**
 - **Value Routes**. See [Value routes](value-routes.md).
 - **Files**. See [Manage the files of a release](release-files.md).
+- **Issues**. Read the findings for the feed.
 - **Settings**.
 
 ## Add tracks

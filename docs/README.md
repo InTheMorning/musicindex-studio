@@ -212,6 +212,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0234: A new release is written with its pages, and a one-sided link is reported](adr/0234-a-new-release-is-written-with-its-pages-and-a-one-sided-link-is-reported.md)
 - [ADR 0235: The desktop app can open the vault from the keyring of the computer](adr/0235-the-desktop-app-can-open-the-vault-from-the-keyring-of-the-computer.md)
 - [ADR 0236: The release notes are for testers, and the operator checks are in a review file](adr/0236-the-release-notes-are-for-testers-and-the-operator-checks-are-in-a-review-file.md)
+- [ADR 0237: The README shows a few screenshots in the dark theme](adr/0237-the-readme-shows-a-few-screenshots-in-the-dark-theme.md)
 
 ## Plans
 

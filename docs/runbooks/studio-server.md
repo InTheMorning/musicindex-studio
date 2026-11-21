@@ -163,7 +163,7 @@ The server has these limits:
 - A sensitive account change needs an unlock in the last 5 minutes. The server gives 401 `unlock_required` after that time, and the UI asks the user to unlock. A new passphrase and the removal of a sign-in method end each other session of the account.
 - A wait of 10 seconds for an Argon2id permit. After that, a request gets 503 `busy`.
 - 4 pending NIP-46 connections for each client address.
-- 60 requests for each connected app in each minute, and 20 unknown app tokens for each client address in each hour.
+- 60 requests for each connected app in each minute, and 20 requests for each client address in each hour that have an unknown app key, an incorrect signature or an incorrect pairing code.
 - The storage limit of each user folder. An upload or a download over the limit gets 507 `storage_full`.
 
 The counters are in memory. A restart clears them.
@@ -174,10 +174,10 @@ With Docker, the data folder is the volume `studio-data`, which the container mo
 
 The data folder has this content:
 
-- `server.sqlite`: the accounts, the sessions, the invite codes, the challenges, the passkeys and the index of the app tokens. It holds only the SHA-256 of each token and of each code.
+- `server.sqlite`: the accounts, the sessions, the invite codes, the challenges, the passkeys, the public key of each connected app and the SHA-256 of each pairing code. It holds only the SHA-256 of each token and of each code.
 - `users/<folder>/`: one folder for each account. It has `collection.sqlite`, `vault.json`, `grants/`, `library/` and `incoming/`.
 
-The vault files are encrypted, and no file holds a plain secret. But each file in `grants/` opens with the token of a connected app. A copy of the disk together with an app token gives the host secret of an active grant (ADR 0058). Keep the backups as safe as the server.
+The vault files are encrypted, and no file holds a plain secret. Each file in `grants/` opens with its grant key. The server keeps that key encrypted for the public key of the connected app. A copy of the disk together with the private key of a connected app gives the host secret of an active grant (ADR 0058). Keep the backups as safe as the server.
 
 To make a backup while the server runs, copy each SQLite file with the SQLite backup command, and copy the other files after it:
 

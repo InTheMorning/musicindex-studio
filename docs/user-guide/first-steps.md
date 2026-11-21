@@ -1,6 +1,6 @@
 # Start your artist page or label page
 
-Studio shows the page **Welcome to Studio** when your collection has no release.
+Studio shows the page **Welcome to Studio** when your collection has no feed.
 Use this page to start your first artist page or label page.
 Studio shows the same page on a computer and on a server.
 
@@ -16,8 +16,8 @@ Select a row on the Welcome page.
 
 1. Type your name in **Artist name**. Select **Continue**.
 2. Select the file host that Studio uses for your files. Step 2 always shows.
-   - On a computer, the first row is **Folder on this computer**. It is selected at the start. Studio starts with the folder `~/musicindex/pages`. Select **Continue**. The public address of the folder is optional.
-   - On a server, the first row is **Try it here (temporary)**. It is selected at the start. Studio keeps your files for 7 days. Select **Continue**.
+   - On a computer, the first row is **Folder on this computer**. It is selected at the start. Studio starts with the folder `~/musicindex/pages`. The public address of the folder is optional.
+   - On a server, the first row is **Try it here (temporary)**. It is selected at the start. Studio keeps your files for 7 days.
    - For a different type of file host, select its row. Fill in its fields. Studio adds the file host.
 3. Studio makes the draft of your artist page and opens it.
 
@@ -88,5 +88,4 @@ An account has one temporary area. To make a new area, remove the expired area i
 
 ## Move from a different server
 
-Select **Import an Account** below the rows of the Welcome page.
-Use this import only when you moved your account from a different server.
+On the desktop, select **Import an Account** below the Welcome rows. On a server, import when you make the account. Use this import only when you moved your account from a different server.

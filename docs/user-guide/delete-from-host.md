@@ -5,11 +5,11 @@ Studio cannot examine Podcast Index. The entry can keep its last payment recipie
 
 ## Open the options
 
-1. Open the feed. Go to the section **Feed** on the album page.
-2. Select **Delete from File Host…**. A sheet opens with three options:
-   - **Move It to a Different File Host** opens the move sheet.
-   - **Retire It** hides the feed from apps in the draft. This is the recommended option.
-   - **Delete the File Only** opens the delete sheet.
+1. Open the feed. Go to the section **Feed** on the release page.
+2. Select **Delete from File Host…**. A sheet opens.
+   - Select **Put the feed on a different file host** to move it.
+   - Select **Take the feed out of the apps** to retire it.
+   - **Remove the file** shows only when Studio confirms that removal can proceed.
 
 ## Retire the feed
 
@@ -20,7 +20,7 @@ Keep the feed address after you remove the file. A different address does not gi
 2. Select **Check Again** to read the current answer from Music Index.
 3. When Music Index removes the entry, select **Delete the File**.
 
-Before Music Index removes the entry, you can select **Delete Anyway**. Select **Stop Retiring** to turn off the hide switch in the draft.
+Wait until Studio confirms removal before you select **Delete the File**. Select **Stop Retiring** to turn off the hide switch in the draft.
 Review and write that change through the usual write flow.
 
 ## Delete the file
@@ -35,4 +35,4 @@ Select **Delete** to open Review. Examine the diff and write it to remove the fi
 Select **Cancel**, close the sheet, or press Escape to discard the delete draft.
 
 After the write, Studio keeps the feed in the collection as read-only.
-Use its restore button to write the last copy to the same address.
+Select **Put the File Back**, examine Review, then write the draft to put the file back.

@@ -59,10 +59,11 @@ To go back to the files on your computer, select **Choose Files from This Comput
 Select a track in the outline or on the album page.
 The track page has these sections:
 
-- **Track**. Fields: **Title**, **Description** and **Publication date**. The duration is in **Properties**. Some apps sort the tracks by the publication date. Select the date and the time with the picker of your system, in your local time. Type the duration as minutes and seconds, for example `4:21`, or as hours, minutes and seconds, for example `1:02:03`.
-- **Audio file**. The field **Audio file address** with **Choose…**, a player and the disclosure **Properties**. Alternative files show as lines with **Remove**.
+- **Track**. Fields: **Title** and **Description**. The audio address, player, **Properties** and **Artwork** are here.
+- **Credits**. Select **Use the album credits** or **Credits for this track**.
+- **Lyrics**. Select **Add a lyrics file**.
 - **Value routes**. See [Value routes](value-routes.md).
-- **More**. **Track image** sets an image for this track. Use **Choose…** to pick the image file. **Identity** shows the track number and the track GUID. Studio gives a GUID when it saves a new track.
+- **More**. **Publication date**, **Explicit** and **Identity** are here. The duration is in **Properties**. Select the date and time with your system picker, in your local time. Type the duration in minutes and seconds, for example `4:21`, or in hours, minutes and seconds, for example `1:02:03`. **Identity** shows the track number and GUID. Studio gives a GUID when it saves a new track.
   - **Disc** is in **Identity**, with the mark **Experimental**. Studio writes the disc as `podcast:season`. The Podcasting 2.0 namespace defines that element for the seasons of a podcast, so apps can show it as a season.
 
 The two arrow buttons in the header open the track before and the track after this one.
@@ -110,4 +111,4 @@ Each track has a position menu. Select a number, and the track moves to that pos
 
 **Remove the Track** does not ask you to confirm.
 It removes the track from the draft.
-To get the track back, go back to an earlier version, or use **Discard the Draft** to remove all changes that you did not write.
+Use **Undo** in the toolbar to put the removed track back in the draft.

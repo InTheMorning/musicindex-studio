@@ -1,8 +1,7 @@
 # Passphrase, unlock and lock
 
 The vault holds your secrets. Examples are the access key of a bucket and the private key of an SFTP login.
-Only your passphrase opens the vault.
-Studio cannot open it for you.
+On a computer, your passphrase opens the vault. You can also set Studio to unlock it from the keyring of this computer. On a server, your account methods can unlock the vault.
 
 ## When Studio makes the vault
 
@@ -38,16 +37,17 @@ If you chose a recovery key, Studio shows it one time only.
 2. Select the check box "I wrote down the recovery key in a safe place".
 3. Select **Continue**.
 
-On the desktop, the Unlock page asks for the passphrase only.
-Keep your passphrase safe.
-On a server, you can sign in with the recovery key. See [Sign in to a Studio server](sign-in.md).
+On the desktop, the Unlock page asks for your passphrase. If you set **Unlock on this computer**, Studio can use the computer keyring at startup. On a server, sign-in with a recovery key opens the vault. See [Sign in to a Studio server](sign-in.md).
 
 ## Unlock Studio on the desktop
 
-When a vault exists, Studio asks for the passphrase each time that it starts.
+Studio asks for your passphrase unless **Unlock on this computer** opens the vault from the computer keyring.
 
-1. Type the passphrase in the field **Passphrase**.
-2. Select **Unlock**.
+1. Open **Settings**, then **General**, then **Lock**.
+2. Set **At start** to **Unlock on this computer**.
+3. Select **Save**.
+
+To unlock with your passphrase, type it in **Passphrase**, then select **Unlock**.
 
 If the passphrase is incorrect, Studio shows "The passphrase is not correct."
 
@@ -58,7 +58,7 @@ On a narrow window, it is at the bottom of the first page.
 The button shows only when the vault is open.
 
 On the desktop, the Unlock page then opens.
-To lock the vault by itself, select a time at **Settings**, **Lock Studio after**. The start value on the desktop is **Never**. When Studio then needs a key, it asks for the passphrase.
+To lock the vault by itself, open **Settings**, then **General**, then **Lock**. Change **Lock Studio after**, then select **Save**. The start value on the desktop is **Never**. When Studio then needs a key, it asks for your passphrase.
 
 ## The vault on a server
 
@@ -70,7 +70,7 @@ The server locks the vault in these cases:
 
 - After the last use of a secret, when the time at **Settings**, **Lock Studio after** is over. The start value is 10 minutes. The operator of the server sets the longest time.
 - When you select **Lock Studio**.
-- When you sign out, or when your last session ends.
+- When the last session of your account ends, also after **Sign Out**.
 - When the server stops.
 
 When the vault is locked, the left panel shows **Unlock Studio**, not **Lock Studio**.

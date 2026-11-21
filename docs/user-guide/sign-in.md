@@ -38,7 +38,7 @@ Select one of these methods on the page **Sign in**:
 | --- | --- |
 | Email and passphrase | Type them in **Email address** and **Passphrase**. Then select **Sign In**. |
 | Signer extension | Select **Sign In with a Signer Extension**. Your signer asks you to sign the request. |
-| Passkey | Select **Sign In with a Passkey**. First add a passkey in the Account panel. See [Your account on a server](account.md). |
+| Passkey | Select **Sign In with a Passkey**. First open **Settings**, then **Account**, and select **Add a Passkey**. See [Your account on a server](account.md). |
 | Remote signer | Select **Sign In with Amber or a Bunker**. See [Connect a remote signer](#connect-a-remote-signer). |
 
 A sign-in with the passphrase or a passkey also opens the vault.
@@ -86,7 +86,7 @@ You must add a method before you can do other work:
 | "The account or the recovery key is not correct." | Examine the account name and the key. |
 | "Another account has this email address." | Sign in with that account, or use a different address. |
 | "Sign-up needs an invite code that nobody used." | Get a new code from the operator. |
-| "Too many sign-in attempts. Try again later." | Wait. The server permits 10 sign-ins that are not correct for each account in each hour. |
+| "Too many sign-in attempts. Try again later." | Wait. In each hour, the server permits 10 incorrect sign-ins for one account from one address, 100 for one account and 30 from one address. |
 | "The server is busy. Try again in a short time." | Try again after some seconds. |
 | "This passkey manager cannot open the vault. Use iCloud Keychain or Google Password Manager, or a different method." | Use a different passkey manager or a different method. |
 | "The passkey request was cancelled or timed out. Try again." | Try again, and approve the request on your device. |

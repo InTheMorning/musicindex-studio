@@ -3,7 +3,7 @@
 This page is for Studio on a server.
 The desktop app has no account.
 
-Select **Settings** at the bottom of the left panel. The panel **Account** is on the Settings page.
+Select **Settings**, then select the **Account** tab.
 
 ## What the panel shows
 
@@ -89,7 +89,7 @@ The notice stays until you add a passkey or select **Close**.
 ## Sign out
 
 Select **Sign Out**.
-Studio locks the vault and shows the page **Sign in**.
+Studio ends this session and shows **Sign in**. It locks the vault when the account has no session left.
 Your drafts stay on the server.
 
 ## Delete the account

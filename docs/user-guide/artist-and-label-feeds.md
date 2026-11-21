@@ -11,14 +11,13 @@ When Studio finds the roles in the feed, the dot is hollow until you select the 
 
 ## Make an artist feed or a label feed
 
-You need a file host with a public address. See [Connect a file host](hosts.md).
+You need a file host. Without a public address, Studio gives the feed a placeholder GUID. See [Connect a file host](hosts.md).
 
-1. Select **Releases** in the left panel. Then select **＋ Add a Feed**.
-2. On the page **Add feeds**, select **Artist or label** in the group **Make a new feed**. A sheet opens.
-3. Select the file host in **File host** if you have more than one.
-4. Type the name in **Name**.
-5. Under **Role**, select **Artist**, **Label** or **Hosting**.
-6. Select **Make the Feed**.
+1. Select **Releases**, then **＋ Add**, then **Artist** or **Label**.
+2. Select the file host in **File host** if you have more than one.
+3. Type the name in **Name**.
+4. Under **Role**, select **Artist**, **Label** or **Hosting**.
+5. Select **Make the Page**.
 
 Studio gives the feed file from the name. To change it, open the row **Feed file**.
 
@@ -27,11 +26,11 @@ Select **Review** and **Write to the File Host** to make the file. See [Review a
 
 ## The pages of the feed
 
-An artist feed has these tabs: **Artist**, **Value Routes**, **Credits**, **Files** and **Settings**. A label feed has **Label**, not **Artist**.
+The tabs are **Artist** or **Label**, **Value Routes**, **Credits**, **Files**, **Issues**, and **Settings**.
 
 The page **Artist** or **Label** has these sections:
 
-- **Artist** or **Label**. Fields: **Title**, **Name**, **Description**, **Cover image address** and **Website**. Select **Choose…** to pick an image file. See [Edit the album details](edit-album.md).
+- **Artist** or **Label**. Fields include **Title**, **Name**, **Description**, and **Website**. Open **Artwork** to change the cover image or select an image file. See [Edit the album details](edit-album.md).
 - **Releases**. The releases of this artist or this label.
 - **Role**. Select **Artist**, **Label**, **Hosting** or **Custom**. **Custom** shows a check box for each role. Select one or more roles.
   - When Studio finds the roles in the feed, it names them. Select the roles to keep them.
@@ -46,17 +45,19 @@ The page **Artist** or **Label** has these sections:
 
 Studio does not put these recipients into the releases of the feed.
 
-## Make a new album for an artist feed or a label feed
+## Make a new release for an artist feed or a label feed
 
-1. Open the artist feed or the label feed.
+1. Open an artist page.
 2. At the end of **Releases**, select **＋ Add a Release**.
-3. Type the title. For an artist feed, **Artist** starts with the name of the artist.
+3. Type the title. **Artist** starts with the name of the artist.
 4. Select **Make the Release**.
 
-On a wide window, the list of the releases of the feed also has **＋ Add a Release**.
+A new label page with no release shows the row **Add a release**. Select it to make a release that the label puts out.
+
+You can also select **Releases**, then **＋ Add**, then **Release**. In the form, select the artist page in **Artist page**.
 
 Studio adds the new release to **Releases** of the feed, and opens the page of the release.
-This change also changes two drafts. Write the two feeds through Review.
+This change also changes two drafts. Write both feeds through Review.
 
 ## Add a release to an artist feed or a label feed
 

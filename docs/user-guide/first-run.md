@@ -34,7 +34,7 @@ Studio shows "Welcome to Studio" while your collection is empty.
 
 1. Select **Import the Backups** below the rows.
 2. Select **Choose Backup Files** and select the .json files that MSP 2.0 saved.
-3. Select **Import Backups** to add the feeds.
+3. Select **Import 1 Backup**, or the button that shows the number of selected backups, to add the feeds.
 
 Studio keeps the edit tokens from the backup files in your vault.
 If you have no vault, Studio asks you to make one. See [Passphrase, unlock and lock](vault.md).
@@ -44,5 +44,5 @@ On a server, the vault exists from the sign-up. If it is locked, Studio asks you
 
 On the next start, Studio opens the Releases page.
 While your collection is empty, Studio shows the Welcome page again.
-On the desktop, if you made a vault, Studio asks for your passphrase first.
+Studio asks for your passphrase unless **Unlock on this computer** opens the vault from the computer keyring.
 On a server, you sign in first.

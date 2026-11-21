@@ -12,15 +12,14 @@ Without a grant, Studio writes only changes that you reviewed.
 
 ## Connect an app
 
-1. Select **Settings** in the left panel.
-2. In the panel **Connected apps**, select **Connect an App**.
-3. Type a name in **Name of the app**. Use a name for this computer or this copy of the app. For example: "Live Publisher (studio PC)".
-4. Select **Make Pairing Text**. Studio asks you to unlock the vault if it is locked.
-5. Select **Copy**. Studio shows the pairing text as dots. Studio shows "Copied" when the text is on the clipboard.
-6. Paste the pairing text into the app in 15 minutes. For example, run `musicindex-live-publisher studio connect` on your own computer.
-7. Wait for the app to say that it is connected. The notice in Studio then shows "is connected" and the short key of the app.
-8. Compare the key in the line of the app with the key that the app shows.
-9. Select **Done**.
+1. In **Settings**, select **Apps**, then select **Connect an App** in **Connected apps**.
+2. Type a name in **Name of the app**. Use a name for this computer or this copy of the app. For example: "Live Publisher (studio PC)".
+3. Select **Make Pairing Text**. Studio asks you to unlock the vault if it is locked.
+4. Select **Copy**. Studio shows the pairing text as dots. Studio shows "Copied" when the text is on the clipboard.
+5. Paste the pairing text into the app in 15 minutes. For example, run `musicindex-live-publisher studio connect` on your own computer.
+6. Wait for the app to say that it is connected. The notice in Studio then shows "is connected" and the short key of the app.
+7. Compare the key in the line of the app with the key that the app shows.
+8. Select **Done**.
 
 The pairing text holds the address of Studio and a code, for example `https://studio.musicindex.org#pair=K7M2-Q9XD`.
 The code works one time, for 15 minutes. After that, Studio removes the waiting app and its code.

@@ -1,7 +1,7 @@
 # Value routes
 
 A value route tells apps who gets the payments for your music.
-Each recipient has a share of the payment.
+Each recipient has a share or percent of the payment.
 
 Studio shows the recipients of one payment block for the album and for each track.
 Studio keeps the payment values that the editor does not show.
@@ -38,7 +38,7 @@ To copy many recipients of a different feed, select **Copy from a Feed** below t
 ## An open recipient
 
 Each line shows the name, a bar, the percent and the address.
-The percent comes from the shares of all recipients.
+Select **Shares** or **Percent** adjacent to **Split**. The line below shows the other value.
 
 The percent of a fee also comes from the shares of all recipients.
 To make a recipient a fee, select the check box "Fee".
@@ -49,8 +49,7 @@ The rows sort by split, the biggest first. They sort when you leave the row. Whe
 
 An open recipient also has:
 
-- **Change…** to change the address. **Find on Music Index** in that sheet fills the form from a feed.
-- **Add to People**, when no person holds the address.
+- Open **Actions** on the recipient address to select **Change…** or **Add to People**. **Find on Music Index** in the change sheet fills the form from a feed.
 - **Remove**.
 
 ## Recipients for one track

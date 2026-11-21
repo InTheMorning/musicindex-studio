@@ -13,10 +13,9 @@ These methods are easy on a phone:
 ## One page at a time
 
 On a phone, Studio shows one page at a time. It opens on **Releases**.
-Select the back button to go to the first page.
+Select the back button to go back. Select it more times to go to the first page.
 The first page lists **Releases**, the top artists and labels, **File hosts**, **Settings**, and **Lock Studio** or **Unlock Studio**.
-When you open a release, you see its outline first. Select the title to open the page of the release, then use the menu to change the page.
-Use the back button to go back.
+Select a release to open its page. To see the outline of the release, select **‹ Overview** at the left of the page menu.
 See [Find and open a release](find-your-way.md).
 
 ## Unlock the vault

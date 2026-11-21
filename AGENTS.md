@@ -194,7 +194,7 @@ Situational rules:
 
 Documentation:
 
-- Put no Markdown file in the repository root other than `AGENTS.md` and `README.md`. The global repository-docs rules own this. `README.md` is a landing page for an artist, with the sections of [ADR 0188](docs/adr/0188-the-readme-is-a-landing-page-for-an-artist.md) in their sequence. Only `docs/user-guide/README.md` lists each guide page. A Node test refuses a broken relative link in `README.md` and `docs/user-guide/`, and a guide page with no link in the guide index (ADR 0188).
+- Put no Markdown file in the repository root other than `AGENTS.md` and `README.md`. The global repository-docs rules own this. `README.md` is a landing page for an artist, with the sections of [ADR 0188](docs/adr/0188-the-readme-is-a-landing-page-for-an-artist.md) in their sequence. [ADR 0237](docs/adr/0237-the-readme-shows-a-few-screenshots-in-the-dark-theme.md) gives its screenshots: test data, the dark theme, in `docs/user-guide/images/`. Only `docs/user-guide/README.md` lists each guide page. A Node test refuses a broken relative link in `README.md` and `docs/user-guide/`, and a guide page with no link in the guide index (ADR 0188).
 - Add each new document to [docs/README.md](docs/README.md) in the same change. Add each new user guide page to `docs/user-guide/README.md`.
 - Write prose in ASD-STE100 Simplified Technical English. Check it with `~/.agents/skills/asd-ste100/scripts/ste_lint.py`. The operator's global instructions own this rule.
 - A change of a decision changes the ADR, `docs/README.md`, the tests and this file in the same commit.

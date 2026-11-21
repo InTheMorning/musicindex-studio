@@ -12,15 +12,15 @@ A server can also keep no audio and no images. See [A server that keeps no audio
 ## What the page shows
 
 - **Changes in the library folder**. This section shows only when Studio finds a difference.
-- **Files**. The buttons to scan.
-- **File hosts**. The file host settings of the release.
+- **File hosts**. The file hosts of the feed file and the media files, and the button to scan them.
+- **On this computer**. The library folder of the release, and the button to scan it.
 - **Library files**. Each file of the release, with its copies.
 - **Other files on the file hosts**. Files in the release folder on a file host that are not copies of a library file.
 
 ## Scan for changes
 
-- Select **Scan the File Hosts** to read the release folders on the file hosts.
-- Select **Scan the Library Folder** to look for changes in the library folder on your computer.
+- Select **Scan the File Hosts** in **File hosts** to read the release folders on the file hosts.
+- Select **Scan the Library Folder** in **On this computer** to look for changes in the library folder on your computer.
 
 ## Changes in the library folder
 
@@ -30,12 +30,11 @@ Each difference is one row. Select a button to decide:
 | --- | --- |
 | New file | **Add to the Library** |
 | Missing file | **Download Again** (when Studio has a source), **Forget the File** |
-| Changed file | **Use the New File**, **Restore** (when a file host holds a copy) |
+| Changed file | **Use the New File**, **Restore the Hosted Copy…** (when a file host holds a copy) |
 
 ## Choose the file hosts
 
-- **Default file host of the release files**. New files go to this file host. The current files stay where they are. This change occurs immediately, and it is not in the draft.
-- **File host of the feed XML**. If you select a different file host, the feed file moves when you write. The address from before gets a pointer file with the new address.
+- **Feed file** and **Media files** show the current file hosts. Select **Move This Release…** to change them.
 
 A feed file can name a new feed address in the tag `itunes:new-feed-url`. This page and **Feed facts** show that address. If it is a different address, the top of each page of the feed also shows a notice. An app or an index can follow the tag to that address.
 
@@ -45,17 +44,17 @@ To undo a move before you write, use **Undo** in the review sheet. See [Review a
 
 Select **Move This Release…** to move the feed file and all the files of the release in one action.
 
-1. Select the file host. The sheet shows the plan: the feed file, the audio files, the images and the files that do not move.
+1. Select what moves: **Feed and media files**, **Feed file only** or **Media files only**. Then select the file host. The sheet shows the plan.
 2. Select the time that Studio keeps the old files: 7, 30 or 90 days. To keep the old files with no later question, clear **Delete the files … when the move is complete**.
 3. Select **Add to the Draft**. Nothing changes on a file host until you write. Review shows each change.
 
-A file that is not in the library does not move, and the plan names it. A Blossom host cannot keep a feed file, so the feed file stays on its file host.
+A move can include files that are not in the library. Studio downloads them first. A Blossom host cannot keep a feed file, so the feed file stays on its file host.
 
-If you change only **File host of the feed XML**, a notice gives the count of the files that stay. Select **Move the Files Too** to open the same sheet.
+If only the feed file moves, a notice gives the count of the files that stay. Select **Move the Files Too** to open the same sheet.
 
 ### After the write
 
-The old files stay on the file host from before, because an app can still use their addresses. **Moves that wait** shows each move, with these lines:
+Select **Follow the Move** to use the new feed address in this collection. The old files stay on the file host from before, because an app can still use their addresses. **Moves that wait** shows each move, with these lines:
 
 - **New files**. The new copies passed the check of the write.
 - **Music Index**. Whether Music Index follows the new feed address. Studio cannot examine each other app.
@@ -74,11 +73,11 @@ Each file is one line with its format, its path, "In use" or "Not in use", and t
 Select a line to open it.
 
 - **Copy to** a file host. Studio sends a spare copy when you write.
-- **Reference**. The feed uses the copy on this file host.
+- **Use This Copy**. The feed uses the copy on this file host.
 - **Delete**. Studio deletes the copy on that file host when you write.
-- **Move to** a file host. The feed uses the file on that file host. When you write, Studio copies the file there. The copy on the file host from before stays for 30 days, and then Studio asks you. See [Move a release](#move-a-release).
-- **File host of this file**. Select a file host for this file, or **Use the default file host of the release**.
 - **Undo**. Takes a pending copy or deletion out of the draft.
+
+To move the media files to a different file host, use **Move This Release…**.
 
 The copy that the feed uses has no **Delete** button.
 Move the use to a different copy first.
@@ -174,9 +173,9 @@ When Studio starts and each time **Releases** opens, Studio reads the public add
 
 A row of the left panel shows one mark for its feed and its releases. A row with no mark is up to date. Hold the pointer on a mark to see its name.
 
-- A red cloud with "!": a feed changed or moved outside Studio.
-- A blue pencil: a feed has changes that are not written.
-- A gray dashed circle: Studio did not read a feed correctly. The check is in progress, or it is off in **Settings**.
+- A warning cloud marks an outside change.
+- A blue pencil marks changes that are not written.
+- A spinner means **Checking**. A dashed circle means **Not checked**.
 
 - **Changed outside Studio** means that the hosted file has different bytes. Select **Read Again** on the feed page. A draft with edits keeps its edits.
 - **Moved outside Studio** means that the hosted file names a new address. A write from Studio can put the feed back on the old file host. **Show the Difference** opens the merge in Review. **Keep This File Host** hides the notice until the hosted file changes again.

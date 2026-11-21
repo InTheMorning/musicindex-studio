@@ -31,34 +31,34 @@ Select **Hide This Suggestion** to hide a suggestion. Studio changes no person a
 
 ## The page of a person
 
-The page shows the details first. The page keeps each change until you select **Save**. The toolbar shows how many changes are not saved.
+A person has **Profile**, **Feeds**, **Payment** and **Settings** tabs. The page keeps each change until you select **Save**. The toolbar shows how many changes are not saved.
 A control with a change has a mark at its start edge.
 
 - Select **Save** to keep all the changes together. Save changes no feed.
 - Select **Discard** to put back the saved values.
 - Studio asks before you open a different page with a change that is not saved. Select **Keep Editing** to stay on the page. Select **Discard Changes** to open the other page.
 
-- **Suggestions for the picture** and **Suggestions for the information address** show below those two fields. Studio takes the values from the Nostr profile of a key of the person, from the credits of the feeds and from the artist or label feed. Each line names its source. Select **Use** to fill the field. Then select **Save**. When the field has a value, the other values are in a line that you open.
+- **Suggestions for the picture** and **Suggestions for the information address** show below those two fields. Studio takes the values from the Nostr profile of a key of the person, from the credits of the feeds and from the artist or label feed. Each line names its source. Select **Add** to keep a suggested picture or website. Select **Make Default** to change the default value, then select **Save**. When the field has a value, the other values are in a line that you open.
 - **More from your feeds** lists items that can belong to this person. Select **Add** for an item. A row can warn that the name of a Nostr profile is not the name of this person. Select **Correct the Feeds** to open **Check your feeds** and replace that key. Select **Add Anyway** when the key is correct, for example for a band or a label.
-- **Payment** shows the wallets. The default address is first, and has the tag **Default**. To change it, select **Make Default** on a different address, then select **Save**. Select **Edit** to change an address. The sheet names each other address that the change removes. A change of a wallet changes no feed. Select **Add a Wallet** to add one. Select **Remove Wallet** below a wallet to remove it from the person.
-- An LNURL address from the Nostr profile of a key of the person shows below the wallets. Select **Add to Wallet** to keep it, or **Dismiss** to hide it for this person. When the key is not the key of this person, remove the key in **Credits**.
+- **Payment** shows the wallets. The default address is first, and has the tag **Default**. To change it, open **Actions** on a wallet address, then select **Make Default** or **Edit**. The sheet names each other address that the change removes. A change of a wallet changes no feed. Select **Add a Wallet** to add one. Select **Remove Wallet** below a wallet to remove it from the person.
+- An LNURL address from the Nostr profile of a key of the person shows below the wallets. Select **Add to Wallet** to keep it, or **Dismiss** to hide it for this person. When the key is not the key of this person, open **Feeds** to change the Nostr keys in **Credits**.
 - **Credits** has the fold **Credited as**. Open it to see each credit name with its feeds, its roles, its website and its Nostr key. Brackets mark the usual role. A Nostr key with no credit name has its own row. **Remove** on a row with a credit name and a key removes both from the person. It changes no feed.
 - **Add a Nostr Key** opens the sheet **Find a Nostr profile**. Type a name, an `npub` key or a NIP-05 address in the field. Then select **Search**, and select a result to add the key.
 - The row **Nostr key** of **Add a Credit Name** opens the same sheet.
 - **Edit** on a credit name or a support link opens the same sheet with the saved values. **Save** changes no feed.
 - **Add a Wallet**, **Add a Credit Name**, **Add a Support Link** and **Find a Nostr profile** each have **Find on Music Index**. Select a feed, and Studio fills the form with its values. You then add the values.
 - Each search of Music Index reads fields, such as `artist:ann` or `kind:single`. A field that is not correct shows a message. A field that only HitIt can apply, such as `is:ready`, shows a note and no rows. A sheet that opens with a name searches that name as plain words until you edit the field. **Find on Music Index** on the page of a person searches only artist and label feeds, so a field such as `kind:` shows a note there.
-- **Linked artist and label pages** lists each artist or label page that this person links to. Each link stays in Studio. Select **Link to an Artist or Label Page** to add a link. It opens the sheet of **Find on Music Index**. Its fold lists the artist and label pages of your feeds. A page that is not in your feeds is a read-only link, with the line "Read only". When you open the person, Studio reads each read-only page. A new picture, website, Nostr key or wallet of that page shows at its field with **Use**. Select **Remove** to remove a link. **Save** keeps the changes.
+- **Linked artist and label pages** lists each artist or label page that this person links to. Each link stays in Studio. Select **Link to an Artist or Label Page** to add a link. It opens the sheet of **Find on Music Index**. Its fold lists the artist and label pages of your feeds. A page that is not in your feeds is a read-only link, with the line "Read only". When you open the person, Studio reads each read-only page. A new picture, website, Nostr key or wallet of that page shows at its field with **Add**. Select **Remove** to remove a link. **Save** keeps the changes.
   - After **Save**, one sheet opens for each new link. It asks to add this person to the credits of that feed, with a role for that feed. Select **Review in 1 Feed** to make a change set. Studio writes the feed only after you review it.
   - Select **Not Now** to keep the link in Studio only. No feed changes.
   - When you remove a link, a sheet asks to remove the credit.
   - After the last sheet, one change set opens its review. Two or more show in **Changes to write** on the People page.
-- **Merge with a Person** moves the items of a different person to this person.
+- **Merge with a Person** moves the items of a different person to this person. After a merge, select **Undo** in the notice to put both persons back.
 - **Delete Person** deletes the person. No feed changes.
 
 ## Find on Music Index
 
-Select **Find on Music Index** on the page of a person, or **Link to an Artist or Label Page**. The two buttons open the same sheet. The search field stays at the top of the sheet. Studio searches the artist and label feeds on musicindex.org for the name that you type. The search changes no feed. It adds nothing to your collection.
+Select **Find on Music Index** on the page of a person, or **Link to an Artist or Label Page**. For a person with a linked page, select **Find Another Page** in the role line. The two buttons open the same sheet. The search field stays at the top of the sheet. Studio searches the artist and label feeds on musicindex.org for the name that you type. The search changes no feed. It adds nothing to your collection.
 
 The feeds are in three levels:
 

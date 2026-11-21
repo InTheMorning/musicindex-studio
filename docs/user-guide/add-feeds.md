@@ -36,9 +36,9 @@ If you connected a file host, open **Find on Music Index** and select **Add from
 
 1. If you have more than one file host, select it in **File host**.
 2. Under **Feeds in this folder**, select a feed. Studio lists the feed files that it finds, with the type.
-3. Select **Add the Feed**.
+3. Select **Add to Studio**.
 
-If the feed is not in the list, select **The Feed Is Not in the List**.
+If the file is missing from the list, select **The File Is Not in the List**.
 Type the path of the feed file in **Feed file**, for example `album/feed.xml`.
 To go back to the list, select **Select from the List**.
 
@@ -50,14 +50,14 @@ Open **Find on Music Index** and select **Add from MSP 2.0 Backups…** to move 
 
 1. Select **Choose Backup Files**.
 2. Select one or more .json files that MSP 2.0 saved.
-3. Select **Import Backups**.
+3. Select **Import 1 Backup**, or the button that shows the number of selected backups.
 
 Studio adds the feeds and keeps the edit tokens in your vault.
 If you have no vault, Studio asks you to make one. See [Passphrase, unlock and lock](vault.md).
 
 ## Remove a feed from your collection
 
-Open the feed. Open **Feed facts** on the album page and select **Remove from Collection**.
+Open the feed. Select **Remove from Collection** below **Feed facts**. You do not need to open the fold.
 For a read-only feed, select **Remove from Collection** on its page.
 Studio asks you to confirm. The feed file on the file host does not change.
 

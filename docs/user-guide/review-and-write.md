@@ -16,7 +16,7 @@ You can close Studio and come back. The draft stays.
 2. The sheet "Review changes" opens. Studio examines the draft each time that the sheet opens.
 3. Read the list of actions and the diff.
 
-The review has two views. Use the menu **View** to select one. Studio keeps your selection on this device.
+The review has two views. Select **Simplified** or **Detailed** in the **View** control. Studio keeps your selection on this device.
 
 - **Simplified** is the default. It shows **What changes**. This list gives each change in words, for example "Title: Old name → New name". Each time shows in your local time.
 - **Detailed** shows the changed lines of the feed file. Below a changed line with a time, a second line gives your local time.
@@ -34,7 +34,7 @@ Studio shows three lines around each change. Select "Show N more lines" to open 
 In **Detailed**, select **Show the Whole File** to see each line. Then select **Show Only the Changes** to go back.
 When the draft has nothing to write, Studio says that it matches the hosted file.
 
-The sheet can also list these actions before the diff:
+Open **File operations** below the changes to examine uploads, copies, deletions and moves. The review can list these actions:
 
 | Action | Meaning |
 | --- | --- |
@@ -43,10 +43,9 @@ The sheet can also list these actions before the diff:
 | Delete | Studio deletes the file after it writes the feed. |
 | Confirm | Studio makes sure that the file host gives this file. |
 | Move | The feed XML moves to a different file host. |
-| Announce | Studio tells Podcast Index about the write. See [Announcements](announcements.md). |
 
 Select **Undo** on a file host operation row to remove it from the draft.
-Upload and Announce rows have no **Undo** button.
+Upload rows have no **Undo** button.
 Studio does not delete a file when a feed in your library refers to it. The row tells you.
 
 Select **Examine the Changes** to look at the draft again.
@@ -54,7 +53,9 @@ Select **Examine the Changes** to look at the draft again.
 ## Write to the file host
 
 1. Select **Write to the File Host**.
-2. Studio writes the feed. The sheet closes.
+2. Studio writes the feed. Review stays open and shows the result and the public address.
+
+For a new release, Review also shows the changes to its artist page or label page. Studio writes them together. Examine these changes before you write.
 
 On a server, a write that needs a secret needs an open vault.
 If the vault is locked, Studio shows the sheet **Unlock Studio**. After the unlock, Studio writes.
@@ -97,6 +98,8 @@ Studio refuses the write in these cases:
 The sheet shows "Studio refuses this write." It lists each address, with the cause below it.
 Studio tells you what changed on the file hosts. You cannot write over a refusal.
 The button **Write to the File Host** is disabled while the refusal shows.
+
+When Review requires an artist page, select a page and select **Link and Continue**. If no page is available, select **Make an Artist Page…**.
 
 If a button shows, select it:
 
@@ -155,8 +158,9 @@ Select **Apply to the Draft**. Nothing changes on a file host. Examine the chang
 
 ## Discard the draft
 
-Select **Discard the Draft** in the sheet.
-Studio asks you to confirm.
+For a new release, select **Remove from Collection…** in Review to remove the release.
+
+Select **Discard the Draft** in the sheet. Studio asks you to confirm.
 Each change that you did not write goes out. The hosted file does not change.
 
 ## Go back to an earlier version

@@ -1,6 +1,6 @@
 # Edit the album details
 
-Open a release from **Releases**. Select its title in the outline. The tab **Album** opens.
+Open a release and select **Release**.
 Studio saves each change in the draft as you type.
 The hosted file does not change until you write. See [Review and write your changes](review-and-write.md).
 
@@ -17,9 +17,8 @@ The page has four sections.
 | Title | The name of the album. |
 | Artist | The artist of the album. |
 | Description | A text about the album. |
-| Cover image address | The web address of the cover image. Studio shows a preview. Select **Choose…** to pick a file. |
+| Cover image address | The web address of the cover image. Studio shows a preview. Open **Artwork** to change it. |
 | Website | The web address of your website. |
-| Language | For example `en` or `de-AT`. |
 
 An address must start with `https://` or `http://`.
 If it does not, the field shows red text.
@@ -27,9 +26,9 @@ Studio does not write while an address is not correct.
 
 ### Choose a cover file
 
-You can type or paste an address, or you can choose a file.
+You can type or paste an address, or choose a file.
 
-1. Select **Choose…** adjacent to **Cover image address**.
+1. Open **Artwork**, then select **Choose…** adjacent to **Cover image address**.
 2. Select a source in the sheet:
    - **This Release**. The image files of this release.
    - **File Hosts**. The image files on your connected file hosts. You can only select a file that has a public address.
@@ -74,6 +73,10 @@ Some feeds also have a block for one platform, such as `spotify`.
 Then **Advanced** shows below the switch, with one check box for each platform.
 The switch does not change these blocks.
 
+### Settings
+
+Open **Settings** to change **Language**.
+
 ### OP3 statistics
 
 OP3 counts the downloads of each track.
@@ -100,9 +103,9 @@ Studio then changes no address until you set the switch.
 
 The tabs **Credits** and **Value Routes** open the credits and the payment recipients. See [Value routes](value-routes.md).
 
-This section has one row.
+When a release has no tracks, cover image, audio file, payment recipient or artist page, the page shows the checklist "This release needs N things". Select the button of a row to add that detail.
 
-- **Feed facts**. Shows the address source, the feed GUID, the file, the version and the last announcement. It also has the button **Remove from Collection**.
+- **Feed facts** is in the section **Feed**. It shows the address source, feed GUID, file, version and last announcement. It also has **Remove from Collection**.
 
 ### Linked artist and label pages
 

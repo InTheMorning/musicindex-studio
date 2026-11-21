@@ -8,44 +8,27 @@ The file host type "Folder on this computer" is not available on a server.
 
 ## Before you start
 
-Connect a file host that publishes its files on the web.
-The file host needs a public address. See [Connect a file host](hosts.md).
-If you have no file host, the group **Make a new feed** shows "Studio puts the files of a release on a file host. Connect a file host first."
+Connect a file host. Studio can make a draft without a public address. It uses a placeholder GUID until the file host has one. See [Connect a file host](hosts.md).
+If you have no file host, the sheet shows "Connect a file host to add this feed."
 Select **Connect a File Host**.
 
 A Blossom file host keeps media only. Use a different file host for the feed file.
 
 ## Make the release
 
-1. Select **Releases** in the left panel. Then select **＋ Add a Feed**.
-2. On the page **Add feeds**, select **Album** in the group **Make a new feed**. A sheet opens.
-3. If you have more than one file host, select the file host in **File host**.
-4. Type the name of the album in **Album title**.
-5. Type the name of the artist in **Artist**.
-6. Select **Make the Release**.
+1. Select **Releases**, then **＋ Add**, then **Release**. A sheet opens.
+2. If you have more than one file host, select the file host in **File host**.
+3. Type the release title in **Title** and the artist name in **Artist name**.
+4. Select the artist page of the release in **Artist page**. If Studio shows "No artist page is available. Make an artist page first.", make the artist page first. See [Artist and label feeds](artist-and-label-feeds.md).
+5. Select **Make the Release**.
 
 Studio gives the feed file from the title. For example, "Pixel Palace" gives `pixel-palace.xml`.
 The row **Feed file** shows this path. To change it, open the row and type a new path in the folder of the file host.
 After you type a path, the title does not change it again.
 
-Studio opens the new release.
-A notice tells you that the file host has no file for this release yet.
+Studio opens the new release. A notice tells you that the file host has no file for this release yet.
 
-If the file host has no public address, Studio shows "Give this file host a public address first, in File hosts."
 If a file with this path exists, Studio shows "A file exists at this path already."
-
-## Start from an album
-
-If you have an album in Studio, a new album can start from it.
-
-1. In the sheet, keep **Album** in **Type**.
-2. Select an album in **Start from**.
-3. Examine **Album title** and **Artist**. Studio puts the artist of the source in **Artist**.
-4. Select **Make the Release**.
-
-The new album gets the tracks of the source. Each track and the album get new GUIDs.
-The source album does not change.
-**Start from** is only in the sheet for an album. The value **Empty album** makes an album with no tracks.
 
 ## Add the content
 
@@ -59,16 +42,11 @@ Fill in the album details and add tracks. See these pages:
 
 1. Select **Review** in the toolbar.
 2. Check the changes.
-3. Select **Write to the File Host**.
+3. Examine each **Also write** entry for linked pages.
+4. Select **Write to the File Host**.
 
-Studio now makes the feed file on the file host. See [Review and write your changes](review-and-write.md).
+Review writes the new release and its linked pages together. Studio now makes the feed file on the file host. See [Review and write your changes](review-and-write.md).
 
 ## Other new feeds
 
-The group **Make a new feed** also has these rows. They open the same sheet:
-
-- **Artist or label**. See [Artist and label feeds](artist-and-label-feeds.md).
-- **Show**. See [Live shows](live-shows.md).
-- **Playlist**. See [Playlists](playlists.md).
-
-In the sheet, **Type** selects the feed type.
+The **＋ Add** menu also has **Artist**, **Label**, **Show**, and **Playlist**. Each entry opens its creation sheet. See [Artist and label feeds](artist-and-label-feeds.md), [Live shows](live-shows.md), and [Playlists](playlists.md).

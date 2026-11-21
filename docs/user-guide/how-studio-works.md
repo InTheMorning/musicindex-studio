@@ -60,7 +60,7 @@ You can go back to an earlier version.
 ## Vault
 
 The vault holds your secrets, for example the access key of a bucket.
-Only your passphrase opens the vault.
+On a computer, your passphrase opens the vault. You can also set Studio to unlock it from the keyring of this computer. On a server, your account methods can unlock the vault.
 On the desktop, Studio asks you to make the vault when you add the first secret.
 On a server, Studio makes the vault when it makes your account.
 See [Passphrase, unlock and lock](vault.md).

@@ -1,7 +1,6 @@
 # Check a feed
 
-The tab **Check** shows what Studio finds in a feed. It is before **Settings** on the page of a feed.
-The tab shows the number of findings, for example **Check 5**. With no finding, the tab shows **Check**.
+Open **Issues** to read the findings. Its label includes the count, for example **Issues (5)**. It is before **Settings** on the page of a feed.
 
 Studio does not change the feed when it checks it. Nothing changes until you select a button.
 
@@ -11,6 +10,7 @@ Each finding is one row. The row has a level, a title, a cause and one button.
 
 - **Notice**. Studio found a problem. The button repairs it, or opens the field where you repair it.
 - **Question**. Studio needs a value from you. The button opens the field.
+- **Stops the write**. This finding prevents a write until you correct its cause.
 
 A row has no button when Studio cannot repair the finding. A read-only feed has no file host. Studio shows its findings and does not repair them.
 

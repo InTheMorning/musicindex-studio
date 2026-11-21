@@ -728,6 +728,16 @@ fn outer_library(source: &Path) -> Result<Option<PathBuf>, CollectionsError> {
 fn fill_copy(source: &Path, target: &Path) -> Result<(), CollectionsError> {
     let outer = outer_library(source)?;
     copy_folder(source, target, &NOT_IN_COPY)?;
+    let source_vault = source.join("vault.json");
+    if let Ok(json) = std::fs::read_to_string(&source_vault)
+        && let Ok(vault) = crate::vault::VaultFile::from_json(&json)
+    {
+        std::fs::write(
+            target.join("vault.json"),
+            vault.without_device_wrapper_bytes(),
+        )
+        .map_err(|e| CollectionsError::io(&target.join("vault.json"), &e))?;
+    }
     let database = source.join(DATABASE);
     if database.exists() {
         // The source can be open, so SQLite makes the copy.
@@ -1018,7 +1028,9 @@ mod tests {
     fn a_copy_keeps_the_vault_and_holds_no_app_grant_or_queue() {
         let (dir, collections) = ready();
         let main = collections.folder(MAIN_FOLDER);
-        std::fs::write(main.join("vault.json"), "vault-a").unwrap();
+        let mut vault = crate::vault::OpenVault::create("correct horse battery").unwrap();
+        vault.set_device_wrapper("test-device", &[7; 32]).unwrap();
+        std::fs::write(main.join("vault.json"), vault.file().to_json()).unwrap();
         std::fs::create_dir_all(main.join("grants")).unwrap();
         std::fs::write(main.join("grants/1.json"), "grant").unwrap();
         std::fs::create_dir_all(main.join("library/r")).unwrap();
@@ -1062,10 +1074,16 @@ mod tests {
         assert!(size > 10, "the size must count the files: {size}");
         let made = collections.copy(&main, "Test: 4 releases").unwrap();
         let copy = collections.folder(&made.folder);
+        let copied_vault = crate::vault::VaultFile::load(&copy.join("vault.json")).unwrap();
         assert_eq!(
-            std::fs::read_to_string(copy.join("vault.json")).unwrap(),
-            "vault-a",
-            "ADR 0149 item 8: a copy has the passphrase of its source."
+            copied_vault.device_id(),
+            None,
+            "a copy omits the local device wrapper"
+        );
+        assert!(
+            copied_vault
+                .open_with_passphrase("correct horse battery")
+                .is_ok()
         );
         assert_eq!(
             std::fs::read_to_string(copy.join("library/r/a.mp3")).unwrap(),

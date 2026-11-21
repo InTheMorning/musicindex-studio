@@ -4,7 +4,7 @@ import { pendingStatus } from './people.js';
 // The tab of each setting of the draft (ADR 0166 items 1 and 7), for the
 // pencil on the tab of a pending change (item 9).
 export const SETTING_TABS = {
-  scale: 'general', lock: 'general', window: 'general', outside: 'general',
+  scale: 'general', lock: 'general', start: 'general', window: 'general', outside: 'general',
   nostr: 'nostr', libraryMax: 'data', libraryMin: 'data',
 };
 
@@ -12,6 +12,10 @@ export const SETTING_TABS = {
 // at its first change.
 export function makeSettingsDraft(saved = {}) {
   return { saved: { ...saved }, values: { ...saved }, didSave: false };
+}
+
+export function lockStartMenu(startChoices) {
+  return startChoices.length ? [{ value: 'ask', label: 'Ask for the passphrase' }, { value: 'device', label: 'Unlock on this computer' }] : null;
 }
 
 export function changeSetting(draft, key, value) {
@@ -62,7 +66,9 @@ export async function saveSettings(draft, routes) {
       else await routes[keys[0]](draft.values[keys[0]]);
       for (const key of keys) delete errors[key];
     } catch (error) {
-      const message = error?.message || 'Could not save this setting.';
+      const message = error?.details?.detail
+        ? `${error.message} ${error.details.detail}`
+        : error?.message || 'Could not save this setting.';
       for (const key of keys) errors[key] = message;
     }
   }

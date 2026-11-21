@@ -45,6 +45,12 @@ pub(crate) enum Wrapper {
         #[serde(flatten)]
         inner: HkdfWrapper,
     },
+    /// A key from the computer keyring encrypts the vault key.
+    Device {
+        device_id: String,
+        #[serde(flatten)]
+        inner: HkdfWrapper,
+    },
     /// The user's signer encrypted the vault key to the user's own public key
     /// with NIP-44.
     Nostr { pubkey: String, ciphertext: String },
@@ -151,7 +157,7 @@ impl VaultFile {
                 Wrapper::Passkey { credential_id, .. } => Some(VaultMethod::Passkey {
                     credential_id: credential_id.clone(),
                 }),
-                Wrapper::App { .. } => None,
+                Wrapper::Device { .. } | Wrapper::App { .. } => None,
             })
             .collect()
     }
@@ -225,6 +231,24 @@ impl VaultFile {
     #[must_use]
     pub fn to_json(&self) -> String {
         serde_json::to_string_pretty(self).expect("a vault always serializes")
+    }
+
+    /// Give JSON bytes without the computer-specific device wrapper.
+    #[must_use]
+    pub fn without_device_wrapper_bytes(&self) -> Vec<u8> {
+        let mut copy = self.clone();
+        copy.wrappers
+            .retain(|wrapper| !matches!(wrapper, Wrapper::Device { .. }));
+        copy.to_json().into_bytes()
+    }
+
+    /// Give the ID of the computer-specific wrapper, if present.
+    #[must_use]
+    pub fn device_id(&self) -> Option<&str> {
+        self.wrappers.iter().find_map(|wrapper| match wrapper {
+            Wrapper::Device { device_id, .. } => Some(device_id.as_str()),
+            _ => None,
+        })
     }
 
     /// Read a desktop vault file.

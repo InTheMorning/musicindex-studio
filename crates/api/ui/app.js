@@ -4,7 +4,7 @@ import { checkCount, releaseChecklist } from './feedcheck.js';
 import { pageSequence, settingsTabs } from './pages.js';
 import { useFieldList, RowList, PickerLayout, SearchResults } from './pickers.js';
 import { UI_SCALES, SCALE_KEY, normalizeScale, measureWindowUnits } from './uiscale.js';
-import { LOCK_HINT, lockChoiceText } from './vaultlock.js';
+import { LOCK_HINT, START_HINT, lockChoiceText } from './vaultlock.js';
 import { serverFilesRows, sizeText, SERVER_FILES_NOTE } from './assets.js';
 import { failedLine } from './failures.js';
 import { OPEN_MERGE, OPEN_FEED_MOVE, MoveAllSheet, AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, OUTSIDE_RECHECK, restoreDeletedFile, checkDeletedAgain, AnnounceChoice, UndoButtons, useUndoKeys, DeleteUndoBar, removeFeedFromCollection } from './editor.js';
@@ -26,7 +26,7 @@ import { isLiveItem } from './live.js';
 import { appRowLines, pairingPhase, pairingNotice, doneRemovesApp } from './apps.js';
 import { CONFIRMS, confirmButtons } from './confirms.js';
 import { changeTitle, afterDiscard, changeLine } from './people.js';
-import { makeSettingsDraft, changeSetting, settingsDraftView, discardSettings, saveSettings, asksSettingsLeave } from './settingsdraft.js';
+import { makeSettingsDraft, changeSetting, settingsDraftView, discardSettings, saveSettings, asksSettingsLeave, lockStartMenu } from './settingsdraft.js';
 import { makeHistory } from './undohistory.js';
 import { DeleteUndoProvider, useDeleteUndo, undoNoticeText, UNDO_COMPLETE } from './undonotice.js';
 
@@ -444,9 +444,10 @@ export function dropAreaClass(over, busy) {
 export function ErrorNotice({ error, action, onRetry }) {
   if (!error) return null;
   const step = errorStep(error);
-  const details = error.message && error.message !== step;
+  const detailText = error.details?.detail || error.message;
+  const details = detailText && detailText !== step;
   return html`<div class="notice error" role="alert"><strong>${action || title(error)}</strong><p>${step}</p>
-    ${details && html`<details class="disclosure"><summary class="link-row"><span class="summary">Details</span></summary><p>${error.message}</p></details>`}
+    ${details && html`<details class="disclosure"><summary class="link-row"><span class="summary">Details</span></summary><p>${detailText}</p></details>`}
     ${onRetry && retryHelps(error) && html`<div class="actions"><button class="button action" type="button" onClick=${onRetry}>Try Again</button></div>`}</div>`;
 }
 
@@ -1977,7 +1978,7 @@ function LibrarySheet({ defaultRoot, onDone }) {
 
 // ---- Unlock and no-token screens ----
 
-function Unlock({ onUnlocked }) {
+function Unlock({ onUnlocked, startUnlockFailed }) {
   const [passphrase, setPassphrase] = useState('');
   const { busy, error, run } = useAction();
   const submit = (event) => {
@@ -1991,6 +1992,7 @@ function Unlock({ onUnlocked }) {
   return html`<main class="center"><form class="card" onSubmit=${submit}>
     <${Brand} />
     <div><h1>Unlock Studio</h1><p>Your passphrase opens the vault with the keys of your file hosts.</p></div>
+    ${startUnlockFailed && html`<p class="notice" role="status">Studio could not open the vault from the keyring of this computer. Enter the passphrase.</p>`}
     <${SecretField} id="unlock" label="Passphrase" autocomplete="current-password" required autofocus
       error=${unlockError.field} value=${passphrase} onInput=${(e) => setPassphrase(e.target.value)} />
     <${ErrorNotice} error=${unlockError.other} />
@@ -3113,7 +3115,8 @@ function SettingsPage({ view, go, version }) {
     try {
       const routes = {
         scale: async (value) => { localStorage.setItem(SCALE_KEY, value); },
-        lock: (value) => api('/settings/lock', { method: 'PUT', body: { minutes: Number(value) } }),
+        lock: (value) => api('/settings/lock', { method: 'PUT', body: { minutes: Number(value), start: draft.saved.start || 'ask' } }),
+        start: (value) => api('/settings/lock', { method: 'PUT', body: { minutes: Number(draft.values.lock ?? draft.saved.lock), start: value } }),
         window: (value) => api('/window-close', { method: 'PUT', body: { on_close: value } }),
         outside: (value) => api('/settings/outside-check', { method: 'PUT', body: { enabled: value } }),
         nostr: (value) => api('/settings/nostr', { method: 'PUT', body: { search_relay: value.trim() } }),
@@ -5062,12 +5065,15 @@ function LockPanel({ draft, draftState, changed, causes }) {
   const { busy, error, run } = useAction();
   useEffect(() => { run(async () => {
     const setting = await api('/settings/lock');
-    setSetting(draftState.values.lock === undefined ? setting : { ...setting, minutes: Number(draftState.values.lock) });
+    draft('lock', String(setting.minutes), String(draftState.values.lock ?? setting.minutes));
+    if (setting.start_choices.length) draft('start', setting.start, draftState.values.start ?? setting.start);
+    setSetting({ ...setting, minutes: Number(draftState.values.lock ?? setting.minutes), start: draftState.values.start ?? setting.start });
   }); }, []);
   const change = (value) => { draft('lock', String(setting.minutes), String(value)); setSetting({ ...setting, minutes: Number(value) }); };
+  const startMenu = lockStartMenu(setting?.start_choices || []);
   return html`<section class="page-section settings-section">
     <h2>Lock</h2><div class="group settings-group">
-    <${ErrorNotice} error=${error} />
+    <${ErrorNotice} error=${error} action=${error?.code === 'keyring_failed' ? error.message : undefined} />
     ${setting && html`<div class="field setting-row"><label for="lock-minutes">Lock Studio after<${SettingsPencil} pending=${changed('lock')} /></label>
       <div class="field-body">
         <span class="hint">${LOCK_HINT}</span>
@@ -5077,6 +5083,12 @@ function LockPanel({ draft, draftState, changed, causes }) {
         ${causes.lock && html`<span class="field-error">${causes.lock}</span>`}
       </div>
     </div>`}
+    ${setting && startMenu && html`<div class="field setting-row"><label for="lock-start">At start<${SettingsPencil} pending=${changed('start')} /></label><div class="field-body">
+      <span class="hint">${START_HINT}</span>
+      <select id="lock-start" class="button" disabled=${busy} value=${setting.start} onChange=${(e) => { draft('start', setting.start, e.target.value); setSetting({ ...setting, start: e.target.value }); }}>
+        ${startMenu.map((choice) => html`<option value=${choice.value}>${choice.label}</option>`)}
+      </select>${causes.start && html`<span class="field-error">${causes.start}</span>`}
+    </div></div>`}
   </div></section>`;
 }
 
@@ -5756,7 +5768,7 @@ function Studio({ epoch }) {
   if (!status || !library) return html`<p class="boot" role="status">Loading Studio…</p>`;
   // On a server, a locked vault does not stop the start. A route that needs
   // the vault opens the unlock sheet (ADR 0056 item 9).
-  if (status.vault === 'locked' && !serverMode) return html`<${Unlock} onUnlocked=${load} />`;
+  if (status.vault === 'locked' && !serverMode) return html`<${Unlock} onUnlocked=${load} startUnlockFailed=${status.start_unlock_failed} />`;
   // Studio needs its library folder before the editor, so that a write has
   // a release folder to keep the hosted file in (ADR 0036 items 1 and 2).
   if (library.root === null) {

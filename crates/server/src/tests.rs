@@ -729,7 +729,10 @@ async fn a_user_selects_a_lock_time_up_to_the_maximum_and_has_no_never() {
     let who = new_user(&app, "a@example.org", PASS_ONE).await;
     let path = "/api/v1/settings/lock";
     let reply = api(&app, &who, "GET", path, None).await;
-    assert_eq!(reply.json, json!({ "minutes": 10, "choices": [5, 10, 30] }));
+    assert_eq!(
+        reply.json,
+        json!({ "minutes": 10, "choices": [5, 10, 30], "start": "ask", "start_choices": [] })
+    );
     for refused in [0, 60] {
         let reply = api(&app, &who, "PUT", path, Some(json!({ "minutes": refused }))).await;
         assert_eq!(reply.status, StatusCode::UNPROCESSABLE_ENTITY, "{refused}");

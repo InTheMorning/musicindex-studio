@@ -2,7 +2,7 @@
 
 Decision: [ADR 0235](../adr/0235-the-desktop-app-can-open-the-vault-from-the-keyring-of-the-computer.md), all items.
 
-Status: Open.
+Status: Done.
 
 ## Problem
 
@@ -65,3 +65,37 @@ Human, by the operator: the check of ADR 0235.
 - `node` is not on the PATH. Use `tools/node`.
 - Do not make an architecture decision. Stop and report a question.
 - Write the section "Result" at the end of this file: each change with file and line, and each check with its result.
+
+## Result
+
+- Added the device wrapper and filtered vault bytes in [vault.rs](../../crates/core/src/vault.rs:330) and [file.rs](../../crates/core/src/vault/file.rs:238).
+- Excluded the device wrapper from exports and collection copies in [account_archive.rs](../../crates/core/src/account_archive.rs:287) and [collections.rs](../../crates/core/src/collections.rs:737).
+- Added the key store, startup unlock, lock settings and status fields in [workspace.rs](../../crates/api/src/workspace.rs:888) and [routes.rs](../../crates/api/src/routes.rs:4204).
+- Added the desktop keyring with `keyring` 4.2.0 and default `v1` features in [keyring.rs](../../crates/desktop/src/keyring.rs:1). The docs.rs source lists `get_secret`, `set_secret` and `delete_credential`.
+- Connected the desktop start in [lib.rs](../../crates/desktop/src/lib.rs:292). Added the “At start” menu and the keyring unlock error notice in [app.js](../../crates/api/ui/app.js:5063).
+- Added the device wrapper cases, API startup cases and UI menu model in [vault.rs](../../crates/core/src/vault.rs:990), [device_unlock.rs](../../crates/api/src/tests/device_unlock.rs:1) and [settingsdraft.test.mjs](../../crates/api/ui-tests/settingsdraft.test.mjs:25).
+- Updated `Cargo.lock` for the keyring dependency.
+- Checks: `tools/gate.sh` passed. It passed the Rust checks, ADR guard and 947 UI checks. UI syntax checks and the component guard passed.
+- STE check: 25 dictionary findings remain in the task file.
+- Visual: the Lock section at 1280 px passed its fit check. The 390 px Lock section check remains open.
+- Keyring check of the delegate: open. Xvfb exited after a segmentation fault.
+- Human check: open for the operator.
+
+## Main Session Changes
+
+- `crates/api/src/workspace.rs`, `set_start_mode`: the same start value changes nothing. The UI sends the saved start value with each change of the lock time. Before this change, such a change made a new keyring key and needed a recent unlock. On the server, the value "ask" gave 409.
+- `crates/desktop/src/keyring.rs`: a read waits at most 60 seconds. A keyring such as KeePassXC can ask the user to unlock it, and the start must not wait with no limit. Technical choice of the main session: the limit is 60 seconds.
+- `crates/api/ui/vaultlock.js` and `crates/api/ui/app.js`: "At start" has the hint `START_HINT`, as "Lock Studio after" has `LOCK_HINT`.
+- `crates/api/src/tests/device_unlock.rs`: tests for ADR 0235 items 3, 12 and 13, for the same start value after 20 minutes, and for a server lock time with `start: "ask"`.
+
+Main session checks:
+
+- `tools/gate.sh` passes.
+- Real keyring: `target/debug/studio-desktop` ran on a private D-Bus with `gnome-keyring-daemon`.
+- "Unlock on this computer" wrote one entry (`secret-tool search` gives service `musicindex-studio`, user `vault-{device ID}`) and one wrapper with the kind `device`. The next start gave `"vault":"open"`. A start with no D-Bus and a start after `secret-tool clear` gave `"vault":"locked"` and `"start_unlock_failed":true`.
+- Screenshots with `tools/drive-ui.mjs`: the unlock screen with the notice of item 12 at 1280 px and 390 px. Settings > Lock with "At start" is also at 1280 px and 390 px. `$edges()` gives no finding, and the fit check gives no finding at 390 px and 761 px.
+- The Tauri binary was not started for this task. It calls the same `studio_desktop::start`.
+
+Open:
+
+- The human check of ADR 0235 on the computer of the operator.

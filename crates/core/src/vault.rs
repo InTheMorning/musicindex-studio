@@ -30,6 +30,7 @@ const RECOVERY_INFO: &str = "musicindex-studio recovery wrapper v1";
 
 /// The HKDF info text of a passkey wrapper.
 const PASSKEY_INFO: &str = "musicindex-studio passkey wrapper v1";
+const DEVICE_INFO: &str = "musicindex-studio device wrapper v1";
 
 /// The digits of a recovery key.
 const HEX: &[u8; 16] = b"0123456789abcdef";
@@ -172,6 +173,19 @@ impl fmt::Debug for OpenVault {
 }
 
 impl OpenVault {
+    /// Make a random device ID and keyring secret.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`VaultError`] when the random source is not available.
+    pub fn device_credentials() -> Result<(String, Zeroizing<[u8; 32]>), VaultError> {
+        let mut secret = Zeroizing::new([0_u8; 32]);
+        crypto::random_fill(secret.as_mut_slice())?;
+        let mut id = Zeroizing::new([0_u8; 16]);
+        crypto::random_fill(id.as_mut_slice())?;
+        Ok((uuid::Uuid::from_bytes(*id).simple().to_string(), secret))
+    }
+
     /// Make a new empty vault that a passphrase opens.
     ///
     /// # Errors
@@ -311,6 +325,34 @@ impl OpenVault {
             inner: wrapper,
         });
         Ok(())
+    }
+
+    /// Set the computer-specific wrapper. Gives the ID of a replaced wrapper.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`VaultError`] when the random source is not available.
+    pub fn set_device_wrapper(
+        &mut self,
+        device_id: &str,
+        secret: &[u8; 32],
+    ) -> Result<Option<String>, VaultError> {
+        let wrapper = self.hkdf_wrapper("device", secret, DEVICE_INFO, None)?;
+        let old = self.remove_device_wrapper();
+        self.file.wrappers.push(Wrapper::Device {
+            device_id: device_id.to_owned(),
+            inner: wrapper,
+        });
+        Ok(old)
+    }
+
+    /// Remove the computer-specific wrapper and give its ID.
+    pub fn remove_device_wrapper(&mut self) -> Option<String> {
+        let old = self.file.device_id().map(str::to_owned);
+        self.file
+            .wrappers
+            .retain(|wrapper| !matches!(wrapper, Wrapper::Device { .. }));
+        old
     }
 
     /// Remove the passkey wrapper of a credential. Gives `true` when the
@@ -487,6 +529,25 @@ impl VaultFile {
             .ok_or_else(VaultError::wrong_key)?;
         let aad = hkdf_aad("passkey", &self.vault_id, Some(credential_id));
         self.open_hkdf(wrapper, prf_output, PASSKEY_INFO, &aad)
+    }
+
+    /// Open the vault with its computer-specific keyring secret.
+    ///
+    /// # Errors
+    ///
+    /// Gives [`VaultErrorKind::WrongKey`] when the secret is not correct or
+    /// the vault has no device wrapper.
+    pub fn open_with_device_secret(self, secret: &[u8; 32]) -> Result<OpenVault, VaultError> {
+        let wrapper = self
+            .wrappers
+            .iter()
+            .find_map(|wrapper| match wrapper {
+                Wrapper::Device { inner, .. } => Some(inner),
+                _ => None,
+            })
+            .ok_or_else(VaultError::wrong_key)?;
+        let aad = hkdf_aad("device", &self.vault_id, None);
+        self.open_hkdf(wrapper, secret, DEVICE_INFO, &aad)
     }
 
     fn open_hkdf(
@@ -917,6 +978,60 @@ mod tests {
         assert_eq!(file.methods().len(), 2);
         assert!(file.clone().open_with_passkey("cred-a", &[7; 32]).is_err());
         assert!(file.open_with_passkey("cred-a", &[9; 32]).is_ok());
+    }
+
+    #[test]
+    fn a_device_wrapper_opens_replaces_and_can_be_removed_without_changing_passphrase() {
+        let mut vault = vault_with_secret();
+        assert_eq!(
+            vault.set_device_wrapper("device-a", &[7; 32]).unwrap(),
+            None
+        );
+        let file = vault.file().clone();
+        assert_eq!(file.device_id(), Some("device-a"));
+        assert!(file.clone().open_with_device_secret(&[7; 32]).is_ok());
+        assert!(file.clone().open_with_device_secret(&[8; 32]).is_err());
+        assert_eq!(
+            vault
+                .set_device_wrapper("device-b", &[9; 32])
+                .unwrap()
+                .as_deref(),
+            Some("device-a")
+        );
+        let file = vault.file().clone();
+        assert!(file.clone().open_with_device_secret(&[7; 32]).is_err());
+        assert!(file.clone().open_with_device_secret(&[9; 32]).is_ok());
+        assert!(
+            file.clone()
+                .open_with_passphrase("correct horse battery")
+                .is_ok()
+        );
+        vault
+            .set_passphrase("another correct horse battery")
+            .unwrap();
+        assert!(
+            vault
+                .file()
+                .clone()
+                .open_with_device_secret(&[9; 32])
+                .is_ok()
+        );
+        assert!(
+            vault
+                .file()
+                .clone()
+                .open_with_passphrase("another correct horse battery")
+                .is_ok()
+        );
+        assert_eq!(vault.remove_device_wrapper().as_deref(), Some("device-b"));
+        assert_eq!(vault.remove_device_wrapper(), None);
+        assert!(
+            vault
+                .file()
+                .clone()
+                .open_with_passphrase("another correct horse battery")
+                .is_ok()
+        );
     }
 
     #[test]

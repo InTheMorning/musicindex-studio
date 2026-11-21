@@ -49,6 +49,7 @@ const GRANT_SYNC_INTERVAL: Duration = Duration::from_hours(1);
 
 /// The setting of the time before the vault locks (ADR 0142).
 const LOCK_SETTING: &str = "vault_lock_minutes";
+const START_SETTING: &str = "vault_start_unlock";
 /// The times of the menu, in minutes.
 const LOCK_CHOICES: [u64; 4] = [5, 10, 30, 60];
 /// How often the desktop checks the time of the vault.
@@ -784,6 +785,8 @@ pub struct Workspace {
     /// desktop uses it (ADR 0107 item 9).
     pub(crate) imports: Arc<crate::import::ImportStore>,
     vault_path: PathBuf,
+    device_store: Option<Arc<dyn DeviceKeyStore>>,
+    start_unlock_failed: bool,
     /// The folder of the grant vaults: `grants/` in the data folder
     /// (ADR 0058 item 1).
     grants_dir: PathBuf,
@@ -880,6 +883,31 @@ pub struct Workspace {
     /// True when the remote file records wait for the vault unlock (task 126).
     remote_records_wait: AtomicBool,
 }
+
+/// Read and change a secret in the computer keyring.
+pub trait DeviceKeyStore: Send + Sync + std::fmt::Debug {
+    /// Read a secret by device ID.
+    ///
+    /// # Errors
+    ///
+    /// Gives the keyring error text when the read fails.
+    fn get(&self, device_id: &str) -> Result<Option<DeviceSecret>, String>;
+    /// Save a secret by device ID.
+    ///
+    /// # Errors
+    ///
+    /// Gives the keyring error text when the write fails.
+    fn set(&self, device_id: &str, secret: &[u8]) -> Result<(), String>;
+    /// Delete a secret by device ID.
+    ///
+    /// # Errors
+    ///
+    /// Gives the keyring error text when the delete fails.
+    fn delete(&self, device_id: &str) -> Result<(), String>;
+}
+
+/// A zeroizing secret returned by a device key store.
+pub type DeviceSecret = Zeroizing<Vec<u8>>;
 
 /// The folder of the temporary area in the user folder (ADR 0122 item 9).
 pub(crate) const TEMPORARY_FOLDER: &str = "temporary";
@@ -980,6 +1008,8 @@ impl Workspace {
                 data_dir.join("import-staging"),
             )),
             vault_path: data_dir.join("vault.json"),
+            device_store: None,
+            start_unlock_failed: false,
             grants_dir,
             collection,
             vault: None,
@@ -1018,6 +1048,38 @@ impl Workspace {
             work: crate::work::Work::new(),
             remote_records_wait: AtomicBool::new(false),
         })
+    }
+
+    /// Set the keyring used by the desktop shell.
+    #[must_use]
+    pub fn with_device_store(mut self, store: Arc<dyn DeviceKeyStore>) -> Self {
+        self.device_store = Some(store);
+        self
+    }
+
+    /// Open the vault from the desktop keyring at application start.
+    pub fn unlock_from_device_store(&mut self) {
+        let Ok(file) = self.vault_file() else {
+            self.start_unlock_failed = self.vault_path.exists();
+            return;
+        };
+        let Some(device_id) = file.device_id().map(str::to_owned) else {
+            self.start_unlock_failed = false;
+            return;
+        };
+        let opened = self.device_store.as_ref().and_then(|store| {
+            let secret = store.get(&device_id).ok()??;
+            let secret: [u8; 32] = secret.as_slice().try_into().ok()?;
+            file.open_with_device_secret(&secret).ok()
+        });
+        if let Some(vault) = opened {
+            self.vault = Some(vault);
+            self.touch_vault();
+            self.start_unlock_failed = false;
+            self.sync_grant_vaults(None);
+        } else if self.vault_path.exists() {
+            self.start_unlock_failed = true;
+        }
     }
 
     /// The count of the work that runs. The clone shares the count, and
@@ -1213,6 +1275,96 @@ impl Workspace {
             choices.sort_unstable();
         }
         choices
+    }
+
+    pub(crate) fn start_choices(&self) -> Vec<&'static str> {
+        if self.rules.is_none() && self.device_store.is_some() {
+            vec!["ask", "device"]
+        } else {
+            Vec::new()
+        }
+    }
+
+    pub(crate) fn start_mode(&self) -> &'static str {
+        let device_wrapper = self
+            .vault
+            .as_ref()
+            .map(|vault| vault.file().device_id().is_some())
+            .or_else(|| {
+                self.vault_file()
+                    .ok()
+                    .map(|file| file.device_id().is_some())
+            })
+            .unwrap_or(false);
+        if device_wrapper
+            && self
+                .collection
+                .setting(START_SETTING)
+                .ok()
+                .flatten()
+                .and_then(|v| v.as_str().map(str::to_owned))
+                .as_deref()
+                == Some("device")
+        {
+            "device"
+        } else {
+            "ask"
+        }
+    }
+
+    pub(crate) fn set_start_mode(&mut self, mode: &str) -> Result<Option<String>, ApiError> {
+        // The lock time route sends the saved value again. The same value
+        // changes nothing, so it makes no new key and needs no recent unlock.
+        if mode == self.start_mode() {
+            return Ok(None);
+        }
+        if !self.start_choices().contains(&mode) {
+            return Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "invalid_config",
+                "this shell does not offer this start choice",
+            ));
+        }
+        if mode == "device" {
+            self.require_recent_unlock()?;
+            let (device_id, secret) = OpenVault::device_credentials()?;
+            let store = self
+                .device_store
+                .as_ref()
+                .ok_or_else(|| ApiError::internal("the keyring is not available"))?;
+            store.set(&device_id, secret.as_slice()).map_err(|detail| {
+                ApiError::new(
+                    StatusCode::BAD_GATEWAY,
+                    "keyring_failed",
+                    "Studio could not save a key in the keyring of this computer.",
+                )
+                .with_details(serde_json::json!({"detail": detail}))
+            })?;
+            let vault = self
+                .vault
+                .as_mut()
+                .ok_or_else(|| ApiError::internal("the vault closed"))?;
+            let replaced = vault.set_device_wrapper(&device_id, &secret)?;
+            self.save_vault()?;
+            self.collection
+                .set_setting(START_SETTING, &serde_json::json!("device"))?;
+            if let Some(old) = replaced {
+                let _ = store.delete(&old);
+            }
+            Ok(None)
+        } else {
+            let vault = self.vault.as_mut().ok_or_else(ApiError::vault_locked)?;
+            let removed = vault.remove_device_wrapper();
+            self.save_vault()?;
+            self.collection
+                .set_setting(START_SETTING, &serde_json::json!("ask"))?;
+            let warning = removed.and_then(|id| {
+                self.device_store
+                    .as_ref()
+                    .and_then(|store| store.delete(&id).err())
+            });
+            Ok(warning)
+        }
     }
 
     /// The stored time, when this shell offers it. A time from a different
@@ -1416,6 +1568,10 @@ impl Workspace {
         }
     }
 
+    pub(crate) fn start_unlock_failed(&self) -> bool {
+        self.start_unlock_failed
+    }
+
     pub(crate) fn vault_file(&self) -> Result<VaultFile, ApiError> {
         Ok(VaultFile::load(&self.vault_path)?)
     }
@@ -1465,6 +1621,7 @@ impl Workspace {
     pub(crate) fn unlock_with_passphrase(&mut self, passphrase: &str) -> Result<(), ApiError> {
         let file = self.vault_file()?;
         self.vault = Some(file.open_with_passphrase(passphrase)?);
+        self.start_unlock_failed = false;
         self.touch_vault();
         self.mark_unlocked();
         self.sync_grant_vaults(None);
@@ -1474,6 +1631,7 @@ impl Workspace {
     pub(crate) fn unlock_with_key(&mut self, key_base64: &str) -> Result<(), ApiError> {
         let file = self.vault_file()?;
         self.vault = Some(file.open_with_key(key_base64)?);
+        self.start_unlock_failed = false;
         self.touch_vault();
         self.mark_unlocked();
         self.sync_grant_vaults(None);
@@ -1487,6 +1645,7 @@ impl Workspace {
     ) -> Result<(), ApiError> {
         let file = self.vault_file()?;
         self.vault = Some(file.open_with_passkey(credential_id, prf_output)?);
+        self.start_unlock_failed = false;
         self.touch_vault();
         self.mark_unlocked();
         self.sync_grant_vaults(None);
@@ -1507,6 +1666,7 @@ impl Workspace {
     pub(crate) fn unlock_with_recovery_key(&mut self, recovery_key: &str) -> Result<(), ApiError> {
         let file = self.vault_file()?;
         self.vault = Some(file.open_with_recovery_key(recovery_key)?);
+        self.start_unlock_failed = false;
         self.touch_vault();
         self.mark_unlocked();
         self.sync_grant_vaults(None);

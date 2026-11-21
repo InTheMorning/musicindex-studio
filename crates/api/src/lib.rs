@@ -42,8 +42,8 @@ pub use import::{
 pub use window_close::{OnClose, WindowClose};
 pub use work::{Work, WriteGuard};
 pub use workspace::{
-    AccountIdentity, AppChange, AppHook, ClientAddress, Clock, ServerRules, VaultState, WallClock,
-    Workspace, WorkspaceHandle, private_dir,
+    AccountIdentity, AppChange, AppHook, ClientAddress, Clock, DeviceKeyStore, DeviceSecret,
+    ServerRules, VaultState, WallClock, Workspace, WorkspaceHandle, private_dir,
 };
 
 pub use musicindex_build_info::BuildInfo;

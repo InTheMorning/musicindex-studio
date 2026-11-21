@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makeSettingsDraft, changeSetting, settingsDraftView, discardSettings, saveSettings, asksSettingsLeave, SETTING_TABS } from '../ui/settingsdraft.js';
+import { makeSettingsDraft, changeSetting, settingsDraftView, discardSettings, saveSettings, asksSettingsLeave, SETTING_TABS, lockStartMenu } from '../ui/settingsdraft.js';
 import { makeHistory } from '../ui/undohistory.js';
 
 test('settings draft reports no, one, and many changes', () => {
@@ -14,13 +14,21 @@ test('settings draft reports no, one, and many changes', () => {
   assert.equal(settingsDraftView(draft).status, '2 changes not saved');
 });
 
-test('all seven settings track their owning tab', () => {
-  let draft = makeSettingsDraft({ scale: 1, lock: 1, window: 'tray', outside: true, nostr: '', libraryMax: 2, libraryMin: 1 });
+test('all eight settings track their owning tab', () => {
+  let draft = makeSettingsDraft({ scale: 1, lock: 1, start: 'ask', window: 'tray', outside: true, nostr: '', libraryMax: 2, libraryMin: 1 });
   for (const key of Object.keys(SETTING_TABS)) draft = changeSetting(draft, key, `changed-${key}`);
   const view = settingsDraftView(draft);
   assert.deepEqual(view.pending, Object.keys(SETTING_TABS));
   assert.deepEqual(view.tabs, ['general', 'nostr', 'data']);
   assert.deepEqual(view.rows, Object.keys(SETTING_TABS));
+});
+
+test('At start is shown only when the API gives start choices', () => {
+  assert.deepEqual(lockStartMenu(['ask', 'device']), [
+    { value: 'ask', label: 'Ask for the passphrase' },
+    { value: 'device', label: 'Unlock on this computer' },
+  ]);
+  assert.equal(lockStartMenu([]), null);
 });
 
 test('tab changes keep the draft; leaving with changes asks', () => {
@@ -80,4 +88,12 @@ test('save attempts every setting and sends both library limits once', async () 
   assert.deepEqual(calls, ['scale', 'lock', 'library:20:4']);
   assert.equal(result.errors.lock, 'locked');
   assert.deepEqual(settingsDraftView(result.draft).pending, ['lock']);
+});
+
+test('a keyring save error keeps its detail in the setting error', async () => {
+  const draft = changeSetting(makeSettingsDraft({ start: 'ask' }), 'start', 'device');
+  const result = await saveSettings(draft, { start: async () => {
+    throw { message: 'Studio could not save a key in the keyring of this computer.', details: { detail: 'The store is unavailable.' } };
+  } });
+  assert.equal(result.errors.start, 'Studio could not save a key in the keyring of this computer. The store is unavailable.');
 });

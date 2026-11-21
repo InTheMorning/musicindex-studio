@@ -16,6 +16,8 @@ pub use studio_api::{
 };
 use tokio::net::TcpListener;
 
+mod keyring;
+
 /// The port that the desktop shells try first (ADR 0124 item 7). A fixed
 /// port lets the browser or webview keep the settings of the UI.
 pub const DEFAULT_PORT: u16 = 42069;
@@ -296,8 +298,10 @@ where
     S: Future<Output = ()> + Send + 'static,
 {
     let lock = lock_data_dir(&options.data_dir)?;
-    let mut workspace =
-        Workspace::open(&options.data_dir).map_err(|e| StartError::new(format!("{e:?}")))?;
+    let mut workspace = Workspace::open(&options.data_dir)
+        .map_err(|e| StartError::new(format!("{e:?}")))?
+        .with_device_store(keyring::store());
+    workspace.unlock_from_device_store();
     if let Some(base) = &options.musicindex {
         workspace = workspace.with_musicindex(base);
     }

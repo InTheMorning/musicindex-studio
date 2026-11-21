@@ -130,6 +130,7 @@ pub(crate) async fn status(State(shared): State<Shared>) -> ApiResult {
                 json!({ "used": rules.used(), "limit": rules.storage_limit })
             }),
             "vault": w.vault_state(),
+            "start_unlock_failed": w.start_unlock_failed(),
             "connectors": w.collection.connectors()?.len(),
             "feeds": w.collection.feeds()?.len(),
         })))
@@ -4200,7 +4201,7 @@ const DEFAULT_DOWNLOAD_LIMIT_BYTES: u64 = download::DEFAULT_LIMIT_BYTES;
 pub(crate) async fn get_lock_settings(State(shared): State<Shared>) -> ApiResult {
     blocking(shared, |w| {
         Ok(Json(
-            json!({ "minutes": w.lock_minutes(), "choices": w.lock_choices() }),
+            json!({ "minutes": w.lock_minutes(), "choices": w.lock_choices(), "start": w.start_mode(), "start_choices": w.start_choices() }),
         ))
     })
     .await
@@ -4209,6 +4210,7 @@ pub(crate) async fn get_lock_settings(State(shared): State<Shared>) -> ApiResult
 #[derive(Deserialize)]
 pub(crate) struct LockSettingsBody {
     minutes: u64,
+    start: Option<String>,
 }
 
 /// Keep the time before the vault locks (ADR 0142).
@@ -4220,9 +4222,14 @@ pub(crate) async fn put_lock_settings(
         if !w.lock_choices().contains(&body.minutes) {
             return Err(invalid_config("this server does not offer this time"));
         }
+        let warning = if let Some(start) = body.start.as_deref() {
+            w.set_start_mode(start)?
+        } else {
+            None
+        };
         w.set_lock_minutes(body.minutes)?;
         Ok(Json(
-            json!({ "minutes": w.lock_minutes(), "choices": w.lock_choices() }),
+            json!({ "minutes": w.lock_minutes(), "choices": w.lock_choices(), "start": w.start_mode(), "start_choices": w.start_choices(), "warning": warning }),
         ))
     })
     .await

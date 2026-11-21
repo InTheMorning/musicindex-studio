@@ -1,6 +1,7 @@
 //! Contract tests of the local API (task 007).
 
 mod apps;
+mod device_unlock;
 mod feed_check;
 mod feed_retire;
 
@@ -8204,7 +8205,10 @@ async fn the_desktop_has_never_as_the_start_of_the_lock_time() {
     let app = app();
     let (status, body) = call(&app, "GET", "/api/v1/settings/lock", None).await;
     assert_eq!(status, StatusCode::OK);
-    assert_eq!(body, json!({ "minutes": 0, "choices": [0, 5, 10, 30, 60] }));
+    assert_eq!(
+        body,
+        json!({ "minutes": 0, "choices": [0, 5, 10, 30, 60], "start": "ask", "start_choices": [] })
+    );
     let (status, body) = call(
         &app,
         "PUT",
@@ -8233,7 +8237,10 @@ async fn a_stored_never_from_a_desktop_does_not_count_on_a_server() {
         .set_setting("vault_lock_minutes", &json!(0))
         .unwrap();
     let (_, body) = call(&app, "GET", "/api/v1/settings/lock", None).await;
-    assert_eq!(body, json!({ "minutes": 10, "choices": [5, 10, 30, 60] }));
+    assert_eq!(
+        body,
+        json!({ "minutes": 10, "choices": [5, 10, 30, 60], "start": "ask", "start_choices": [] })
+    );
 }
 
 #[tokio::test]

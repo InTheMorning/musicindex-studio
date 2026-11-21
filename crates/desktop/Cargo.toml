@@ -23,6 +23,7 @@ musicindex-build-info.workspace = true
 directories.workspace = true
 studio-api.workspace = true
 studio-core.workspace = true
+keyring = "4.2.0"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
 
 [dev-dependencies]

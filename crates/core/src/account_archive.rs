@@ -278,7 +278,14 @@ pub fn write_archive_from<W: Write>(
     let manifest_json = serde_json::to_vec_pretty(manifest)
         .map_err(|e| ArchiveError::new(ArchiveCause::InvalidManifest, e.to_string()))?;
     append_bytes(&mut builder, MANIFEST, &manifest_json, mtime)?;
-    append_file(&mut builder, VAULT, &vault, mtime)?;
+    let vault_bytes =
+        fs::read(&vault).map_err(|e| ArchiveError::new(ArchiveCause::Io, e.to_string()))?;
+    let vault_json = String::from_utf8(vault_bytes)
+        .map_err(|e| ArchiveError::new(ArchiveCause::Io, e.to_string()))?;
+    let vault_bytes = crate::vault::VaultFile::from_json(&vault_json)
+        .map_err(|e| ArchiveError::new(ArchiveCause::Io, e.to_string()))?
+        .without_device_wrapper_bytes();
+    append_bytes(&mut builder, VAULT, &vault_bytes, mtime)?;
     let grants = folder.join(GRANTS);
     if grants.is_dir() {
         append_dir(&mut builder, GRANTS, mtime)?;
@@ -980,7 +987,9 @@ mod tests {
     /// Make an account folder with every kind of entry.
     fn account(dir: &Path) {
         fs::create_dir_all(dir.join("grants")).unwrap();
-        fs::write(dir.join("vault.json"), b"{\"vault\":true}").unwrap();
+        let mut vault = crate::vault::OpenVault::create("correct horse battery").unwrap();
+        vault.set_device_wrapper("test-device", &[7; 32]).unwrap();
+        fs::write(dir.join("vault.json"), vault.file().to_json()).unwrap();
         fs::write(dir.join("grants/4.json"), b"{\"grant\":4}").unwrap();
         fs::create_dir_all(dir.join("library/album")).unwrap();
         fs::write(dir.join("library/album/album.xml"), b"<rss/>").unwrap();
@@ -1029,8 +1038,14 @@ mod tests {
             manifest, unpacked,
             "ADR 0107 item 6: check and unpack must read one manifest"
         );
+        assert_eq!(
+            fs::read(target.join("vault.json")).unwrap(),
+            crate::vault::VaultFile::load(&source.join("vault.json"))
+                .unwrap()
+                .without_device_wrapper_bytes(),
+            "the archive must omit the local device wrapper"
+        );
         for name in [
-            "vault.json",
             "grants/4.json",
             "library/album/album.xml",
             "library/album/track.mp3",

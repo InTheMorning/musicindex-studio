@@ -480,6 +480,15 @@ mod tests {
             rustix::process::DumpableBehavior::NotDumpable,
             "ADR 0104 item 1: the desktop must be not dumpable. Call harden_process() at the start of run()."
         );
+        let during = keyring::while_dumpable(|| rustix::process::dumpable_behavior().unwrap());
+        assert_eq!(
+            (during, rustix::process::dumpable_behavior().unwrap()),
+            (
+                rustix::process::DumpableBehavior::Dumpable,
+                rustix::process::DumpableBehavior::NotDumpable
+            ),
+            "ADR 0235 item 15: the keyring read at the start is dumpable, and the process is not dumpable after it. Call keyring::while_dumpable() only around the read."
+        );
     }
 
     #[tokio::test]

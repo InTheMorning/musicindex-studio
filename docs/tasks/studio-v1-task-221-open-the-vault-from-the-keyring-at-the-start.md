@@ -87,6 +87,7 @@ Human, by the operator: the check of ADR 0235.
 - `crates/desktop/src/keyring.rs`: a read waits at most 60 seconds. A keyring such as KeePassXC can ask the user to unlock it, and the start must not wait with no limit. Technical choice of the main session: the limit is 60 seconds.
 - `crates/api/ui/vaultlock.js` and `crates/api/ui/app.js`: "At start" has the hint `START_HINT`, as "Lock Studio after" has `LOCK_HINT`.
 - `crates/api/src/tests/device_unlock.rs`: tests for ADR 0235 items 3, 12 and 13, for the same start value after 20 minutes, and for a server lock time with `start: "ask"`.
+- `crates/desktop/src/keyring.rs`, `while_dumpable`: the keyring read at the start runs while the process is dumpable (ADR 0235 item 15, from finding 2 of the human check). `crates/desktop/src/lib.rs`: the not dumpable test also examines this function.
 
 Main session checks:
 
@@ -96,6 +97,14 @@ Main session checks:
 - Screenshots with `tools/drive-ui.mjs`: the unlock screen with the notice of item 12 at 1280 px and 390 px. Settings > Lock with "At start" is also at 1280 px and 390 px. `$edges()` gives no finding, and the fit check gives no finding at 390 px and 761 px.
 - The Tauri binary was not started for this task. It calls the same `studio_desktop::start`.
 
+## Findings Of The Human Check
+
+The operator used KeePassXC as the Secret Service provider.
+
+1. KeePassXC shows "unknown executable" for Studio. The window "Access Request" gives the warning "Non-existing/inaccessible executable path". Cause: the desktop start makes the process not dumpable (`crates/desktop/src/lib.rs` near line 83). Then other processes of the same user cannot read `/proc/PID/exe`.
+2. "Remember" in that window has no effect after a restart. KeePassXC asks again at each start of Studio. Cause: KeePassXC keeps each decision only in memory, in the `DBusClient` of one D-Bus connection (`src/fdosecrets/dbus/DBusClient.h` and `.cpp` of KeePassXC). Item 15 does not change this. The operator kept ADR 0235 item 15, so that the window shows the program path of Studio with no warning, and a click at each start.
+3. The first Studio process gave "SS error: prompt dismissed" with no window, and KeePassXC kept 4 entries with no title. A new Studio process wrote the key with no error. After "Allow Selected", the start opened the vault with no unlock screen (ADR 0235 item 10). Inference: KeePassXC kept a refused condition for the connection of the first process. The test programs `kdiag` (the crate `secret-service`, all four cases) and `kdiag2` (the crate `keyring`, as Studio uses it) passed from a terminal.
+
 Open:
 
-- The human check of ADR 0235 on the computer of the operator.
+- None. The human check of ADR 0235 passed with KeePassXC: item 10 opened the vault with no unlock screen, and with item 15 the access request shows `/home/citizen/build/musicindex-studio/target/release/musicindex-studio-desktop` with no warning.

@@ -5,8 +5,10 @@
 - Owner: operator
 - Accepted: 2026-11-20 by the operator, who selected "Keyring key" from a drawing in the questionnaire. The choices were a key in the keyring, the passphrase in the keyring, and no change.
 - Technical choices: the main session selected items 2 to 14. The operator did not receive them as a question.
+- Revised: 2026-11-20, item 15 added. The operator selected "Short open window" from a drawing in the questionnaire, after the human check with KeePassXC. The choices were item 15, no confirmation in KeePassXC, and a click at each start. The KeePassXC source then showed that "Remember" applies only while one client process runs. The operator kept item 15 and a click at each start.
 - Bar: crosses modules. It adds a wrapper kind to the vault file in `studio-core`, a route and a setting in `studio-api`, and the keyring in `studio-desktop`. Without this record, an agent can keep ADR 0003 item 2 and refuse a keyring, or keep the passphrase itself in the keyring.
 - Changes: [ADR 0003](0003-user-unlocked-secret-vault.md) item 2, the passphrase as the only unlock method of the desktop vault.
+- Changes: [ADR 0104](0104-key-material-stays-off-the-disk.md) item 1, the desktop process is not dumpable from its start.
 - Uses: [ADR 0142](0142-a-user-selects-the-time-before-the-vault-locks.md), the section "Lock" of Settings. [ADR 0106](0106-a-sensitive-account-change-needs-a-recent-unlock.md), the recent unlock. [ADR 0149](0149-the-desktop-app-has-many-collections.md), one vault for each collection.
 - Source: [research note of 2026-11-15](../research/2026-11-15-vault-unlock-at-the-start-of-the-desktop-app.md), option 1.
 
@@ -40,12 +42,14 @@ ADR 0003 refused the keychain of the operating system, because the encrypted vau
 12. When the keyring is not available, the entry is not there, or its key does not open the vault, the vault stays locked. The unlock screen shows the passphrase field and the notice "Studio could not open the vault from the keyring of this computer. Enter the passphrase." The device wrapper stays.
 13. The keyring opens the vault only at the start of the app. After a lock, by the lock time or by **Lock**, Studio asks for the passphrase.
 14. When "Unlock on this computer" cannot write to the keyring, the setting stays "Ask for the passphrase". The error notice says "Studio could not save a key in the keyring of this computer." and gives the detail of the keyring.
+15. On Linux, the desktop process is dumpable only during the keyring read of item 10. It is not dumpable before the read, and it is not dumpable again before the vault opens. A keyring such as KeePassXC reads `/proc/PID/exe` to identify the app, and the kernel lets it do that only for a dumpable process. Without the program path, the access request of KeePassXC shows "unknown executable" and a warning. With it, the user can see that the request comes from Studio. KeePassXC keeps "Remember" only while the Studio process runs, so it asks at each start.
 
 ## Item Map
 
 | Earlier item | Change by this ADR |
 | --- | --- |
 | ADR 0003 item 2 | The passphrase opens the vault on each computer. On the desktop, a key in the keyring of the computer can also open it (items 4 to 13). |
+| ADR 0104 item 1 | The desktop process is not dumpable from its start, except during the keyring read at the start (item 15). |
 
 ## Consequences
 
@@ -53,6 +57,7 @@ ADR 0003 refused the keychain of the operating system, because the encrypted vau
 - A vault file that moves to a different computer opens with the passphrase. Its device wrapper does nothing there.
 - On Linux, the computer needs a Secret Service provider, such as GNOME Keyring or KeePassXC. A window manager such as i3 does not always start one. Without it, item 12 applies.
 - The vault file grows by one wrapper.
+- During the keyring read at the start, a program of the same user can attach to the Studio process when the kernel permits it. With the Yama value `ptrace_scope` 1, only the parent of Studio can attach. A program that attaches stays attached after item 15 makes the process not dumpable again. The vault is locked at that time, but the program can then read the vault key after the vault opens. The keyring already lets each program of the same user open the vault (first consequence).
 
 ## Alternatives Considered
 
@@ -67,6 +72,7 @@ Mechanical:
 
 - `crates/core` tests: a device wrapper opens the vault. A second device wrapper replaces the first. The remove of the wrapper leaves the passphrase wrapper. A change of the passphrase keeps the device wrapper. An export and a copy of a collection have no device wrapper.
 - `crates/api` tests of the settings, with a keyring in memory: the lock settings give the start choices on the desktop and not on the server. The change to "Unlock on this computer" needs a recent unlock. A failed keyring write leaves the vault file unchanged.
+- `crates/desktop` test of item 15: a not dumpable process is dumpable during `keyring::while_dumpable`, and not dumpable after it.
 - `crates/api` tests of the start, with a keyring in memory: a start with the entry opens the vault and sets no recent unlock. A start with no entry or a wrong key leaves the vault locked and gives the notice. A lock and a new unlock do not read the keyring.
 
 Visual, by the main session: the section "Lock" at 1280 px and at 390 px, and the unlock screen with the notice of item 12.

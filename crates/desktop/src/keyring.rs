@@ -30,17 +30,42 @@ fn read(device_id: &str) -> Result<Option<DeviceSecret>, String> {
     }
 }
 
+/// Run `read` while the process is dumpable, and then set the earlier
+/// dumpable state again (ADR 0235 item 15). A keyring such as `KeePassXC`
+/// reads `/proc/PID/exe` to identify the app, and the kernel lets it do that
+/// only for a dumpable process. The vault is locked during the read, so no
+/// vault key is in memory.
+pub(crate) fn while_dumpable<T>(read: impl FnOnce() -> T) -> T {
+    #[cfg(target_os = "linux")]
+    {
+        use rustix::process::{DumpableBehavior, dumpable_behavior, set_dumpable_behavior};
+        let earlier = dumpable_behavior().ok();
+        if earlier == Some(DumpableBehavior::NotDumpable) {
+            let _ = set_dumpable_behavior(DumpableBehavior::Dumpable);
+        }
+        let value = read();
+        if earlier == Some(DumpableBehavior::NotDumpable) {
+            crate::harden_process();
+        }
+        value
+    }
+    #[cfg(not(target_os = "linux"))]
+    read()
+}
+
 impl DeviceKeyStore for KeyringStore {
     fn get(&self, device_id: &str) -> Result<Option<DeviceSecret>, String> {
         let (send, receive) = mpsc::channel();
         let id = device_id.to_owned();
-        std::thread::spawn(move || {
-            // The receiver can be gone after the time limit.
-            let _ = send.send(read(&id));
-        });
-        receive
-            .recv_timeout(READ_LIMIT)
-            .map_err(|_| "the keyring gave no answer in 60 seconds".to_owned())?
+        while_dumpable(|| {
+            std::thread::spawn(move || {
+                // The receiver can be gone after the time limit.
+                let _ = send.send(read(&id));
+            });
+            receive
+                .recv_timeout(READ_LIMIT)
+                .map_err(|_| "the keyring gave no answer in 60 seconds".to_owned())
+        })?
     }
 
     fn set(&self, device_id: &str, secret: &[u8]) -> Result<(), String> {

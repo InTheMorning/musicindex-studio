@@ -214,6 +214,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0237: The README shows a few screenshots in the dark theme](adr/0237-the-readme-shows-a-few-screenshots-in-the-dark-theme.md)
 - [ADR 0238: A found release gives the page of each role](adr/0238-a-found-release-gives-the-page-of-each-role.md)
 - [ADR 0239: The panel holds the content and the page has tabs](adr/0239-the-panel-holds-the-content-and-the-page-has-tabs.md)
+- [ADR 0240: Hosting is a first role, and a stray release moves to its pages](adr/0240-hosting-is-a-first-role-and-a-stray-release-moves-to-its-pages.md)
 
 ## Plans
 

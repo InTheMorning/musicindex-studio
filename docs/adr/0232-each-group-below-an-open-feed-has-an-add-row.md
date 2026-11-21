@@ -9,6 +9,7 @@
 - Changes: [ADR 0215](0215-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) items 2, 5 and 6 (items 1 to 12).
 - Uses: [ADR 0230](0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 2, 3 and 5, the add menu and the forms. [ADR 0231](0231-a-new-release-writes-its-artist-page-and-the-files-of-a-restored-release.md) item 6, the parent list of a new release. [ADR 0227](0227-undo-and-redo.md), the undo of a remove. Stophammer ADR 0069, section "A direct link between a label feed and an artist feed" (rejected).
 - Changed by: [ADR 0233](0233-each-add-form-finds-on-music-index-and-copies-the-found-feed.md) item 3, on 2026-11-20. Item 8: the page **Add One You Have** is no longer a start of a new feed.
+- Changed by: [ADR 0240](0240-hosting-is-a-first-role-and-a-stray-release-moves-to-its-pages.md) items 5 to 8, on 2026-11-21. Items 2 to 4: a hosting feed has no group Releases, and only an artist feed has **＋ Add release**.
 
 ## Context
 

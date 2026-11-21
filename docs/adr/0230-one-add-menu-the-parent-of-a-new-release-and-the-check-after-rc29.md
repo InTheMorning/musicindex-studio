@@ -16,6 +16,7 @@
 - Uses: [ADR 0164](0164-the-releases-of-a-publisher-feed-have-an-add-row.md), the add row of a publisher page. [ADR 0211](0211-studio-follows-a-move-that-a-different-studio-made.md) item 16, the notice **Use This File Host**. [ADR 0036](0036-library-records-host-inventory-and-host-operations.md), the remote records.
 - Changed by: [ADR 0231](0231-a-new-release-writes-its-artist-page-and-the-files-of-a-restored-release.md) items 1 to 6 and 14 to 17, on 2026-11-20. Item 9: the parent list has artist pages only. Item 11: the sheet says "Release". Item 27: a notice under the head shows the actions. Items 31 and 32: the corrected repair and the join of the rows with " 2".
 - Changed by: [ADR 0233](0233-each-add-form-finds-on-music-index-and-copies-the-found-feed.md) items 1 to 14, on 2026-11-20. Items 1, 4 and 11: **Add One You Have…** leaves the menu, and each form gets the search. Items 14 to 16: a selection copies the tracks and the payment recipients.
+- Changed by: [ADR 0240](0240-hosting-is-a-first-role-and-a-stray-release-moves-to-its-pages.md) items 1 and 4, on 2026-11-21. Item 1: the menu gets Hosting after Label. Item 2: the menu of a label page or a hosting page has no Release.
 
 ## Context
 

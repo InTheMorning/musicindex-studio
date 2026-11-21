@@ -8,6 +8,7 @@
 - Uses: these current ADRs own a part of this area. This ADR names each one at its item. [ADR 0069](0069-the-outline-head-opens-the-feed-page.md) (the outline head), [ADR 0075](0075-the-publisher-page-has-payments-and-credits.md) (the tabs Value Routes and Credits of a publisher page), [ADR 0157](0157-the-page-tabs-are-a-segmented-control.md) (the look of the tabs), [ADR 0174](0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md) (the tab Check), [ADR 0197](0197-the-tabs-and-the-field-rows-follow-the-editor-column.md) (the select menu of the tabs), [ADR 0206](0206-the-shell-and-the-editor-pages.md) (the outline of an album), [ADR 0225](0225-the-first-tab-of-a-release-is-release.md) (the first tab of a release), [ADR 0232](0232-each-group-below-an-open-feed-has-an-add-row.md) (the add rows of the outline).
 - Uses: musicindex ADR 0080 R-ACT-1 item 3 and musicindex ADR 0085 R-CASE-1.
 - Source: [findings of local use, finding 4](../reviews/2026-11-06-local-use-findings.md), and the mockups in `.studio-dev/mockup-outline/`.
+- Changed by: [ADR 0240](0240-hosting-is-a-first-role-and-a-stray-release-moves-to-its-pages.md) item 7, on 2026-11-21. Item 4: the outline of a publisher feed shows the groups of its role.
 
 ## Context
 

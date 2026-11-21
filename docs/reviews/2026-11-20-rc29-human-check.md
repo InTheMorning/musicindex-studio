@@ -230,3 +230,22 @@ Operator choices of 2026-11-20 after the check, from drawings:
 - Finding 2: the first write of a new release always writes its artist page too. The check box "Also write {title}" is on and locked for that write. The release row and **Issues** also report a release that its artist page does not list, with an action that writes the artist page.
 - Finding 3: a release row below an artist page shows the line "Artist: {name}" only when the artist name of the release differs from the name of the artist page.
 - Findings 4 and 5 are defects. They need no choice.
+
+## Desktop Check Of 75e1c2d
+
+The operator ran the release binary `target/release/musicindex-studio-desktop` of main at `75e1c2d` on the real data.
+
+Steps:
+
+1. Pass. The schema version is 50. The test album has `files_connector_id` 1 and `files_connector_kept` NULL after the migration.
+2. Pass. A move of the test album to bastone gives "Each file of this release is already on this file host.", and **Add to the Draft** is disabled.
+3. Pass. A move of the media files to CloudFlare, with the delete of the bastone files on, then a discard: **Media files** says bastone again.
+4. Pass. A copy of Various & Assorted below HeyCitizen shows "Artist: Matt Finlay" in the level of HeyCitizen.
+5. Pass. Review of the new release shows "Also write HeyCitizen" on, the text "A new release is written with its pages." and **Remove from Collection…**.
+6. Pass. **Remove from Collection…** in Review removes the release, and the HeyCitizen row says "No changes".
+
+Findings:
+
+1. A click on **Find on Music Index** does not put the focus in the search field.
+
+Operator choice: the search field gets the focus when the sheet opens. The main session added `autofocus` to the field `add-find-query` (`crates/api/ui/app.js`). The step file `.studio-dev/v-207/s45.json` found the focus on that field at 1100 px and at 390 px.

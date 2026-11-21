@@ -1536,7 +1536,7 @@ function AddFindSheet({ open, type, role, parent, connectors, onPick, onAdded, o
       ${artist
         ? html`<section class="page-section"><${RowList}><button class="link-row" type="button" onClick=${() => { setArtist(null); setProblem(null); }}>
             <span class="text"><span class="label">‹ Results</span><span class="summary">${artist.row.title || ''}</span></span></button><//></section>`
-        : html`<section class="page-section pinned-form"><div class="group rows"><${Field} id="add-find-query" label="Name or feed address" type="search" value=${query} ...${fields.input}>${fields.list}<//></div>
+        : html`<section class="page-section pinned-form"><div class="group rows"><${Field} id="add-find-query" label="Name or feed address" type="search" autofocus value=${query} ...${fields.input}>${fields.list}<//></div>
           ${address && html`<div class="actions"><button class="button" type="button" disabled=${busy} onClick=${() => addAddress(query.trim())}>Add This Address</button></div>`}</section>`}
       <${ErrorNotice} error=${problem} />
       ${busy && html`<p class="empty" role="status">Reading the feed…</p>`}

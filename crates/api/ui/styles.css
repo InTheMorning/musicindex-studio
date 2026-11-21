@@ -2018,6 +2018,9 @@ button.outline-feed {
 .releases-tile .releases-text { width: 100%; }
 .releases-tile .art-dot { width: 100%; }
 .empty-releases { display: grid; gap: 12px; justify-items: start; }
+/* The add button of an empty list is at the left edge of the content, so
+   its menu opens to the right and does not go below the sidebar. */
+.empty-releases .add-menu .sort-menu { right: auto; left: 0; }
 
 /* The Welcome page and its first steps (ADR 0119). The large rows have an icon
    box of 2.75rem, which is 44 px at the default size. The step line shows each step as done, now or later. */

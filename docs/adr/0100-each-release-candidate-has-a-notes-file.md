@@ -4,6 +4,7 @@
 - Date: 2026-11-01
 - Owner: operator
 - Accepted: 2026-11-01 by the operator.
+- Changed by: [ADR 0236](0236-the-release-notes-are-for-testers-and-the-operator-checks-are-in-a-review-file.md) item 1 changes item 2: the notes are for testers who are not the operator, with the sections "What's new", "Try this" and "Known problems". The checks of the operator are in a review file.
 - Uses: [ADR 0066](0066-the-server-ships-as-a-container-image.md) for the candidate tag, the server image and `tools/release-candidate.sh`.
 
 ## Context

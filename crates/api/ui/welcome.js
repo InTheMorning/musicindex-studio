@@ -74,10 +74,13 @@ export function showWelcome(feeds) {
 // hosts, with the first one selected, or null with no file host. `rows` are
 // the rows of the file host types. `selected` is the type of the first row
 // with no file host. With a file host, the menu is selected at the start, so
-// `selected` is null and the step has one primary button.
+// `selected` is null and the step has one primary button. An account has
+// one temporary area only (ADR 0122 item 9). When the area exists, the menu
+// holds it and the row "Try it here (temporary)" does not show.
 export function hostStepModel(connectors, serverMode) {
   const list = connectors || [];
-  const rows = HOST_ROWS(serverMode);
+  const hasTemporary = list.some((c) => c.kind === 'temporary');
+  const rows = HOST_ROWS(serverMode).filter((row) => !(hasTemporary && row.type === 'temporary'));
   const menu = list.length > 0 ? { value: String(list[0].id), options: list.map((c) => [String(c.id), c.name]) } : null;
   return { menu, rows, selected: menu ? null : rows[0].type };
 }

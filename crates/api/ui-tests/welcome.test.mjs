@@ -53,6 +53,14 @@ test('hostStepModel selects the first row, or the menu with a connected file hos
   assert.equal(hostStepModel(undefined, false).menu, null);
 });
 
+test('hostStepModel removes the temporary row when the account has the temporary area (ADR 0122 item 9)', () => {
+  const server = hostStepModel([{ id: 3, name: 'Temporary area', kind: 'temporary' }], true);
+  assert.deepEqual(server.rows.map((r) => r.type), ['nsite', 's3', 'sftp'],
+    'ADR 0122 item 9: an account has one temporary area only. Select the area in the menu, not in a second row.');
+  assert.deepEqual(server.menu, { value: '3', options: [['3', 'Temporary area']] });
+  assert.equal(server.selected, null);
+});
+
 test('the text of ADR 0122 item 3 is as decided, for the temporary row', () => {
   assert.equal(HOST_ROWS(true)[0].line, 'Kept for 7 days. Pick a real file host to keep your pages.');
   assert.equal(HOST_STEP.temporary, 'Kept for 7 days. Pick a real file host to keep your pages.');

@@ -1,0 +1,29 @@
+# Findings From The Tutorial For A Hosting User
+
+On 2026-11-22, the main session made a tutorial for a person who hosts many artists on one DreamHost site. The tutorial changes the payees of about 45 feeds to LNURL addresses, and moves three artist pages below a new hosting page. The main session ran each step on a test copy of the public feeds (`.studio-dev/tj-tutorial`, ignored). No feed was written to a server.
+
+This file records the possible improvements. It states no rule. Each fix needs its own decision or task.
+
+## Findings
+
+1. **A page move leaves many drafts, and no control writes them together.** The move of The Doerfels gave 21 release drafts and one hosting page draft. The move sheet has no write button (`crates/api/ui/editor.js:2805`). Only a change set has a write button for many feeds (`crates/api/ui/app.js:3375`). Review of a release writes its linked pages only before the first write of the release (`crates/api/src/routes.rs:4509`). Thus the user opens Review for each of about 38 feeds.
+
+   Proposal: a page move makes a change set, as a payee batch does, with **Write N Feeds** and **Discard**.
+
+2. **The move error does not name the feed.** When one release is read-only, the move sheet shows "Studio cannot change this feed. It is read-only." The move of 21 releases does not tell which release is read-only. Proposal: name each read-only release, and give the button that connects its file host.
+
+3. **The folder scan misses feeds at a large folder depth or in a large folder.** A file host list goes to a depth of 4 folders and stops at 1000 files (`crates/core/src/connector.rs:78` and `:80`). A WordPress site keeps its feeds in `wp-content/uploads/2023/08/`, which is below that depth. Three feeds stayed read-only until a second file host used the folder `wp-content/uploads`. A DreamHost site folder with media files can also have more than 1000 files. The File hosts page tells the user nothing about the feeds that it did not find. The hint for a truncated list (`crates/api/ui/app.js:1821`) is on a different page. Proposal: after a match, name the feeds that stay read-only, and tell when the scan stopped at a limit.
+
+4. **An artist feed with no role has no Move To….** The three artist feeds have no `rel` role, so Studio shows them under "No role" with the type "Feed". **Move To…** shows only for the role artist or label (`crates/api/ui/app.js:2595`). The user must find the Role field in the page form first. Proposal: show **Move To…** on a publisher feed with no role, and set the role Artist with the move.
+
+5. **The move sheet shows "Changes 21 releases:" with no lines.** When Label and Hosting are both "None", the sheet shows a colon and an empty list. Proposal: show "Select a label or a hosting page." until a value changes.
+
+6. **The batch sheet selects feeds that do not change.** "Use the LNURL Address" for Middle Season selected 8 feeds. Review had 6 feeds, because 2 feeds already paid the address (outcome `no_node_recipient`). Proposal: the sheet tells "2 feeds pay this address already" and does not count them in **Review in N Feeds**.
+
+7. **A URL breaks inside a word.** The fit check found these (musicindex ADR 0065 R-FIT-3): at 390 px, `https://www.doerfelverse.com/` on the File hosts card; at 761 px, `https://sirtjthewrathful.com/tracks/thoughtitwasreal.xml` on a release page. Proposal: give each URL element the attribute `data-fit-allow-break`, as the check message tells.
+
+8. **The hosting form shows "Artist or label" as its type.** The sheet "Make a new hosting page" has Type "Artist or label" and Role "Hosting". The two fields seem to disagree. Proposal: name the type "Publisher page", or hide the field when the role is set.
+
+## Open
+
+- Findings 1 and 3 have the most effect for a hosting user. The main session recommends that the operator selects them first.

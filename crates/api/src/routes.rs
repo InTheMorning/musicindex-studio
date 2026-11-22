@@ -8515,6 +8515,7 @@ pub(crate) async fn recipient_uses(
             let channel = uses(&places.channel);
             let items = places.items.iter().filter(|list| uses(list)).count();
             let live_items = places.live_items.iter().filter(|list| uses(list)).count();
+            let node = change_set::has_node_recipient(places.all(), &wallet);
             if !channel && items == 0 && live_items == 0 {
                 continue;
             }
@@ -8525,6 +8526,7 @@ pub(crate) async fn recipient_uses(
                 "channel": channel,
                 "items": items,
                 "live_items": live_items,
+                "node": node,
                 "writable": row.connector_id.is_some(),
             }));
         }

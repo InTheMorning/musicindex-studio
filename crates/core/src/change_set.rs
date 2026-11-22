@@ -1033,13 +1033,25 @@ fn add_to_releases(feed: &mut Feed, wallet: &Wallet, operation: &RecipientOperat
     Outcome::NotChanged { cause, parts }
 }
 
+/// True when the list has a recipient of the wallet that is not an
+/// `lnaddress` recipient (ADR 0243 item 16).
+#[must_use]
+pub fn has_node_recipient<'a>(
+    recipients: impl IntoIterator<Item = &'a Recipient>,
+    wallet: &Wallet,
+) -> bool {
+    recipients.into_iter().any(|recipient| {
+        wallet.matches(recipient) && !is_lnaddress_type(recipient.recipient_type.as_deref())
+    })
+}
+
 /// Replace each recipient of the wallet that is not an `lnaddress`
 /// recipient (ADR 0095 item 11).
 fn use_lnaddress_in_block(block: &mut ValueBlock, wallet: &Wallet, address: &str) -> BlockResult {
     let to_change = |e: &Entry<Recipient>| {
         wallet.matches(&e.value) && !is_lnaddress_type(e.value.recipient_type.as_deref())
     };
-    if !block.recipients.iter().any(to_change) {
+    if !has_node_recipient(block.recipients.iter().map(|entry| &entry.value), wallet) {
         let has_wallet = block.recipients.iter().any(|e| wallet.matches(&e.value));
         return BlockResult::Skipped(if has_wallet {
             Cause::NoNodeRecipient
@@ -2249,6 +2261,23 @@ mod tests {
 
     fn wallet(address: &str) -> Wallet {
         Wallet::single(key(address))
+    }
+
+    #[test]
+    fn has_node_recipient_matches_only_node_members_of_the_wallet() {
+        let wallet = wallet("ann@example.com");
+        let node = recipient("ann@example.com", "100").value;
+        let mut lnaddress = recipient("ann@example.com", "100").value;
+        lnaddress.recipient_type = Some("lnaddress".into());
+
+        assert!(
+            has_node_recipient([&node], &wallet),
+            "ADR 0243 item 16: fix has_node_recipient for a node recipient"
+        );
+        assert!(
+            !has_node_recipient([&lnaddress], &wallet),
+            "ADR 0243 item 16: fix has_node_recipient for an lnaddress recipient"
+        );
     }
 
     /// A feed with a channel block, an item block, a live item block and

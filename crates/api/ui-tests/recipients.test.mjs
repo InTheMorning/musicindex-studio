@@ -316,8 +316,8 @@ test('the page of a wallet has the five operations, the last one destructive (AD
 
 test('each sheet of a wallet lists the feeds, each selected, and counts them in its button (ADR 0099 item 7)', () => {
   const uses = [
-    { feed_id: 1, title: 'One', channel: true, items: 2, live_items: 0, writable: true },
-    { feed_id: 2, title: '', channel: false, items: 0, live_items: 1, writable: false }];
+    { feed_id: 1, title: 'One', channel: true, items: 2, live_items: 0, writable: true, node: true },
+    { feed_id: 2, title: '', channel: false, items: 0, live_items: 1, writable: false, node: true }];
   for (const kind of ['change_address', 'rename', 'use_lnaddress', 'remove']) {
     const sheet = walletSheet(kind, uses);
     assert.deepEqual(sheet.rows.map((r) => [r.id, r.checked]), [[1, true], [2, true]]);
@@ -327,6 +327,20 @@ test('each sheet of a wallet lists the feeds, each selected, and counts them in 
   assert.equal(walletSheet('rename', [uses[0]]).button, 'Review in 1 Feed');
   assert.equal(walletSheet('add', uses).title, 'Add to All Releases');
   assert.deepEqual(walletSheet('add', uses).rows, [], 'The feeds of Add to All Releases come from the artist or label that the user selects.');
+});
+
+test('Use the LNURL Address lists only feeds that change (ADR 0243 item 16)', () => {
+  const uses = [
+    { feed_id: 1, title: 'One', channel: true, items: 0, live_items: 0, writable: true, node: true },
+    { feed_id: 2, title: 'Two', channel: true, items: 0, live_items: 0, writable: true, node: false },
+    { feed_id: 3, title: 'Three', channel: true, items: 0, live_items: 0, writable: true, node: true }];
+  const lnurl = walletSheet('use_lnaddress', uses);
+  assert.deepEqual(lnurl.rows.map((row) => row.id), [1, 3], 'ADR 0243 item 16: fix walletSheet to filter feeds with node: false');
+  assert.equal(lnurl.button, 'Review in 2 Feeds', 'ADR 0243 item 16: fix walletSheet button count');
+  assert.equal(lnurl.note, '1 feed pays this address already.', 'ADR 0243 item 16: fix walletSheet note');
+  const changeAddress = walletSheet('change_address', uses);
+  assert.equal(changeAddress.rows.length, 3, 'ADR 0243 item 16: fix walletSheet so Change Address keeps every feed');
+  assert.equal(changeAddress.note, undefined, 'ADR 0243 item 16: fix walletSheet so Change Address has no note');
 });
 
 test('the fields of a wallet sheet start at the member with the type and give the body of the route', () => {

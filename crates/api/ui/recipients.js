@@ -520,8 +520,13 @@ export function walletFeedRows(uses) {
 // feeds and the text of the primary button. The sheet "Add to All Releases"
 // has no feed until the user selects an artist or label.
 export function walletSheet(kind, uses) {
-  const rows = kind === 'add' ? [] : walletFeedRows(uses);
-  return { title: WALLET_TITLES[kind], rows, button: reviewLabel(checkedIds(rows).length) };
+  const list = uses || [];
+  const rows = kind === 'add' ? [] : walletFeedRows(kind === 'use_lnaddress' ? list.filter((use) => use.node) : list);
+  const alreadyPaying = kind === 'use_lnaddress' ? list.filter((use) => !use.node).length : 0;
+  const note = alreadyPaying > 0
+    ? `${alreadyPaying} ${alreadyPaying === 1 ? 'feed pays' : 'feeds pay'} this address already.`
+    : undefined;
+  return { title: WALLET_TITLES[kind], rows, button: reviewLabel(checkedIds(rows).length), ...(note ? { note } : {}) };
 }
 
 // The start values of the fields of a sheet. The address fields start at the

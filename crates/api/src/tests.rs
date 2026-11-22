@@ -13617,6 +13617,17 @@ async fn recipient_uses_and_a_rename_act_on_each_member_of_the_wallet() {
     .await;
     assert_eq!(status, StatusCode::OK, "{uses}");
     assert_eq!(uses["feeds"].as_array().unwrap().len(), 2, "{uses}");
+    let rows = uses["feeds"].as_array().unwrap();
+    assert_eq!(
+        rows.iter().find(|row| row["feed_id"] == node).unwrap()["node"],
+        true,
+        "ADR 0243 item 16: fix has_node_recipient for the node feed"
+    );
+    assert_eq!(
+        rows.iter().find(|row| row["feed_id"] == ln).unwrap()["node"],
+        false,
+        "ADR 0243 item 16: fix has_node_recipient for the lnaddress feed"
+    );
     let (status, set) = call(
         &app,
         "POST",

@@ -2,7 +2,7 @@
 
 Decision: [ADR 0243](../adr/0243-a-move-is-a-change-set-and-a-level-gathers-its-pages.md) item 16. Finding 6 of [the tutorial findings](../reviews/2026-11-22-tj-tutorial-findings.md).
 
-Status: Open. Task 231 must be committed first, because both tasks change `crates/api/src/routes.rs`.
+Status: Done. The main session corrected the doc comment of `has_node_recipient`, so that it states the `lnaddress` exception.
 
 ## Problem
 

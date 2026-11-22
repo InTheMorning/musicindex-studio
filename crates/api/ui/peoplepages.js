@@ -1638,6 +1638,7 @@ function WalletForm({ kind, recipient, uses, feeds, go }) {
   };
   const ids = rows ? checkedIds(rows) : [];
   const ready = walletSheetReady(kind, fields, ids);
+  const sheet = walletSheet(kind, uses);
   // Only the sheets with the type menu check the address against the type.
   const selectedAddressField = addressField(fields.type);
   const selectedAddress = String(fields[selectedAddressField] ?? '').trim();
@@ -1679,7 +1680,8 @@ function WalletForm({ kind, recipient, uses, feeds, go }) {
             <${Field} id="op-name" label="Name" value=${fields.name} onInput=${(e) => set({ name: e.target.value })} />
             ${addressFields}</div>
         </details></div>`}
-      <${FeedChecks} rows=${rows} setRows=${setRows} empty=${adding ? 'This artist or label has no release.' : 'No feed uses this wallet.'} />
+      <${FeedChecks} rows=${rows} setRows=${setRows} empty=${adding ? 'This artist or label has no release.' : kind === 'use_lnaddress' ? 'No feed needs this change.' : 'No feed uses this wallet.'} />
+      ${sheet.note && html`<p class="hint">${sheet.note}</p>`}
       <${ErrorNotice} error=${error} />
     </div>
     <footer>

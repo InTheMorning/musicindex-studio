@@ -293,7 +293,8 @@ const inHosts = (view) => view.name === 'hosts' || (view.name === 'change-set' &
 // null before it loads. `narrow` is true at 760 px or less. `vaultLocked` is
 // true on a server with a locked vault: the row "Unlock Studio" then takes
 // the place of "Lock Studio" (ADR 0039 item 1).
-export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, narrow = false, collection = null }) {
+export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, narrow = false, collection = null,
+  serverMode = false, collectionCount = 0 }) {
   const bottom = [
     // The People destination holds the page of a person, the page of a
     // wallet and the review of a change set (ADR 0099 items 1 and 12).
@@ -308,8 +309,12 @@ export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, 
   ];
   // The mark of a collection that is not "Main collection" (ADR 0149 item 17).
   if (collection) bottom.push({ id: 'collection', label: collection, icon: 'folder', current: false });
+  // ADR 0241 item 4: put the switch row after the collection row.
+  if (!serverMode && collectionCount >= 2) bottom.push({ id: 'switch', label: 'Switch Collection…', icon: 'folder-open', current: false });
   if (vaultOpen) bottom.push({ id: 'lock', label: 'Lock Studio', icon: 'lock', current: false });
   else if (vaultLocked) bottom.push({ id: 'unlock', label: 'Unlock Studio', icon: 'lock-open', current: false });
+  // ADR 0241 item 1: put Sign Out after the vault row.
+  if (serverMode) bottom.push({ id: 'signout', label: 'Sign Out', icon: 'user', current: false });
   const feed = isFeedView(view) && Array.isArray(feeds)
     ? feeds.find((f) => f.id === view.id)
     : undefined;

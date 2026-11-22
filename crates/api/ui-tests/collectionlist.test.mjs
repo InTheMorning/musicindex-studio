@@ -2,12 +2,20 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
-import { collectionMark, collectionRow, collectionSectionActions, collectionAction, collectionSheet } from '../ui/collectionlist.js';
+import { collectionMark, collectionRow, collectionSectionActions, collectionAction, collectionSheet, switchCollectionRows } from '../ui/collectionlist.js';
 import { leftPanel } from '../ui/shell.js';
 import { pageSequence, tierError } from '../ui/pages.js';
 
 const main = { folder: 'main', name: 'Main collection', feeds: 14, main: true, open: false };
 const test4 = { folder: 'test', name: 'Test', feeds: 1, main: false, open: true };
+
+test('ADR 0241 item 5: switchCollectionRows gives one action row for each collection', () => {
+  const rows = switchCollectionRows([main, test4]);
+  assert.deepEqual(rows, [
+    { folder: 'main', name: 'Main collection', open: false, status: null, action: 'open' },
+    { folder: 'test', name: 'Test', open: true, status: 'Open now', action: null },
+  ], 'ADR 0241 item 5: fix switchCollectionRows in crates/api/ui/collectionlist.js.');
+});
 
 test('wallet and collection rows use the row menu control (ADR 0207 items 53 to 56, ADR 0183 item 1)', () => {
   const app = readFileSync(new URL('../ui/app.js', import.meta.url), 'utf8');

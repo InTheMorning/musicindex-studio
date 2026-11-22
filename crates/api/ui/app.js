@@ -36,7 +36,7 @@ const settingsHistory = makeHistory();
 import { PeoplePage, PersonPage, CheckPage, WalletPage, useLookup } from './peoplepages.js';
 import { deletedNotice } from './feeddelete.js';
 import { OUTSIDE_LIMIT, OUTSIDE_SETTING_LABEL, OUTSIDE_SETTING_HINT, outsideMark, outsideNotice, readOnlyHostNotice, indexNotice, releaseMusicIndexLink, moveNotice, moveAgainDelay, writeNotice, nextNoticeLoad, eachLimited, panelSet, stateMark, feedsToCheck } from './outsidecheck.js';
-import { collectionMark, collectionRow, collectionSectionActions, collectionSheet, collectionAction, CLOSED_EXPORT_HINT, COLLECTIONS_HINT, OPENING_TEXT } from './collectionlist.js';
+import { collectionMark, collectionRow, collectionSectionActions, collectionSheet, collectionAction, switchCollectionRows, CLOSED_EXPORT_HINT, COLLECTIONS_HINT, OPENING_TEXT } from './collectionlist.js';
 import { localInputToIso, isoToLocalInput, zoneHint, nowInput, unreadDateHint } from './datetime.js';
 import { durationText, readDuration, DURATION_ERROR, unreadDurationHint } from './duration.js';
 import { coverOf } from './cover.js';
@@ -254,6 +254,17 @@ export async function sendInParts(feedId, file, { replace = false, onProgress = 
 function authCall(path, options = {}) {
   const headers = csrfToken ? { 'X-Studio-CSRF': csrfToken } : {};
   return exchange(`/auth/v1${path}`, headers, { method: 'POST', ...options });
+}
+
+// ADR 0241 item 2: sign out and load the sign-in page.
+async function signOutSession(reload) {
+  await authCall('/signout');
+  await reload();
+}
+
+// ADR 0241 item 6: open a collection through the existing Settings action.
+function openCollection(folder) {
+  return api(`/collections/${folder}/open`, { method: 'POST' });
 }
 
 // ---- Images and audio from their hosts (ADR 0109) ----
@@ -2131,6 +2142,8 @@ const ICONS = {
   folder: () => html`<path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />`,
   'hard-drive': () => html`<path d="M10 16h.01" /><path d="M2.212 11.577a2 2 0 0 0-.212.896V18a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-5.527a2 2 0 0 0-.212-.896L18.55 5.11A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /><path d="M21.946 12.013H2.054" /><path d="M6 16h.01" />`,
   settings: () => html`<path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" /><circle cx="12" cy="12" r="3" />`,
+  user: () => html`<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />`,
+  'folder-open': () => html`<path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2" />`,
   lock: () => html`<rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />`,
   'lock-open': () => html`<rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 9.9-1" />`,
   copy: () => html`<rect width="14" height="14" x="8" y="8" rx="2" ry="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />`,
@@ -3435,23 +3448,23 @@ function ChangeSetPage({ id, go, onChanged }) {
 // At 760 px or less the left panel is not shown: its content is the root
 // page and the outline page of the stack (ADR 0039 item 11, musicindex ADR
 // 0030 R-SHELL-2).
-function LeftPanel({ panel, draft, changedFeeds, go, showReleases, onAdding, onImporting, onAddFeedRow, onMove, onLock }) {
+function LeftPanel({ panel, draft, changedFeeds, go, showReleases, onAdding, onImporting, onAddFeedRow, onMove, onLock, collections }) {
   if (panel.kind === 'level') {
     return html`<header><${Brand} /><${ThemeToggle} /></header>
       <div class="sidebar-scroll"><${Level} panel=${panel} go=${go} back onAddFeedRow=${onAddFeedRow} onMove=${onMove} /></div>
-      <${LeftPanelFooter} panel=${panel} go=${go} onLock=${onLock} />`;
+      <${LeftPanelFooter} panel=${panel} go=${go} onLock=${onLock} collections=${collections} />`;
   }
   if (panel.kind === 'destinations') {
     return html`<header><${Brand} /><${ThemeToggle} /></header>
       <div class="sidebar-scroll">${destinationRows(panel.top, go)}</div>
-      <${LeftPanelFooter} panel=${panel} go=${go} onLock=${onLock} />`;
+      <${LeftPanelFooter} panel=${panel} go=${go} onLock=${onLock} collections=${collections} />`;
   }
   return html`<header><${Brand} /><${ThemeToggle} /></header>
     <div class="sidebar-scroll">
       <${Outline} panel=${panel} draft=${draft} changedFeeds=${changedFeeds} go=${go} showReleases=${showReleases}
         onAdding=${onAdding} onImporting=${onImporting} onAddFeedRow=${onAddFeedRow} onMove=${onMove} />
     </div>
-    <${LeftPanelFooter} panel=${panel} go=${go} onLock=${onLock} />`;
+    <${LeftPanelFooter} panel=${panel} go=${go} onLock=${onLock} collections=${collections} />`;
 }
 
 // The current row of a list gets aria-current.
@@ -3652,37 +3665,83 @@ function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImp
     </ul></div>`;
 }
 
-// The footer of the left panel and of the root page: People, File hosts, Settings, and Lock
-// Studio when the vault is open. On a server with a locked vault, Unlock Studio
-// opens the unlock sheet.
-function LeftPanelFooter({ panel, go, onLock }) {
-  return html`<footer>${panelRows(panel.bottom, go, onLock)}</footer>`;
+// The footer actions follow ADR 0241 items 1 and 4, as well as the vault state.
+function LeftPanelFooter({ panel, go, onLock, collections }) {
+  const [switchOpen, setSwitchOpen] = useState(false);
+  const { reload } = useContext(SessionContext) || {};
+  const { busy, error, run } = useAction();
+  const onSignOut = () => run(() => signOutSession(reload || (() => Promise.resolve())));
+  return html`<footer>
+    ${panelRows(panel.bottom, go, onLock, onSignOut, () => setSwitchOpen(true), busy)}
+    <${ErrorNotice} error=${error} />
+    <${SwitchCollectionSheet} open=${switchOpen} collections=${collections || []}
+      onClose=${() => setSwitchOpen(false)}
+      onDone=${() => setSwitchOpen(false)} />
+  </footer>`;
 }
 
 // The rows of the bottom of the panel: Lock or Unlock Studio, the collection
 // mark and the plain destinations.
-function panelRows(items, go, onLock) {
+function panelRows(items, go, onLock, onSignOut, onSwitch, busy) {
   return html`${items.map((item) => (item.id === 'lock'
       ? html`<button class="row" type="button" onClick=${onLock}><${Icon} name=${item.icon} />Lock Studio</button>`
       : item.id === 'unlock'
       ? html`<button class="row" type="button" onClick=${() => { askUnlock(); }}><${Icon} name=${item.icon} />Unlock Studio</button>`
       : item.id === 'collection'
       ? html`<button class="row collection-mark" type="button" onClick=${() => go({ name: 'settings' })}><${Icon} name=${item.icon} /><span class="row-label">${item.label}</span></button>`
+      : item.id === 'signout'
+      ? html`<button class="row" type="button" disabled=${busy} onClick=${onSignOut}><${Icon} name=${item.icon} />${item.label}</button>`
+      : item.id === 'switch'
+      ? html`<button class="row" type="button" onClick=${onSwitch}><${Icon} name=${item.icon} />${item.label}</button>`
       : html`<button class="row" type="button" aria-current=${currentAttr(item)}
           onClick=${() => { if (item.opens ?? !item.current) go({ name: item.id }); }}><${Icon} name=${item.icon} />${item.label}</button>`))}`;
 }
 
-// The root page of a narrow window has the order of the wide left panel
-// (ADR 0226 items 7 and 8): the row Releases, then the feed groups, then
-// People, File hosts and Settings, then the collection mark and Lock Studio.
-// It has no back control.
-function RootPage({ panel, go, onLock }) {
+// ADR 0241 item 5: show one row for each collection in Settings order.
+function SwitchCollectionSheet({ open, collections, onClose, onDone }) {
+  const ref = useSheet(open);
+  const cancelRef = useRef(null);
+  const { busy, error, run } = useAction();
+  const [opening, setOpening] = useState(false);
+  const rows = switchCollectionRows(collections);
+  useEffect(() => { if (open) cancelRef.current?.focus(); }, [open]);
+  // The sheet stays open with the text of the section Collections while
+  // Studio restarts (ADR 0241 item 6, ADR 0149 item 14).
+  const choose = (folder) => run(async () => {
+    await openCollection(folder);
+    setOpening(true);
+    setTimeout(() => { setOpening(false); onDone(); }, 10000);
+  });
+  return html`<dialog ref=${ref} class="sheet small" aria-labelledby="switch-collection-title" onClose=${onClose}>
+    <header>
+      <h2 id="switch-collection-title">Switch Collection</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button>
+    </header>
+    <div class="body">
+      <div class="group collection-rows">
+          ${rows.map((row) => html`<div class="link-row static" key=${row.folder}>
+          <span class="text"><span class="label">${row.name}</span></span>
+          ${row.open
+            ? html`<span class="summary">${row.status}</span>`
+            : html`<button class="button action" type="button" disabled=${busy || opening} onClick=${() => choose(row.folder)}>Open</button>`}
+        </div>`)}
+      </div>
+      ${opening && html`<p class="hint" role="status">${OPENING_TEXT}</p>`}
+      <${ErrorNotice} error=${error} />
+    </div>
+    <footer><button class="button" type="button" ref=${cancelRef} onClick=${() => ref.current.close()}>Cancel</button></footer>
+  </dialog>`;
+}
+
+// ADR 0241 item 3: the narrow root page uses the same footer order.
+// The page has no Back control (ADR 0226 items 7 and 8).
+function RootPage({ panel, go, onLock, collections }) {
   return html`<div class="panel-page">
     <${Bar} back=${false}><span class="bar-title">Studio</span><//>
     <div class="stack-page">
       <header><${Brand} /><${ThemeToggle} /></header>
       ${destinationRows(panel.top, go)}
-      <${LeftPanelFooter} panel=${panel} go=${go} onLock=${onLock} />
+      <${LeftPanelFooter} panel=${panel} go=${go} onLock=${onLock} collections=${collections} />
     </div>
   </div>`;
 }
@@ -4313,7 +4372,8 @@ function Shell({ vault, onLock, version }) {
       setPendingAddTracks(null);
     }
   }, [draftFeedId]);
-  const collection = useCollectionMark();
+  const collectionState = useCollectionMark();
+  const collection = collectionState.mark;
   // The Releases page checks again each time it opens (ADR 0165 item 5).
   const releasesOpened = useRef({ shown: false, count: 0 });
   if (view.name === 'releases' && !releasesOpened.current.shown) releasesOpened.current.count += 1;
@@ -4322,7 +4382,8 @@ function Shell({ vault, onLock, version }) {
   const outsideValue = { feeds: feeds || [], results, running, check };
   const panel = leftPanel({
     view, feeds: feeds || [], model: draft.model, vaultOpen: vault === 'open',
-    vaultLocked: serverMode && vault === 'locked', narrow, collection,
+    vaultLocked: serverMode && vault === 'locked', narrow, collection, serverMode,
+    collectionCount: collectionState.count,
   });
 
   // A new feed opens its page. The list is loaded before the page opens.
@@ -4341,7 +4402,7 @@ function Shell({ vault, onLock, version }) {
   } else if (feeds === null) {
     main = withBar(html`<section class="section"><p class="empty" role="status">Loading your collection…</p></section>`);
   } else if (view.name === 'root') {
-    main = html`<${RootPage} panel=${panel} go=${go} onLock=${lock} />`;
+    main = html`<${RootPage} panel=${panel} go=${go} onLock=${lock} collections=${collectionState.collections} />`;
   } else if (view.name === 'hosts') {
     main = html`<${Hosts} connectors=${connectors} feeds=${feeds} view=${view} onChanged=${() => load()}
       onOpen=${(id) => go({ name: 'feed', id })} onMoved=${async (id) => { await load(); go({ name: 'change-set', id, area: 'hosts' }); }} />`;
@@ -4390,6 +4451,7 @@ function Shell({ vault, onLock, version }) {
     // A new release opens with the import sheet "Add tracks" (ADR 0224 item 7).
     addTracksNext: setPendingAddTracks };
   const panelProps = { panel, draft, changedFeeds, go, showReleases, onAdding: setAdding, onImporting: setImporting, onAddFeedRow: openAddFeedRow,
+    collections: collectionState.collections,
     onMove: setMoveId, onLock: lock };
   return html`<${NavContext.Provider} value=${navValue}><${OutsideContext.Provider} value=${outsideValue}><div class="shell">
     ${!narrow && html`<nav class="sidebar" aria-label="Collection">
@@ -4773,10 +4835,7 @@ function AddMethodPage() {
     await registerPasskey('Passkey 1');
     await reload();
   });
-  const signOut = () => run(async () => {
-    await authCall('/signout');
-    await reload();
-  });
+  const signOut = () => run(() => signOutSession(reload));
   const signerError = error && (error.code === 'signer' || error.code === 'no_signer') ? error : null;
   return html`<main class="center"><div class="card">
     <${Brand} />
@@ -5016,10 +5075,7 @@ function AccountPanel() {
     await reload();
   });
   const byEmail = !!session.email;
-  const signOut = () => run(async () => {
-    await authCall('/signout');
-    await reload();
-  });
+  const signOut = () => run(() => signOutSession(reload));
   const remove = (event) => {
     event.preventDefault();
     if (!confirmation) return;
@@ -5446,16 +5502,16 @@ const COLLECTIONS_CHANGED = 'studio-collections-changed';
 // The text of the mark of a collection in the left panel (ADR 0176 item 12).
 // A shell with no collections sends no request.
 function useCollectionMark() {
-  const [mark, setMark] = useState(null);
+  const [collections, setCollections] = useState(null);
   useEffect(() => {
     if (!hasCollections) return undefined;
-    const read = () => api('/collections').then((r) => setMark(collectionMark(r.collections)), () => {});
+    const read = () => api('/collections').then((r) => setCollections(r.collections), () => {});
     read();
     // The section "Collections" tells the panel after a change of the list.
     addEventListener(COLLECTIONS_CHANGED, read);
     return () => removeEventListener(COLLECTIONS_CHANGED, read);
   }, []);
-  return mark;
+  return { mark: collectionMark(collections), count: collections?.length || 0, collections };
 }
 
 // The sheet that makes a collection, and then opens it (ADR 0149 items 7 to
@@ -5568,7 +5624,7 @@ function CollectionsPanel() {
   const openName = (list.find((c) => c.open) || {}).name || '';
   // The quit rules can stop a restart, so the text goes after a short time.
   const open = (folder) => run(async () => {
-    await api(`/collections/${folder}/open`, { method: 'POST' });
+    await openCollection(folder);
     setOpening(true);
     setTimeout(() => setOpening(false), 10000);
   });

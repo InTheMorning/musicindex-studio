@@ -388,6 +388,22 @@ test('the root page has no current destination, and gives People, File hosts and
   assert.deepEqual(panel.bottom.map((e) => e.id), ['people', 'hosts', 'settings']);
 });
 
+test('ADR 0241 items 1, 3, 4 and 8: leftPanel adds shell footer rows in order', () => {
+  const base = { view: { name: 'root' }, feeds: [], model: null, vaultOpen: false };
+  const owner = 'ADR 0241 items 1, 3, 4 and 8: fix leftPanel in crates/api/ui/shell.js.';
+  const server = leftPanel({ ...base, serverMode: true, vaultLocked: true, collectionCount: 2, narrow: true });
+  assert.deepEqual(server.bottom.map((item) => item.id), ['people', 'hosts', 'settings', 'unlock', 'signout'], owner);
+  assert.equal(server.bottom.at(-1).label, 'Sign Out', owner);
+  const desktop = leftPanel({ ...base, collection: 'Collection: Test', collectionCount: 2 });
+  assert.deepEqual(desktop.bottom.map((item) => item.id), ['people', 'hosts', 'settings', 'collection', 'switch'], owner);
+  assert.equal(desktop.bottom.at(-1).label, 'Switch Collection…', owner);
+  const unlockedDesktop = leftPanel({ ...base, collection: 'Collection: Test', collectionCount: 2, vaultOpen: true });
+  assert.deepEqual(unlockedDesktop.bottom.map((item) => item.id), ['people', 'hosts', 'settings', 'collection', 'switch', 'lock'], owner);
+  const one = leftPanel({ ...base, collection: 'Collection: Test', collectionCount: 1 });
+  assert.equal(one.bottom.some((item) => item.id === 'switch'), false, owner);
+  assert.equal(leftPanel({ ...base, serverMode: true, collectionCount: 2 }).bottom.some((item) => item.id === 'switch'), false, owner);
+});
+
 test('Back from the outline marks the feed on Releases, and Back from a part keeps no mark', () => {
   let nav = { entries: narrowStack({ name: 'outline', id: 1 }), index: 3 };
   nav = backNav(nav);

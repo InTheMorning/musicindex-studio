@@ -2,7 +2,7 @@
 
 Decision: [ADR 0241](../adr/0241-sign-out-and-switch-collection-are-rows-of-the-panel-footer.md) items 1 to 8.
 
-Status: Open. Start after task 224 is committed, because task 224 changes `crates/api/ui/app.js` and `crates/api/ui/shell.js`.
+Status: Done.
 
 ## Problem
 
@@ -53,3 +53,10 @@ Visual (the main session checks with screenshots):
 ## Report
 
 Give the changed files, the new tests, the result of `tools/gate.sh` and `git status --short`.
+
+## Results
+
+- `tools/gate.sh` passes.
+- Server, dark theme, 1280 px: the footer is People, File hosts, Settings, Lock Studio, Sign Out. The root page at 390 px has the same sequence. Sign Out shows the sign-in page.
+- Desktop: the `studio-desktop` binary opens one folder and has no collection list. The check used the release Tauri binary with a data copy that has two collections (`.studio-dev/t224/tauri227.sh`). The footer shows "Switch Collection…" after "Collection: HeyCitizen". The sheet shows "Open now" on the open collection and **Open** on the other. **Open** opened the second collection.
+- Operator choice: the text "Open now" was in the middle of its row. A CSS rule puts it at the right end, in the column of the **Open** button.

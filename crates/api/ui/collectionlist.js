@@ -9,6 +9,17 @@ export function collectionMark(collections) {
   return open && list.length > 1 ? `Collection: ${open.name}` : null;
 }
 
+// ADR 0241 item 5: give the rows for the Switch Collection sheet.
+export function switchCollectionRows(collections) {
+  return (collections || []).map((collection) => ({
+    folder: collection.folder,
+    name: collection.name,
+    open: collection.open === true,
+    status: collection.open === true ? 'Open now' : null,
+    action: collection.open === true ? null : 'open',
+  }));
+}
+
 // The count of feeds of a collection, such as "1 feed".
 function feedsText(collection) {
   return collection.feeds === 1 ? '1 feed' : `${collection.feeds} feeds`;

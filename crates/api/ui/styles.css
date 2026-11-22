@@ -1967,6 +1967,8 @@ button.outline-feed {
 .panel-row-with-menu .row-menu-text { display: none; }
 .address-status { display: flex; align-items: center; gap: 8px; }
 .collections-group, .collection-rows { overflow: visible; }
+/* The status of the open collection is at the right end, as the Open button of each other row (ADR 0241 item 6). */
+.collection-rows > .link-row > .summary { flex: none; }
 /* A group with an address row does not clip the open menu of the row (ADR 0207 item 53). */
 .group:has(> .address-row .row-menu-wrap) { overflow: visible; }
 .letters {

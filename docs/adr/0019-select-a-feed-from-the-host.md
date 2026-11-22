@@ -3,6 +3,7 @@
 - Status: Accepted
 - Date: 2026-10-22
 - Owner: operator
+- Changed by: [ADR 0243](0243-a-move-is-a-change-set-and-a-level-gathers-its-pages.md) item 13, on 2026-11-22. Item 3: a depth of 6 folders and 5000 files.
 
 ## Context
 

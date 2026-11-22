@@ -26,4 +26,5 @@ This file records the possible improvements. It states no rule. Each fix needs i
 
 ## Open
 
-- Findings 1 and 3 have the most effect for a hosting user. The main session recommends that the operator selects them first.
+- [ADR 0243](../adr/0243-a-move-is-a-change-set-and-a-level-gathers-its-pages.md) gives findings 1, 2, 3, 4 and 6. Tasks 229 to 232 build ADR 0243 and findings 5, 7 and 8.
+- After tasks 229 to 232, the main session makes the tutorial again with the shorter steps.

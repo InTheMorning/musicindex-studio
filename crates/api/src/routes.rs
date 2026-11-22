@@ -1,6 +1,6 @@
 //! The JSON routes of the local API.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -3396,6 +3396,46 @@ fn changed_json(w: &Workspace, before: &DraftBytes) -> ApiResult {
     Ok(Json(json!({ "changed": changed })))
 }
 
+struct PageMoveSnapshot {
+    drafts: Vec<(FeedId, Option<studio_core::collection::DraftRow>)>,
+    kept: Vec<(FeedId, FeedId)>,
+}
+
+fn page_move_snapshot(w: &Workspace, feeds: &[FeedId]) -> Result<PageMoveSnapshot, ApiError> {
+    Ok(PageMoveSnapshot {
+        drafts: feeds
+            .iter()
+            .map(|feed| Ok((*feed, w.collection.draft(*feed)?)))
+            .collect::<Result<_, ApiError>>()?,
+        kept: w.collection.kept_levels()?,
+    })
+}
+
+fn page_move_response(
+    w: &Workspace,
+    snapshot: &PageMoveSnapshot,
+    operation: &RecipientOperation,
+) -> ApiResult {
+    let id = change_set::record_page_move_change_set(
+        &w.collection,
+        operation,
+        &snapshot.drafts,
+        &snapshot.kept,
+        &w.collection.kept_levels()?,
+    )?
+    .id;
+    let Json(mut response) = changed_json(
+        w,
+        &snapshot
+            .drafts
+            .iter()
+            .map(|(id, draft)| (*id, draft.as_ref().map(|draft| draft.draft_xml.clone())))
+            .collect::<Vec<_>>(),
+    )?;
+    response["change_set_id"] = json!(id);
+    Ok(Json(response))
+}
+
 #[derive(Deserialize)]
 pub(crate) struct LinkBody {
     release: i64,
@@ -3444,33 +3484,33 @@ pub(crate) struct MoveToBody {
 fn check_move_page(
     w: &Workspace,
     page: FeedId,
-    release: FeedId,
+    _release: FeedId,
     role: PublisherRole,
 ) -> Result<(), ApiError> {
-    if !w.collection.feed(page)?.publisher_roles.contains(&role) {
+    let row = w.collection.feed(page)?;
+    if row.connector_id.is_none() {
+        return Ok(());
+    }
+    if !row.publisher_roles.contains(&role) {
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
             "invalid_publisher",
             format!("feed {} does not have the role {role:?}", page.0),
         ));
     }
-    check_mediums(w, page, Some(release))?;
+    if row.medium.as_deref() != Some("publisher") {
+        return Err(ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "not_publisher",
+            format!("feed {} is not a publisher feed", page.0),
+        ));
+    }
     Ok(())
 }
 
 /// Check one release before a page move changes any draft (ADR 0240 item 25).
 fn check_move_release(w: &Workspace, release: FeedId) -> Result<(), ApiError> {
     let row = w.collection.feed(release)?;
-    if row.connector_id.is_none() {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            "read_only",
-            format!(
-                "feed {} has no connector, so Studio cannot write it",
-                release.0
-            ),
-        ));
-    }
     if !matches!(row.medium.as_deref(), Some("music" | "musicL")) {
         return Err(ApiError::new(
             StatusCode::UNPROCESSABLE_ENTITY,
@@ -3481,10 +3521,58 @@ fn check_move_release(w: &Workspace, release: FeedId) -> Result<(), ApiError> {
     Ok(())
 }
 
+fn check_page_move_feeds(w: &Workspace, feeds: &[FeedId]) -> Result<(), ApiError> {
+    let open_sets = change_set::change_sets(&w.collection)?;
+    let mut in_change_set = Vec::new();
+    for feed in feeds {
+        let Some(set) = open_sets.iter().find(|set| {
+            set.feeds.iter().any(|entry| {
+                entry.feed_id == *feed && entry.outcome.is_changed() && entry.written_at.is_none()
+            })
+        }) else {
+            continue;
+        };
+        let row = w.collection.feed(*feed)?;
+        in_change_set.push(json!({
+            "id": feed.0,
+            "title": row.title,
+            "change_set_id": set.id,
+        }));
+    }
+    if !in_change_set.is_empty() {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "in_change_set",
+            "write or discard the open change set before this move",
+        )
+        .with_details(json!({ "feeds": in_change_set })));
+    }
+    let mut read_only = Vec::new();
+    for feed in feeds {
+        let row = w.collection.feed(*feed)?;
+        if row.connector_id.is_none() {
+            read_only.push(json!({ "id": feed.0, "title": row.title }));
+        }
+    }
+    if !read_only.is_empty() {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            "read_only",
+            "Studio cannot change each read-only feed",
+        )
+        .with_details(json!({ "feeds": read_only })));
+    }
+    Ok(())
+}
+
 /// Move a release to its pages: link the artist page and the optional label
 /// page and hosting page, then unlink each other page of the collection with
 /// the role artist, label or hosting. Each check runs before the first
 /// change, so a failed check changes no draft (ADR 0240 items 16 to 18).
+#[expect(
+    clippy::too_many_lines,
+    reason = "ADR 0243 items 1 to 6: the route checks every feed before it changes links."
+)]
 pub(crate) async fn move_release_to_pages(
     State(shared): State<Shared>,
     Path(id): Path<i64>,
@@ -3541,7 +3629,13 @@ pub(crate) async fn move_release_to_pages(
                 )
             });
             if has_page_role && !selected.iter().any(|(chosen, _)| chosen == page) {
-                check_mediums(w, *page, Some(release_id))?;
+                if row.medium.as_deref() != Some("publisher") {
+                    return Err(ApiError::new(
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                        "not_publisher",
+                        "a linked page is not a publisher feed",
+                    ));
+                }
                 if model.is_none() {
                     return Err(ApiError::new(
                         StatusCode::UNPROCESSABLE_ENTITY,
@@ -3557,6 +3651,7 @@ pub(crate) async fn move_release_to_pages(
         touched.push(release_id);
         touched.sort_by_key(|feed| feed.0);
         touched.dedup();
+        check_page_move_feeds(w, &touched)?;
         for feed in &touched {
             let guid = if w.collection.draft(*feed)?.is_some() {
                 pipeline::draft_model(&w.collection, *feed)?.0.podcast_guid
@@ -3575,7 +3670,7 @@ pub(crate) async fn move_release_to_pages(
                 ));
             }
         }
-        let before = before_change(w, &touched)?;
+        let snapshot = page_move_snapshot(w, &touched)?;
         for feed in &touched {
             ensure_draft(w, *feed)?;
         }
@@ -3586,7 +3681,229 @@ pub(crate) async fn move_release_to_pages(
             publisher::unlink(&w.collection, *page, release_id)?;
         }
         remove_shared_kept_levels(w)?;
-        changed_json(w, &before)
+        let artist = selected
+            .iter()
+            .find(|(_, role)| *role == PublisherRole::Artist)
+            .map(|(id, _)| w.collection.feed(*id))
+            .transpose()?
+            .and_then(|row| row.title)
+            .unwrap_or_else(|| "Artist".to_owned());
+        page_move_response(
+            w,
+            &snapshot,
+            &RecipientOperation::MovePages {
+                page_names: Vec::new(),
+                release_title: moved.title,
+                target_name: artist,
+                role: "release".to_owned(),
+            },
+        )
+    })
+    .await
+}
+
+#[derive(Deserialize)]
+pub(crate) struct GatherBody {
+    role: String,
+    page_ids: Vec<i64>,
+}
+
+fn publisher_is_below(
+    feeds: &[(FeedRow, Option<Feed>)],
+    catalogs: &[publisher::Catalog],
+    page: FeedId,
+    parent: FeedId,
+) -> bool {
+    let Some(start) = feeds.iter().position(|(row, _)| row.id == page) else {
+        return false;
+    };
+    let mut seen = HashSet::new();
+    let mut pending = catalogs[start].parents.clone();
+    while let Some(ancestor) = pending.pop() {
+        if ancestor == parent {
+            return true;
+        }
+        if seen.insert(ancestor)
+            && let Some(index) = feeds.iter().position(|(row, _)| row.id == ancestor)
+        {
+            pending.extend(catalogs[index].parents.iter().copied());
+        }
+    }
+    false
+}
+
+/// Gather publisher pages under one parent as one change set (ADR 0243 items 7 to 12).
+#[expect(
+    clippy::too_many_lines,
+    reason = "ADR 0243 items 7 to 12: the route checks every page before it changes links."
+)]
+pub(crate) async fn gather_pages(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(body): Json<GatherBody>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let parent = FeedId(id);
+        let parent_row = w.collection.feed(parent)?;
+        let Some(parent_role) = parent_row.publisher_roles.iter().min().copied() else {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "invalid_publisher",
+                "gather needs a hosting page or a label page",
+            ));
+        };
+        if parent_row.medium.as_deref() != Some("publisher")
+            || !matches!(parent_role, PublisherRole::Hosting | PublisherRole::Label)
+        {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "invalid_publisher",
+                "gather needs a hosting page or a label page",
+            ));
+        }
+        let role = match body.role.as_str() {
+            "artist" => PublisherRole::Artist,
+            "label" => PublisherRole::Label,
+            _ => {
+                return Err(ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "invalid_publisher",
+                    "gather role must be artist or label",
+                ));
+            }
+        };
+        if parent_role == PublisherRole::Label && role != PublisherRole::Artist {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "invalid_publisher",
+                "a label page can gather artists only",
+            ));
+        }
+        if body.page_ids.is_empty() {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                "invalid_publisher",
+                "select at least one page",
+            ));
+        }
+        let mut pages: Vec<_> = body.page_ids.into_iter().map(FeedId).collect();
+        pages.sort_by_key(|page| page.0);
+        pages.dedup();
+        let rows = w.collection.feeds()?;
+        let catalog_feeds: Vec<_> = rows
+            .into_iter()
+            .map(|row| {
+                let model = files_feed(w, row.id).ok().flatten();
+                (row, model)
+            })
+            .collect();
+        let kept_before = w.collection.kept_levels()?;
+        let catalogs = publisher::catalogs_with_kept(&catalog_feeds, &kept_before);
+        let mut releases_by_page = Vec::new();
+        let mut touched = vec![parent];
+        for page in &pages {
+            let index = catalog_feeds
+                .iter()
+                .position(|(row, _)| row.id == *page)
+                .ok_or_else(|| {
+                    ApiError::new(StatusCode::NOT_FOUND, "not_found", "a page was not found")
+                })?;
+            let row = &catalog_feeds[index].0;
+            if row.medium.as_deref() != Some("publisher")
+                || (!row.publisher_roles.is_empty() && !row.publisher_roles.contains(&role))
+            {
+                return Err(ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "invalid_publisher",
+                    "a page has a different role",
+                ));
+            }
+            if publisher_is_below(&catalog_feeds, &catalogs, *page, parent) {
+                return Err(ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "invalid_publisher",
+                    "a page is already below the selected page",
+                ));
+            }
+            let releases = catalogs[index].releases.clone();
+            touched.push(*page);
+            touched.extend(releases.iter().copied());
+            for release in &releases {
+                let release_index = catalog_feeds
+                    .iter()
+                    .position(|(row, _)| row.id == *release)
+                    .ok_or_else(|| ApiError::internal("a release is missing"))?;
+                for linked in &catalogs[release_index].publishers {
+                    let linked_row = w.collection.feed(*linked)?;
+                    if linked_row.publisher_roles.contains(&parent_role) {
+                        touched.push(*linked);
+                    }
+                }
+            }
+            releases_by_page.push((*page, releases));
+        }
+        touched.sort_by_key(|feed| feed.0);
+        touched.dedup();
+        check_page_move_feeds(w, &touched)?;
+        let snapshot = page_move_snapshot(w, &touched)?;
+        for feed in &touched {
+            ensure_draft(w, *feed)?;
+        }
+        for (page, releases) in &releases_by_page {
+            if w.collection.feed(*page)?.publisher_roles.is_empty() {
+                publisher::set_roles(&w.collection, *page, &[role])?;
+            }
+            for release in releases {
+                let release_index = catalog_feeds
+                    .iter()
+                    .position(|(row, _)| row.id == *release)
+                    .ok_or_else(|| ApiError::internal("a release is missing"))?;
+                for linked in &catalogs[release_index].publishers {
+                    if *linked != *page
+                        && w.collection
+                            .feed(*linked)?
+                            .publisher_roles
+                            .contains(&parent_role)
+                    {
+                        publisher::unlink(&w.collection, *linked, *release)?;
+                    }
+                }
+                publisher::link(&w.collection, parent, *release)?;
+            }
+            for (upper, lower) in &kept_before {
+                if *lower == *page
+                    && w.collection
+                        .feed(*upper)?
+                        .publisher_roles
+                        .contains(&parent_role)
+                {
+                    w.collection.remove_kept_level(*upper, *page)?;
+                }
+            }
+            w.collection.add_kept_level(parent, *page)?;
+        }
+        remove_shared_kept_levels(w)?;
+        let page_names = pages
+            .iter()
+            .map(|page| {
+                w.collection
+                    .feed(*page)
+                    .map(|row| row.title.unwrap_or_else(|| format!("Page {}", page.0)))
+                    .map_err(ApiError::from)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        page_move_response(
+            w,
+            &snapshot,
+            &RecipientOperation::MovePages {
+                page_names,
+                release_title: None,
+                target_name: parent_row
+                    .title
+                    .unwrap_or_else(|| format!("Page {}", parent.0)),
+                role: role.as_str().to_owned(),
+            },
+        )
     })
     .await
 }
@@ -3602,7 +3919,7 @@ fn invalid_move_body() -> ApiError {
 /// Move an artist or label page and its releases (ADR 0240 items 20 to 25).
 #[expect(
     clippy::too_many_lines,
-    reason = "The route validates the full page move before it changes any link."
+    reason = "ADR 0243 items 1 to 6: the route checks every feed before it changes links."
 )]
 fn move_publisher_page_to_pages(
     w: &Workspace,
@@ -3660,14 +3977,22 @@ fn move_publisher_page_to_pages(
             ));
         }
         let target_row = w.collection.feed(*target)?;
-        if !target_row.publisher_roles.contains(target_role) {
-            return Err(ApiError::new(
-                StatusCode::BAD_REQUEST,
-                "invalid_publisher",
-                "a target page has the wrong role",
-            ));
+        if target_row.connector_id.is_some() {
+            if !target_row.publisher_roles.contains(target_role) {
+                return Err(ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    "invalid_publisher",
+                    "a target page has the wrong role",
+                ));
+            }
+            if target_row.medium.as_deref() != Some("publisher") {
+                return Err(ApiError::new(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "not_publisher",
+                    "a target is not a publisher feed",
+                ));
+            }
         }
-        check_mediums(w, *target, None)?;
     }
     let current_parents: Vec<_> = catalogs[page_index]
         .parents
@@ -3722,7 +4047,13 @@ fn move_publisher_page_to_pages(
             check_move_page(w, *target, release, *role)?;
         }
         for old_page in &old {
-            check_mediums(w, *old_page, Some(release))?;
+            if w.collection.feed(*old_page)?.medium.as_deref() != Some("publisher") {
+                return Err(ApiError::new(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "not_publisher",
+                    "a linked page is not a publisher feed",
+                ));
+            }
             if catalog_feeds
                 .iter()
                 .find(|(row, _)| row.id == *old_page)
@@ -3744,6 +4075,7 @@ fn move_publisher_page_to_pages(
     touched.extend(selected.iter().map(|(id, _)| *id));
     touched.sort_by_key(|feed| feed.0);
     touched.dedup();
+    check_page_move_feeds(w, &touched)?;
     for feed in &touched {
         let model = catalog_feeds
             .iter()
@@ -3762,7 +4094,7 @@ fn move_publisher_page_to_pages(
             ));
         }
     }
-    let before = before_change(w, &touched)?;
+    let snapshot = page_move_snapshot(w, &touched)?;
     for feed in &touched {
         ensure_draft(w, *feed)?;
     }
@@ -3777,11 +4109,33 @@ fn move_publisher_page_to_pages(
     for parent in current_parents {
         w.collection.remove_kept_level(parent, page_id)?;
     }
-    for (target, _) in selected {
-        w.collection.add_kept_level(target, page_id)?;
+    for (target, _) in &selected {
+        w.collection.add_kept_level(*target, page_id)?;
     }
     remove_shared_kept_levels(w)?;
-    changed_json(w, &before)
+    let target_name = selected
+        .last()
+        .map(|(id, _)| w.collection.feed(*id))
+        .transpose()?
+        .and_then(|row| row.title)
+        .unwrap_or_else(|| "None".to_owned());
+    page_move_response(
+        w,
+        &snapshot,
+        &RecipientOperation::MovePages {
+            page_names: vec![
+                page.title
+                    .clone()
+                    .unwrap_or_else(|| format!("Page {}", page_id.0)),
+            ],
+            release_title: None,
+            target_name,
+            role: role.map_or_else(
+                || "page".to_owned(),
+                |role| format!("{role:?}").to_lowercase(),
+            ),
+        },
+    )
 }
 
 /// Add a release to a publisher page draft without changing the release.

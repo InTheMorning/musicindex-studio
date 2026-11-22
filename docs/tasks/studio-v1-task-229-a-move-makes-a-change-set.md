@@ -2,7 +2,7 @@
 
 Decision: [ADR 0243](../adr/0243-a-move-is-a-change-set-and-a-level-gathers-its-pages.md) items 1, 2, 5, 6, 11 and 12.
 
-Status: Open.
+Status: Done. ChatGPT built it. The main session read the diff, added the two refusal tests of the gather route, and ran `tools/gate.sh`. Schema version 49.
 
 ## Problem
 

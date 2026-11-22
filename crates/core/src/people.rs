@@ -3627,6 +3627,7 @@ const FEED_DELETE_TABLES: &[(&str, &str)] = &[
     ("show_grants", "feed_id"),
     ("grant_writes", "grant_id"),
     ("change_set_feeds", "feed_id"),
+    ("change_set_kept_levels", "upper_id"),
     ("feed_credits", "feed_id"),
     ("draft_grants", "feed_id"),
     ("placed_feed_files", "feed_id"),
@@ -3664,7 +3665,7 @@ fn delete_snapshot(
         let predicate = match *table {
             "downloads" => "library_file_id IN (SELECT id FROM library_files WHERE feed_id = ?1)",
             "grant_writes" => "grant_id IN (SELECT id FROM show_grants WHERE feed_id = ?1)",
-            "kept_levels" => "upper_id = ?1 OR lower_id = ?1",
+            "kept_levels" | "change_set_kept_levels" => "upper_id = ?1 OR lower_id = ?1",
             _ => "",
         };
         let query = if predicate.is_empty() {

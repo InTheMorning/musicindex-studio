@@ -113,6 +113,17 @@ pub enum RecipientOperation {
         /// The waiting time of the old copies.
         wait_days: u32,
     },
+    /// Move publisher pages and their releases (ADR 0243 items 1 to 3).
+    MovePages {
+        /// The names of the moved pages (ADR 0243 item 3).
+        page_names: Vec<String>,
+        /// The moved release title, when the move changes one release (ADR 0243 item 3).
+        release_title: Option<String>,
+        /// The target page name (ADR 0243 item 3).
+        target_name: String,
+        /// The role of the moved page or release (ADR 0243 item 3).
+        role: String,
+    },
     /// Replace the address, the custom pair and the type.
     ChangeAddress {
         /// The new `address`.
@@ -652,7 +663,9 @@ fn apply_block(
         },
         // A credit feed has no payee, as Add to all releases with only a credit.
         RecipientOperation::CreditFeed { .. } => BlockResult::Skipped(Cause::NothingSelected),
-        RecipientOperation::MoveReleases { .. } => BlockResult::Skipped(Cause::NothingToMove),
+        RecipientOperation::MoveReleases { .. } | RecipientOperation::MovePages { .. } => {
+            BlockResult::Skipped(Cause::NothingToMove)
+        }
         RecipientOperation::Correct { .. } => correct_in_block(block, wallet, operation),
     }
 }
@@ -1134,7 +1147,10 @@ fn pick_cause(causes: &[Cause], operation: &RecipientOperation) -> Cause {
 /// When no block changes, the feed does not change.
 pub fn apply(feed: &mut Feed, wallet: &Wallet, operation: &RecipientOperation) -> Outcome {
     // A move changes no recipient. See `make_move_change_set`.
-    if matches!(operation, RecipientOperation::MoveReleases { .. }) {
+    if matches!(
+        operation,
+        RecipientOperation::MoveReleases { .. } | RecipientOperation::MovePages { .. }
+    ) {
         return Outcome::not_changed(Cause::NothingToMove);
     }
     if let RecipientOperation::Add { percent, .. } = operation
@@ -1337,6 +1353,56 @@ pub fn make_move_change_set(
             Ok(outcome)
         },
     )
+}
+
+/// Record a completed page move with the drafts and kept links from before it.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the collection cannot store the change set.
+pub fn record_page_move_change_set(
+    collection: &Collection,
+    operation: &RecipientOperation,
+    before: &[(FeedId, Option<crate::collection::DraftRow>)],
+    kept_before: &[(FeedId, FeedId)],
+    kept_after: &[(FeedId, FeedId)],
+) -> Result<ChangeSet, PipelineError> {
+    let no_recipient = RecipientKey {
+        address: String::new(),
+        custom_key: None,
+        custom_value: None,
+    };
+    collection.delete_closed_change_sets()?;
+    let id =
+        collection.add_change_set(&to_json(operation)?, &to_json(&no_recipient)?, now(), None)?;
+    let after_set: HashSet<_> = kept_after.iter().copied().collect();
+    let before_set: HashSet<_> = kept_before.iter().copied().collect();
+    for &(upper, lower) in before_set.union(&after_set) {
+        let was_present = before_set.contains(&(upper, lower));
+        if was_present != after_set.contains(&(upper, lower)) {
+            collection.add_change_set_kept_level(id, upper, lower, was_present)?;
+        }
+    }
+    for (feed_id, draft) in before {
+        collection.add_change_set_feed(
+            id,
+            &ChangeSetFeedRow {
+                feed_id: *feed_id,
+                outcome: to_json(&Outcome::Changed {
+                    channel: true,
+                    items: 0,
+                    live_items: 0,
+                    parts: Vec::new(),
+                })?,
+                before: draft.clone(),
+                had_draft: draft.is_some(),
+                before_files_connector_id: None,
+                before_files_connector_kept: None,
+                written_at: None,
+            },
+        )?;
+    }
+    change_set(collection, id)
 }
 
 /// The outcome of a move of one release: `feed_moves` in the place of the
@@ -2054,7 +2120,7 @@ pub fn change_sets(collection: &Collection) -> Result<Vec<ChangeSet>, PipelineEr
 /// stays.
 pub fn discard_change_set(collection: &Collection, id: i64) -> Result<(), PipelineError> {
     let set = change_set(collection, id)?;
-    let is_move = matches!(set.operation, RecipientOperation::MoveReleases { .. });
+    let is_file_move = matches!(set.operation, RecipientOperation::MoveReleases { .. });
     for row in collection.change_set_feed_rows(id)? {
         let outcome: Outcome = from_json(&row.outcome)?;
         if !outcome.is_changed() || row.written_at.is_some() {
@@ -2065,19 +2131,26 @@ pub fn discard_change_set(collection: &Collection, id: i64) -> Result<(), Pipeli
                 collection.save_draft(row.feed_id, &before)?;
                 // The draft keeps its own host operations, and the move
                 // loses its own (ADR 0148 item 18).
-                if is_move {
+                if is_file_move {
                     collection.remove_draft_operations_since(row.feed_id, set.made_at)?;
                     collection.remove_draft_feed_move(row.feed_id)?;
                 }
             }
             _ => remove_new_draft(collection, row.feed_id)?,
         }
-        if is_move {
+        if is_file_move {
             collection.restore_files_connector_snapshot(
                 row.feed_id,
                 row.before_files_connector_id,
                 row.before_files_connector_kept,
             )?;
+        }
+    }
+    for (upper, lower, was_present) in collection.change_set_kept_levels(id)? {
+        if was_present {
+            collection.add_kept_level(upper, lower)?;
+        } else {
+            collection.remove_kept_level(upper, lower)?;
         }
     }
     collection.delete_change_set(id)?;

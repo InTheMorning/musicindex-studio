@@ -720,6 +720,15 @@ WHERE files_connector_kept IS NOT NULL
     r"
 ALTER TABLE feed_writes ADD COLUMN written_xml BLOB;
 ",
+    r"
+CREATE TABLE change_set_kept_levels (
+    change_set_id INTEGER NOT NULL REFERENCES change_sets(id) ON DELETE CASCADE,
+    upper_id INTEGER NOT NULL REFERENCES feeds(id) ON DELETE CASCADE,
+    lower_id INTEGER NOT NULL REFERENCES feeds(id) ON DELETE CASCADE,
+    was_present INTEGER NOT NULL,
+    PRIMARY KEY (change_set_id, upper_id, lower_id)
+);
+",
 ];
 
 /// `root` as a relative path under `data_dir`, when it is a folder inside
@@ -3244,6 +3253,46 @@ impl Collection {
             params![upper.0, lower.0],
         )?;
         Ok(())
+    }
+
+    /// Save the prior state of a kept link for a change set (ADR 0243 item 2).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn add_change_set_kept_level(
+        &self,
+        change_set: i64,
+        upper: FeedId,
+        lower: FeedId,
+        was_present: bool,
+    ) -> Result<(), CollectionError> {
+        self.db.execute(
+            "INSERT INTO change_set_kept_levels (change_set_id, upper_id, lower_id, was_present)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![change_set, upper.0, lower.0, was_present],
+        )?;
+        Ok(())
+    }
+
+    /// The kept links that a change set must restore (ADR 0243 item 2).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn change_set_kept_levels(
+        &self,
+        change_set: i64,
+    ) -> Result<Vec<(FeedId, FeedId, bool)>, CollectionError> {
+        let mut statement = self.db.prepare(
+            "SELECT upper_id, lower_id, was_present FROM change_set_kept_levels
+             WHERE change_set_id = ?1 ORDER BY upper_id, lower_id",
+        )?;
+        Ok(statement
+            .query_map([change_set], |row| {
+                Ok((FeedId(row.get(0)?), FeedId(row.get(1)?), row.get(2)?))
+            })?
+            .collect::<Result<_, _>>()?)
     }
 
     /// Remove a connector that no feed uses.

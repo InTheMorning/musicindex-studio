@@ -2284,6 +2284,20 @@ async fn the_move_route_links_three_pages_and_unlinks_the_other_artist_page() {
     )
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
+    let change_set_id = body["change_set_id"]
+        .as_i64()
+        .expect("ADR 0243 item 1, move_release_to_pages: a release move returns its change_set_id");
+    let (_, change_set) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/change-sets/{change_set_id}"),
+        None,
+    )
+    .await;
+    assert_eq!(
+        change_set["operation"]["kind"], "move_pages",
+        "ADR 0243 item 1, move_release_to_pages: the release move has no page-move operation"
+    );
     let changed: Vec<i64> = body["changed"]
         .as_array()
         .unwrap()
@@ -2679,6 +2693,377 @@ async fn a_hosting_page_cannot_move_and_a_failed_page_move_changes_no_kept_link(
         status,
         StatusCode::BAD_REQUEST,
         "ADR 0240 item 21, move_publisher_page_to_pages must reject a key for the moved role: {body}"
+    );
+}
+
+#[tokio::test]
+async fn a_page_move_records_one_change_set_and_discard_restores_drafts_and_kept_links() {
+    let (app, connector) = publisher_app().await;
+    let [artist, _, label, hosting, first_release] = move_pages(&app, connector).await;
+    let second_release = make_feed(
+        &app,
+        new_feed_body(
+            connector,
+            "second-release.xml",
+            "Second Release",
+            None,
+            None,
+        ),
+    )
+    .await["id"]
+        .as_i64()
+        .unwrap();
+    for release in [first_release, second_release] {
+        for page in [artist, label] {
+            let (status, body) = call(
+                &app,
+                "POST",
+                &format!("/api/v1/feeds/{page}/links"),
+                Some(json!({ "release": release })),
+            )
+            .await;
+            assert_eq!(status, StatusCode::OK, "ADR 0243 item 1, add_link: {body}");
+        }
+    }
+    let workspace = Workspace::open(app.data.path()).unwrap();
+    workspace
+        .collection
+        .add_kept_level(
+            studio_core::collection::FeedId(label),
+            studio_core::collection::FeedId(artist),
+        )
+        .unwrap();
+    let feeds = [artist, label, hosting, first_release, second_release];
+    let before_drafts = move_draft_rows(&app, &feeds);
+    let before_kept = workspace.collection.kept_levels().unwrap();
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{artist}/move-to"),
+        Some(json!({ "hosting_id": hosting })),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0243 item 1, move_publisher_page_to_pages: {body}"
+    );
+    let change_set_id = body["change_set_id"]
+        .as_i64()
+        .expect("ADR 0243 item 1, move_publisher_page_to_pages returns a change_set_id");
+    let (_, set) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/change-sets/{change_set_id}"),
+        None,
+    )
+    .await;
+    let set_feeds: Vec<i64> = set["feeds"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|feed| feed["feed_id"].as_i64())
+        .collect();
+    assert!(
+        set_feeds.contains(&first_release) && set_feeds.contains(&second_release),
+        "ADR 0243 item 1, page_move_response: {set}"
+    );
+    assert!(
+        !workspace.collection.kept_levels().unwrap().contains(&(
+            studio_core::collection::FeedId(label),
+            studio_core::collection::FeedId(artist),
+        )),
+        "ADR 0243 item 2, move_publisher_page_to_pages: old kept link remains"
+    );
+    let (status, body) = call(
+        &app,
+        "DELETE",
+        &format!("/api/v1/change-sets/{change_set_id}"),
+        None,
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::NO_CONTENT,
+        "ADR 0243 item 2, discard_change_set: {body}"
+    );
+    assert_eq!(
+        move_draft_rows(&app, &feeds),
+        before_drafts,
+        "ADR 0243 item 2, discard_change_set: move drafts did not return byte for byte"
+    );
+    assert_eq!(
+        workspace.collection.kept_levels().unwrap(),
+        before_kept,
+        "ADR 0243 item 2, discard_change_set: kept links did not return"
+    );
+}
+
+#[tokio::test]
+async fn gather_moves_two_pages_with_no_role_in_one_change_set() {
+    let (app, connector) = publisher_app().await;
+    let host = make_feed(
+        &app,
+        new_feed_body(
+            connector,
+            "host.xml",
+            "Host",
+            Some("publisher"),
+            Some("hosting"),
+        ),
+    )
+    .await["id"]
+        .as_i64()
+        .unwrap();
+    let mut pages = Vec::new();
+    for (path, title) in [("one.xml", "One"), ("two.xml", "Two")] {
+        let page = make_feed(
+            &app,
+            new_feed_body(connector, path, title, Some("publisher"), Some("artist")),
+        )
+        .await;
+        let page_id = page["id"].as_i64().unwrap();
+        let release = make_feed(
+            &app,
+            new_feed_body(connector, &format!("{path}.release"), "Release", None, None),
+        )
+        .await["id"]
+            .as_i64()
+            .unwrap();
+        let (status, body) = call(
+            &app,
+            "POST",
+            &format!("/api/v1/feeds/{page_id}/links"),
+            Some(json!({ "release": release })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "ADR 0243 item 11, add_link: {body}");
+        Workspace::open(app.data.path())
+            .unwrap()
+            .collection
+            .set_publisher_roles(studio_core::collection::FeedId(page_id), &[], true)
+            .unwrap();
+        pages.push((page_id, release));
+    }
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{host}/gather"),
+        Some(json!({ "role": "artist", "page_ids": pages.iter().map(|(page, _)| page).collect::<Vec<_>>() })),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0243 item 11, gather_pages: {body}"
+    );
+    assert!(
+        body["change_set_id"].as_i64().is_some(),
+        "ADR 0243 item 12, gather_pages: {body}"
+    );
+    let pages_again: Vec<i64> = pages.iter().map(|(page, _)| *page).collect();
+    for (page, release) in pages {
+        assert_eq!(
+            Workspace::open(app.data.path())
+                .unwrap()
+                .collection
+                .feed(studio_core::collection::FeedId(page))
+                .unwrap()
+                .publisher_roles,
+            vec![studio_core::collection::PublisherRole::Artist],
+            "ADR 0243 item 11, gather_pages: role was not set"
+        );
+        assert!(
+            listed(&app, host).await["release_ids"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|id| id.as_i64() == Some(release)),
+            "ADR 0243 item 11, gather_pages: publisher::link did not add the release"
+        );
+    }
+    // A page that is below the hosting page now is not in the list of
+    // ADR 0243 item 8, so the route refuses it.
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{host}/gather"),
+        Some(json!({ "role": "artist", "page_ids": [pages_again[0]] })),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::BAD_REQUEST,
+        "ADR 0243 item 8, gather_pages must refuse a page that is below the page now: {body}"
+    );
+}
+
+#[tokio::test]
+async fn gather_on_a_label_page_refuses_labels_and_an_empty_list() {
+    let (app, connector) = publisher_app().await;
+    let label = make_feed(
+        &app,
+        new_feed_body(
+            connector,
+            "label.xml",
+            "Label",
+            Some("publisher"),
+            Some("label"),
+        ),
+    )
+    .await["id"]
+        .as_i64()
+        .unwrap();
+    let other = make_feed(
+        &app,
+        new_feed_body(
+            connector,
+            "other.xml",
+            "Other",
+            Some("publisher"),
+            Some("label"),
+        ),
+    )
+    .await["id"]
+        .as_i64()
+        .unwrap();
+    for body in [
+        json!({ "role": "label", "page_ids": [other] }),
+        json!({ "role": "artist", "page_ids": [] }),
+    ] {
+        let (status, response) = call(
+            &app,
+            "POST",
+            &format!("/api/v1/feeds/{label}/gather"),
+            Some(body),
+        )
+        .await;
+        assert_eq!(
+            status,
+            StatusCode::BAD_REQUEST,
+            "ADR 0243 item 7, gather_pages: a label page gathers only artists, and the list is not empty: {response}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_page_move_names_each_read_only_release_and_changes_nothing() {
+    let (app, connector) = publisher_app().await;
+    let [artist, _, _, hosting, first_release] = move_pages(&app, connector).await;
+    let second_release = make_feed(
+        &app,
+        new_feed_body(connector, "read-only.xml", "Read Only", None, None),
+    )
+    .await["id"]
+        .as_i64()
+        .unwrap();
+    for release in [first_release, second_release] {
+        let (status, body) = call(
+            &app,
+            "POST",
+            &format!("/api/v1/feeds/{artist}/links"),
+            Some(json!({ "release": release })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "ADR 0243 item 5, add_link: {body}");
+    }
+    let workspace = Workspace::open(app.data.path()).unwrap();
+    workspace
+        .collection
+        .clear_feed_location(studio_core::collection::FeedId(first_release))
+        .unwrap();
+    workspace
+        .collection
+        .clear_feed_location(studio_core::collection::FeedId(second_release))
+        .unwrap();
+    let before = move_draft_rows(&app, &[artist, hosting, first_release, second_release]);
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{artist}/move-to"),
+        Some(json!({ "hosting_id": hosting })),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::CONFLICT,
+        "ADR 0243 item 6, move_publisher_page_to_pages: {body}"
+    );
+    assert_eq!(body["error"]["code"], "read_only");
+    assert_eq!(
+        body["error"]["details"]["feeds"],
+        json!([
+            { "id": first_release, "title": "Release" },
+            { "id": second_release, "title": "Read Only" },
+        ]),
+        "ADR 0243 item 6, check_page_move_feeds: refusal must name both releases"
+    );
+    assert_eq!(
+        move_draft_rows(&app, &[artist, hosting, first_release, second_release]),
+        before,
+        "ADR 0243 item 6, move_publisher_page_to_pages: refusal changed a draft"
+    );
+}
+
+#[tokio::test]
+async fn a_page_move_names_a_release_in_an_open_change_set() {
+    let (app, connector) = publisher_app().await;
+    let [artist, _, _, hosting, _] = move_pages(&app, connector).await;
+    let release = add_paid_feed(
+        &app,
+        connector,
+        "busy.xml",
+        &paid_feed("Busy Release", "busy-guid", &[ANN], &[], ""),
+    )
+    .await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{artist}/links"),
+        Some(json!({ "release": release })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "ADR 0243 item 5, add_link: {body}");
+    let (status, set) = call(
+        &app,
+        "POST",
+        "/api/v1/change-sets",
+        Some(json!({
+            "recipient": ann_key(),
+            "operation": { "kind": "rename", "name": "Anna" },
+            "feed_ids": [release],
+        })),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::CREATED,
+        "ADR 0243 item 5, make_change_set: {set}"
+    );
+    let set_id = set["id"].as_i64().unwrap();
+    let before = move_draft_rows(&app, &[artist, hosting, release]);
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{artist}/move-to"),
+        Some(json!({ "hosting_id": hosting })),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::CONFLICT,
+        "ADR 0243 item 5, move_publisher_page_to_pages: {body}"
+    );
+    assert_eq!(body["error"]["code"], "in_change_set");
+    assert_eq!(
+        body["error"]["details"]["feeds"],
+        json!([{ "id": release, "title": "Busy Release", "change_set_id": set_id }]),
+        "ADR 0243 item 5, check_page_move_feeds: refusal must name the open change set"
+    );
+    assert_eq!(
+        move_draft_rows(&app, &[artist, hosting, release]),
+        before,
+        "ADR 0243 item 5, move_publisher_page_to_pages: refusal changed a draft"
     );
 }
 

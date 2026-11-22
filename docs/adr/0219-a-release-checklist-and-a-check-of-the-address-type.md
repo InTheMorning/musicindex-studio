@@ -8,6 +8,7 @@
 - Bar: crosses modules. Items 1 to 12 add findings in the core and show them in the editor and on the Check tab. An agent can also make the opposite choice by mistake: one shared address field, or an automatic change of a type.
 - Changed by: [ADR 0224](0224-a-finding-that-stops-the-write-and-a-new-release-opens-add-tracks.md) items 4 to 6, on 2026-11-19. Items 6 and 7: the checklist gets the row "Artist page".
 - Changed by: [ADR 0244](0244-studio-reads-the-fee-value-of-musicindex-adr-0088.md) item 2, on 2026-11-22. Item 1: the finding kind `unknown_fee`.
+- Changed by: [ADR 0245](0245-review-repairs-short-addresses-and-offers-the-people-values.md) items 1 to 4, on 2026-11-22. Item 1: the finding kind `short_address`, with the level Stop.
 - Changes: [ADR 0174](0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md) item 7. Five new finding kinds.
 - Changes: [ADR 0217](0217-a-new-artist-sees-the-result-of-a-write-the-payment-types-and-an-undo-of-a-merge.md) items 7 and 11. The menu "Type" selects the fields that show, and each type has its own address field.
 - Uses: [ADR 0138](0138-the-names-of-a-wallet-address-and-the-correction-of-a-wrong-key.md) for the words of the two types. [ADR 0007](0007-draft-diff-write-and-announce.md) for Review. [ADR 0070](0070-a-cover-opens-the-artwork-sheet.md) for the artwork sheet.

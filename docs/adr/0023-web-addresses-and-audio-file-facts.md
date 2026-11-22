@@ -5,6 +5,7 @@
 - Owner: operator
 - Changed by: [ADR 0060](0060-the-album-cover-keeps-the-form-of-its-feed.md) item 1 adds the `url` of the channel RSS `<image>` to the address fields of item 1.
 - Changed by: [ADR 0073](../archive/adr/0073-the-add-pages-ask-one-question-at-a-time.md) item 14 shows the facts that Studio found in a closed row "Properties" (item 6).
+- Changed by: [ADR 0245](0245-review-repairs-short-addresses-and-offers-the-people-values.md) items 1 to 9, on 2026-11-22. Items 1, 3 and 4: a person value is an address field, and an address with no scheme gets the repair **Add https://** before the write.
 
 ## Context
 

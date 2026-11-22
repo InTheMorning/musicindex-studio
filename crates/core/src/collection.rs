@@ -836,6 +836,17 @@ pub enum CollectionErrorKind {
 pub struct CollectionError {
     kind: CollectionErrorKind,
     message: String,
+    address: Option<AddressRefusal>,
+}
+
+/// The field of a person that has an address that is not correct, and the
+/// repair when one exists (ADR 0245 item 9).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AddressRefusal {
+    /// The name of the field: `img`, `href`, `pictures` or `websites`.
+    pub field: String,
+    /// The text with `https://` added, when that gives a correct address.
+    pub repair: Option<String>,
 }
 
 impl CollectionError {
@@ -847,7 +858,32 @@ impl CollectionError {
         Self {
             kind,
             message: message.into(),
+            address: None,
         }
+    }
+
+    /// An error for an address of a person that is not correct (ADR 0245
+    /// item 9). The kind is `Invalid`.
+    pub(crate) fn bad_address(
+        message: impl Into<String>,
+        field: &str,
+        repair: Option<String>,
+    ) -> Self {
+        Self {
+            kind: CollectionErrorKind::Invalid,
+            message: message.into(),
+            address: Some(AddressRefusal {
+                field: field.to_owned(),
+                repair,
+            }),
+        }
+    }
+
+    /// The field and the repair of an address that is not correct (ADR 0245
+    /// item 9). Other errors give `None`.
+    #[must_use]
+    pub fn address_refusal(&self) -> Option<&AddressRefusal> {
+        self.address.as_ref()
     }
 
     /// An error for a value that the collection refuses.
@@ -4456,6 +4492,40 @@ impl Collection {
                     format!("feed {} has no snapshot {}", id.0, snapshot.0),
                 )
             })
+    }
+
+    /// Run `read` while the rows of `feed_credits` and `feed_recipients` of
+    /// each feed in `feeds` that has a draft come from that draft (ADR 0245
+    /// item 12). A review then sees the drafts that it writes. The function
+    /// rolls the rows back before it returns, so the index keeps the rows of
+    /// the written feeds. A draft that is not a feed keeps the rows of its
+    /// feed.
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails or when `read` fails.
+    pub(crate) fn with_draft_rows<T>(
+        &self,
+        feeds: &[FeedId],
+        read: impl FnOnce() -> Result<T, CollectionError>,
+    ) -> Result<T, CollectionError> {
+        let tx = self.db.unchecked_transaction()?;
+        for &id in feeds {
+            let Some(draft) = self.draft(id)? else {
+                continue;
+            };
+            let Ok(doc) = Document::parse_bytes(&draft.draft_xml) else {
+                continue;
+            };
+            let Ok(feed) = Feed::read(&doc) else {
+                continue;
+            };
+            put_credits(&tx, id, feed.credit_places())?;
+            put_recipients(&tx, id, feed.recipient_places())?;
+        }
+        let result = read();
+        tx.rollback()?;
+        result
     }
 
     /// Each row of `feed_credits`, by feed ID and then by name (ADR 0098

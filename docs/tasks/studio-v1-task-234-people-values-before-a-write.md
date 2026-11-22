@@ -2,7 +2,13 @@
 
 Decision: [ADR 0245](../adr/0245-review-repairs-short-addresses-and-offers-the-people-values.md) items 5, 9, 10, 12 and 14. Run it after task 233.
 
-Status: Open.
+Status: Done 2026-11-22. The gate passed (2061 Rust tests, 979 Node tests).
+
+Operator choices of the main session:
+
+- The People findings of a review read the credits and the payees of each draft of the review, and then roll back these rows. Thus the findings go after **Apply to the Drafts**, as the checks of ADR 0245 give. After **Discard**, the findings come back. The API test examines the two states.
+- `make_person` copies only a correct address from the credits, and `add_person` refuses an address that is not correct (ADR 0245 items 9 and 14). A person made from the credits of "The Doerfels" thus gets `https://www.doerfelverse.com/` and not `www.doerfelverse.com`.
+- Studio refuses the save of a person that has an address that is not correct, also when the user did not change that field. Task 235 shows the error and **Add https://** below the field.
 
 ## Problem
 

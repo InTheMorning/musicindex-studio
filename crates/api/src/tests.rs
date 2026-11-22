@@ -2799,6 +2799,156 @@ async fn a_page_move_records_one_change_set_and_discard_restores_drafts_and_kept
     );
 }
 
+/// `POST /people/review-findings` for one feed (ADR 0245 item 10).
+async fn review_findings_of(app: &App, feed: i64) -> (StatusCode, Value) {
+    call(
+        app,
+        "POST",
+        "/api/v1/people/review-findings",
+        Some(json!({ "feed_ids": [feed] })),
+    )
+    .await
+}
+
+/// ADR 0245 items 10 and 12: the People values go into the draft of a feed
+/// of an open move change set with no change set of their own. **Discard**
+/// of the move then puts back the draft from before the move.
+#[tokio::test]
+async fn people_values_go_into_a_draft_of_an_open_move_and_discard_of_the_move_removes_them() {
+    let owner = "ADR 0245 item 12: fix correct_drafts in crates/core/src/change_set.rs";
+    let (app, connector) = publisher_app().await;
+    let [artist, _, _, hosting, _] = move_pages(&app, connector).await;
+    let credit =
+        "<podcast:person role=\"vocalist\" href=\"www.doerfelverse.com\">Ann</podcast:person>";
+    let release = add_paid_feed(
+        &app,
+        connector,
+        "ann-release.xml",
+        &paid_feed("Ann Release", "gann", &[], &[], credit),
+    )
+    .await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{artist}/links"),
+        Some(json!({ "release": release })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, ann) = call(
+        &app,
+        "POST",
+        "/api/v1/people",
+        Some(json!({ "name": "Ann", "href": "https://www.doerfelverse.com/" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{ann}");
+    let ann = ann["id"].as_i64().unwrap();
+    let before = move_draft_rows(&app, &[release]);
+    let (status, moved) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{artist}/move-to"),
+        Some(json!({ "hosting_id": hosting })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{moved}");
+    let change_set_id = moved["change_set_id"].as_i64().expect(owner);
+    let sets_before = collection_of(&app).change_set_rows().unwrap().len();
+
+    let (status, found) = review_findings_of(&app, release).await;
+    assert_eq!(status, StatusCode::OK, "{found}");
+    assert_eq!(found["people"][0]["person_id"], ann, "{owner}: {found}");
+    assert_eq!(found["people"][0]["name"], "Ann", "{owner}: {found}");
+    assert_eq!(
+        found["people"][0]["feeds"][0]["findings"][0]["kind"], "credit_details",
+        "ADR 0245 item 10: {found}"
+    );
+
+    let (status, applied) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/people/{ann}/correct-drafts"),
+        Some(json!({
+            "operation": { "kind": "correct", "details": true },
+            "feed_ids": [release],
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{owner}: {applied}");
+    assert_eq!(
+        applied["feeds"][0]["outcome"]["outcome"], "changed",
+        "{applied}"
+    );
+    let draft = collection_of(&app)
+        .draft(studio_core::collection::FeedId(release))
+        .unwrap()
+        .expect(owner);
+    assert!(
+        String::from_utf8_lossy(&draft.draft_xml).contains("https://www.doerfelverse.com/"),
+        "{owner}: the draft must have the value of the person"
+    );
+    assert_eq!(
+        collection_of(&app).change_set_rows().unwrap().len(),
+        sets_before,
+        "ADR 0245 item 12: the route must make no change set"
+    );
+    let (_, found) = review_findings_of(&app, release).await;
+    assert_eq!(
+        found["people"],
+        json!([]),
+        "ADR 0245 item 10: review_findings must read the draft after Apply to the Drafts"
+    );
+
+    let (status, body) = call(
+        &app,
+        "DELETE",
+        &format!("/api/v1/change-sets/{change_set_id}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
+    assert_eq!(
+        move_draft_rows(&app, &[release]),
+        before,
+        "ADR 0245 item 12: Discard of the move must put back the draft from before the move"
+    );
+    let (_, found) = review_findings_of(&app, release).await;
+    assert_eq!(
+        found["people"][0]["person_id"], ann,
+        "ADR 0245 item 12: after Discard the written feed differs from People again: {found}"
+    );
+}
+
+/// ADR 0245 item 9: a short address of a person is a `bad_address` refusal
+/// with the field and the repair text.
+#[tokio::test]
+async fn saving_a_short_address_of_a_person_gives_bad_address_with_the_repair() {
+    let app = app();
+    let id = new_person(&app, "Ann").await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/people/{id}/save"),
+        Some(json!({ "fields": { "name": "Ann", "href": "www.doerfelverse.com" } })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(
+        body["error"]["code"], "bad_address",
+        "ADR 0245 item 9: person_error in crates/api/src/people.rs must give bad_address: {body}"
+    );
+    assert_eq!(
+        body["error"]["details"]["fields"],
+        json!(["href"]),
+        "{body}"
+    );
+    assert_eq!(
+        body["error"]["details"]["repair"], "https://www.doerfelverse.com",
+        "{body}"
+    );
+}
+
 /// A written artist page with the role keeps its file as it is after a
 /// gather. The change set holds only the feeds that change (ADR 0243 item 1).
 #[tokio::test]

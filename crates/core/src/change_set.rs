@@ -1479,6 +1479,44 @@ pub fn make_person_change_set(
     build_change_set(collection, start, &wallet, &snapshot, Some(id), feeds)
 }
 
+/// Apply the operation `Correct` of a person to the drafts of `feeds`
+/// directly (ADR 0245 item 12). The function makes no change set. A feed with
+/// no draft gets one from `start`, as a repair does. A feed of an open change
+/// set also changes, and **Discard** of that change set puts back the draft
+/// from before that change set. The function uses [`person_operation`] and
+/// [`change_feed`], as [`make_person_change_set`] does. It gives the outcome
+/// of each feed, in the order of `feeds`.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when `operation` is not `Correct`, when the
+/// request is not valid, when the person does not exist, when the collection
+/// fails or when a draft is not a feed.
+pub fn correct_drafts(
+    collection: &Collection,
+    start: &mut dyn FnMut(FeedId) -> Result<(), String>,
+    id: PersonId,
+    operation: &PersonOperation,
+    feeds: &[FeedId],
+) -> Result<Vec<(FeedId, Outcome)>, PipelineError> {
+    if !matches!(operation, PersonOperation::Correct { .. }) {
+        return Err(invalid(
+            "ADR 0245 item 12: correct_drafts needs the operation Correct",
+        ));
+    }
+    let lookups = lookup_map(collection)?;
+    let (wallet, snapshot) = person_operation(collection, id, operation, &lookups)?;
+    check_operation(&snapshot)?;
+    let mut seen = HashSet::new();
+    let mut outcomes = Vec::new();
+    for &feed in feeds.iter().filter(|&&feed| seen.insert(feed)) {
+        let had_draft = collection.draft(feed)?.is_some();
+        let outcome = change_feed(collection, start, &wallet, &snapshot, feed, had_draft)?;
+        outcomes.push((feed, outcome));
+    }
+    Ok(outcomes)
+}
+
 /// Link the credit name of a person, with the values of its credit (ADR
 /// 0118 item 11). A remove after the write then finds the credit. A credit
 /// name of a different person gives a conflict, and no change is made.

@@ -16,7 +16,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::change_set::RecipientKey;
 use crate::collection::{Collection, CollectionError, CollectionErrorKind, CreditRow, FeedId, now};
-use crate::feed::{CreditPlace, Feed, Recipient, RecipientPlace};
+use crate::feed::{
+    CreditPlace, Feed, Recipient, RecipientPlace, is_web_address, short_address_repair,
+};
 use crate::keysend::{self, Lookup, LookupResult};
 use crate::lookup::{is_channel_route, norm_name, save_key_of};
 use crate::musicindex::PublisherValues;
@@ -406,11 +408,15 @@ fn insert_person(db: &Connection, fields: &PersonFields) -> Result<PersonId, Col
 ///
 /// # Errors
 ///
-/// Gives [`CollectionErrorKind::Invalid`] for a name of only spaces.
+/// Gives [`CollectionErrorKind::Invalid`] for a name of only spaces, and for
+/// a picture or an information address that is not a correct web address,
+/// with [`CollectionError::address_refusal`] (ADR 0245 item 9).
 pub fn add_person(
     collection: &Collection,
     fields: &PersonFields,
 ) -> Result<PersonId, CollectionError> {
+    check_address("img", &fields.img)?;
+    check_address("href", &fields.href)?;
     insert_person(collection.db(), fields)
 }
 
@@ -437,12 +443,31 @@ pub(crate) fn clear_merge_undo(db: &Connection, id: PersonId) -> Result<(), Coll
     Ok(())
 }
 
+/// Refuse a picture or an information address of a person that is not empty
+/// and is not a correct web address (ADR 0245 item 9, ADR 0023 item 2). The
+/// error names `field` and gives the repair of [`short_address_repair`] when
+/// one exists.
+fn check_address(field: &str, text: &str) -> Result<(), CollectionError> {
+    let text = text.trim();
+    if text.is_empty() || is_web_address(text) {
+        return Ok(());
+    }
+    let repair = short_address_repair(text);
+    let message = match &repair {
+        Some(repair) => format!("{field} has an address that is not full, use {repair}"),
+        None => format!("{field} has an address that is not correct"),
+    };
+    Err(CollectionError::bad_address(message, field, repair))
+}
+
 fn update_fields(
     db: &Connection,
     id: PersonId,
     fields: &PersonFields,
 ) -> Result<(), CollectionError> {
     let fields = clean_fields(fields)?;
+    check_address("img", &fields.img)?;
+    check_address("href", &fields.href)?;
     let changed = db.execute(
         "UPDATE people SET name = ?2, usual_role = ?3, usual_group = ?6, img = ?4, href = ?5, nickname = ?7 WHERE id = ?1",
         params![
@@ -1484,7 +1509,10 @@ where
 /// [`CollectionErrorKind::Conflict`] for a wallet or a key of a different
 /// person, and [`CollectionErrorKind::NotFound`] for an unknown person or
 /// feed, and [`CollectionErrorKind::Invalid`] for an empty page GUID or the
-/// GUID of a feed of the collection (ADR 0159 item 5).
+/// GUID of a feed of the collection (ADR 0159 item 5). A picture or an
+/// information address that is not a correct web address also gives
+/// [`CollectionErrorKind::Invalid`], with [`CollectionError::address_refusal`]
+/// (ADR 0245 item 9).
 pub fn save_person(
     collection: &Collection,
     id: PersonId,
@@ -1538,6 +1566,14 @@ fn replace_person_values(
     kind: &str,
     values: &[PersonValue],
 ) -> Result<(), CollectionError> {
+    let field = if kind == "picture" {
+        "pictures"
+    } else {
+        "websites"
+    };
+    for value in values {
+        check_address(field, &value.value)?;
+    }
     db.execute(
         "DELETE FROM person_values WHERE person_id = ?1 AND kind = ?2",
         params![id.0, kind],
@@ -2761,6 +2797,61 @@ pub fn check<S: BuildHasher>(
     Ok(PersonCheck { feeds })
 }
 
+/// The People findings of one person for a review (ADR 0245 item 10).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ReviewPerson {
+    /// The person.
+    pub person_id: PersonId,
+    /// The name of the person.
+    pub name: String,
+    /// Each feed of the review with a finding, in the form of [`check`].
+    pub feeds: Vec<FeedCheck>,
+}
+
+/// The People findings for the feeds of a review (ADR 0245 item 10). The
+/// function runs [`check`] for each person. It keeps the findings of `feeds`
+/// only. It drops the neutral finding [`Finding::NotDefault`], and a feed
+/// with no finding left. A person with no feed left is not in the answer.
+/// A feed with a draft counts with the credits and the payees of the draft,
+/// because the review writes the draft (ADR 0245 item 12). The function reads
+/// the index and the drafts and makes no request (ADR 0203 item 70).
+///
+/// # Errors
+///
+/// Gives a [`CollectionError`] when SQLite fails.
+pub fn review_findings<S: BuildHasher>(
+    collection: &Collection,
+    feeds: &[FeedId],
+    lookups: &HashMap<String, Lookup, S>,
+) -> Result<Vec<ReviewPerson>, CollectionError> {
+    let wanted: HashSet<FeedId> = feeds.iter().copied().collect();
+    let everyone = people(collection)?;
+    collection.with_draft_rows(feeds, || {
+        let mut found = Vec::new();
+        for person in &everyone {
+            let kept: Vec<FeedCheck> = check(collection, person, lookups)?
+                .feeds
+                .into_iter()
+                .filter(|feed| wanted.contains(&feed.feed_id))
+                .filter_map(|mut feed| {
+                    feed.findings
+                        .retain(|f| !matches!(f, Finding::NotDefault { .. }));
+                    feed.state = check_state(&feed.findings);
+                    (!feed.findings.is_empty()).then_some(feed)
+                })
+                .collect();
+            if !kept.is_empty() {
+                found.push(ReviewPerson {
+                    person_id: person.id,
+                    name: person.name.clone(),
+                    feeds: kept,
+                });
+            }
+        }
+        Ok(found)
+    })
+}
+
 /// The normal name of each person and of each credit name, with the ID of
 /// its person (ADR 0111 item 6).
 fn person_names(collection: &Collection) -> Result<Vec<(String, PersonId)>, CollectionError> {
@@ -2994,14 +3085,16 @@ pub fn make_person<S: BuildHasher>(
 
     // The most frequent role of the selected credits. With a tie, the first
     // role A to Z. `img` and `href` come from the first selected credit
-    // that has one.
+    // that has a correct web address. Studio does not copy an address that is
+    // not correct into People, and does not add https:// itself (ADR 0245
+    // items 9 and 14).
     let rows = collection.feed_credits()?;
     let mut roles: BTreeMap<&str, usize> = BTreeMap::new();
     let mut img = String::new();
     let mut href = String::new();
     for (name, credit_href, npub) in &request.credits {
         let selected = (name.trim(), credit_href.trim(), npub.trim());
-        if href.is_empty() {
+        if href.is_empty() && is_web_address(selected.1) {
             selected.1.clone_into(&mut href);
         }
         for row in rows
@@ -3011,7 +3104,7 @@ pub fn make_person<S: BuildHasher>(
             if !row.role.is_empty() {
                 *roles.entry(row.role.as_str()).or_default() += 1;
             }
-            if img.is_empty() {
+            if img.is_empty() && is_web_address(row.img.trim()) {
                 img.clone_from(&row.img);
             }
         }
@@ -5447,7 +5540,11 @@ mod tests {
                     role,
                     href,
                     npub,
-                    if npub.is_empty() { "" } else { "img.png" }
+                    if npub.is_empty() {
+                        ""
+                    } else {
+                        "https://img.example/img.png"
+                    }
                 ],
             )
             .unwrap();
@@ -5592,17 +5689,45 @@ mod tests {
             &collection,
             &PersonFields {
                 name: "Ann".into(),
-                img: "ann.png".into(),
+                img: "https://ann.example/ann.png".into(),
                 ..PersonFields::default()
             },
         )
         .unwrap();
         add_key(&collection, ann, "npub1ann").unwrap();
-        credit_row(&collection, 1, "ann", "vocals", "ann.png", "npub1city");
-        credit_row(&collection, 2, "Ann", "vocals", "ann.png", "");
+        credit_row(
+            &collection,
+            1,
+            "ann",
+            "vocals",
+            "https://ann.example/ann.png",
+            "npub1city",
+        );
+        credit_row(
+            &collection,
+            2,
+            "Ann",
+            "vocals",
+            "https://ann.example/ann.png",
+            "",
+        );
         credit_row(&collection, 3, "Ann", "vocals", "old.png", "npub1ann");
-        credit_row(&collection, 4, "Ann", "", "ann.png", "NPUB1ANN");
-        credit_row(&collection, 5, "Ann", "vocals", "ann.png", "npub1ann");
+        credit_row(
+            &collection,
+            4,
+            "Ann",
+            "",
+            "https://ann.example/ann.png",
+            "NPUB1ANN",
+        );
+        credit_row(
+            &collection,
+            5,
+            "Ann",
+            "vocals",
+            "https://ann.example/ann.png",
+            "npub1ann",
+        );
         credit_row(&collection, 6, "Bob", "vocals", "x.png", "npub1bob");
         let list = checked(&collection, ann);
         assert_eq!(
@@ -5632,7 +5757,7 @@ mod tests {
                 href: false,
                 feed_img: "old.png".into(),
                 feed_href: String::new(),
-                person_img: "ann.png".into(),
+                person_img: "https://ann.example/ann.png".into(),
                 person_href: String::new(),
                 places: Vec::new(),
             }]
@@ -5648,13 +5773,125 @@ mod tests {
     }
 
     #[test]
+    fn a_save_refuses_a_short_address_and_keeps_the_old_value() {
+        let owner = "ADR 0245 item 9: fix check_address in crates/core/src/people.rs";
+        let collection = Collection::open_in_memory().unwrap();
+        let ann = add_person(
+            &collection,
+            &PersonFields {
+                name: "Ann".into(),
+                href: "https://old.example/".into(),
+                ..PersonFields::default()
+            },
+        )
+        .unwrap();
+        let save = |href: &str, websites: Option<&str>| PersonSave {
+            fields: Some(PersonFields {
+                name: "Ann".into(),
+                href: href.into(),
+                ..PersonFields::default()
+            }),
+            websites: websites.map(|text| {
+                vec![PersonValue {
+                    value: text.into(),
+                    source: None,
+                }]
+            }),
+            ..PersonSave::default()
+        };
+        let error = save_person(&collection, ann, &save("www.doerfelverse.com", None)).unwrap_err();
+        assert_eq!(error.kind(), CollectionErrorKind::Invalid, "{owner}");
+        let refusal = error.address_refusal().expect(owner);
+        assert_eq!(refusal.field, "href", "{owner}");
+        assert_eq!(
+            refusal.repair.as_deref(),
+            Some("https://www.doerfelverse.com"),
+            "{owner}"
+        );
+        assert_eq!(
+            person(&collection, ann).unwrap().href,
+            "https://old.example/",
+            "{owner}"
+        );
+        let error = save_person(
+            &collection,
+            ann,
+            &save("https://old.example/", Some("none")),
+        )
+        .unwrap_err();
+        let refusal = error.address_refusal().expect(owner);
+        assert_eq!(refusal.field, "websites", "{owner}");
+        assert_eq!(refusal.repair, None, "{owner}");
+        save_person(
+            &collection,
+            ann,
+            &save("https://www.doerfelverse.com/", None),
+        )
+        .unwrap();
+        assert_eq!(
+            person(&collection, ann).unwrap().href,
+            "https://www.doerfelverse.com/",
+            "{owner}"
+        );
+    }
+
+    #[test]
+    fn review_findings_keep_only_the_feeds_of_the_review_and_no_neutral_finding() {
+        let owner = "ADR 0245 item 10: fix review_findings in crates/core/src/people.rs";
+        let collection = Collection::open_in_memory().unwrap();
+        let ann = add_person(
+            &collection,
+            &PersonFields {
+                name: "Ann".into(),
+                img: "https://ann.example/a.png".into(),
+                ..PersonFields::default()
+            },
+        )
+        .unwrap();
+        credit_row(
+            &collection,
+            1,
+            "Ann",
+            "vocals",
+            "https://old.example/a.png",
+            "",
+        );
+        credit_row(
+            &collection,
+            2,
+            "Ann",
+            "vocals",
+            "https://old.example/a.png",
+            "",
+        );
+        let lookups = lookup_map(&collection).unwrap();
+        let all = review_findings(&collection, &[FeedId(1), FeedId(2)], &lookups).unwrap();
+        assert_eq!(all.len(), 1, "{owner}");
+        assert_eq!(all[0].person_id, ann, "{owner}");
+        assert_eq!(all[0].feeds.len(), 2, "{owner}");
+        let one = review_findings(&collection, &[FeedId(2)], &lookups).unwrap();
+        assert_eq!(one[0].feeds.len(), 1, "{owner}");
+        assert_eq!(one[0].feeds[0].feed_id, FeedId(2), "{owner}");
+        assert!(
+            one[0]
+                .feeds
+                .iter()
+                .flat_map(|f| &f.findings)
+                .all(|f| !matches!(f, Finding::NotDefault { .. })),
+            "{owner}"
+        );
+        let none = review_findings(&collection, &[FeedId(9)], &lookups).unwrap();
+        assert_eq!(none.len(), 0, "{owner}");
+    }
+
+    #[test]
     fn a_difference_gives_the_values_and_the_places_of_the_credit() {
         let mut collection = Collection::open_in_memory().unwrap();
         let ann = add_person(
             &collection,
             &PersonFields {
                 name: "Ann".into(),
-                img: "ann.png".into(),
+                img: "https://ann.example/ann.png".into(),
                 ..PersonFields::default()
             },
         )
@@ -5680,7 +5917,7 @@ mod tests {
                 href: false,
                 feed_img: "old.png".into(),
                 feed_href: String::new(),
-                person_img: "ann.png".into(),
+                person_img: "https://ann.example/ann.png".into(),
                 person_href: String::new(),
                 places: vec![
                     CreditPlace::Channel,
@@ -5758,7 +5995,7 @@ mod tests {
             .find(|c| c.name == "Ann Lee" && c.npub == "npub1aaa")
             .unwrap();
         assert_eq!(first.roles, ["artist"]);
-        assert_eq!(first.img, "img.png");
+        assert_eq!(first.img, "https://img.example/img.png");
         assert_eq!(list[0].credit_feeds, 4);
     }
 
@@ -7044,7 +7281,7 @@ mod tests {
         let p = person(&collection, id).unwrap();
         assert_eq!(p.name, "Ann Lee");
         assert_eq!(p.usual_role, "artist");
-        assert_eq!(p.img, "img.png");
+        assert_eq!(p.img, "https://img.example/img.png");
         assert_eq!(p.href, "https://ann.example");
         let npubs: Vec<&str> = p.keys.iter().map(|k| k.npub.as_str()).collect();
         assert_eq!(npubs, ["npub1ann", "npub1extra"]);
@@ -7054,6 +7291,67 @@ mod tests {
         assert_eq!(p.wallets[0].recipient_type, "node");
         assert_eq!(p.members, [FeedId(2)]);
         assert_eq!(suggest(&collection), Vec::new());
+    }
+
+    #[test]
+    fn a_made_person_skips_an_address_that_is_not_correct() {
+        let owner = "ADR 0245 items 9 and 14: fix make_person in crates/core/src/people.rs";
+        let collection = Collection::open_in_memory().unwrap();
+        credit(
+            &collection,
+            1,
+            "The Doerfels",
+            "band",
+            "www.doerfelverse.com",
+            "",
+        );
+        credit(
+            &collection,
+            2,
+            "The Doerfels",
+            "band",
+            "https://www.doerfelverse.com/",
+            "",
+        );
+        let id = make_person(
+            &collection,
+            &MakePerson {
+                name: "The Doerfels".into(),
+                credits: vec![
+                    (
+                        "The Doerfels".into(),
+                        "www.doerfelverse.com".into(),
+                        String::new(),
+                    ),
+                    (
+                        "The Doerfels".into(),
+                        "https://www.doerfelverse.com/".into(),
+                        String::new(),
+                    ),
+                ],
+                recipients: Vec::new(),
+                keys: Vec::new(),
+                member_of: None,
+            },
+            &HashMap::new(),
+        )
+        .unwrap();
+        let p = person(&collection, id).unwrap();
+        assert_eq!(p.href, "https://www.doerfelverse.com/", "{owner}");
+        let error = add_person(
+            &collection,
+            &PersonFields {
+                name: "Ann".into(),
+                href: "www.ann.example".into(),
+                ..PersonFields::default()
+            },
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.address_refusal().expect(owner).field,
+            "href",
+            "{owner}"
+        );
     }
 
     #[test]

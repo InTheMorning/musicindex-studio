@@ -350,7 +350,9 @@ fn workspace_router_with_shared(workspace: Workspace) -> (Router, WorkspaceHandl
         .route("/people/{id}/more", get(people::more_items))
         .route("/people/{id}/merge", post(people::merge_person))
         .route("/people/{id}/merge/undo", post(people::undo_merge_person))
+        .route("/people/review-findings", post(people::review_findings))
         .route("/people/{id}/changes", post(people::make_changes))
+        .route("/people/{id}/correct-drafts", post(people::correct_drafts))
         .route(
             "/people/{id}/changes/preview",
             post(people::preview_changes),

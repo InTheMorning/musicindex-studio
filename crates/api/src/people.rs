@@ -41,6 +41,16 @@ use studio_core::musicindex::{
 /// names that refusal `invalid_person`. The other errors keep the mapping
 /// of the collection.
 fn person_error(error: CollectionError) -> ApiError {
+    // ADR 0245 item 9: an address that is not correct names the field and
+    // gives the repair text, so the field can offer Add https://.
+    if let Some(refusal) = error.address_refusal() {
+        return ApiError::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "bad_address",
+            error.to_string(),
+        )
+        .with_details(json!({ "fields": [refusal.field], "repair": refusal.repair }));
+    }
     if error.kind() == CollectionErrorKind::Invalid {
         return ApiError::new(
             StatusCode::UNPROCESSABLE_ENTITY,
@@ -246,6 +256,27 @@ pub(crate) async fn check_person(State(shared): State<Shared>, Path(id): Path<i6
         let lookups = lookups(&w.collection)?;
         let check = people::check(&w.collection, &person, &lookups)?;
         Ok(Json(json!(check)))
+    })
+    .await
+}
+
+/// The body of `POST /people/review-findings`.
+#[derive(Deserialize)]
+pub(crate) struct ReviewFeeds {
+    feed_ids: Vec<i64>,
+}
+
+/// The People findings for the feeds of a review (ADR 0245 items 10 and 11).
+/// The answer is `{"people": [{person_id, name, feeds: [{feed_id, state,
+/// findings}]}]}`. The route reads the collection and makes no request.
+pub(crate) async fn review_findings(
+    State(shared): State<Shared>,
+    Json(body): Json<ReviewFeeds>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let feeds: Vec<FeedId> = body.feed_ids.iter().map(|&id| FeedId(id)).collect();
+        let found = people::review_findings(&w.collection, &feeds, &lookups(&w.collection)?)?;
+        Ok(Json(json!({ "people": found })))
     })
     .await
 }
@@ -1135,6 +1166,36 @@ pub(crate) async fn make_changes(
             )?
         };
         Ok((StatusCode::CREATED, Json(change_set_json(w, &set))))
+    })
+    .await
+}
+
+/// Apply the operation `Correct` of a person to the drafts of the feeds
+/// directly (ADR 0245 item 12). The body is the body of the change set
+/// route. The route makes no change set. The answer is `{"feeds": [{feed_id,
+/// outcome}]}`, as the preview gives it.
+pub(crate) async fn correct_drafts(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(body): Json<PersonChanges>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let (_, _, feeds) = person_snapshot(w, id, &body)?;
+        let outcomes = {
+            let workspace: &Workspace = w;
+            change_set::correct_drafts(
+                &workspace.collection,
+                &mut |feed| ensure_draft(workspace, feed).map_err(|e| e.coded()),
+                PersonId(id),
+                &body.operation,
+                &feeds,
+            )?
+        };
+        let rows: Vec<Value> = outcomes
+            .into_iter()
+            .map(|(feed, outcome)| json!({ "feed_id": feed.0, "outcome": outcome }))
+            .collect();
+        Ok(Json(json!({ "feeds": rows })))
     })
     .await
 }

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   NEW_PAGE_PREFIX, moveTitle, moveMenus, moveStart, moveForArtist, moveReady, moveBody, hasArtistPage, NEEDS_ARTIST_LINE,
+  movePageTitle, pageMoveRoles, pageMoveBody, pageMoveMenus, pageMoveStart, pageMoveLines,
 } from '../ui/movepages.js';
 
 const page = (id, title, roles, extra = {}) => ({ id, title, medium: 'publisher', publisher_roles: roles, connector_id: 'c', ...extra });
@@ -53,4 +54,28 @@ test('a release needs an artist page', () => {
   assert.equal(hasArtistPage(feeds, { publisher_ids: [10] }), false, owner);
   assert.equal(hasArtistPage(feeds, { publisher_ids: [1] }), true, owner);
   assert.equal(NEEDS_ARTIST_LINE, 'A release needs an artist page.', owner);
+});
+
+test('page moves show the allowed roles, current parent, and changed page lines', () => {
+  const artist = { ...feeds[0], release_ids: [101, 102] };
+  const label = { ...feeds[2], release_ids: [101, 102] };
+  assert.equal(movePageTitle(artist), 'Move Zed', owner);
+  assert.equal(movePageTitle(label), 'Move Label A', owner);
+  assert.deepEqual(pageMoveRoles(artist), ['label', 'hosting'], owner);
+  assert.deepEqual(pageMoveRoles(label), ['hosting'], owner);
+  assert.deepEqual(pageMoveMenus(feeds, artist, { label: '10', hosting: '' }).map((menu) => menu.role), ['label', 'hosting'], owner);
+  assert.deepEqual(pageMoveMenus(feeds, label, { hosting: '' }).map((menu) => menu.role), ['hosting'], owner);
+  assert.deepEqual(pageMoveStart(feeds, artist), { label: '10', hosting: '20' }, owner);
+  assert.deepEqual(pageMoveStart(feeds, label), { hosting: '20' }, owner);
+  assert.deepEqual(pageMoveLines([...feeds, { id: 11, title: 'Label B' }], artist, { label: '11', hosting: '20' }),
+    ['Changes 2 releases:', '+ Label B', '− Label A'], owner);
+  assert.deepEqual(pageMoveLines([...feeds, page(21, 'Host B', ['hosting'])], label, { hosting: '21' }),
+    ['Changes 2 releases:', '+ Host B', '− Host A'], owner);
+});
+
+test('page move bodies use selected page ids and null for None', () => {
+  const artist = { ...feeds[0] };
+  const label = { ...feeds[2] };
+  assert.deepEqual(pageMoveBody(artist, { label: '12', hosting: '' }), { label_id: 12, hosting_id: null }, owner);
+  assert.deepEqual(pageMoveBody(label, { hosting: '12' }), { hosting_id: 12 }, owner);
 });

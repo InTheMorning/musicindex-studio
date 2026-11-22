@@ -70,6 +70,27 @@ test('the outline of a read-only album has the item IDs of the album with a conn
   assert.deepEqual(ids(readOnly), ids({ ...readOnly, connector_id: 'c1' }));
 });
 
+test('level and outline rows offer page moves and omit hosting moves', () => {
+  const owner = 'ADR 0240 item 20: row move availability comes from the publisher role and connector. Fix feedLevel or outlineItems in crates/api/ui/shell.js.';
+  const release = { ...album, id: 11, publisher_ids: [1, 2, 3] };
+  const hosting = { id: 1, title: 'Host', medium: 'publisher', publisher_roles: ['hosting'], connector_id: 'c1', release_ids: [11], child_ids: [2] };
+  const label = { id: 2, title: 'Label', medium: 'publisher', publisher_roles: ['label'], connector_id: 'c1', release_ids: [11], parent_ids: [1], child_ids: [3] };
+  const artist = { id: 3, title: 'Artist', medium: 'publisher', publisher_roles: ['artist'], connector_id: 'c1', release_ids: [11], parent_ids: [2] };
+  const feeds = [hosting, label, artist, release];
+  const levelMoves = (id) => {
+    const level = leftPanel({ view: { name: 'releases', group: id }, feeds, model: null, vaultOpen: true });
+    return [...level.sections.flatMap((section) => section.items), ...(level.releases || [])].filter((item) => item.move).map((item) => item.id);
+  };
+  assert.deepEqual(levelMoves(1), [2], owner);
+  assert.deepEqual(levelMoves(2), [3, 11], owner);
+  assert.deepEqual(levelMoves(3), [11], owner);
+  const outlineMoves = (id) => leftPanel({ view: { name: 'outline', id }, feeds, model: null, vaultOpen: true })
+    .items.filter((item) => item.move).map((item) => item.id);
+  assert.deepEqual(outlineMoves(1), ['page:2'], owner);
+  assert.deepEqual(outlineMoves(2), ['page:3', 'release:11'], owner);
+  assert.deepEqual(outlineMoves(3), ['release:11'], owner);
+});
+
 test('reviewHost gives host, choose and move', () => {
   assert.deepEqual(reviewHost({ hasHost: true, isReadOnly: false, feedMove: null }), { kind: 'host' });
   assert.deepEqual(reviewHost({ hasHost: false, isReadOnly: true, feedMove: null }), { kind: 'choose' });

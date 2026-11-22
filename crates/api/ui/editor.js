@@ -34,7 +34,8 @@ import { platformBlocks } from './listing.js';
 import { deleteWrite } from './feeddelete.js';
 import { pageSequence } from './pages.js';
 import { releaseKindOptions, shouldAddTracksAfterNewRelease } from './addfeeds.js';
-import { moveTitle, moveMenus, moveStart, moveForArtist, moveReady, moveBody, hasArtistPage, NEEDS_ARTIST_LINE, NEW_PAGE_PREFIX } from './movepages.js';
+import { moveTitle, moveMenus, moveStart, moveForArtist, moveReady, moveBody, hasArtistPage, NEEDS_ARTIST_LINE, NEW_PAGE_PREFIX,
+  movePageTitle, pageMoveBody, pageMoveMenus, pageMoveStart, pageMoveLines } from './movepages.js';
 import { nextStep, firstStart, releaseAdd, releaseArtistChoices, FIRST_STEPS, HOST_STEP } from './welcome.js';
 import {
   fileState, fileStatus, canDownloadToDevice, canCopyFile, missingCount, missingNotice, reviewNotice, dayText,
@@ -2782,16 +2783,18 @@ function FeedDelete({ feed, draft, onListChanged }) {
 // route of ADR 0240 item 18. `prepare` runs before the call, and it gives
 // false when the page cannot leave its state. `onMoved` gets the list of the
 // feeds that the route changed, and it can give the next view.
-export function MoveSheet({ release, feeds, connectors, prepare, onMoved, onListChanged, onClose }) {
+export function MoveSheet({ release, page, feeds, connectors, prepare, onMoved, onListChanged, onClose }) {
   const ref = useSheet(true);
   const { busy, error, run } = useAction();
-  const [values, setValues] = useState(() => moveStart(feeds, release));
+  const movingPage = Boolean(page);
+  const item = page || release;
+  const [values, setValues] = useState(() => movingPage ? pageMoveStart(feeds, page) : moveStart(feeds, release));
   // The role of the page that the user makes, or null.
   const [making, setMaking] = useState(null);
   const select = (role) => (value) => {
     if (value.startsWith(NEW_PAGE_PREFIX)) { setMaking(value.slice(NEW_PAGE_PREFIX.length)); return; }
     // A new artist page gives its label page and hosting page (ADR 0240 item 15).
-    setValues((current) => (role === 'artist' && value !== '' ? moveForArtist(feeds, value) : { ...current, [role]: value }));
+    setValues((current) => (!movingPage && role === 'artist' && value !== '' ? moveForArtist(feeds, value) : { ...current, [role]: value }));
   };
   const made = async (page) => {
     const role = making;
@@ -2801,19 +2804,22 @@ export function MoveSheet({ release, feeds, connectors, prepare, onMoved, onList
   };
   const move = () => run(async () => {
     if (prepare && !(await prepare())) return;
-    const answer = await api(`/feeds/${release.id}/move-to`, { method: 'POST', body: moveBody(values) });
-    await onMoved(answer.changed || [], moveBody(values));
+    const body = movingPage ? pageMoveBody(page, values) : moveBody(values);
+    const answer = await api(`/feeds/${item.id}/move-to`, { method: 'POST', body });
+    await onMoved(answer.changed || [], body, values);
     if (ref.current) ref.current.close();
   });
   return html`<dialog ref=${ref} class="sheet small" aria-labelledby="move-pages-title" onClose=${onClose}>
-    <header><h2 id="move-pages-title">${moveTitle(release)}</h2>
+    <header><h2 id="move-pages-title">${movingPage ? movePageTitle(page) : moveTitle(release)}</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button></header>
     <div class="body"><div class="form">
-      ${moveMenus(feeds, values).map((menu) => html`<${ChoiceSelect} key=${menu.role} id=${`move-${menu.role}`} label=${menu.label}
+      ${(movingPage ? pageMoveMenus(feeds, page, values) : moveMenus(feeds, values)).map((menu) => html`<${ChoiceSelect} key=${menu.role} id=${`move-${menu.role}`} label=${menu.label}
         value=${menu.value} options=${menu.options} onChange=${select(menu.role)} />`)}
+      ${movingPage && (() => { const [head, ...lines] = pageMoveLines(feeds, page, values);
+        return html`<div class="move-changes"><strong>${head}</strong>${lines.map((line) => html`<span>${line}</span>`)}</div>`; })()}
       <${ErrorNotice} error=${error} />
       <div class="actions"><button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
-        <button class="button primary" type="button" disabled=${busy || !moveReady(values)} onClick=${move}>Move</button></div>
+        <button class="button primary" type="button" disabled=${busy || (!movingPage && !moveReady(values))} onClick=${move}>Move</button></div>
     </div></div>
   </dialog>
   ${making && html`<${AddFeedRowSheet} open=${ARTIST_PAGE_FORM} connectors=${connectors} feeds=${feeds} start=${{ role: making }}
@@ -4138,7 +4144,7 @@ const PUBLISHER_ROLE_TEXT = 'Select the role of this feed first.';
 // The publisher page: the fields, the role and the releases (ADR 0041 item
 // 3). Each link changes the draft of this feed and the draft of the release,
 // so the page loads both drafts and names each release that changed.
-function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, onListChanged, onArtwork, onRemoved, connectors }) {
+function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, onMove, onListChanged, onArtwork, onRemoved, connectors }) {
   const field = (name) => (value) => update((m) => set(m, name, value));
   const nav = useContext(NavContext);
   const roleAction = useAction();
@@ -5290,7 +5296,7 @@ function CheckPage({ feed, model, check, go, onOpenFinding }) {
 // album, the credits, the recipients or one track (task 014c step 3). The
 // shell loads the draft and shows its toolbar. This component does not call
 // useDraft (ADR 0029 item 4).
-export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, importing, onImporting, onRemoved, connectors, onOpsChanged, filesReloadKey, differences, onRescan, onListChanged, artwork, onArtwork, check, addRecipient, onAddRecipientOpened, onOpenFinding }) {
+export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, importing, onImporting, onMove, onRemoved, connectors, onOpsChanged, filesReloadKey, differences, onRescan, onListChanged, artwork, onArtwork, check, addRecipient, onAddRecipientOpened, onOpenFinding }) {
   const { model, update } = draft;
   const page = view.page || 'album';
   const trackIndex = model && page === 'track' ? model.items.findIndex((item) => isTrack(item, view.track)) : -1;
@@ -5350,7 +5356,7 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
     body = html`<${SettingsPage} model=${model} update=${update} album=${!publisher && !playlist}
       op3Tracks=${draft.op3Tracks} />`;
   } else if (publisher && page !== 'files' && page !== 'credits' && page !== 'recipients') {
-    body = html`<${PublisherPage} feed=${feed} feeds=${feeds} model=${model} update=${update} bad=${draft.bad}
+    body = html`<${PublisherPage} feed=${feed} feeds=${feeds} model=${model} update=${update} bad=${draft.bad} onMove=${onMove}
       draft=${draft} go=${go} from=${pageLevel(feed.id, view.from)}
       onListChanged=${onListChanged} onArtwork=${onArtwork} onRemoved=${onRemoved} connectors=${connectors} />`;
   } else if (playlist && page === 'tracks') {

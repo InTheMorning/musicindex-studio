@@ -2504,7 +2504,7 @@ function Crumb({ feed, view, draft }) {
 
 // An editable album: the compact header, not the hero (ADR 0029 item 10).
 // The toolbar stays in view at each scroll position (ADR 0029 item 1).
-function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importing, onImporting, onChanged, onListChanged, onRemoved, connectors, differences, onRescan }) {
+function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importing, onImporting, onMove, onChanged, onListChanged, onRemoved, connectors, differences, onRescan }) {
   const { busy, error, run } = useAction();
   const [outsideCheck, setOutsideCheck] = useState(null);
   const kind = feedKind(feed);
@@ -2573,6 +2573,8 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
             : html`<p class="sub mono">This feed has no public address yet.</p>`}
           ${musicIndexLink && html`<a class="button link index-link" href=${musicIndexLink.href} target="_blank" rel="noopener">${musicIndexLink.text}</a>`}
         </div>
+        ${isPublisher(feed) && (feed.publisher_roles || []).some((role) => role === 'artist' || role === 'label')
+          && html`<button class="button" type="button" onClick=${() => onMove(feed.id)}>Move To…</button>`}
         ${feed.last_version !== null && html`<button class="button" type="button" disabled=${busy} onClick=${refresh}>
           ${busy ? 'Reading…' : 'Read Again'}</button>`}
       </header>
@@ -2596,7 +2598,7 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
     </div>
     <${PageTabs} feed=${feed} view=${view} go=${go} checkCount=${check.count} />
     <${AlbumEditor} key=${feed.id} feed=${feed} feeds=${feeds} draft=${draft} view=${view} go=${go}
-      adding=${adding} onAdding=${onAdding} importing=${importing} onImporting=${onImporting} onRemoved=${onRemoved}
+      adding=${adding} onAdding=${onAdding} importing=${importing} onImporting=${onImporting} onMove=${onMove} onRemoved=${onRemoved}
       connectors=${connectors} onOpsChanged=${opsChanged} filesReloadKey=${filesReloadKey}
       differences=${differences} onRescan=${onRescan} onListChanged=${onListChanged}
       artwork=${artwork} onArtwork=${setArtwork} check=${check} addRecipient=${addRecipient}
@@ -2606,10 +2608,10 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
 
 // The feed open in the main pane: the editor for an editable album, or the
 // read-only view for every other feed (ADR 0029 item 10).
-function FeedDetail({ feed, feeds, draft, view, go, adding, onAdding, importing, onImporting, onChanged, onListChanged, onRemoved, connectors, differences, onRescan }) {
+function FeedDetail({ feed, feeds, draft, view, go, adding, onAdding, importing, onImporting, onMove, onChanged, onListChanged, onRemoved, connectors, differences, onRescan }) {
   if (isEditable(feed)) {
     return html`<${EditableFeed} feed=${feed} feeds=${feeds} draft=${draft} view=${view} go=${go}
-      adding=${adding} onAdding=${onAdding} importing=${importing} onImporting=${onImporting}
+      adding=${adding} onAdding=${onAdding} importing=${importing} onImporting=${onImporting} onMove=${onMove}
       onChanged=${onChanged} onListChanged=${onListChanged} onRemoved=${onRemoved} connectors=${connectors}
       differences=${differences} onRescan=${onRescan} />`;
   }
@@ -3427,10 +3429,10 @@ function ChangeSetPage({ id, go, onChanged }) {
 // At 760 px or less the left panel is not shown: its content is the root
 // page and the outline page of the stack (ADR 0039 item 11, musicindex ADR
 // 0030 R-SHELL-2).
-function LeftPanel({ panel, draft, changedFeeds, go, showReleases, onAdding, onImporting, onAddFeedRow, onLock }) {
+function LeftPanel({ panel, draft, changedFeeds, go, showReleases, onAdding, onImporting, onAddFeedRow, onMove, onLock }) {
   if (panel.kind === 'level') {
     return html`<header><${Brand} /><${ThemeToggle} /></header>
-      <div class="sidebar-scroll"><${Level} panel=${panel} go=${go} back onAddFeedRow=${onAddFeedRow} /></div>
+      <div class="sidebar-scroll"><${Level} panel=${panel} go=${go} back onAddFeedRow=${onAddFeedRow} onMove=${onMove} /></div>
       <${LeftPanelFooter} panel=${panel} go=${go} onLock=${onLock} />`;
   }
   if (panel.kind === 'destinations') {
@@ -3441,7 +3443,7 @@ function LeftPanel({ panel, draft, changedFeeds, go, showReleases, onAdding, onI
   return html`<header><${Brand} /><${ThemeToggle} /></header>
     <div class="sidebar-scroll">
       <${Outline} panel=${panel} draft=${draft} changedFeeds=${changedFeeds} go=${go} showReleases=${showReleases}
-        onAdding=${onAdding} onImporting=${onImporting} onAddFeedRow=${onAddFeedRow} />
+        onAdding=${onAdding} onImporting=${onImporting} onAddFeedRow=${onAddFeedRow} onMove=${onMove} />
     </div>
     <${LeftPanelFooter} panel=${panel} go=${go} onLock=${onLock} />`;
 }
@@ -3490,18 +3492,20 @@ function destinationRows(top, go) {
 // A section row or a release row of a level. A section row covers its feed
 // and its releases. A release row covers its feed only (ADR 0165 item 3).
 // `count` is given for a section row, which shows art and a number.
-function LevelRow({ item, set, label, count, attrs, onOpen }) {
+function LevelRow({ item, set, label, count, attrs, onOpen, onMove }) {
   const mark = useStateMark(set);
   const click = useOpenAndCheck(set, mark, onOpen);
   const section = count !== undefined;
   const base = section ? `${label}, ${count} ${count === 1 ? 'release' : 'releases'}` : label;
-  return html`<button class="row" type="button" ...${attrs} aria-label=${mark ? `${base}, ${mark.text}` : (section ? base : undefined)}
-    onClick=${click}>
+  const row = html`<button class="row" type="button" ...${attrs} aria-label=${mark ? `${base}, ${mark.text}` : (section ? base : undefined)} onClick=${click}>
     ${section && html`<${FeedArt} art=${item.art} glow=${item.glow} dot=${item.dot} />`}
     <span class="row-label">${label}</span>
     <${StateMark} mark=${mark} />
     ${section && html`<span class="count" aria-hidden="true">${count}</span>`}
   </button>`;
+  return item.move ? html`<div class="panel-row-with-menu">${row}<${MenuControl} row=${true} Icon=${Icon} buttonLabel="More"
+    accessibleName=${`More for ${label}`} menuLabel=${`More for ${label}`} items=${[{ label: 'Move To…' }]}
+    onSelect=${() => onMove(item.id)} /></div>` : row;
 }
 
 // One level of the hierarchy (ADR 0088 item 5): "‹" to the level above when
@@ -3513,7 +3517,7 @@ function AddTreeRow({ item, attrs, onAdd }) {
     <span class="num">＋</span><span class="row-label">${item.label}</span></button>`;
 }
 
-function Level({ panel, go, back, onAddFeedRow = () => {} }) {
+function Level({ panel, go, back, onAddFeedRow = () => {}, onMove = () => {} }) {
   const narrow = useNarrow();
   const [current, setCurrent] = useState(null);
   const { feeds } = useContext(OutsideContext);
@@ -3544,23 +3548,23 @@ function Level({ panel, go, back, onAddFeedRow = () => {} }) {
     ${panel.sections.map((section) => html`<div class="destination-group">
       <h2 class="panel-heading">${section.heading}</h2>
       ${section.items.map((item) => { const index = cursor++; return html`<${LevelRow} item=${item} set=${panelSet(feeds, item.id)} label=${item.label} count=${item.count}
-        attrs=${rowAttrs(index, headIndex)} onOpen=${() => go(item.view)} />`; })}
+        attrs=${rowAttrs(index, headIndex)} onOpen=${() => go(item.view)} onMove=${onMove} />`; })}
       ${section.add && html`<${AddTreeRow} item=${section.add} attrs=${rowAttrs(cursor++, headIndex)} onAdd=${onAddFeedRow} />`}
     </div>`)}
     ${panel.releases && html`<div class="destination-group">
       <h2 class="panel-heading">Releases</h2>
       ${panel.releases.map((item) => { const index = cursor++; return html`<${LevelRow} item=${item} set=${feeds.filter((feed) => feed.id === item.id)} label=${item.title}
-        attrs=${rowAttrs(index, headIndex)} onOpen=${() => go(openFeedView(item.id, narrow, item.from))} />`; })}
+        attrs=${rowAttrs(index, headIndex)} onOpen=${() => go(openFeedView(item.id, narrow, item.from))} onMove=${onMove} />`; })}
       ${panel.releaseAdd && html`<${AddTreeRow} item=${panel.releaseAdd} attrs=${rowAttrs(cursor++, headIndex)} onAdd=${onAddFeedRow} />`}
     </div>`}</div>`;
 }
 
 // A level as a page of a narrow window (ADR 0088 item 7). Back opens the
 // page below it in the stack.
-function LevelPage({ panel, go, onAddFeedRow }) {
+function LevelPage({ panel, go, onAddFeedRow, onMove }) {
   return html`<div class="panel-page">
     <${Bar}><span class="bar-title">${panel.head.title}</span><//>
-    <section class="section outline-page"><${Level} panel=${panel} go=${go} back=${false} onAddFeedRow=${onAddFeedRow} /></section>
+    <section class="section outline-page"><${Level} panel=${panel} go=${go} back=${false} onAddFeedRow=${onAddFeedRow} onMove=${onMove} /></section>
   </div>`;
 }
 
@@ -3568,7 +3572,7 @@ function LevelPage({ panel, go, onAddFeedRow }) {
 // type label, then one row for each item. The left panel shows it at a wide
 // width, and the outline page shows it at a narrow width. `showReleases` is
 // given at a wide width only, where the item "Releases" is in the panel.
-function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImporting, onAddFeedRow = () => {} }) {
+function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImporting, onAddFeedRow = () => {}, onMove = () => {} }) {
   const [current, setCurrent] = useState(null);
   const { feeds } = useContext(OutsideContext);
   const feed = panel.feed;
@@ -3629,12 +3633,15 @@ function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImp
         });
         const numbered = item.number !== undefined;
         const index = childIndex++;
-        return html`<li key=${item.id}><button class="node" type="button" ...${rowAttrs(index, feedIndex)} aria-current=${currentAttr(item)} onClick=${open}>
+        const row = html`<button class="node" type="button" ...${rowAttrs(index, feedIndex)} aria-current=${currentAttr(item)} onClick=${open}>
           ${numbered && html`<span class="num">${item.number}</span>`}
           <span class="label">${item.label}</span>
           ${item.status && html`<span class="sub">${item.status}</span>`}
           ${numbered && hasBadAddress(item.number) && html`<span class="field-error">Address not correct</span>`}
-        </button></li>`;
+        </button>`;
+        return html`<li key=${item.id}>${item.move ? html`<div class="panel-row-with-menu">${row}<${MenuControl} row=${true} Icon=${Icon} buttonLabel="More"
+          accessibleName=${`More for ${item.label}`} menuLabel=${`More for ${item.label}`} items=${[{ label: 'Move To…' }]}
+          onSelect=${() => onMove(Number(item.id.split(':').pop()))} /></div>` : row}</li>`;
       })}
     </ul></div>`;
 }
@@ -3676,7 +3683,7 @@ function RootPage({ panel, go, onLock }) {
 
 // The outline page of a narrow window (ADR 0039 item 11a). Its bar has the
 // back control, the title of the feed and the draft toolbar of the feed.
-function OutlinePage({ feed, panel, draft, changedFeeds, feeds, go, onAdding, onImporting, onAddFeedRow, onChanged, onListChanged, connectors }) {
+function OutlinePage({ feed, panel, draft, changedFeeds, feeds, go, onAdding, onImporting, onAddFeedRow, onMove, onChanged, onListChanged, connectors }) {
   // A host operation can change the draft XML. After it, the shell saves the
   // edits of the user and loads the draft again (ADR 0036 item 14).
   const opsChanged = async () => {
@@ -3689,7 +3696,7 @@ function OutlinePage({ feed, panel, draft, changedFeeds, feeds, go, onAdding, on
     <//>
     <section class="section outline-page">
       <${Outline} panel=${panel} draft=${draft} changedFeeds=${changedFeeds} go=${go} showReleases=${null}
-        onAdding=${onAdding} onImporting=${onImporting} onAddFeedRow=${onAddFeedRow} />
+        onAdding=${onAdding} onImporting=${onImporting} onAddFeedRow=${onAddFeedRow} onMove=${onMove} />
     </section>
   </div>`;
 }
@@ -4034,6 +4041,7 @@ function Shell({ vault, onLock, version }) {
   // The Add a track sheet, by the left panel and by the album page (ADR 0029 item 7).
   const [adding, setAdding] = useState(false);
   const [addingFeed, setAddingFeed] = useState(null);
+  const [moveId, setMoveId] = useState(null);
   const [copyNotice, setCopyNotice] = useState(null);
   // The import sheet, by the left panel and by the album page (task 018d).
   const [importing, setImporting] = useState(false);
@@ -4279,6 +4287,8 @@ function Shell({ vault, onLock, version }) {
 
   const lock = async () => { await api('/vault/lock', { method: 'POST' }).catch(() => {}); onLock(); };
   const selected = isFeedView(view) && feeds ? feeds.find((f) => f.id === view.id) : null;
+  const movingFeed = moveId === null || !feeds ? null : feeds.find((feed) => feed.id === moveId);
+  const movingPage = movingFeed && (movingFeed.publisher_roles || []).some((role) => role === 'artist' || role === 'label');
   // The shell holds the one draft of the selected feed (ADR 0029 item 4).
   // A feed with no connector, or a feed that is not an album, needs no draft.
   const draftFeedId = selected && isEditable(selected) ? selected.id : null;
@@ -4353,15 +4363,17 @@ function Shell({ vault, onLock, version }) {
     main = html`<${ChangeSetPage} key=${view.id} id=${view.id} go=${go} onChanged=${() => load()} />`;
   } else if (selected && view.name === 'outline') {
     main = html`<${OutlinePage} feed=${selected} panel=${panel} draft=${draft} changedFeeds=${changedFeeds} feeds=${feeds} go=${go}
-      onAdding=${setAdding} onImporting=${setImporting} onAddFeedRow=${openAddFeedRow} onChanged=${() => load()} onListChanged=${() => load()} connectors=${connectors} />`;
+      onAdding=${setAdding} onImporting=${setImporting} onAddFeedRow=${openAddFeedRow} onMove=${setMoveId}
+      onChanged=${() => load()} onListChanged=${() => load()} connectors=${connectors} />`;
   } else if (selected) {
     main = html`<${FeedDetail} feed=${selected} feeds=${feeds} draft=${draft} view=${view} go=${go}
-      adding=${adding} onAdding=${setAdding} importing=${importing} onImporting=${setImporting} onChanged=${() => load()}
+      adding=${adding} onAdding=${setAdding} importing=${importing} onImporting=${setImporting} onMove=${setMoveId} onChanged=${() => load()}
       onListChanged=${() => load()}
       onRemoved=${async () => { await load(); go({ name: 'releases' }, { replace: true }); }} connectors=${connectors}
       differences=${differences.filter((d) => d.feed_id === selected.id)} onRescan=${rescan} />`;
   } else if (narrow && panel.kind === 'level') {
-    main = html`<${LevelPage} panel=${panel} go=${go} onAddFeedRow=${openAddFeedRow} />`;
+    main = html`<${LevelPage} panel=${panel} go=${go} onAddFeedRow=${openAddFeedRow}
+      onMove=${setMoveId} />`;
   } else {
     // A release of a level goes back to that level (ADR 0088 item 6).
     const from = view.name === 'releases' && typeof view.group === 'number'
@@ -4378,7 +4390,8 @@ function Shell({ vault, onLock, version }) {
     rootButtons: showsRootButtons(nav, narrow), toRoot, go,
     // A new release opens with the import sheet "Add tracks" (ADR 0224 item 7).
     addTracksNext: setPendingAddTracks };
-  const panelProps = { panel, draft, changedFeeds, go, showReleases, onAdding: setAdding, onImporting: setImporting, onAddFeedRow: openAddFeedRow, onLock: lock };
+  const panelProps = { panel, draft, changedFeeds, go, showReleases, onAdding: setAdding, onImporting: setImporting, onAddFeedRow: openAddFeedRow,
+    onMove: setMoveId, onLock: lock };
   return html`<${NavContext.Provider} value=${navValue}><${OutsideContext.Provider} value=${outsideValue}><div class="shell">
     ${!narrow && html`<nav class="sidebar" aria-label="Collection">
       <${LeftPanel} ...${panelProps} />
@@ -4400,6 +4413,19 @@ function Shell({ vault, onLock, version }) {
       start=${addingFeed.start} onAdded=${(f, info) => { setAddingFeed(null); addedFeed(f, info, addingFeed.from); }}
       onConnect=${() => go({ name: 'hosts' })}
       onClose=${() => setAddingFeed(null)} />`}
+    ${movingFeed && html`<${MoveSheet} key=${moveId} release=${movingPage ? undefined : movingFeed}
+      page=${movingPage ? { ...movingFeed, parent_ids: movingFeed.parent_ids || [], release_ids: movingFeed.release_ids || [] } : undefined}
+      feeds=${feeds} connectors=${connectors} onListChanged=${load}
+      prepare=${selected && selected.id === moveId && draftFeedId === moveId ? () => draft.flush() : undefined}
+      onMoved=${async (_changed, body, values) => {
+        await load();
+        if (body.artist_id !== undefined) go(movedReleaseView(body.artist_id));
+        else {
+          // The new upper page is the label page, else the hosting page (ADR 0240 item 21).
+          const upper = values.label || values.hosting;
+          go(upper ? { name: 'releases', group: Number(upper) } : { name: 'releases' });
+        }
+      }} onClose=${() => setMoveId(null)} />`}
   </div><//><//>`;
 }
 

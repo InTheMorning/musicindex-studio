@@ -2376,6 +2376,313 @@ async fn the_move_route_changes_no_draft_when_a_page_fails_its_check() {
 }
 
 #[tokio::test]
+async fn an_artist_page_move_updates_its_releases_and_kept_level() {
+    let (app, connector) = publisher_app().await;
+    let [artist, _, label_a, hosting, release_a] = move_pages(&app, connector).await;
+    let label_b = make_feed(
+        &app,
+        new_feed_body(
+            connector,
+            "label-b.xml",
+            "Label B",
+            Some("publisher"),
+            Some("label"),
+        ),
+    )
+    .await["id"]
+        .as_i64()
+        .unwrap();
+    let release_b = make_feed(
+        &app,
+        new_feed_body(connector, "release-b.xml", "Release B", None, None),
+    )
+    .await["id"]
+        .as_i64()
+        .unwrap();
+    for release in [release_a, release_b] {
+        for page in [artist, label_a] {
+            let (status, body) = call(
+                &app,
+                "POST",
+                &format!("/api/v1/feeds/{page}/links"),
+                Some(json!({ "release": release })),
+            )
+            .await;
+            assert_eq!(
+                status,
+                StatusCode::OK,
+                "ADR 0240 item 23, an_artist_page_move_updates_its_releases_and_kept_level: link failed: {body}"
+            );
+        }
+    }
+    let workspace = Workspace::open(app.data.path()).unwrap();
+    workspace
+        .collection
+        .add_kept_level(
+            studio_core::collection::FeedId(label_a),
+            studio_core::collection::FeedId(artist),
+        )
+        .unwrap();
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{artist}/move-to"),
+        Some(json!({ "label_id": label_b, "hosting_id": hosting })),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0240 item 23, move_publisher_page_to_pages: {body}"
+    );
+    for release in [release_a, release_b] {
+        let publishers: Vec<i64> = listed(&app, release).await["publisher_ids"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|id| id.as_i64().unwrap())
+            .collect();
+        assert!(
+            publishers.contains(&artist),
+            "ADR 0240 item 23, move_publisher_page_to_pages: artist link must stay"
+        );
+        assert!(
+            publishers.contains(&label_b),
+            "ADR 0240 item 23, move_publisher_page_to_pages: new label link is missing"
+        );
+        assert!(
+            !publishers.contains(&label_a),
+            "ADR 0240 item 23, move_publisher_page_to_pages: old label link remains"
+        );
+    }
+    let kept = workspace.collection.kept_levels().unwrap();
+    assert!(
+        !kept.contains(&(
+            studio_core::collection::FeedId(label_a),
+            studio_core::collection::FeedId(artist)
+        )),
+        "ADR 0240 item 24, move_publisher_page_to_pages: old kept link remains"
+    );
+    assert!(
+        !kept.contains(&(
+            studio_core::collection::FeedId(label_b),
+            studio_core::collection::FeedId(artist)
+        )),
+        "ADR 0240 item 24, move_publisher_page_to_pages: a shared-release link stays kept"
+    );
+}
+
+#[tokio::test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "This test covers both release links and kept links for page moves."
+)]
+async fn a_label_page_move_keeps_artist_links_and_a_page_without_releases_moves() {
+    let (app, connector) = publisher_app().await;
+    let [artist, _, label, hosting, release] = move_pages(&app, connector).await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{artist}/links"),
+        Some(json!({ "release": release })),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0240 item 23, a_label_page_move_keeps_artist_links_and_a_page_without_releases_moves: {body}"
+    );
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{label}/links"),
+        Some(json!({ "release": release })),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0240 item 23, a_label_page_move_keeps_artist_links_and_a_page_without_releases_moves: {body}"
+    );
+    let workspace = Workspace::open(app.data.path()).unwrap();
+    workspace
+        .collection
+        .add_kept_level(
+            studio_core::collection::FeedId(hosting),
+            studio_core::collection::FeedId(label),
+        )
+        .unwrap();
+    let empty_artist = make_feed(
+        &app,
+        new_feed_body(
+            connector,
+            "empty-artist.xml",
+            "Empty Artist",
+            Some("publisher"),
+            Some("artist"),
+        ),
+    )
+    .await["id"]
+        .as_i64()
+        .unwrap();
+    workspace
+        .collection
+        .add_kept_level(
+            studio_core::collection::FeedId(label),
+            studio_core::collection::FeedId(empty_artist),
+        )
+        .unwrap();
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{label}/move-to"),
+        Some(json!({ "hosting_id": null })),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0240 item 24, move_publisher_page_to_pages: {body}"
+    );
+    let links: Vec<i64> = listed(&app, release).await["publisher_ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|id| id.as_i64().unwrap())
+        .collect();
+    assert!(
+        links.contains(&artist),
+        "ADR 0240 item 23, move_publisher_page_to_pages: artist link must stay"
+    );
+    let kept = workspace.collection.kept_levels().unwrap();
+    assert!(
+        !kept.contains(&(
+            studio_core::collection::FeedId(hosting),
+            studio_core::collection::FeedId(label)
+        )),
+        "ADR 0240 item 24, move_publisher_page_to_pages: old kept link remains"
+    );
+    let other_label = make_feed(
+        &app,
+        new_feed_body(
+            connector,
+            "other-label.xml",
+            "Other Label",
+            Some("publisher"),
+            Some("label"),
+        ),
+    )
+    .await["id"]
+        .as_i64()
+        .unwrap();
+    let kept_only_drafts_before = move_draft_rows(&app, &[empty_artist, other_label]);
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{empty_artist}/move-to"),
+        Some(json!({ "label_id": other_label, "hosting_id": null })),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0240 item 24, move_publisher_page_to_pages with no releases: {body}"
+    );
+    let kept = workspace.collection.kept_levels().unwrap();
+    assert!(
+        !kept.contains(&(
+            studio_core::collection::FeedId(label),
+            studio_core::collection::FeedId(empty_artist)
+        )),
+        "ADR 0240 item 24, move_publisher_page_to_pages: old kept link remains"
+    );
+    assert!(
+        kept.contains(&(
+            studio_core::collection::FeedId(other_label),
+            studio_core::collection::FeedId(empty_artist)
+        )),
+        "ADR 0240 item 24, move_publisher_page_to_pages: new kept link is missing"
+    );
+    assert_eq!(
+        move_draft_rows(&app, &[empty_artist, other_label]),
+        kept_only_drafts_before,
+        "ADR 0240 item 24, move_publisher_page_to_pages changed a draft for kept links"
+    );
+}
+
+#[tokio::test]
+async fn a_hosting_page_cannot_move_and_a_failed_page_move_changes_no_kept_link() {
+    let (app, connector) = publisher_app().await;
+    let [artist, _, label, hosting, _] = move_pages(&app, connector).await;
+    let workspace = Workspace::open(app.data.path()).unwrap();
+    workspace
+        .collection
+        .add_kept_level(
+            studio_core::collection::FeedId(label),
+            studio_core::collection::FeedId(artist),
+        )
+        .unwrap();
+    let before = workspace.collection.kept_levels().unwrap();
+    let before_drafts = move_draft_rows(&app, &[artist, label, hosting]);
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{hosting}/move-to"),
+        Some(json!({ "hosting_id": null })),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::BAD_REQUEST,
+        "ADR 0240 item 20, move_publisher_page_to_pages must refuse a hosting page: {body}"
+    );
+    let (_, read_only) = call(&app, "POST", "/api/v1/feeds", Some(json!({}))).await;
+    let read_only = read_only["id"].as_i64().unwrap();
+    workspace
+        .collection
+        .set_publisher_roles(
+            studio_core::collection::FeedId(read_only),
+            &[studio_core::collection::PublisherRole::Label],
+            true,
+        )
+        .unwrap();
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{artist}/move-to"),
+        Some(json!({ "label_id": read_only, "hosting_id": null })),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::CONFLICT,
+        "ADR 0240 item 25, move_publisher_page_to_pages must refuse a read-only target: {body}"
+    );
+    assert_eq!(
+        workspace.collection.kept_levels().unwrap(),
+        before,
+        "ADR 0240 item 25, move_publisher_page_to_pages changed kept links after refusal"
+    );
+    assert_eq!(
+        move_draft_rows(&app, &[artist, label, hosting]),
+        before_drafts,
+        "ADR 0240 item 25, move_publisher_page_to_pages changed drafts after refusal"
+    );
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{artist}/move-to"),
+        Some(json!({ "artist_id": artist, "hosting_id": null })),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::BAD_REQUEST,
+        "ADR 0240 item 21, move_publisher_page_to_pages must reject a key for the moved role: {body}"
+    );
+}
+
+#[tokio::test]
 async fn each_publisher_route_needs_the_token() {
     let app = app();
     let routes = [

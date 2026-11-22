@@ -194,6 +194,7 @@ function outlineItems(feed, view, model, narrow, feeds) {
       section.feeds.forEach((child) => items.push({
         id: `page:${child.id}`,
         label: displayTitle(child),
+        move: (child.publisher_roles || []).some((role) => role === 'artist' || role === 'label'),
         target: openFeedView(child.id, narrow, level),
       }));
       if (section.add) items.push({ id: `add-${section.add.add}`, label: section.add.label, action: 'add-feed', open: section.add.open, start: section.add.start, from: level });
@@ -203,6 +204,7 @@ function outlineItems(feed, view, model, narrow, feeds) {
       (feed.release_ids || []).map((id) => byId.get(id)).filter(Boolean).forEach((release) => items.push({
         id: `release:${release.id}`,
         label: displayTitle(release),
+        move: true,
         target: openFeedView(release.id, narrow, level),
       }));
       if (groups.releaseAdd) items.push({ id: 'add-release', label: groups.releaseAdd.label, action: 'add-feed', open: groups.releaseAdd.open, start: groups.releaseAdd.start, from: level });
@@ -490,6 +492,7 @@ function feedLevel(owner, view, feeds) {
       items: section.feeds.map((feed) => ({
         id: feed.id,
         label: displayTitle(feed),
+        move: (feed.publisher_roles || []).some((role) => role === 'artist' || role === 'label'),
         dot: feedKind(feed).dot,
         glow: kindGlow(feedKind(feed)),
         art: publisherArt(feed, feeds),
@@ -504,6 +507,7 @@ function feedLevel(owner, view, feeds) {
       ? (owner.release_ids || []).map((id) => byId.get(id)).filter(Boolean).map((feed) => ({
         id: feed.id,
         title: displayTitle(feed),
+        move: true,
         from,
       }))
       : null,

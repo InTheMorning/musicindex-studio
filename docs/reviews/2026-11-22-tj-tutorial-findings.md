@@ -33,13 +33,15 @@ The main session ran the tutorial again after commit `a0ed27c`, in `.studio-dev/
 11. **The refusal of a bad address names model paths.** The write message is "these address fields are not full http or https addresses: items/0/persons/0/href …". A user does not know what `items/0/persons/0/href` is. Proposal: name the track, the credit and the field, for example "Track 1, credit Ben Doerfel: Information address".
 12. **The review of a role change repeats one line.** The review of The Doerfels shows "Remote items: 18 entries get the relation artist", then the line "Relation: none → artist" for each entry. Proposal: show the count line only.
 
+13. **A link of Elijah Lied names an old GUID.** In `elijahliedpubfeed.xml`, the link to "This Is It" has `feedGuid="11f41bfe-7cbe-5795-85c3-6deaccac20aa"`. The feed `thisisit.xml` has the GUID `24e9311b-73a9-5f48-b593-81148712cb14`. The GUID decides the match (ADR 0205 item 12), so the move does not change that link, and the review of Elijah Lied shows 5 entries. Proposal: tell the user to correct the link in the hosted feed.
+
 The write of the new hosting page gave `not_reachable` (404) in the test, because the test does not put the file on the public site. This is a limit of the test, not a finding.
 
 ## Open
 
 - [ADR 0243](../adr/0243-a-move-is-a-change-set-and-a-level-gathers-its-pages.md) gives findings 1, 2, 3, 4 and 6. Tasks 229 to 232 build ADR 0243 and findings 5, 7 and 8. They are committed, the last in `9b1a300`.
 - [ADR 0245](../adr/0245-review-repairs-short-addresses-and-offers-the-people-values.md) gives findings 10 and 11. Each review repairs an address with no `https://` before the write, and offers the values of People. Tasks 233, 234 and 235 build it, one at a time.
-- Findings 9 and 12 have no decision record now. The tutorial tells the user how to correct the fault of finding 10 by hand.
+- [ADR 0246](../adr/0246-a-link-with-no-medium-equal-changes-in-review-and-the-people-button.md) gives findings 9 and 12 and the People button label from the choices below. The tutorial tells the user how to correct the fault of finding 10 by hand.
 - Operator choice (2026-11-22), finding 9: when a link has no `medium`, Studio uses the feed in the collection that the link names. If that feed is a release, the link gets the `rel` and also `medium` with the medium of that feed. A link to a feed that is not in the collection does not change.
 - Operator choice (2026-11-22), finding 12: the review shows the count line. A closed fold below it lists the names of the entries.
 - Operator choice (2026-11-22), task 235 open point: the People button label has no possessive. The label is "Use the People Values in N Feeds".

@@ -1042,10 +1042,21 @@ pub fn roles_from_rel(text: &str) -> Vec<PublisherRole> {
 /// in their sequence (ADR 0082 item 4, ADR 0086 item 3).
 #[must_use]
 pub fn inferred_roles(feed: &Feed) -> Vec<PublisherRole> {
+    inferred_roles_with(feed, |item| {
+        matches!(item.medium.as_deref(), Some("music" | "musicL"))
+    })
+}
+
+/// Infer roles from links selected by the caller (ADR 0246 item 2).
+#[must_use]
+pub(crate) fn inferred_roles_with(
+    feed: &Feed,
+    is_release_link: impl Fn(&crate::feed::RemoteItem) -> bool,
+) -> Vec<PublisherRole> {
     let mut roles: Vec<PublisherRole> = feed
         .remote_items
         .iter()
-        .filter(|item| matches!(item.medium.as_deref(), Some("music" | "musicL")))
+        .filter(|item| is_release_link(item))
         .filter_map(|item| item.rel.as_deref())
         .flat_map(roles_from_rel)
         .collect();

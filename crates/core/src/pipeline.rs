@@ -2414,6 +2414,73 @@ fn hosted_change_seconds(bytes: &[u8], last_modified: Option<i64>) -> Option<i64
     feed_build_seconds(bytes).or(last_modified)
 }
 
+/// Read the current feed identity and title (ADR 0246 item 5).
+pub(crate) fn feed_identity(
+    collection: &Collection,
+    row: &FeedRow,
+) -> Result<(Option<String>, Option<String>), PipelineError> {
+    if collection.draft(row.id)?.is_some() {
+        let (feed, _) = draft_model(collection, row.id)?;
+        Ok((feed.podcast_guid, feed.title.or_else(|| row.title.clone())))
+    } else {
+        Ok((row.podcast_guid.clone(), row.title.clone()))
+    }
+}
+
+/// Name linked feeds in the review (ADR 0246 item 5).
+fn name_review_links(
+    collection: &Collection,
+    fields: &mut [crate::review::FieldGroup],
+) -> Result<(), PipelineError> {
+    if !fields
+        .iter()
+        .flat_map(|group| &group.changes)
+        .any(|change| {
+            !change.remote_item_has_title
+                && (change.remote_item_guid.is_some() || change.remote_item_url.is_some())
+        })
+    {
+        return Ok(());
+    }
+    let feed_rows = collection.feeds()?;
+    let mut titles_by_guid = HashMap::new();
+    let mut titles_by_url = HashMap::new();
+    for row in &feed_rows {
+        let (guid, title) = feed_identity(collection, row)?;
+        if let (Some(guid), Some(title)) = (guid, title.as_ref()) {
+            titles_by_guid.insert(guid, title.clone());
+        }
+        if let (Some(url), Some(title)) = (row.public_url.as_ref(), title.as_ref()) {
+            titles_by_url.insert(url.clone(), title.clone());
+        }
+    }
+    for change in fields.iter_mut().flat_map(|group| &mut group.changes) {
+        if change.remote_item_has_title {
+            continue;
+        }
+        let title = change
+            .remote_item_guid
+            .as_ref()
+            .and_then(|guid| titles_by_guid.get(guid))
+            .or_else(|| {
+                change
+                    .remote_item_guid
+                    .is_none()
+                    .then(|| {
+                        change
+                            .remote_item_url
+                            .as_ref()
+                            .and_then(|url| titles_by_url.get(url))
+                    })
+                    .flatten()
+            });
+        if let Some(title) = title {
+            change.entry = Some(title.clone());
+        }
+    }
+    Ok(())
+}
+
 /// The same as [`diff`], with the time `now` in seconds after the Unix
 /// epoch. The diff gives the planned Nostr events of each host. The
 /// collection keeps the plan time, so that a later diff of the same ID
@@ -2552,7 +2619,8 @@ fn diff_planned(
         .context_radius(3)
         .header("live", "draft")
         .to_string();
-    let review = crate::review::review(&draft.base_xml, &draft.draft_xml);
+    let mut review = crate::review::review(&draft.base_xml, &draft.draft_xml);
+    name_review_links(collection, &mut review.fields)?;
     let stream_problems = streams.map_or_else(Vec::new, |streams| {
         changed_stream_problems(&draft.base_xml, &draft.draft_xml, streams)
     });

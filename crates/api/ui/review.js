@@ -312,8 +312,7 @@ export function groupLabel(group) {
   }
 }
 
-// The largest set of more than two changes of one path with one new value,
-// or null (ADR 0114 item 2).
+// Each set has more than two changes of one path with one new value (ADR 0246 item 4).
 function cluster(group) {
   const sets = new Map();
   group.changes.forEach((c, i) => {
@@ -322,46 +321,76 @@ function cluster(group) {
     if (!sets.has(id)) sets.set(id, []);
     sets.get(id).push(i);
   });
-  let best = null;
-  sets.forEach((indexes) => { if (indexes.length > 2 && (!best || indexes.length > best.length)) best = indexes; });
-  return best;
+  return [...sets.values()].filter((indexes) => indexes.length > 2);
 }
 
 // The rows of the field view: one object for each group, with `label` (or
-// null), `summary` (or null), `rows` and `more` (or null). `more` is the
-// collapsed line `{ summary, rows }` of the changes that the summary covers.
+// null), `summaries`, `summary` (the first one, or null), `rows`, `more` (or
+// null) and `fold` (or null). `more` is the collapsed line `{ summary, rows }`
+// of a set with more than one old value (ADR 0114 item 2). `fold` is
+// `{ summary, names }` for the equal sets (ADR 0246 item 4).
 export function fieldRows(groups, profiles) {
   return (groups || []).map((group) => {
     const label = groupLabel(group);
     const rowsFor = (change) => rowsOf(group, change, profiles);
-    const set = cluster(group);
-    if (!set) {
+    const sets = cluster(group);
+    const equalSets = sets.filter((indexes) => indexes.every((i) =>
+      JSON.stringify(group.changes[i].old) === JSON.stringify(group.changes[indexes[0]].old)));
+    const noun = group.kind === 'credits' ? 'credits' : 'entries';
+    const summaryFor = (indexes) => {
+      const change = group.changes[indexes[0]];
+      const word = inSentence(pathWord(change.path));
+      const value = valueText(change.new, change.path, profiles, true);
+      return change.new === null || change.new === undefined || change.new === ''
+        ? `${indexes.length} ${noun} lose the ${word}`
+        : `${indexes.length} ${noun} get the ${word} ${value}`;
+    };
+    const otherSet = sets
+      .filter((indexes) => !equalSets.includes(indexes))
+      .reduce((best, indexes) => !best || indexes.length > best.length ? indexes : best, null);
+    if (equalSets.length === 0 && !otherSet) {
       const rows = group.changes.flatMap(rowsFor);
       // A heading with no summary above rows with the same label is a row
       // with no text. The rows then show without the heading.
       const heading = rows.every((row) => row.label === label) ? null : label;
       return { label: heading, summary: null, more: null, rows };
     }
-    const first = group.changes[set[0]];
-    const covered = new Set(set);
-    const count = set.length;
-    const noun = group.kind === 'credits' ? 'credits' : 'entries';
-    const word = inSentence(pathWord(first.path));
-    const value = valueText(first.new, first.path, profiles, true);
-    const summary = first.new === null || first.new === undefined || first.new === ''
-      ? `${count} ${noun} lose the ${word}`
-      : `${count} ${noun} get the ${word} ${value}`;
-    const rest = set.slice(2).map((i) => group.changes[i]);
-    const names = rest.map((c) => c.entry).filter(Boolean);
-    const moreNoun = group.kind === 'credits' ? plural(rest.length, 'credit', 'credits') : plural(rest.length, 'entry', 'entries');
-    const moreSummary = `${rest.length} more ${moreNoun}${names.length === rest.length ? `: ${names.join(', ')}` : ''}`;
-    const rows = [
-      ...set.slice(0, 2).flatMap((i) => rowsFor(group.changes[i])),
-      ...group.changes.filter((_, i) => !covered.has(i)).flatMap(rowsFor),
-    ];
+    const summaries = [...equalSets.map(summaryFor), ...(otherSet ? [summaryFor(otherSet)] : [])];
+    const covered = new Set([...equalSets.flat(), ...(otherSet || [])]);
+    const rows = [];
+    if (otherSet) rows.push(...otherSet.slice(0, 2).flatMap((i) => rowsFor(group.changes[i])));
+    group.changes.forEach((change, i) => {
+      if (!covered.has(i)) rows.push(...rowsFor(change));
+      else if (equalSets.some((set) => set.includes(i))) {
+        rows.push(...rowsFor(change).filter((row) => row.warning));
+      }
+    });
+    const names = [];
+    const seen = new Set();
+    equalSets.flat().sort((a, b) => a - b).forEach((i) => {
+      const change = group.changes[i];
+      const identity = change.entry_index !== undefined && change.entry_index !== null
+        ? `index:${change.entry_index}`
+        : change.entry ? `entry:${change.entry}` : `change:${i}`;
+      if (!seen.has(identity)) {
+        seen.add(identity);
+        names.push(change.entry || `Entry ${names.length + 1}`);
+      }
+    });
+    // The collapsed line of ADR 0114 item 2 for the set with more than one old value.
+    let more = null;
+    if (otherSet && otherSet.length > 2) {
+      const rest = otherSet.slice(2).map((i) => group.changes[i]);
+      const restNames = rest.map((c) => c.entry).filter(Boolean);
+      const moreNoun = group.kind === 'credits' ? plural(rest.length, 'credit', 'credits') : plural(rest.length, 'entry', 'entries');
+      more = {
+        summary: `${rest.length} more ${moreNoun}${restNames.length === rest.length ? `: ${restNames.join(', ')}` : ''}`,
+        rows: rest.flatMap(rowsFor),
+      };
+    }
     return {
-      label, summary, rows,
-      more: { summary: moreSummary, rows: rest.flatMap(rowsFor) },
+      label, summaries, summary: summaries[0] || null, rows, more,
+      fold: equalSets.length ? { summary: `Show the ${names.length} ${noun}`, names } : null,
     };
   });
 }

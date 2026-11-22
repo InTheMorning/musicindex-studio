@@ -1575,10 +1575,12 @@ function FieldView({ diff }) {
   const lastPlain = cards.length > 0 && cards[cards.length - 1].plain;
   const part = (g, i) => html`
     ${g.label && html`<div class="link-row static" key=${`l${i}`}><span class="text"><span class="label">${g.label}</span>
-      ${g.summary && html`<span class="summary">${g.summary}</span>`}</span></div>`}
+      ${(g.summaries || (g.summary ? [g.summary] : [])).map((summary, j) => html`<span class="summary" key=${j}>${summary}</span>`)}</span></div>`}
     ${g.rows.map((row, j) => html`<${FieldRow} row=${row} key=${`${i}-${j}`} />`)}
     ${g.more && html`<details class="disclosure" key=${`m${i}`}><summary class="link-row"><span class="summary">${g.more.summary}</span></summary>
-      <div class="form">${g.more.rows.map((row, j) => html`<${FieldRow} row=${row} key=${j} />`)}</div></details>`}`;
+      <div class="form">${g.more.rows.map((row, j) => html`<${FieldRow} row=${row} key=${j} />`)}</div></details>`}
+    ${g.fold && html`<details class="disclosure" key=${`f${i}`}><summary class="link-row"><span class="summary">${g.fold.summary}</span></summary>
+      <div class="form">${g.fold.names.map((name, j) => html`<div class="link-row static" key=${j}><span class="text">${name}</span></div>`)}</div></details>`}`;
   return html`<section class="page-section fieldview"><h2>What changes</h2>
     ${cards.map((card, c) => html`<div class="group" key=${c}>
       ${card.parts.map(part)}

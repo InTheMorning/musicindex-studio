@@ -154,6 +154,88 @@ fn setup_live_item() -> Setup {
     setup_with(&feed)
 }
 
+#[test]
+fn a_link_without_a_title_uses_the_title_of_its_collection_feed() {
+    let mut s = setup();
+    let release = "<?xml version=\"1.0\"?><rss version=\"2.0\" xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel><title>Release Album</title><podcast:guid>release-guid</podcast:guid><podcast:medium>music</podcast:medium></channel></rss>";
+    s.connector
+        .write("release.xml", release.as_bytes(), &Expected::Absent)
+        .unwrap();
+    let release_id = s
+        .collection
+        .add_feed(
+            Some("https://music.example/release.xml"),
+            Some((ConnectorId(1), "release.xml")),
+        )
+        .unwrap();
+    pipeline::refresh(&mut s.collection, s.connector.as_ref(), release_id).unwrap();
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), release_id).unwrap();
+    pipeline::edit_draft(&s.collection, release_id, |feed| {
+        feed.podcast_guid = Some("release-guid-new".to_owned());
+        feed.title = Some("New Album".to_owned());
+    })
+    .unwrap();
+    let mut draft = pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    let draft_xml = String::from_utf8(draft.draft_xml).unwrap().replace(
+        "  </channel>",
+        "    <podcast:remoteItem feedGuid=\"release-guid-new\" feedUrl=\"https://music.example/release.xml\" medium=\"music\" />\n  </channel>",
+    );
+    draft.draft_xml = draft_xml.into_bytes();
+    s.collection.save_draft(s.feed, &draft).unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    let change = diff
+        .fields
+        .iter()
+        .find(|group| group.name.as_deref() == Some("remote_items"))
+        .and_then(|group| group.changes.first())
+        .expect("ADR 0246 item 5: fix diff_planned in crates/core/src/pipeline.rs");
+    assert_eq!(
+        change.entry.as_deref(),
+        Some("New Album"),
+        "ADR 0246 item 5: fix diff_planned in crates/core/src/pipeline.rs"
+    );
+}
+
+#[test]
+fn a_link_that_loses_its_title_uses_the_named_collection_feed_title() {
+    let publisher_xml = FEED.replace(
+        "  </channel>",
+        "    <podcast:remoteItem feedGuid=\"release-guid\" feedUrl=\"https://music.example/release.xml\" medium=\"music\" title=\"Old Link\" />\n  </channel>",
+    );
+    let mut s = setup_with(&publisher_xml);
+    let release = "<?xml version=\"1.0\"?><rss version=\"2.0\" xmlns:podcast=\"https://podcastindex.org/namespace/1.0\"><channel><title>Release Album</title><podcast:guid>release-guid</podcast:guid><podcast:medium>music</podcast:medium></channel></rss>";
+    s.connector
+        .write("release.xml", release.as_bytes(), &Expected::Absent)
+        .unwrap();
+    let release_id = s
+        .collection
+        .add_feed(
+            Some("https://music.example/release.xml"),
+            Some((ConnectorId(1), "release.xml")),
+        )
+        .unwrap();
+    pipeline::refresh(&mut s.collection, s.connector.as_ref(), release_id).unwrap();
+    let mut draft = pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    let draft_xml = String::from_utf8(draft.draft_xml)
+        .unwrap()
+        .replace(" title=\"Old Link\"", " rel=\"artist\"");
+    draft.draft_xml = draft_xml.into_bytes();
+    s.collection.save_draft(s.feed, &draft).unwrap();
+
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    let change = diff
+        .fields
+        .iter()
+        .find(|group| group.name.as_deref() == Some("remote_items"))
+        .and_then(|group| group.changes.iter().find(|change| change.path == "rel"))
+        .expect("ADR 0246 item 5: fix name_review_links in crates/core/src/pipeline.rs");
+    assert_eq!(
+        change.entry.as_deref(),
+        Some("Release Album"),
+        "ADR 0246 item 5: fix name_review_links in crates/core/src/pipeline.rs"
+    );
+}
+
 fn change_live_item(s: &Setup) {
     pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
     pipeline::edit_draft(&s.collection, s.feed, |feed| {

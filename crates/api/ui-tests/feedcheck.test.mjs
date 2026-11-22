@@ -308,7 +308,7 @@ test('the People panel gives the texts of ADR 0245 item 11 for one feed', () => 
   const view = peoplePanelView(peopleAnswer([{ person_id: 7, name: 'The Doerfels', feeds: [entry(4, [{ kind: 'credit_details', href: true }])] }]), (id) => `Feed ${id}`);
   assert.equal(view.title, '1 feed differs from People', owner);
   assert.equal(view.groups.length, 1, owner);
-  assert.equal(view.groups[0].button, "Use The Doerfels's Values in 1 Feed", owner);
+  assert.equal(view.groups[0].button, 'Use the People Values in 1 Feed', owner);
   assert.deepEqual(view.groups[0].feedIds, [4], owner);
   assert.equal(view.groups[0].entries[0].title, 'Feed 4', owner);
 });
@@ -322,9 +322,22 @@ test('the People panel for two feeds and two persons counts each feed once', () 
   ]));
   assert.equal(view.title, '2 feeds differ from People', owner);
   assert.deepEqual(view.groups.map((group) => [group.name, group.button]), [
-    ['Ann', "Use Ann's Values in 2 Feeds"], ['Bob', "Use Bob's Values in 1 Feed"],
+    ['Ann', 'Use the People Values in 2 Feeds'], ['Bob', 'Use the People Values in 1 Feed'],
   ], owner);
   assert.deepEqual(view.groups[0].feedIds, [1, 2], owner);
   assert.equal(peoplePanelView(peopleAnswer([{ person_id: 9, name: 'Cy', feeds: [entry(5, [])] }])), null, owner);
   assert.equal(peoplePanelView(null), null, owner);
+});
+
+test('the People button names People for two feeds of The Doerfels', () => {
+  const owner = 'ADR 0246 item 7: check peoplePanelView in feedcheck.js.';
+  const view = peoplePanelView(peopleAnswer([{
+    person_id: 7,
+    name: 'The Doerfels',
+    feeds: [
+      entry(4, [{ kind: 'credit_details', href: true }]),
+      entry(5, [{ kind: 'credit_details', href: true }]),
+    ],
+  }]));
+  assert.equal(view.groups[0].button, 'Use the People Values in 2 Feeds', owner);
 });

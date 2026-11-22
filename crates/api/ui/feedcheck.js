@@ -179,7 +179,7 @@ export function peoplePanelView(answer, titleOf = () => '') {
       name: person.name,
       entries,
       feedIds: entries.map((entry) => entry.feedId),
-      button: `Use ${person.name}'s Values in ${plural(entries.length, 'Feed', 'Feeds')}`,
+      button: `Use the People Values in ${plural(entries.length, 'Feed', 'Feeds')}`,
     };
   }).filter(Boolean);
   if (groups.length === 0) return null;

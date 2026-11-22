@@ -78,6 +78,9 @@ pub struct FieldChange {
     /// The entry of the change: the role of a credit or the name of a
     /// recipient.
     pub entry: Option<String>,
+    /// The position of the entry in its list (ADR 0246 item 4).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entry_index: Option<usize>,
     /// The name of the credit, for a change of an entry of a `persons`
     /// list. It is the name in the draft, or in the live file when the
     /// draft has no name.
@@ -91,6 +94,15 @@ pub struct FieldChange {
     old_at: Option<Place>,
     #[serde(skip)]
     new_at: Option<Place>,
+    /// The linked feed identity for review labels (ADR 0246 item 5).
+    #[serde(skip)]
+    pub(crate) remote_item_guid: Option<String>,
+    /// The linked feed address for review labels (ADR 0246 item 5).
+    #[serde(skip)]
+    pub(crate) remote_item_url: Option<String>,
+    /// True when the link has its own title (ADR 0246 item 5).
+    #[serde(skip)]
+    pub(crate) remote_item_has_title: bool,
 }
 
 /// The changes of one element, such as a title, a credit name or a track.
@@ -666,6 +678,7 @@ fn simplify_hidden_changes(
             op: ChangeOp::Changed,
             path: String::new(),
             entry: None,
+            entry_index: None,
             name: None,
             old: Some(Value::from(if old.hidden() { "Yes" } else { "No" })),
             new: Some(Value::from(if new.hidden() { "Yes" } else { "No" })),
@@ -675,6 +688,9 @@ fn simplify_hidden_changes(
             new_at: hidden_changes
                 .iter()
                 .find_map(|change| change.new_at.clone()),
+            remote_item_guid: None,
+            remote_item_url: None,
+            remote_item_has_title: false,
         }],
     });
 }
@@ -913,6 +929,10 @@ fn match_recipients(olds: &[Obj], news: &[Obj]) -> Vec<Match> {
 struct Who<'a> {
     entry: Option<&'a str>,
     name: Option<&'a str>,
+    remote_item_guid: Option<&'a str>,
+    remote_item_url: Option<&'a str>,
+    remote_item_has_title: bool,
+    index: Option<usize>,
 }
 
 /// The name of a credit entry. Only a `persons` list has one.
@@ -928,6 +948,7 @@ fn entry_label(list_key: &str, map: &Map<String, Value>) -> Option<String> {
     match list_key {
         "persons" => string_at(map, "role"),
         "recipients" => string_at(map, "name"),
+        "remote_items" => string_at(map, "title").or_else(|| string_at(map, "feed_url")),
         _ => None,
     }
 }
@@ -951,9 +972,19 @@ fn match_changes(
         Match::Pair(i, j) => {
             let label = label_of(&news[j]).or_else(|| label_of(&olds[i]));
             let name = name_of(&news[j]).or_else(|| name_of(&olds[i]));
+            let remote_item_guid =
+                string_at(news[j].map, "feed_guid").or_else(|| string_at(olds[i].map, "feed_guid"));
+            let remote_item_url =
+                string_at(news[j].map, "feed_url").or_else(|| string_at(olds[i].map, "feed_url"));
+            let remote_item_has_title = string_at(news[j].map, "title").is_some()
+                || (label_of(&news[j]).is_none() && string_at(olds[i].map, "title").is_some());
             let who = Who {
                 entry: label.as_deref().or(inherited.entry),
                 name: name.as_deref().or(inherited.name),
+                remote_item_guid: remote_item_guid.as_deref().or(inherited.remote_item_guid),
+                remote_item_url: remote_item_url.as_deref().or(inherited.remote_item_url),
+                remote_item_has_title: remote_item_has_title || inherited.remote_item_has_title,
+                index: Some(j),
             };
             walk_table(sub, Some(&olds[i]), Some(&news[j]), path, who, out);
         }
@@ -961,21 +992,29 @@ fn match_changes(
             op: ChangeOp::Added,
             path: path.to_owned(),
             entry: label_of(&news[j]).or_else(|| inherited.entry.map(str::to_owned)),
+            entry_index: Some(j),
             name: name_of(&news[j]).or_else(|| inherited.name.map(str::to_owned)),
             old: None,
             new: Some(news[j].whole()),
             old_at: None,
             new_at: news[j].cur.as_ref().map(|cur| cur.place(true)),
+            remote_item_guid: string_at(news[j].map, "feed_guid"),
+            remote_item_url: string_at(news[j].map, "feed_url"),
+            remote_item_has_title: string_at(news[j].map, "title").is_some(),
         }),
         Match::Removed(i) => out.push(FieldChange {
             op: ChangeOp::Removed,
             path: path.to_owned(),
             entry: label_of(&olds[i]).or_else(|| inherited.entry.map(str::to_owned)),
+            entry_index: Some(i),
             name: name_of(&olds[i]).or_else(|| inherited.name.map(str::to_owned)),
             old: Some(olds[i].whole()),
             new: None,
             old_at: olds[i].cur.as_ref().map(|cur| cur.place(true)),
             new_at: None,
+            remote_item_guid: string_at(olds[i].map, "feed_guid"),
+            remote_item_url: string_at(olds[i].map, "feed_url"),
+            remote_item_has_title: string_at(olds[i].map, "title").is_some(),
         }),
     }
 }
@@ -1023,11 +1062,15 @@ fn walk_field(
         op: ChangeOp::Changed,
         path: path.to_owned(),
         entry: who.entry.map(str::to_owned),
+        entry_index: who.index,
         name: who.name.map(str::to_owned),
         old: old_value.cloned(),
         new: new_value.cloned(),
         old_at,
         new_at,
+        remote_item_guid: who.remote_item_guid.map(str::to_owned),
+        remote_item_url: who.remote_item_url.map(str::to_owned),
+        remote_item_has_title: who.remote_item_has_title,
     };
     let whole_of = |obj: Option<&Obj>| obj.and_then(|o| o.cur.as_ref()).map(|c| c.place(true));
     let start_of = |obj: Option<&Obj>| obj.and_then(|o| o.cur.as_ref()).map(|c| c.place(false));
@@ -1094,21 +1137,29 @@ fn walk_pair(
             op: ChangeOp::Added,
             path: path.to_owned(),
             entry: who.entry.map(str::to_owned),
+            entry_index: who.index,
             name: who.name.map(str::to_owned),
             old: None,
             new: Some(new.whole()),
             old_at: None,
             new_at: new.cur.as_ref().map(|cur| cur.place(true)),
+            remote_item_guid: who.remote_item_guid.map(str::to_owned),
+            remote_item_url: who.remote_item_url.map(str::to_owned),
+            remote_item_has_title: who.remote_item_has_title,
         }),
         (Some(old), None) => out.push(FieldChange {
             op: ChangeOp::Removed,
             path: path.to_owned(),
             entry: who.entry.map(str::to_owned),
+            entry_index: who.index,
             name: who.name.map(str::to_owned),
             old: Some(old.whole()),
             new: None,
             old_at: old.cur.as_ref().map(|cur| cur.place(true)),
             new_at: None,
+            remote_item_guid: who.remote_item_guid.map(str::to_owned),
+            remote_item_url: who.remote_item_url.map(str::to_owned),
+            remote_item_has_title: who.remote_item_has_title,
         }),
         (None, None) => {}
     }
@@ -1381,6 +1432,64 @@ mod tests {
             .unwrap();
         }
         feed(&channel)
+    }
+
+    #[test]
+    fn link_changes_use_the_link_title_or_feed_address_as_the_entry_name() {
+        let base = feed(
+            "<podcast:remoteItem feedGuid=\"release-1\" feedUrl=\"https://music.example/one.xml\" medium=\"music\" />\n\
+             <podcast:remoteItem feedGuid=\"release-2\" feedUrl=\"https://music.example/two.xml\" medium=\"music\" />\n",
+        );
+        let draft = base
+            .replacen(
+                "feedGuid=\"release-1\" feedUrl=\"https://music.example/one.xml\" medium=\"music\" />",
+                "feedGuid=\"release-1\" feedUrl=\"https://music.example/one.xml\" medium=\"music\" title=\"Album\" rel=\"artist\" />",
+                1,
+            )
+            .replacen(
+                "feedGuid=\"release-2\" feedUrl=\"https://music.example/two.xml\" medium=\"music\" />",
+                "feedGuid=\"release-2\" feedUrl=\"https://music.example/two.xml\" medium=\"music\" rel=\"artist\" />",
+                1,
+            );
+        let review = review(base.as_bytes(), draft.as_bytes());
+        let entries: Vec<_> = review
+            .fields
+            .iter()
+            .flat_map(|group| &group.changes)
+            .filter(|change| change.path == "rel")
+            .map(|change| change.entry.as_deref())
+            .collect();
+        assert_eq!(
+            entries,
+            [Some("Album"), Some("https://music.example/two.xml")],
+            "ADR 0246 item 5: fix entry_label in crates/core/src/review.rs"
+        );
+        let indices: Vec<_> = review
+            .fields
+            .iter()
+            .flat_map(|group| &group.changes)
+            .filter(|change| change.path == "rel")
+            .map(|change| change.entry_index)
+            .collect();
+        assert_eq!(
+            indices,
+            [Some(0), Some(1)],
+            "ADR 0246 item 4: fix match_changes in crates/core/src/review.rs"
+        );
+        let json = serde_json::to_value(&review.fields).unwrap();
+        let serialized_indices: Vec<_> = json
+            .as_array()
+            .unwrap()
+            .iter()
+            .flat_map(|group| group["changes"].as_array().unwrap())
+            .filter(|change| change["path"] == "rel")
+            .map(|change| change["entry_index"].as_u64().unwrap())
+            .collect();
+        assert_eq!(
+            serialized_indices,
+            [0, 1],
+            "ADR 0246 item 4: fix match_changes and FieldChange serialization in crates/core/src/review.rs"
+        );
     }
 
     fn run(base: &str, draft: &str) -> Review {

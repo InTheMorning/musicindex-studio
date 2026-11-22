@@ -220,6 +220,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0243: A move is a change set, and a level gathers its pages](adr/0243-a-move-is-a-change-set-and-a-level-gathers-its-pages.md)
 - [ADR 0244: Studio reads the fee value of musicindex ADR 0088](adr/0244-studio-reads-the-fee-value-of-musicindex-adr-0088.md)
 - [ADR 0245: Review repairs short addresses and offers the People values](adr/0245-review-repairs-short-addresses-and-offers-the-people-values.md)
+- [ADR 0246: A link with no medium, equal changes in review and the People button](adr/0246-a-link-with-no-medium-equal-changes-in-review-and-the-people-button.md)
 
 ## Plans
 

@@ -12,6 +12,7 @@
 - Revised: 2026-11-15 by operator decision. Item 19 gives the position of the check box in the review sheet, from the selections of the operator on 2026-11-14 and 2026-11-15: the sheet has no row **Announce**. Item 38 gives the removal of a live show, which the operator selected on 2026-11-14. These rules were in ADR 0209 and ADR 0210, which are deleted.
 - Changed by: [ADR 0228](0228-undo-in-the-bar-a-notice-that-stays-and-the-rc28-check-findings.md) items 14 to 16, on 2026-11-20. Item 19: the XML changes come first, the file operations are in a closed fold, and the write error is above the check box.
 - Changed by: [ADR 0231](0231-a-new-release-writes-its-artist-page-and-the-files-of-a-restored-release.md) items 7 to 11, on 2026-11-20. Item 8: Review of a new release also writes its artist page when the check box "Also write {artist page}" is on.
+- Changed by: [ADR 0246](0246-a-link-with-no-medium-equal-changes-in-review-and-the-people-button.md) items 1 to 3, on 2026-11-22. Item 6: a channel link with no `medium` that names a release of the collection is a release link. Studio adds the `medium` when it sets the `rel`.
 
 ## Context
 

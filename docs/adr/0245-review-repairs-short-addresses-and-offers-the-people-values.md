@@ -11,6 +11,7 @@
 - Changes: [ADR 0219](0219-a-release-checklist-and-a-check-of-the-address-type.md) item 1. The feed check gets the finding kind `short_address`, with the level Stop.
 - Uses: [ADR 0174](0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md) for findings and repairs. [ADR 0224](0224-a-finding-that-stops-the-write-and-a-new-release-opens-add-tracks.md) item 1 for the level Stop. [ADR 0218](0218-a-page-link-in-review-and-a-suggestion-starts-with-no-person.md) items 1 and 5 for a panel that stops the write. [ADR 0203](0203-people.md) items 64 to 73 for the check of a person and the operation **Correct**. [ADR 0244](0244-studio-reads-the-fee-value-of-musicindex-adr-0088.md) item 4 for the shown words.
 - Source: [the findings of the tutorial for a hosting user](../reviews/2026-11-22-tj-tutorial-findings.md), findings 10 and 11.
+- Changed by: [ADR 0246](0246-a-link-with-no-medium-equal-changes-in-review-and-the-people-button.md) item 7, on 2026-11-22. Item 11: the button is **Use the People Values in {n} Feeds**.
 
 ## Context
 

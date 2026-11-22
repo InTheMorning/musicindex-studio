@@ -6,6 +6,7 @@ use studio_core::collection::{
 };
 use studio_core::connector::{self, Connector, LocalFolder};
 use studio_core::feed::{Entry, Feed, Publisher, RemoteItem};
+use studio_core::library::Library;
 use studio_core::pipeline;
 use studio_core::publisher::{self, PublisherErrorKind};
 
@@ -324,6 +325,33 @@ fn roles_records_and_confirms_the_inferred_roles_of_the_draft() {
 }
 
 #[test]
+fn roles_infer_artist_from_a_link_without_medium_when_it_names_a_release() {
+    let mut s = setup();
+    let (publisher, release) = pair(&mut s);
+    let release_row = s.collection.feed(release).unwrap();
+    let release_guid = model(&s, release).podcast_guid.unwrap();
+    let release_url = release_row.public_url.unwrap();
+    pipeline::edit_draft(&s.collection, publisher, |feed| {
+        let mut item = remote(
+            "music",
+            &release_guid,
+            &release_url,
+            "Album",
+            Some("artist"),
+        );
+        item.medium = None;
+        feed.remote_items.push(Entry::new(item));
+    })
+    .unwrap();
+
+    assert_eq!(
+        publisher::roles(&s.collection, publisher).unwrap(),
+        [PublisherRole::Artist],
+        "ADR 0246 item 2: fix roles in crates/core/src/publisher.rs"
+    );
+}
+
+#[test]
 fn roles_gives_no_role_for_items_with_no_rel() {
     let mut s = setup();
     let (publisher, _release) = pair(&mut s);
@@ -503,6 +531,62 @@ fn a_playlist_links_to_a_publisher_feed_as_an_album_does() {
     assert_eq!(
         inferred_roles(&model(&s, publisher)),
         vec![PublisherRole::Label]
+    );
+}
+
+#[test]
+fn links_without_a_medium_use_the_named_release_medium_and_role() {
+    let mut s = setup();
+    let publisher = new_feed(&mut s, "artist.xml", "Artist", "publisher");
+    let release = new_feed(&mut s, "album.xml", "Album", "music");
+    let release_guid = model(&s, release).podcast_guid.unwrap();
+    let orphan_guid = "feed-outside-collection";
+    pipeline::edit_draft(&s.collection, publisher, |feed| {
+        feed.remote_items = vec![
+            Entry::new(RemoteItem {
+                feed_guid: Some(release_guid),
+                ..RemoteItem::default()
+            }),
+            Entry::new(RemoteItem {
+                feed_guid: Some(orphan_guid.to_owned()),
+                ..RemoteItem::default()
+            }),
+        ];
+    })
+    .unwrap();
+
+    assert_eq!(
+        publisher::linked_releases(&s.collection, publisher).unwrap(),
+        [release],
+        "ADR 0246 item 1: fix release_medium"
+    );
+    let library_dir = tempfile::tempdir().unwrap();
+    let library = Library::open(library_dir.path()).unwrap();
+    assert_eq!(
+        publisher::publishers_linking(&s.collection, &library, release).unwrap(),
+        [publisher],
+        "ADR 0246 item 2: fix release_medium"
+    );
+
+    publisher::set_roles(&s.collection, publisher, &[PublisherRole::Artist]).unwrap();
+    let links = model(&s, publisher).remote_items;
+    assert_eq!(
+        links[0].value.rel.as_deref(),
+        Some("artist"),
+        "ADR 0246 item 3: fix set_roles"
+    );
+    assert_eq!(
+        links[0].value.medium.as_deref(),
+        Some("music"),
+        "ADR 0246 item 3: fix set_roles"
+    );
+    assert_eq!(
+        links[1].value.rel, None,
+        "ADR 0246 item 1: fix release_medium"
+    );
+    assert_eq!(
+        links[1].value.medium, None,
+        "ADR 0246 item 1: fix release_medium"
     );
 }
 

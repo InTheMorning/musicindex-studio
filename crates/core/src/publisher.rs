@@ -10,7 +10,7 @@
 use std::fmt;
 
 use crate::collection::{
-    Collection, CollectionError, FeedId, FeedRow, PublisherRole, inferred_roles, rel_of,
+    Collection, CollectionError, FeedId, FeedRow, PublisherRole, inferred_roles_with, rel_of,
     roles_from_rel,
 };
 use crate::feed::{Entry, Feed, Publisher, RemoteItem};
@@ -116,7 +116,8 @@ pub fn roles(
         return Ok(row.publisher_roles);
     }
     let (feed, _) = pipeline::draft_model(collection, publisher)?;
-    let mut roles = inferred_roles(&feed);
+    let releases = release_parties(collection)?;
+    let mut roles = inferred_roles_with(&feed, |item| release_medium(item, &releases).is_some());
     if roles.is_empty() {
         roles = row.publisher_roles;
     }
@@ -145,16 +146,15 @@ pub fn linked_releases(
     publisher: FeedId,
 ) -> Result<Vec<FeedId>, PublisherError> {
     let (publisher_feed, _) = pipeline::draft_model(collection, publisher)?;
+    let releases = release_parties(collection)?;
     let mut linked = Vec::new();
-    for row in collection.feeds()? {
-        if !is_release(row.medium.as_deref()) || row.connector_id.is_none() {
+    for (row, release) in &releases {
+        if row.connector_id.is_none() {
             continue;
         }
-        let release = party(collection, &row)?;
-        let is_linked = publisher_feed
-            .remote_items
-            .iter()
-            .any(|item| is_release(item.medium.as_deref()) && names(&item.value, &release));
+        let is_linked = publisher_feed.remote_items.iter().any(|item| {
+            release_medium(&item.value, &releases).is_some() && names(&item.value, release)
+        });
         if is_linked {
             linked.push(row.id);
         }
@@ -175,6 +175,7 @@ pub fn publishers_linking(
     library: &Library,
     release: FeedId,
 ) -> Result<Vec<FeedId>, PublisherError> {
+    let releases = release_parties(collection)?;
     let target = party(collection, &collection.feed(release)?)?;
     let mut linking = Vec::new();
     for row in collection.feeds()? {
@@ -187,9 +188,9 @@ pub fn publishers_linking(
             pipeline::hosted_copy(library, &row)
         };
         if feed.is_some_and(|feed| {
-            feed.remote_items
-                .iter()
-                .any(|item| is_release(item.medium.as_deref()) && names(&item.value, &target))
+            feed.remote_items.iter().any(|item| {
+                release_medium(&item.value, &releases).is_some() && names(&item.value, &target)
+            })
         }) {
             linking.push(row.id);
         }
@@ -358,13 +359,17 @@ pub fn set_roles(
         ));
     }
     let publisher_party = party(collection, &row)?;
+    let releases = release_parties(collection)?;
     collection.set_publisher_roles(publisher, roles, true)?;
     let rel = rel_of(roles);
 
     pipeline::edit_draft(collection, publisher, |feed| {
         for item in &mut feed.remote_items {
-            if is_release(item.medium.as_deref()) {
+            if let Some(medium) = release_medium(&item.value, &releases) {
                 item.rel = Some(rel.clone());
+                if item.medium.is_none() {
+                    item.medium = Some(medium);
+                }
             }
         }
     })?;
@@ -380,6 +385,32 @@ pub fn set_roles(
         })?;
     }
     Ok(())
+}
+
+/// The release feeds of the collection, read one time for the link checks
+/// of ADR 0246 item 2.
+fn release_parties(collection: &Collection) -> Result<Vec<(FeedRow, Party)>, PublisherError> {
+    collection
+        .feeds()?
+        .into_iter()
+        .filter(|row| is_release(row.medium.as_deref()))
+        .map(|row| {
+            let feed = party(collection, &row)?;
+            Ok((row, feed))
+        })
+        .collect()
+}
+
+/// Give the release medium of a channel link (ADR 0246 items 1 and 2).
+fn release_medium(item: &RemoteItem, releases: &[(FeedRow, Party)]) -> Option<String> {
+    match item.medium.as_deref() {
+        Some(medium) if is_release(Some(medium)) => Some(medium.to_owned()),
+        Some(_) => None,
+        None => releases
+            .iter()
+            .find(|(_, feed)| names(item, feed))
+            .and_then(|(row, _)| row.medium.clone()),
+    }
 }
 
 /// The links of one feed of the collection, for its destination (ADR 0085).
@@ -604,12 +635,7 @@ struct Party {
 }
 
 fn party(collection: &Collection, row: &FeedRow) -> Result<Party, PublisherError> {
-    let (guid, title) = if collection.draft(row.id)?.is_some() {
-        let (feed, _) = pipeline::draft_model(collection, row.id)?;
-        (feed.podcast_guid, feed.title)
-    } else {
-        (row.podcast_guid.clone(), row.title.clone())
-    };
+    let (guid, title) = pipeline::feed_identity(collection, row)?;
     Ok(Party {
         guid,
         url: row.public_url.clone(),

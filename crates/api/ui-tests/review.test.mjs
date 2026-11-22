@@ -92,15 +92,108 @@ const credit = (role) => ({ op: 'changed', path: 'npub', entry: role, old: null,
 const profiles = new Map([[KEY, { npub: KEY, name: 'City Radio' }]]);
 
 test('six changes of one key give a summary, two rows and a collapsed line', () => {
+  const owner = 'ADR 0246 item 4: check fieldRows in review.js.';
   const roles = ['musician', 'audio engineer', 'songwriter', 'composer', 'guitarist', 'keyboardist'];
   const [group] = fieldRows([{ kind: 'credits', name: 'City Radio', changes: roles.map(credit) }], profiles);
-  assert.equal(group.label, 'Credits · City Radio');
-  assert.equal(group.summary, '6 credits get the Nostr key City Radio');
-  assert.equal(group.rows.length, 2);
-  assert.equal(group.rows[0].label, 'musician');
-  assert.match(group.rows[0].text, /Nostr key: none → City Radio \(/);
-  assert.equal(group.more.summary, '4 more credits: songwriter, composer, guitarist, keyboardist');
-  assert.equal(group.more.rows.length, 4);
+  assert.equal(group.label, 'Credits · City Radio', owner);
+  assert.equal(group.summary, '6 credits get the Nostr key City Radio', owner);
+  assert.equal(group.rows.length, 0, owner);
+  assert.equal(group.fold.summary, 'Show the 6 credits', owner);
+  assert.deepEqual(group.fold.names, roles, owner);
+  assert.equal(group.more, null, owner);
+});
+
+test('18 equal relation changes show a summary and the names in the fold', () => {
+  const owner = 'ADR 0246 item 4: check fieldRows in review.js.';
+  const changes = Array.from({ length: 18 }, (_, i) => ({
+    op: 'changed', path: 'rel', entry: `Release ${i + 1}`, old: null, new: 'artist',
+  }));
+  const [group] = fieldRows([{ kind: 'remote_items', name: 'links', changes }]);
+  assert.equal(group.summary, '18 entries get the relation artist', owner);
+  assert.equal(group.rows.length, 0, owner);
+  assert.equal(group.fold.summary, 'Show the 18 entries', owner);
+  assert.deepEqual(group.fold.names, changes.map((change) => change.entry), owner);
+  assert.equal(group.more, null, owner);
+});
+
+test('equal medium and relation changes share one fold and keep two summaries', () => {
+  const owner = 'ADR 0246 items 4 and 5: check fieldRows in review.js.';
+  const changes = Array.from({ length: 6 }, (_, i) => ({
+    medium: { op: 'changed', path: 'medium', entry: `Release ${i + 1}`, old: null, new: 'music' },
+    rel: { op: 'changed', path: 'rel', entry: `Release ${i + 1}`, old: null, new: 'artist' },
+  })).flatMap(({ medium, rel }) => [medium, rel]);
+  const [group] = fieldRows([{ kind: 'remote_items', name: 'links', changes }]);
+  assert.deepEqual(group.summaries, [
+    '6 entries get the medium music',
+    '6 entries get the relation artist',
+  ], owner);
+  assert.equal(group.rows.length, 0, owner);
+  assert.equal(group.fold.summary, 'Show the 6 entries', owner);
+  assert.deepEqual(group.fold.names, Array.from({ length: 6 }, (_, i) => `Release ${i + 1}`), owner);
+  assert.equal(group.more, null, owner);
+});
+
+test('three equal changes with different old values keep two example rows', () => {
+  const owner = 'ADR 0246 item 6: check fieldRows in review.js.';
+  const changes = [null, 'label', 'hosting'].map((old, i) => ({
+    op: 'changed', path: 'rel', entry: `Release ${i + 1}`, old, new: 'artist',
+  }));
+  const [group] = fieldRows([{ kind: 'remote_items', name: 'links', changes }]);
+  assert.equal(group.summary, '3 entries get the relation artist', owner);
+  assert.equal(group.rows.length, 2, owner);
+  assert.equal(group.more.summary, '1 more entry: Release 3', owner);
+  assert.equal(group.more.rows.length, 1, owner);
+});
+
+test('equal changes and a mixed old-value set keep their fold and examples', () => {
+  const owner = 'ADR 0246 items 4 and 6: check fieldRows in review.js.';
+  const changes = Array.from({ length: 6 }, (_, i) => ({
+    op: 'changed', path: 'rel', entry: `Release ${i + 1}`, entry_index: i, old: null, new: 'artist',
+  }));
+  changes.push(
+    { op: 'changed', path: 'medium', entry: 'Release 1', entry_index: 0, old: null, new: 'music' },
+    { op: 'changed', path: 'medium', entry: 'Release 2', entry_index: 1, old: 'podcast', new: 'music' },
+    { op: 'changed', path: 'medium', entry: 'Release 3', entry_index: 2, old: 'musicL', new: 'music' },
+  );
+  const [group] = fieldRows([{ kind: 'remote_items', name: 'links', changes }]);
+  assert.equal(group.summaries.length, 2, owner);
+  assert.equal(group.rows.length, 2, owner);
+  assert.equal(group.more.summary, '1 more entry: Release 3', owner);
+  assert.equal(group.more.rows.length, 1, owner);
+  assert.equal(group.fold.names.length, 6, owner);
+});
+
+test('the fold counts entries with the same name by entry index', () => {
+  const owner = 'ADR 0246 item 4: check fieldRows in review.js.';
+  const changes = [0, 0, 0, 1, 1, 1].map((entry_index) => ({
+    op: 'changed', path: 'rel', entry: 'Same release', entry_index, old: null, new: 'artist',
+  }));
+  const [group] = fieldRows([{ kind: 'remote_items', name: 'links', changes }]);
+  assert.equal(group.fold.names.length, 2, owner);
+});
+
+test('the fold counts links with no entry label by their entry index', () => {
+  const owner = 'ADR 0246 item 4: check fieldRows in review.js.';
+  const changes = Array.from({ length: 3 }, (_, entry_index) => [
+    { op: 'changed', path: 'medium', entry_index, old: null, new: 'music' },
+    { op: 'changed', path: 'rel', entry_index, old: null, new: 'artist' },
+  ]).flat();
+  const [group] = fieldRows([{ kind: 'remote_items', name: 'links', changes }]);
+  assert.equal(group.fold.summary, 'Show the 3 entries', owner);
+  assert.deepEqual(group.fold.names, ['Entry 1', 'Entry 2', 'Entry 3'], owner);
+});
+
+test('a warning from an equal set stays visible in rows', () => {
+  const owner = 'ADR 0246 item 4: check fieldRows in review.js.';
+  const key1 = `npub1${'a'.repeat(58)}`;
+  const warningProfiles = new Map([[key1, { npub: key1, name: 'Agreed Name' }]]);
+  const changes = ['One', 'Two', 'Three'].map((entry, i) => ({
+    op: 'changed', path: 'npub', entry, entry_index: i, old: null, new: key1,
+    name: i === 2 ? 'Different Name' : 'Agreed Name',
+  }));
+  const [group] = fieldRows([{ kind: 'credits', name: 'People', changes }], warningProfiles);
+  assert.equal(group.rows.length, 1, owner);
+  assert.ok(group.rows[0].warning, owner);
 });
 
 test('a title, an added entry and a removed entry have a line', () => {

@@ -13,6 +13,7 @@ export const ERROR_STEPS = Object.freeze({
   stale_revision: { step: 'The page changed in a different place. Open the page again, then do the change again.', needsUser: true },
   conflict: { step: 'The page changed in a different place. Open the page again, then do the change again.', needsUser: true },
   read_only: { step: 'Studio cannot change this feed. It is read-only.', needsUser: true },
+  in_change_set: { step: 'Write or discard the changes first.', needsUser: true },
   no_public_address: { step: 'Give this file host a public address in File hosts.', needsUser: true },
   address_not_public: { step: 'Give this file host a public address in File hosts.', needsUser: true },
   too_large: { step: 'The file is too large. Use a smaller file, or change the limit in Settings.', needsUser: true },

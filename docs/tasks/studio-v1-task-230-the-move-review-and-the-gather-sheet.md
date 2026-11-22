@@ -2,7 +2,7 @@
 
 Decision: [ADR 0243](../adr/0243-a-move-is-a-change-set-and-a-level-gathers-its-pages.md) items 3 to 10.
 
-Status: Open. Task 229 must be committed first.
+Status: Done. ChatGPT built it. The main session read the diff, made the corrections below, and took the screenshots of the visual criteria on a copy of the tutorial data. The shots are dark, at 1280 px and at 390 px. The gather sheet is also in the light theme. It also ran `tools/gate.sh`.
 
 ## Problem
 
@@ -63,3 +63,13 @@ Visual (the main session checks with screenshots, in the dark theme at 1280 px a
 ## Report
 
 Give the changed files, the new tests, the result of `tools/gate.sh` and `git status --short`.
+
+## Corrections Of The Main Session
+
+- The entries of the add menu kept the page role in `role`. `MenuControl` gives `entry.role` to the button as its ARIA role, so the entries had `role="artist"`. The field is now `pageRole`, and a test in `shell.test.mjs` stops a `role` field.
+- The add row with a menu was centered. It now has the "＋" column and the label of the other add rows. It is not a tree item and does not take a row number, because its button has `aria-expanded` (musicindex ADR 0061 R-LISTKEY-2 item 1). The outline of an open feed also shows the menu.
+- The refusal had a frame around a second card. It now has the shape of `ErrorNotice`, with one line for each feed and one **Open Changes** for each change set.
+- The gather sheet copied the check row. It now uses `FeedCheckRow` in `group rows`, as the Use sheet does.
+- The core recorded each feed of the move as changed, also an artist page with no change. `record_page_move_change_set` now leaves out a feed whose draft did not change, and removes a draft that the move started with no change. Test `gather_leaves_an_unchanged_page_out_of_the_change_set`. On the tutorial data, the gather of two artist pages gives **Write 14 Feeds** and not 16.
+- Operator choice (main session, in ADR 0243 item 9): one page gives **Move 1 Artist**.
+- Known limit: Discard of a move opens the page whose title is the target name of the change set. With two pages of the same title, it opens one of them.

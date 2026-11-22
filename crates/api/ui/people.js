@@ -361,6 +361,12 @@ export const openChanges = (sets) => (sets || []).filter((s) => s.open);
 // and the list "Changes to write" use it (ADR 0099 items 2 and 12).
 export function changeTitle(operation) {
   switch (operation && operation.kind) {
+    case 'move_pages': {
+      const names = operation.page_names || [];
+      const role = operation.role === 'artist' ? 'artists' : 'labels';
+      const moved = operation.release_title || (names.length === 1 ? names[0] : `${names.length} ${role}`);
+      return `Move ${moved} to ${operation.target_name}`;
+    }
     case 'move_releases': return 'Move All Releases';
     case 'change_address': return 'Change address';
     case 'rename': return 'Rename';
@@ -386,7 +392,9 @@ export function feedsToWrite(set) {
 // people, and `payees` is the list of wallets, for the name of the subject.
 export function changeRow(set, people = [], payees = []) {
   let who = '';
-  if (set.operation && set.operation.kind === 'move_releases') {
+  if (set.operation && set.operation.kind === 'move_pages') {
+    return { title: changeTitle(set.operation), text: `${feedCount(feedsToWrite(set))} to write` };
+  } else if (set.operation && set.operation.kind === 'move_releases') {
     who = `${set.operation.from_name} to ${set.operation.to_name}`;
   } else if (set.person_id != null) {
     const person = people.find((p) => p.id === set.person_id);
@@ -403,13 +411,19 @@ export function changeRow(set, people = [], payees = []) {
 // The view of a change set. A move belongs to File hosts (ADR 0148 item 17).
 export function changeSetView(set) {
   const move = set.operation && set.operation.kind === 'move_releases';
-  return move ? { name: 'change-set', id: set.id, area: 'hosts' } : { name: 'change-set', id: set.id };
+  const pageMove = set.operation && set.operation.kind === 'move_pages';
+  return move ? { name: 'change-set', id: set.id, area: 'hosts' }
+    : pageMove ? { name: 'change-set', id: set.id, area: 'releases' } : { name: 'change-set', id: set.id };
 }
 
 // The view that opens after Discard: the page of the person of a person
 // change set, else the People page (ADR 0099 item 12).
-export function afterDiscard(set) {
+export function afterDiscard(set, feeds = []) {
   if (set && set.operation && set.operation.kind === 'move_releases') return { name: 'hosts' };
+  if (set && set.operation && set.operation.kind === 'move_pages') {
+    const target = feeds.find((feed) => (feed.title || feed.path || `Page ${feed.id}`) === set.operation.target_name);
+    return target ? { name: 'releases', group: target.id } : { name: 'releases' };
+  }
   return set && set.person_id != null ? { name: 'person', id: set.person_id } : { name: 'people' };
 }
 

@@ -1409,6 +1409,7 @@ select option { background: var(--level-3); color: var(--text); }
 .page-section { display: grid; gap: 8px; }
 .page-section > h2 { font-size: var(--text-footnote); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 0 4px; }
 .notice.error > p { margin: 8px 0 0; }
+.move-refusal > p:first-child { margin-top: 0; }
 .audio-values { display: grid; gap: 12px; padding: 4px 0 8px; }
 .audio-values > .actions { margin: 0; }
 .merge-panel { display: grid; gap: 20px; }
@@ -1788,6 +1789,8 @@ button.outline-feed[aria-current="page"] {
 .node .label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .node .num { width: 2ch; flex: none; color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
 .node.add { color: var(--accent); }
+/* The add row with a menu (ADR 0243 item 7) keeps the start alignment of a row. */
+.tree-add-menu .node { justify-content: flex-start; }
 .node .field-error { flex: none; font-size: var(--text-footnote); }
 /* The heading of a group of entries, such as Live shows. */
 .tree-heading { padding: 10px 10px 2px; color: var(--muted); font-size: var(--text-subheadline); font-weight: 600; }

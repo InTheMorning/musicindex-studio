@@ -2799,6 +2799,82 @@ async fn a_page_move_records_one_change_set_and_discard_restores_drafts_and_kept
     );
 }
 
+/// A written artist page with the role keeps its file as it is after a
+/// gather. The change set holds only the feeds that change (ADR 0243 item 1).
+#[tokio::test]
+async fn gather_leaves_an_unchanged_page_out_of_the_change_set() {
+    let (app, connector) = publisher_app().await;
+    let host = make_feed(
+        &app,
+        new_feed_body(
+            connector,
+            "host.xml",
+            "Host",
+            Some("publisher"),
+            Some("hosting"),
+        ),
+    )
+    .await["id"]
+        .as_i64()
+        .unwrap();
+    let page = make_artist_page(&app, connector, "one.xml", "One").await["id"]
+        .as_i64()
+        .unwrap();
+    let release = make_feed(
+        &app,
+        new_feed_body(connector, "one-release.xml", "Release", None, None),
+    )
+    .await["id"]
+        .as_i64()
+        .unwrap();
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{page}/links"),
+        Some(json!({ "release": release })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    write_the_draft(&app, page).await;
+    write_the_draft(&app, release).await;
+    for id in [page, release] {
+        let (status, body) = call(&app, "DELETE", &format!("/api/v1/feeds/{id}/draft"), None).await;
+        assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
+    }
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{host}/gather"),
+        Some(json!({ "role": "artist", "page_ids": [page] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let change_set_id = body["change_set_id"].as_i64().unwrap();
+    let (_, set) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/change-sets/{change_set_id}"),
+        None,
+    )
+    .await;
+    let set_feeds: Vec<i64> = set["feeds"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|feed| feed["feed_id"].as_i64())
+        .collect();
+    assert!(
+        !set_feeds.contains(&page),
+        "ADR 0243 item 1: record_page_move_change_set in crates/core/src/change_set.rs \
+         must leave a feed with no change out of the change set: {set}"
+    );
+    assert_eq!(
+        listed(&app, page).await["draft_state"],
+        "none",
+        "ADR 0243 item 1: record_page_move_change_set must remove a draft that the move started with no change"
+    );
+}
+
 #[tokio::test]
 async fn gather_moves_two_pages_with_no_role_in_one_change_set() {
     let (app, connector) = publisher_app().await;

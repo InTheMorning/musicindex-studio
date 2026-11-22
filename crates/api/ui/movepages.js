@@ -87,7 +87,48 @@ export function pageMoveLines(feeds, page, values) {
     ...changed.filter((feed) => selected.some((id) => String(id) === String(feed.id))).map((feed) => `+ ${pageTitle(feed)}`),
     ...changed.filter((feed) => !selected.some((id) => String(id) === String(feed.id))).map((feed) => `− ${pageTitle(feed)}`),
   ];
-  return [`Changes ${releaseIds.length} ${releaseIds.length === 1 ? 'release' : 'releases'}:`, ...lines];
+  return lines.length > 0
+    ? [`Changes ${releaseIds.length} ${releaseIds.length === 1 ? 'release' : 'releases'}:`, ...lines]
+    : ['Select a label or a hosting page.'];
+}
+
+function ancestors(feeds, page) {
+  const byId = new Map((feeds || []).map((feed) => [feed.id, feed]));
+  const found = new Set();
+  const pending = [...(page.parent_ids || [])];
+  while (pending.length) {
+    const id = pending.shift();
+    if (found.has(id)) continue;
+    found.add(id);
+    pending.push(...((byId.get(id) && byId.get(id).parent_ids) || []));
+  }
+  return found;
+}
+
+// The rows and controls of the gather sheet (ADR 0243 items 8 to 10).
+export function gatherPagesModel(feeds, level, role, selected = null) {
+  const word = role === 'artist' ? 'Artist' : 'Label';
+  const rows = (feeds || []).filter((feed) => isPublisher(feed) && feed.connector_id
+    && ((feed.publisher_roles || []).length === 0 || (feed.publisher_roles || []).includes(role))
+    && !ancestors(feeds, feed).has(level.id) && feed.id !== level.id)
+    .sort((a, b) => pageTitle(a).localeCompare(pageTitle(b)))
+    .map((feed) => ({
+      id: feed.id,
+      title: pageTitle(feed),
+      releases: (feed.release_ids || []).length,
+      role: (feed.publisher_roles || []).includes(role) ? word : 'No role',
+      checked: selected === null ? !(feed.publisher_roles || []).includes(role) : selected.includes(feed.id),
+      noRole: !(feed.publisher_roles || []).includes(role),
+    }));
+  const count = rows.filter((row) => row.checked).length;
+  return {
+    title: `Move ${word.toLowerCase()}s to ${pageTitle(level)}`,
+    rows,
+    count,
+    button: `Move ${count} ${word}${count === 1 ? '' : 's'}`,
+    ready: count > 0,
+    note: rows.some((row) => row.checked && row.noRole) ? `A page with no role gets the role ${word}.` : null,
+  };
 }
 
 // The three menus of the sheet (ADR 0240 items 13 and 14). `values` holds the

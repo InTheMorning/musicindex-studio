@@ -1357,6 +1357,9 @@ pub fn make_move_change_set(
 
 /// Record a completed page move with the drafts and kept links from before it.
 ///
+/// A feed whose draft did not change is not in the change set, and a draft
+/// that the move started with no change goes out (ADR 0243 item 1).
+///
 /// # Errors
 ///
 /// Gives a [`PipelineError`] when the collection cannot store the change set.
@@ -1384,6 +1387,18 @@ pub fn record_page_move_change_set(
         }
     }
     for (feed_id, draft) in before {
+        let unchanged = match (draft, collection.draft(*feed_id)?) {
+            (Some(earlier), Some(now)) => earlier.draft_xml == now.draft_xml,
+            (None, Some(now)) => now.draft_xml == now.base_xml,
+            (None, None) => true,
+            (Some(_), None) => false,
+        };
+        if unchanged {
+            if draft.is_none() {
+                remove_new_draft(collection, *feed_id)?;
+            }
+            continue;
+        }
         collection.add_change_set_feed(
             id,
             &ChangeSetFeedRow {

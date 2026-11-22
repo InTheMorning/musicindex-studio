@@ -6,7 +6,7 @@
 // class to the wrapper, for example to open the menu to the left.
 import { html, useState, useRef } from './vendor/htm-preact-standalone.module.js';
 
-export function MenuControl({ buttonLabel, accessibleName, menuLabel, items, onSelect, row = false, Icon, className = '' }) {
+export function MenuControl({ buttonLabel, accessibleName, menuLabel, items, onSelect, row = false, Icon, className = '', buttonClassName = '' }) {
   const [open, setOpen] = useState(false);
   const button = useRef(null);
   const pick = (entry) => {
@@ -23,7 +23,7 @@ export function MenuControl({ buttonLabel, accessibleName, menuLabel, items, onS
     }
   };
   return html`<div class=${`${row ? 'sort row-menu-wrap' : 'sort'}${className ? ` ${className}` : ''}`} onKeyDown=${onKey}>
-    <button class=${row ? 'button row-menu' : 'button'} type="button" ref=${button} aria-haspopup="menu"
+    <button class=${`${row ? 'button row-menu' : 'button'}${buttonClassName ? ` ${buttonClassName}` : ''}`} type="button" ref=${button} aria-haspopup="menu"
       aria-label=${accessibleName} aria-expanded=${open ? 'true' : 'false'} onClick=${() => setOpen(!open)}>
       ${row ? html`<span class="row-menu-icon"><${Icon} name="ellipsis" /></span><span class="row-menu-text">${buttonLabel} ⌄</span>` : html`${buttonLabel} ⌄`}</button>
     ${open && html`<ul class="sort-menu" role="menu" aria-label=${menuLabel}>

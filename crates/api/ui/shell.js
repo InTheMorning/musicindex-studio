@@ -197,7 +197,7 @@ function outlineItems(feed, view, model, narrow, feeds) {
         move: (child.publisher_roles || []).some((role) => role === 'artist' || role === 'label'),
         target: openFeedView(child.id, narrow, level),
       }));
-      if (section.add) items.push({ id: `add-${section.add.add}`, label: section.add.label, action: 'add-feed', open: section.add.open, start: section.add.start, from: level });
+      if (section.add) items.push({ id: `add-${section.add.add}`, label: section.add.label, action: 'add-feed', open: section.add.open, start: section.add.start, from: level, menu: section.add.menu });
     }
     if (groups.releases) {
       items.push({ id: 'releases-heading', label: 'Releases', heading: true });
@@ -286,6 +286,7 @@ export function isTabChange(current, target) {
 }
 
 const inHosts = (view) => view.name === 'hosts' || (view.name === 'change-set' && view.area === 'hosts');
+const inReleases = (view) => view.name === 'change-set' && view.area === 'releases';
 
 // The left panel (ADR 0039 items 1, 5 and 6). With no open feed it gives the
 // destinations. With an open feed, or the outline view, it gives the outline
@@ -300,7 +301,7 @@ export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, 
     // wallet and the review of a change set (ADR 0099 items 1 and 12).
     {
       id: 'people', label: 'People', icon: 'users',
-      current: PEOPLE_VIEWS.includes(view.name) && !inHosts(view),
+      current: PEOPLE_VIEWS.includes(view.name) && !inHosts(view) && !inReleases(view),
       // A click on the row opens the list from a page of the area.
       opens: view.name !== 'people',
     },
@@ -322,7 +323,7 @@ export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, 
   const owner = levelFeed(view, feeds);
   if (!feed && owner) return { ...feedLevel(owner, view, feeds), bottom };
   if (!feed) {
-    const all = view.name === 'releases' && view.group === undefined;
+    const all = (view.name === 'releases' && view.group === undefined) || inReleases(view);
     return {
       kind: 'destinations',
       top: [
@@ -459,9 +460,21 @@ function pageGroups(owner, feeds) {
     if (!sections.some((section) => section.heading === heading)) sections.push({ heading, items: [] });
   }
   sections.sort((a, b) => HEADINGS.findIndex((entry) => entry[1] === a.heading) - HEADINGS.findIndex((entry) => entry[1] === b.heading));
+  const addRow = (role, label) => ({
+    add: role,
+    label,
+    open: 'publisher',
+    start: { role, below_id: owner.id },
+    menu: ['hosting', 'label'].includes((owner.publisher_roles || [])[0])
+      ? [
+        { action: 'new', label: `New ${roleWord(role)} Page…` },
+        { action: 'gather', label: `Move ${roleWord(role)}s Here…`, pageRole: role },
+      ]
+      : null,
+  });
   const adds = {
-    Artists: { add: 'artist', label: 'Add artist', open: 'publisher', start: { role: 'artist', below_id: owner.id } },
-    Labels: { add: 'label', label: 'Add label', open: 'publisher', start: { role: 'label', below_id: owner.id } },
+    Artists: addRow('artist', 'Add artist'),
+    Labels: addRow('label', 'Add label'),
   };
   const releases = rank !== 0;
   return {
@@ -936,7 +949,8 @@ export function narrowStack(view) {
     // The People area (ADR 0099 items 1 and 5).
     case 'person':
     case 'wallet':
-    case 'change-set': return [root, { name: inHosts(view) ? 'hosts' : 'people' }, view];
+    case 'change-set': return inHosts(view) ? [root, { name: 'hosts' }, view]
+      : inReleases(view) ? [root, releases, view] : [root, { name: 'people' }, view];
     case 'check': return [root, { name: 'people' }, { name: 'person', id: view.id }, view];
     // The feed page is the page below Releases. The outline page is below the
     // feed page (ADR 0223 item 8).

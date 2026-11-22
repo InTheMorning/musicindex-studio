@@ -560,6 +560,16 @@ test('A change set of a move marks File hosts and is below it (ADR 0148 item 17)
   assert.deepEqual(narrowStack(view), [{ name: 'root' }, { name: 'hosts' }, view]);
 });
 
+test('a page move change set belongs to Releases', () => {
+  const view = { name: 'change-set', id: 8, area: 'releases' };
+  const panel = leftPanel({ view, feeds: [], model: null, vaultOpen: true });
+  assert.equal(panel.top[0].current, true, 'ADR 0243 item 3: fix leftPanel in crates/api/ui/shell.js.');
+  assert.equal(panel.bottom.find((item) => item.id === 'people').current, false,
+    'ADR 0243 item 3: fix leftPanel in crates/api/ui/shell.js.');
+  assert.deepEqual(narrowStack(view), [{ name: 'root' }, { name: 'releases' }, view],
+    'ADR 0243 item 3: fix narrowStack in crates/api/ui/shell.js.');
+});
+
 test('People is current on each view of its area (ADR 0099 item 1)', () => {
   for (const name of ['people', 'person', 'check', 'wallet', 'change-set']) {
     const panel = leftPanel({ view: { name }, feeds: [], model: null, vaultOpen: true });
@@ -711,9 +721,17 @@ test('a level gives its ranked groups and add rows when they have no feed rows',
     ['Labels', 'Add label', { role: 'label', below_id: hosting.id }],
     ['Artists', 'Add artist', { role: 'artist', below_id: hosting.id }],
   ], owner);
+  assert.deepEqual(hostPanel.sections.map((section) => section.add.menu.map((item) => item.label)), [
+    ['New Label Page…', 'Move Labels Here…'], ['New Artist Page…', 'Move Artists Here…'],
+  ], 'ADR 0243 item 7: fix feedLevel in crates/api/ui/shell.js.');
+  // MenuControl gives `entry.role` to the button as its ARIA role.
+  assert.ok(hostPanel.sections.every((section) => section.add.menu.every((item) => !('role' in item))),
+    'ADR 0243 item 7: a menu entry of feedLevel in crates/api/ui/shell.js keeps the page role in pageRole, not in role (the ARIA role of MenuControl).');
   assert.equal(hostPanel.releases, null, owner);
   assert.equal(hostPanel.releaseAdd, null, owner);
   const labelPanel = panelOf(label);
+  assert.deepEqual(labelPanel.sections[0].add.menu.map((item) => item.label),
+    ['New Artist Page…', 'Move Artists Here…'], 'ADR 0243 item 7: fix feedLevel in crates/api/ui/shell.js.');
   assert.deepEqual(labelPanel.sections.map((section) => section.heading), ['Artists'], owner);
   assert.deepEqual(labelPanel.sections[0].add.start, { role: 'artist', below_id: label.id }, owner);
   assert.deepEqual(labelPanel.releases, [], owner);
@@ -745,6 +763,13 @@ test('the outline gives the groups and add rows of the level of its role', () =>
     ['Add artist', { role: 'artist', below_id: hosting.id }],
   ], owner);
   assert.equal(hostItems.some((item) => item.id === 'add-release'), false, owner);
+  assert.deepEqual(hostItems.find((item) => item.id === 'add-artist').menu.map((item) => item.label),
+    ['New Artist Page…', 'Move Artists Here…'], 'ADR 0243 item 7: fix outlineItems in crates/api/ui/shell.js.');
+  assert.deepEqual(hostItems.find((item) => item.id === 'add-label').menu.map((item) => item.label),
+    ['New Label Page…', 'Move Labels Here…'], 'ADR 0243 item 7: fix outlineItems in crates/api/ui/shell.js.');
+  assert.deepEqual(labelItems.find((item) => item.id === 'add-artist').menu.map((item) => item.label),
+    ['New Artist Page…', 'Move Artists Here…'], 'ADR 0243 item 7: fix outlineItems in crates/api/ui/shell.js.');
+  assert.equal(artistItems.some((item) => item.menu), false, 'ADR 0243 item 7: fix outlineItems in crates/api/ui/shell.js.');
 });
 
 test('a hosting outline lists the pages below it, and a playlist has only its head (ADR 0240 item 7)', () => {

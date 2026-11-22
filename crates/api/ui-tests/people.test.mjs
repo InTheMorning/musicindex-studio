@@ -1588,9 +1588,22 @@ test('ADR 0132 item 11: one sheet for each feed, the removals first, each with i
   assert.equal(creditPosition(1, 2), '2 of 2.');
 });
 
-test('changeSetView gives a move the area of File hosts (ADR 0148 item 17)', () => {
+test('changeSetView routes a file move to File hosts and a page move to Releases', () => {
   assert.deepEqual(changeSetView({ id: 4, operation: { kind: 'move_releases' } }), { name: 'change-set', id: 4, area: 'hosts' });
+  assert.deepEqual(changeSetView({ id: 6, operation: { kind: 'move_pages' } }), { name: 'change-set', id: 6, area: 'releases' },
+    'ADR 0243 item 3: fix changeSetView in crates/api/ui/people.js.');
   assert.deepEqual(changeSetView({ id: 5, operation: { kind: 'rename' } }), { name: 'change-set', id: 5 });
+});
+
+test('a move pages change set has one or many page titles and returns to its target', () => {
+  const one = { kind: 'move_pages', page_names: ['Artist A'], target_name: 'Host A', role: 'artist' };
+  const many = { kind: 'move_pages', page_names: ['A', 'B', 'C'], target_name: 'Host A', role: 'artist' };
+  assert.equal(changeTitle(one), 'Move Artist A to Host A', 'ADR 0243 item 3: fix changeTitle in crates/api/ui/people.js.');
+  assert.equal(changeTitle(many), 'Move 3 artists to Host A', 'ADR 0243 item 3: fix changeTitle in crates/api/ui/people.js.');
+  assert.equal(changeRow({ operation: one, feeds: [] }).title, 'Move Artist A to Host A',
+    'ADR 0243 item 4: fix changeRow in crates/api/ui/people.js.');
+  assert.deepEqual(afterDiscard({ operation: one }, [{ id: 40, title: 'Host A' }]), { name: 'releases', group: 40 },
+    'ADR 0243 item 3: fix afterDiscard in crates/api/ui/people.js.');
 });
 
 test('ADR 0132 item 12: the view after the last sheet', () => {

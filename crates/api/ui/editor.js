@@ -6,7 +6,7 @@ import { html, useState, useEffect, useRef, createContext, useContext } from './
 import { useDeleteUndo, undoNoticeText } from './undonotice.js';
 import { CONFIRMS } from './confirms.js';
 import { VIEWS, VIEW_LABELS, VIEW_HINTS, normalizeView, shownLines, localTimeNote, runs, commonIndent, stripIndent, moreLabel, fieldRows, guardRow, changeKeys, MERGE_TITLE, MERGE_INTRO, MERGE_HEADINGS, mergeRows, mergeReady, showsExamine, streamProblemRows } from './review.js';
-import { LoadErrorNotice, onSegmentKey, dropAreaClass, useFileDrop, api, saveTicket, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ChoiceSelect, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext, Icon, AddFeedRowSheet, inDesktopApp, NavContext } from './app.js';
+import { LoadErrorNotice, FeedCheckRow, onSegmentKey, dropAreaClass, useFileDrop, api, saveTicket, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ChoiceSelect, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext, Icon, AddFeedRowSheet, inDesktopApp, NavContext } from './app.js';
 import { AlbumPayments, TrackPayments } from './values.js';
 import { PickerLayout, PickFillRow, FindOneSheet, PickFold, TakenTag, useFieldList } from './pickers.js';
 import { PersonArt, useProfiles } from './peoplepages.js';
@@ -35,7 +35,7 @@ import { deleteWrite } from './feeddelete.js';
 import { pageSequence } from './pages.js';
 import { releaseKindOptions, shouldAddTracksAfterNewRelease } from './addfeeds.js';
 import { moveTitle, moveMenus, moveStart, moveForArtist, moveReady, moveBody, hasArtistPage, NEEDS_ARTIST_LINE, NEW_PAGE_PREFIX,
-  movePageTitle, pageMoveBody, pageMoveMenus, pageMoveStart, pageMoveLines } from './movepages.js';
+  movePageTitle, pageMoveBody, pageMoveMenus, pageMoveStart, pageMoveLines, gatherPagesModel } from './movepages.js';
 import { nextStep, firstStart, releaseAdd, releaseArtistChoices, FIRST_STEPS, HOST_STEP } from './welcome.js';
 import {
   fileState, fileStatus, canDownloadToDevice, canCopyFile, missingCount, missingNotice, reviewNotice, dayText,
@@ -2777,13 +2777,27 @@ function FeedDelete({ feed, draft, onListChanged }) {
     </dialog>`;
 }
 
-// The sheet "Move {title}" (ADR 0240 items 12 to 19). It has three select
-// menus: Artist, Label and Hosting. "New … Page…" opens the form of a page
-// with that role, and the menu then selects the new page. **Move** calls the
-// route of ADR 0240 item 18. `prepare` runs before the call, and it gives
-// false when the page cannot leave its state. `onMoved` gets the list of the
-// feeds that the route changed, and it can give the next view.
-export function MoveSheet({ release, page, feeds, connectors, prepare, onMoved, onListChanged, onClose }) {
+// The refusal of a move names each feed that stops it.
+function MoveRefusal({ error, feeds, onAddHost, onOpenChanges }) {
+  if (!error || !['read_only', 'in_change_set'].includes(error.code)) return html`<${ErrorNotice} error=${error} />`;
+  const rows = error.details?.feeds || [];
+  const isReadOnly = error.code === 'read_only';
+  // The shape of ErrorNotice: one line for each feed, then the actions. Each
+  // open change set gets one button (ADR 0243 items 5 and 6).
+  const sets = [...new Set(rows.map((feed) => feed.change_set_id).filter((id) => id != null))];
+  return html`<div class="notice error move-refusal" role="alert">
+    ${rows.map((feed) => html`<p key=${feed.id}>${isReadOnly
+      ? `Studio cannot change ${feed.title || 'this page'}. It is read-only.`
+      : `${feed.title || 'This page'} has changes to write. Write or discard them first.`}</p>`)}
+    <div class="actions">${isReadOnly
+      ? html`<button class="button action" type="button" onClick=${onAddHost}>Add a File Host</button>`
+      : sets.map((id) => html`<button class="button action" type="button" key=${id} onClick=${() => onOpenChanges(id)}>Open Changes</button>`)}</div>
+  </div>`;
+}
+
+// The move sheet opens the change set review after Move (ADR 0243 item 3).
+// `prepare` runs before the call, and false stops the move.
+export function MoveSheet({ release, page, feeds, connectors, prepare, onMoved, onListChanged, onAddHost, onOpenChanges, onClose }) {
   const ref = useSheet(true);
   const { busy, error, run } = useAction();
   const movingPage = Boolean(page);
@@ -2806,8 +2820,8 @@ export function MoveSheet({ release, page, feeds, connectors, prepare, onMoved, 
     if (prepare && !(await prepare())) return;
     const body = movingPage ? pageMoveBody(page, values) : moveBody(values);
     const answer = await api(`/feeds/${item.id}/move-to`, { method: 'POST', body });
-    await onMoved(answer.changed || [], body, values);
     if (ref.current) ref.current.close();
+    await onMoved(answer, body, values);
   });
   return html`<dialog ref=${ref} class="sheet small" aria-labelledby="move-pages-title" onClose=${onClose}>
     <header><h2 id="move-pages-title">${movingPage ? movePageTitle(page) : moveTitle(release)}</h2>
@@ -2817,13 +2831,42 @@ export function MoveSheet({ release, page, feeds, connectors, prepare, onMoved, 
         value=${menu.value} options=${menu.options} onChange=${select(menu.role)} />`)}
       ${movingPage && (() => { const [head, ...lines] = pageMoveLines(feeds, page, values);
         return html`<div class="move-changes"><strong>${head}</strong>${lines.map((line) => html`<span>${line}</span>`)}</div>`; })()}
-      <${ErrorNotice} error=${error} />
+      <${MoveRefusal} error=${error} feeds=${feeds} onAddHost=${onAddHost} onOpenChanges=${onOpenChanges} />
       <div class="actions"><button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
         <button class="button primary" type="button" disabled=${busy || (!movingPage && !moveReady(values))} onClick=${move}>Move</button></div>
     </div></div>
   </dialog>
   ${making && html`<${AddFeedRowSheet} open=${ARTIST_PAGE_FORM} connectors=${connectors} feeds=${feeds} start=${{ role: making }}
     onAdded=${made} onClose=${() => setMaking(null)} />`}`;
+}
+
+// The sheet gathers writable pages under one level (ADR 0243 items 7 to 12).
+export function GatherPagesSheet({ page, role, feeds, onMoved, onAddHost, onOpenChanges, onClose }) {
+  const ref = useSheet(true);
+  const { busy, error, run } = useAction();
+  const [selected, setSelected] = useState(null);
+  const view = gatherPagesModel(feeds, page, role, selected);
+  const selectedIds = view.rows.filter((row) => row.checked).map((row) => row.id);
+  const toggle = (id) => setSelected((current) => {
+    const before = current || view.rows.filter((row) => row.checked).map((row) => row.id);
+    return before.includes(id) ? before.filter((value) => value !== id) : [...before, id];
+  });
+  const move = () => run(async () => {
+    const answer = await api(`/feeds/${page.id}/gather`, { method: 'POST', body: { role, page_ids: selectedIds } });
+    if (ref.current) ref.current.close();
+    await onMoved(answer);
+  });
+  return html`<dialog ref=${ref} class="sheet small" aria-labelledby="gather-pages-title" onClose=${onClose}>
+    <header><h2 id="gather-pages-title">${view.title}</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button></header>
+    <div class="body"><div class="group rows">${view.rows.map((row) => html`<${FeedCheckRow} key=${row.id} title=${row.title}
+      text=${`${row.releases} ${row.releases === 1 ? 'release' : 'releases'} · ${row.role}`} checked=${row.checked} onChange=${() => toggle(row.id)} />`)}</div>
+      ${view.note && html`<p class="hint">${view.note}</p>`}
+      <${MoveRefusal} error=${error} feeds=${feeds} onAddHost=${onAddHost} onOpenChanges=${onOpenChanges} />
+      <div class="actions"><button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
+        <button class="button primary" type="button" disabled=${busy || !selectedIds.length} onClick=${move}>${view.button}</button></div>
+    </div>
+  </dialog>`;
 }
 
 // The section "Artists and labels" of an album or a playlist: its publisher
@@ -2880,7 +2923,10 @@ function ArtistsAndLabels({ feed, feeds, model, update, draft, go, onListChanged
       ${!feed.host_deleted && feed.connector_id && html`<div class="actions"><button class="button" type="button" disabled=${linkAction.busy}
         onClick=${() => setMoving(true)}>Move To…</button></div>`}
       ${moving && html`<${MoveSheet} release=${listed} feeds=${feeds} connectors=${connectors} prepare=${() => draft.flush()}
-        onMoved=${reload} onListChanged=${onListChanged} onClose=${() => setMoving(false)} />`}
+        onMoved=${async (answer, body) => { setMoving(false); await reload(); if (answer.change_set_id != null) go({ name: 'change-set', id: answer.change_set_id, area: 'releases' }); else go(movedReleaseView(body.artist_id)); }}
+        onAddHost=${() => { setMoving(false); go({ name: 'hosts', add: true }); }}
+        onOpenChanges=${(id) => { setMoving(false); go({ name: 'change-set', id }); }}
+        onListChanged=${onListChanged} onClose=${() => setMoving(false)} />`}
       ${rows.map((row) => html`<div class="release-row" key=${row.entry._cid}>
         <span class="title">${row.entry.title || row.entry.feed_url}</span>
         <span class="sub">${publisherLine(row.entry, row.match, row.index)}</span>

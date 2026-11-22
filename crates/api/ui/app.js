@@ -7,7 +7,7 @@ import { UI_SCALES, SCALE_KEY, normalizeScale, measureWindowUnits } from './uisc
 import { LOCK_HINT, START_HINT, lockChoiceText } from './vaultlock.js';
 import { serverFilesRows, sizeText, SERVER_FILES_NOTE } from './assets.js';
 import { failedLine } from './failures.js';
-import { OPEN_MERGE, OPEN_FEED_MOVE, MoveAllSheet, MoveSheet, AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, OUTSIDE_RECHECK, restoreDeletedFile, checkDeletedAgain, AnnounceChoice, UndoButtons, useUndoKeys, DeleteUndoBar, removeFeedFromCollection } from './editor.js';
+import { OPEN_MERGE, OPEN_FEED_MOVE, MoveAllSheet, MoveSheet, GatherPagesSheet, AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, OUTSIDE_RECHECK, restoreDeletedFile, checkDeletedAgain, AnnounceChoice, UndoButtons, useUndoKeys, DeleteUndoBar, removeFeedFromCollection } from './editor.js';
 import {
   recipientKey,
   outcomeText, blockedText, operationLine, nameOf, writableIds, firstOpenId, initialStatuses, refreshedStatuses, startWrite,
@@ -25,7 +25,7 @@ import { WELCOME, HOST_STEP, showWelcome, welcomeSteps, pathTexts, hostStepModel
 import { isLiveItem } from './live.js';
 import { appRowLines, pairingPhase, pairingNotice, doneRemovesApp } from './apps.js';
 import { CONFIRMS, confirmButtons } from './confirms.js';
-import { changeTitle, afterDiscard, changeLine } from './people.js';
+import { changeTitle, afterDiscard, changeLine, changeSetView } from './people.js';
 import { makeSettingsDraft, changeSetting, settingsDraftView, discardSettings, saveSettings, asksSettingsLeave, lockStartMenu } from './settingsdraft.js';
 import { makeHistory } from './undohistory.js';
 import { DeleteUndoProvider, useDeleteUndo, undoNoticeText, UNDO_COMPLETE } from './undonotice.js';
@@ -3075,7 +3075,8 @@ function HostCard({ connector, connectors, feeds, removeBusy, onRemove, onOpen, 
 function Hosts({ connectors, feeds, onChanged, onOpen, onMoved, view }) {
   const { busy, error, run } = useAction();
   const [linked, setLinked] = useState(null);
-  const [adding, setAdding] = useState(false);
+  const [adding, setAdding] = useState(view.add === true);
+  useEffect(() => { if (view.add === true) setAdding(true); }, [view.add]);
   // The result of a new host shows above the host cards, and the form is
   // below them, so the page brings the result into view.
   const resultRef = useRef(null);
@@ -3327,7 +3328,7 @@ function writeFailText(e) {
 // reads it again.
 const UNLOCKED = 'studio-unlocked';
 
-function ChangeSetPage({ id, go, onChanged }) {
+function ChangeSetPage({ id, go, onChanged, feeds }) {
   const [set, setSet] = useState(null);
   const [known, setKnown] = useState([]);
   const [personName, setPersonName] = useState('');
@@ -3398,7 +3399,7 @@ function ChangeSetPage({ id, go, onChanged }) {
     run(async () => {
       await api(`/change-sets/${id}`, { method: 'DELETE' });
       await onChanged();
-      go(afterDiscard(set), { replace: true });
+      go(afterDiscard(set, feeds), { replace: true });
     });
   };
   const notFound = error && error.status === 404;
@@ -3532,9 +3533,20 @@ function LevelRow({ item, set, label, count, attrs, onOpen, onMove }) {
 // their role headings, then its releases. The head opens the feed page, and
 // a release opens its outline at narrow width.
 function AddTreeRow({ item, attrs, onAdd }) {
+  // A menu row is not a tree item: the arrow keys skip it, and Tab reaches
+  // it. Its button has `aria-expanded`, and a tree item with no child rows
+  // has none (musicindex ADR 0061 R-LISTKEY-2 item 1, ADR 0243 item 7).
+  if (item.menu) return html`<div class="tree-add-menu"><${MenuControl} buttonClassName="row node add"
+    buttonLabel=${html`<span class="num">＋</span><span class="row-label">${item.label}</span>`} accessibleName=${item.label} menuLabel=${item.label}
+    items=${item.menu} onSelect=${(entry) => onAdd(entry.action === 'gather'
+      ? { ...item, gatherRole: entry.pageRole }
+      : item)} /></div>`;
   return html`<button class="row node add" type="button" ...${attrs} onClick=${() => onAdd(item)}>
     <span class="num">＋</span><span class="row-label">${item.label}</span></button>`;
 }
+
+// An add row with no menu is a tree item and takes a row number.
+const treeAdd = (item) => Boolean(item && !item.menu);
 
 function Level({ panel, go, back, onAddFeedRow = () => {}, onMove = () => {} }) {
   const narrow = useNarrow();
@@ -3547,8 +3559,8 @@ function Level({ panel, go, back, onAddFeedRow = () => {}, onMove = () => {} }) 
   let cursor = back ? 1 : 0;
   const headIndex = cursor++;
   // A different level can have fewer rows, so the current row stays in range.
-  const total = cursor + panel.sections.reduce((n, section) => n + section.items.length + (section.add ? 1 : 0), 0)
-    + (panel.releases ? panel.releases.length + (panel.releaseAdd ? 1 : 0) : 0);
+  const total = cursor + panel.sections.reduce((n, section) => n + section.items.length + (treeAdd(section.add) ? 1 : 0), 0)
+    + (panel.releases ? panel.releases.length + (treeAdd(panel.releaseAdd) ? 1 : 0) : 0);
   const currentIndex = current === null || current >= total ? (back ? 0 : headIndex) : current;
   // A row with no child rows has no `aria-expanded` (musicindex ADR 0061
   // R-LISTKEY-2 item 1).
@@ -3568,13 +3580,13 @@ function Level({ panel, go, back, onAddFeedRow = () => {}, onMove = () => {} }) 
       <h2 class="panel-heading">${section.heading}</h2>
       ${section.items.map((item) => { const index = cursor++; return html`<${LevelRow} item=${item} set=${panelSet(feeds, item.id)} label=${item.label} count=${item.count}
         attrs=${rowAttrs(index, headIndex)} onOpen=${() => go(item.view)} onMove=${onMove} />`; })}
-      ${section.add && html`<${AddTreeRow} item=${section.add} attrs=${rowAttrs(cursor++, headIndex)} onAdd=${onAddFeedRow} />`}
+      ${section.add && html`<${AddTreeRow} item=${section.add} attrs=${treeAdd(section.add) ? rowAttrs(cursor++, headIndex) : {}} onAdd=${onAddFeedRow} />`}
     </div>`)}
     ${panel.releases && html`<div class="destination-group">
       <h2 class="panel-heading">Releases</h2>
       ${panel.releases.map((item) => { const index = cursor++; return html`<${LevelRow} item=${item} set=${feeds.filter((feed) => feed.id === item.id)} label=${item.title}
         attrs=${rowAttrs(index, headIndex)} onOpen=${() => go(openFeedView(item.id, narrow, item.from))} onMove=${onMove} />`; })}
-      ${panel.releaseAdd && html`<${AddTreeRow} item=${panel.releaseAdd} attrs=${rowAttrs(cursor++, headIndex)} onAdd=${onAddFeedRow} />`}
+      ${panel.releaseAdd && html`<${AddTreeRow} item=${panel.releaseAdd} attrs=${treeAdd(panel.releaseAdd) ? rowAttrs(cursor++, headIndex) : {}} onAdd=${onAddFeedRow} />`}
     </div>`}</div>`;
 }
 
@@ -3602,7 +3614,8 @@ function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImp
     () => { if (!feed.first) go({ name: 'feed', id: feed.id, page: feed.page }); });
   const releases = panel.items.find((item) => item.id === 'releases');
   const rest = panel.items.filter((item) => item.id !== 'releases');
-  const childRows = rest.filter((item) => !item.heading);
+  // An add item with a menu is not a tree item (see AddTreeRow).
+  const childRows = rest.filter((item) => !item.heading && !item.menu);
   const feedIndex = releases ? 1 : 0;
   const activeChild = childRows.findIndex((item) => item.current);
   const defaultCurrent = activeChild >= 0 ? feedIndex + 1 + activeChild : feedIndex;
@@ -3635,6 +3648,7 @@ function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImp
         if (item.heading) {
           return html`<li key=${item.id} class="tree-heading"><span class="label">${item.label}</span></li>`;
         }
+        if (item.menu) return html`<li key=${item.id}><${AddTreeRow} item=${item} attrs=${{}} onAdd=${onAddFeedRow} /></li>`;
         if (item.action) {
           const open = () => {
             if (item.action === 'add-feed') { onAddFeedRow(item); return; }
@@ -3891,7 +3905,10 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
     ${adding && html`<${AddFeedRowSheet} open=${adding.open} connectors=${connectors} feeds=${feeds}
       start=${adding.start} onAdded=${addedRelease} onConnect=${onConnect} onClose=${() => setAdding(null)} />`}
     ${movingFeed && html`<${MoveSheet} release=${movingFeed} feeds=${feeds} connectors=${connectors} onListChanged=${onListChanged}
-      onMoved=${async (changed, body) => { setMoving(null); await onListChanged(); onGo(movedReleaseView(body.artist_id)); }}
+      onMoved=${async (answer, body) => { setMoving(null); await onListChanged(); onGo(answer.change_set_id != null
+        ? changeSetView({ id: answer.change_set_id, operation: { kind: 'move_pages' } }) : movedReleaseView(body.artist_id)); }}
+      onAddHost=${() => { setMoving(null); onGo({ name: 'hosts', add: true }); }}
+      onOpenChanges=${(id) => { setMoving(null); onGo({ name: 'change-set', id }); }}
       onClose=${() => setMoving(null)} />`}
   </div>`;
 }
@@ -4103,6 +4120,7 @@ function Shell({ vault, onLock, version }) {
   // The Add a track sheet, by the left panel and by the album page (ADR 0029 item 7).
   const [adding, setAdding] = useState(false);
   const [addingFeed, setAddingFeed] = useState(null);
+  const [gather, setGather] = useState(null);
   const [moveId, setMoveId] = useState(null);
   const [copyNotice, setCopyNotice] = useState(null);
   // The import sheet, by the left panel and by the album page (task 018d).
@@ -4397,7 +4415,20 @@ function Shell({ vault, onLock, version }) {
     if (f && makeInfo && !makeInfo.copied && shouldAddTracksAfterNewRelease(makeInfo.type)) setPendingAddTracks(f.id);
     go(f ? newFeedView(f.id, from) : { name: 'releases' });
   };
-  const openAddFeedRow = (item) => setAddingFeed(item);
+  const openAddFeedRow = (item) => item.gatherRole
+    ? setGather({ id: item.from.group, role: item.gatherRole })
+    : setAddingFeed(item);
+  const openChangeSet = (id) => go({ name: 'change-set', id });
+  const openMoveReview = async (answer, body, values) => {
+    await load();
+    if (answer.change_set_id != null) {
+      go(changeSetView({ id: answer.change_set_id, operation: { kind: 'move_pages' } }));
+    } else if (body.artist_id !== undefined) go(movedReleaseView(body.artist_id));
+    else {
+      const upper = values.label || values.hosting;
+      go(upper ? { name: 'releases', group: Number(upper) } : { name: 'releases' });
+    }
+  };
   let main;
   // A screen with no bar of its own gets one.
   const withBar = (content) => html`<div><${Bar}><span class="bar-title">Studio</span><//>${content}</div>`;
@@ -4424,7 +4455,7 @@ function Shell({ vault, onLock, version }) {
   } else if (view.name === 'wallet') {
     main = html`<${WalletPage} key=${JSON.stringify(recipientKey(view.recipient))} recipient=${view.recipient} feeds=${feeds} go=${go} />`;
   } else if (view.name === 'change-set') {
-    main = html`<${ChangeSetPage} key=${view.id} id=${view.id} go=${go} onChanged=${() => load()} />`;
+    main = html`<${ChangeSetPage} key=${view.id} id=${view.id} go=${go} feeds=${feeds} onChanged=${() => load()} />`;
   } else if (selected && view.name === 'outline') {
     main = html`<${OutlinePage} feed=${selected} panel=${panel} draft=${draft} changedFeeds=${changedFeeds} feeds=${feeds} go=${go}
       onAdding=${setAdding} onImporting=${setImporting} onAddFeedRow=${openAddFeedRow} onMove=${setMoveId}
@@ -4482,15 +4513,16 @@ function Shell({ vault, onLock, version }) {
       page=${movingPage ? { ...movingFeed, parent_ids: movingFeed.parent_ids || [], release_ids: movingFeed.release_ids || [] } : undefined}
       feeds=${feeds} connectors=${connectors} onListChanged=${load}
       prepare=${selected && selected.id === moveId && draftFeedId === moveId ? () => draft.flush() : undefined}
-      onMoved=${async (_changed, body, values) => {
-        await load();
-        if (body.artist_id !== undefined) go(movedReleaseView(body.artist_id));
-        else {
-          // The new upper page is the label page, else the hosting page (ADR 0240 item 21).
-          const upper = values.label || values.hosting;
-          go(upper ? { name: 'releases', group: Number(upper) } : { name: 'releases' });
-        }
-      }} onClose=${() => setMoveId(null)} />`}
+      onMoved=${openMoveReview}
+      onAddHost=${() => { setMoveId(null); go({ name: 'hosts', add: true }); }}
+      onOpenChanges=${(id) => { setMoveId(null); openChangeSet(id); }}
+      onClose=${() => setMoveId(null)} />`}
+    ${gather && feeds.find((feed) => feed.id === gather.id) && html`<${GatherPagesSheet} page=${feeds.find((feed) => feed.id === gather.id)} role=${gather.role}
+      feeds=${feeds} onMoved=${async (answer) => { setGather(null); await load(); if (answer.change_set_id != null)
+        go(changeSetView({ id: answer.change_set_id, operation: { kind: 'move_pages' } })); }}
+      onAddHost=${() => { setGather(null); go({ name: 'hosts', add: true }); }}
+      onOpenChanges=${(id) => { setGather(null); openChangeSet(id); }}
+      onClose=${() => setGather(null)} />`}
   </div><//><//>`;
 }
 

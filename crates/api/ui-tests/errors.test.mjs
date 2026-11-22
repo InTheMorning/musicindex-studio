@@ -4,11 +4,13 @@ import { readFile } from 'node:fs/promises';
 import { ERROR_STEPS, errorStep, retryHelps } from '../ui/errors.js';
 
 test('each known code has its task step', () => {
-  assert.equal(Object.keys(ERROR_STEPS).length, 14);
+  assert.equal(Object.keys(ERROR_STEPS).length, 15);
   for (const [code, row] of Object.entries(ERROR_STEPS)) {
     assert.equal(errorStep({ code }), row.step);
   }
   assert.equal(errorStep({ code: 'unknown' }), 'Try again. If the error stays, restart Studio.');
+  assert.equal(errorStep({ code: 'in_change_set' }), 'Write or discard the changes first.',
+    'ADR 0243 item 5: fix ERROR_STEPS in crates/api/ui/errors.js.');
 });
 
 test('retry appears only when a new attempt can help without user action', () => {

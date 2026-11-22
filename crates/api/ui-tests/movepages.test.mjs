@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   NEW_PAGE_PREFIX, moveTitle, moveMenus, moveStart, moveForArtist, moveReady, moveBody, hasArtistPage, NEEDS_ARTIST_LINE,
-  movePageTitle, pageMoveRoles, pageMoveBody, pageMoveMenus, pageMoveStart, pageMoveLines,
+  movePageTitle, pageMoveRoles, pageMoveBody, pageMoveMenus, pageMoveStart, pageMoveLines, gatherPagesModel,
 } from '../ui/movepages.js';
 
 const page = (id, title, roles, extra = {}) => ({ id, title, medium: 'publisher', publisher_roles: roles, connector_id: 'c', ...extra });
@@ -78,4 +78,34 @@ test('page move bodies use selected page ids and null for None', () => {
   const label = { ...feeds[2] };
   assert.deepEqual(pageMoveBody(artist, { label: '12', hosting: '' }), { label_id: 12, hosting_id: null }, owner);
   assert.deepEqual(pageMoveBody(label, { hosting: '12' }), { hosting_id: 12 }, owner);
+});
+
+test('gather pages lists writable pages, their start selection, and the note (ADR 0243 items 8 to 10)', () => {
+  const level = page(40, 'Host A', ['hosting']);
+  const candidates = [
+    page(1, 'Artist A', ['artist'], { release_ids: [10, 11] }),
+    page(2, 'No Role', [], { release_ids: [12] }),
+    page(3, 'Nested', ['artist'], { parent_ids: [40] }),
+    page(4, 'Read Only', ['artist'], { connector_id: null }),
+    page(5, 'Label A', ['label']),
+  ];
+  const model = gatherPagesModel([level, ...candidates], level, 'artist');
+  assert.equal(model.title, 'Move artists to Host A', 'ADR 0243 item 8: fix gatherPagesModel in crates/api/ui/movepages.js.');
+  assert.deepEqual(model.rows.map(({ id, title, releases, role, checked }) => ({ id, title, releases, role, checked })), [
+    { id: 1, title: 'Artist A', releases: 2, role: 'Artist', checked: false },
+    { id: 2, title: 'No Role', releases: 1, role: 'No role', checked: true },
+  ], 'ADR 0243 items 8 to 10: fix gatherPagesModel in crates/api/ui/movepages.js.');
+  assert.equal(model.button, 'Move 1 Artist', 'ADR 0243 item 9: fix gatherPagesModel in crates/api/ui/movepages.js.');
+  assert.equal(model.ready, true, 'ADR 0243 item 9: fix gatherPagesModel in crates/api/ui/movepages.js.');
+  assert.equal(model.note, 'A page with no role gets the role Artist.', 'ADR 0243 item 10: fix gatherPagesModel in crates/api/ui/movepages.js.');
+  const empty = gatherPagesModel([level, candidates[0]], level, 'artist', []);
+  assert.equal(empty.button, 'Move 0 Artists', 'ADR 0243 item 9: fix gatherPagesModel in crates/api/ui/movepages.js.');
+  assert.equal(empty.ready, false, 'ADR 0243 item 9: fix gatherPagesModel in crates/api/ui/movepages.js.');
+  assert.equal(empty.note, null, 'ADR 0243 item 10: fix gatherPagesModel in crates/api/ui/movepages.js.');
+});
+
+test('a page move with no link change has an instruction and no heading (ADR 0243 item 6)', () => {
+  const artist = { ...feeds[0], release_ids: [101] };
+  assert.deepEqual(pageMoveLines(feeds, artist, { label: '10', hosting: '20' }), ['Select a label or a hosting page.'],
+    'ADR 0243 item 6: fix pageMoveLines in crates/api/ui/movepages.js.');
 });

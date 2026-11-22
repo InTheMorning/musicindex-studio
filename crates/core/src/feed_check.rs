@@ -58,6 +58,9 @@ pub enum FindingKind {
     NoRecipient,
     /// A recipient address matches the other recipient type.
     WrongAddressType,
+    /// A recipient has a `fee` value that is not known. Studio reads it as
+    /// not a fee (musicindex ADR 0088 R-FEED-6 item 3, ADR 0244 item 2).
+    UnknownFee,
 }
 
 /// How a finding asks for action (ADR 0174 item 3, ADR 0175 item 6).
@@ -250,6 +253,7 @@ pub fn check(feed: &Feed, facts: &Facts) -> Vec<Finding> {
         check_item(&entry.value, facts, &mut found);
     }
     check_recipient_types(feed, &mut found);
+    check_fee_values(feed, &mut found);
     check_images(feed, facts, &mut found);
     index::check_index(facts, &mut found);
     if feed.language.as_deref().is_none_or(|l| l.trim().is_empty()) {
@@ -327,6 +331,55 @@ fn check_release(feed: &Feed, found: &mut Vec<Finding>) {
             None,
             Some(RepairKind::AddARecipient),
         ));
+    }
+}
+
+/// One warning for each recipient with a `fee` value that is not known
+/// (ADR 0244 item 2). The warning changes no text and removes no recipient.
+fn check_fee_values(feed: &Feed, found: &mut Vec<Finding>) {
+    use crate::feed::{FeeReading, ValueBlock};
+    fn recipients(block: &ValueBlock) -> impl Iterator<Item = &crate::feed::Recipient> {
+        block
+            .recipients
+            .iter()
+            .chain(block.time_splits.iter().flat_map(|s| &s.value.recipients))
+            .map(|r| &r.value)
+    }
+    // `Feed::recipients` leaves out a time split and a recipient with no
+    // address, so this walk is separate.
+    let blocks = feed
+        .values
+        .iter()
+        .chain(feed.items.iter().flat_map(|i| &i.value.values))
+        .chain(feed.live_items.iter().flat_map(|l| &l.value.item.values))
+        .map(|v| &v.value);
+    let mut seen = HashSet::new();
+    for recipient in blocks.flat_map(recipients) {
+        let Some(text) = recipient.fee.as_deref() else {
+            continue;
+        };
+        if FeeReading::of(Some(text)) != FeeReading::Unknown {
+            continue;
+        }
+        let name = recipient
+            .name
+            .as_deref()
+            .filter(|n| !n.is_empty())
+            .unwrap_or("This recipient");
+        if !seen.insert((name, recipient.address.as_deref(), text)) {
+            continue;
+        }
+        found.push(Finding {
+            kind: FindingKind::UnknownFee,
+            level: FindingLevel::Warning,
+            title: format!("{name} has an unknown fee value"),
+            reason: format!(
+                "The fee value is \u{201c}{text}\u{201d}. Studio reads it as not a fee. Apps can read it in a different way."
+            ),
+            entry: None,
+            repair: None,
+            url: None,
+        });
     }
 }
 

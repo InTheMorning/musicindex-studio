@@ -27,7 +27,7 @@ pub use keys::BadKey;
 pub use links::{BadAddress, is_web_address};
 use sync::{Children, Modeled, Names, adopt_list, adopt_one, read_list, read_one, read_text};
 pub use sync::{Entry, KeyError};
-pub use value::{RecipientPlace, ValueBlock, ValueTimeSplit};
+pub use value::{FeeReading, RecipientPlace, ValueBlock, ValueTimeSplit};
 
 use crate::xml::{Document, Element, Node, Ns};
 

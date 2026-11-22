@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  isFee,
   recipientRow, rowLines, placesText, useRow, outcomeText, causeText, blockedText,
   initialStatuses, refreshedStatuses, addressLines, lnaddressOf, nodeOf, recipientTitle, lookupHint, memberStart, startType, operationLine, suggestionField, breakParts, OTHER_ADDRESS, startWrite, finishWrite, nextToWrite, statusText, writableIds, writeLabel, retryStatuses, nameOf, statusError,
   walletActions, walletSheet, walletSheetStart, walletTypeChange, walletDetailsLine, walletSheetBody, walletSheetReady, WALLET_TYPES, addressProblem, CUSTOM_KEY_HINT, shareParts, percentages, feeLine, percentText,
@@ -398,4 +399,9 @@ test('the correction of a type moves the text to the field of the other type (AD
     { type: 'lnaddress', address_node: '', address_lnaddress: 'a@b.example' });
   assert.deepEqual(takeOtherType({ recipient_type: 'lnaddress', address_lnaddress: '03ab', address_node: '' }, 'recipient_type', 'node'),
     { recipient_type: 'node', address_lnaddress: '', address_node: '03ab' });
+});
+
+test('a fee is true, 1 or yes, as FeeReading in the core reads it (musicindex ADR 0088 R-FEED-6, ADR 0244 item 1)', () => {
+  for (const fee of ['true', ' TRUE ', '1', 'Yes']) assert.equal(isFee({ fee }), true, `ADR 0244 item 1: "${fee}" is a fee. Fix isFee in crates/api/ui/recipients.js`);
+  for (const fee of ['false', '0', 'no', '', '  ', 'maybe', null, undefined]) assert.equal(isFee({ fee }), false, `ADR 0244 item 1: "${fee}" is not a fee. Fix isFee in crates/api/ui/recipients.js`);
 });

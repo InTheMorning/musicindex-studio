@@ -129,7 +129,7 @@ function RecipientAddressActions({ recipient, onChange }) {
 // and the add row sit as direct rows of the group, each with the group's
 // own inset separator (review of task 014c, defect 3). The rows form two
 // groups: "Recipients", then "Fees" (ADR 0039 item 12). A recipient with
-// fee "true" is in "Fees". The screen sorts each group by split (ADR 0144).
+// a fee (`isFee`) is in "Fees". The screen sorts each group by split (ADR 0144).
 function Recipients({ id, recipients, defaultType, onChange, openAdd = false, onAddOpened, onEmptyClose, wrongAddresses = new Set() }) {
   const percent = percentages(recipients).map((value, i) => (shares(recipients[i]) === null ? null : value));
   // The sheet of a new recipient or of one address: null when closed, else

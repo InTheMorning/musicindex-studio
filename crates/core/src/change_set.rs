@@ -12,7 +12,7 @@ use std::hash::BuildHasher;
 use serde::{Deserialize, Serialize};
 
 use crate::collection::{ChangeSetFeedRow, Collection, FeedId, now};
-use crate::feed::{Entry, Feed, Funding, Person, Recipient, ValueBlock};
+use crate::feed::{Entry, FeeReading, Feed, Funding, Person, Recipient, ValueBlock};
 use crate::keysend::{self, Lookup};
 use crate::people::{self, Identity, PersonId};
 use crate::pipeline::{self, PipelineError, PipelineErrorKind};
@@ -511,14 +511,11 @@ pub fn scale(splits: &[u64], total: u64) -> Vec<u64> {
     scaled
 }
 
-/// True when the recipient is a fee: its `fee` attribute is `true`, with no
-/// regard to capital letters or spaces.
+/// True when the recipient is a fee: its `fee` attribute is `true`, `1` or
+/// `yes` (musicindex ADR 0088 R-FEED-6, ADR 0244 item 1).
 #[must_use]
 pub fn is_fee(recipient: &Recipient) -> bool {
-    recipient
-        .fee
-        .as_deref()
-        .is_some_and(|f| f.trim().eq_ignore_ascii_case("true"))
+    FeeReading::of(recipient.fee.as_deref()) == FeeReading::Fee
 }
 
 fn parse_split(recipient: &Recipient) -> Option<u64> {

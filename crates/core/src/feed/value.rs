@@ -52,6 +52,38 @@ impl Modeled for ValueBlock {
     }
 }
 
+/// The meaning of the `fee` text of a recipient (musicindex ADR 0088 R-FEED-6
+/// item 3, musicindex ADR 0086 R-FEED-4 item 5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FeeReading {
+    /// `true`, `1` or `yes`.
+    Fee,
+    /// `false`, `0`, `no`, an empty value or no attribute.
+    NotFee,
+    /// Each other value. It means not a fee, and the feed check gives the
+    /// warning `unknown_fee` for it.
+    Unknown,
+}
+
+impl FeeReading {
+    /// Reads the `fee` text. The reader removes the spaces at the two ends
+    /// and ignores the letter case. It does not change the text in the feed.
+    #[must_use]
+    pub fn of(text: Option<&str>) -> Self {
+        let Some(text) = text.map(str::trim) else {
+            return Self::NotFee;
+        };
+        let known = |words: &[&str]| words.iter().any(|w| text.eq_ignore_ascii_case(w));
+        if known(&["true", "1", "yes"]) {
+            Self::Fee
+        } else if text.is_empty() || known(&["false", "0", "no"]) {
+            Self::NotFee
+        } else {
+            Self::Unknown
+        }
+    }
+}
+
 /// The place of a recipient: the place of its value block, and the split of
 /// the recipient in that block (ADR 0156 item 4).
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]

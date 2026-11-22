@@ -76,6 +76,7 @@ Keep development and check data in `.studio-dev/` at the repository root. Git ig
 - No write occurs without a diff that the user has seen, or a change that a show grant of the user covers ([ADR 0007](docs/adr/0007-draft-diff-write-and-announce.md), [ADR 0205](docs/adr/0205-publisher-feeds-announcements-and-show-grants.md) item 53).
 - Studio uses the musicindex.org "Afterglow" visual direction ([ADR 0010](docs/adr/0010-studio-uses-the-afterglow-direction.md)).
 - musicindex ADR 0021, ADR 0022, ADR 0026, ADR 0028, ADR 0068, ADR 0080 and ADR 0085 own the interface rules that musicindex.org, Studio and HitIt share. They replace parts of ADR 0010, ADR 0029 and ADR 0037, and ADR 0010 names each part. A change to a shared rule needs a record in `../musicindex`.
+- The words that Studio shows for feed data come from `../musicindex/docs/glossary.md` (musicindex ADR 0087, [ADR 0244](docs/adr/0244-studio-reads-the-fee-value-of-musicindex-adr-0088.md) item 4). Studio keeps its own feed reader, and it reads `fee` as musicindex ADR 0088 R-FEED-6 gives.
 - From 2026-11-11 the app v4vmm has the name HitIt (HitIt ADR 0096). In archived records, finished tasks, reviews, dated records and accepted ADRs, v4vmm means HitIt. The checkout of HitIt is `../HitIt`, and `../v4vmm` in these records means `../HitIt`.
 
 ## Working Rules
@@ -203,6 +204,6 @@ Documentation:
 
 - Research: `../musicindex-research`. It is private. Do not copy text that has a private notice.
 - Visual direction: `../musicindex`, musicindex ADR 0067 items 19 to 49, and `search.html`.
-- Shared interface rules: musicindex ADR 0021, ADR 0022, ADR 0026, ADR 0028, ADR 0068, ADR 0080 and ADR 0085. Shared assets and tokens: `../musicindex-assets` (musicindex ADR 0022).
+- Shared interface rules: musicindex ADR 0021, ADR 0022, ADR 0026, ADR 0028, ADR 0068, ADR 0080, ADR 0085, ADR 0087 and ADR 0088. Shown words: `../musicindex/docs/glossary.md`. Shared assets and tokens: `../musicindex-assets` (musicindex ADR 0022).
 - Feed API: Stophammer, through `../musicindex/api.json`.
 - MSP 2.0: `../MSP-2.0`.

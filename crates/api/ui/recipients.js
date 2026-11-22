@@ -25,7 +25,11 @@ const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 // percentage. The crate `musicindex-value` has the same rule for the core.
 // The editor shows the percentage as information and does not change a split.
 
-export const isFee = (r) => (r.fee || '').toLowerCase() === 'true';
+// A fee is `true`, `1` or `yes`, with no regard to the letter case or the
+// spaces at the two ends. `FeeReading` in the core has the same rule
+// (musicindex ADR 0088 R-FEED-6, ADR 0244 item 1).
+const FEE_WORDS = new Set(['true', '1', 'yes']);
+export const isFee = (r) => FEE_WORDS.has((r.fee || '').trim().toLowerCase());
 export const shares = (r) => {
   const n = Number(r.split);
   return r.split !== null && r.split !== '' && Number.isFinite(n) && n >= 0 ? n : null;

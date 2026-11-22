@@ -2112,11 +2112,11 @@ export const NavContext = createContext(null);
 // title or a breadcrumb, after the back control. The root page has no back
 // control (ADR 0039 item 11), so `back` is false there. The kind of pointer
 // sets the back control: `‹ ›` with a mouse, and one circular `‹` named
-// "Back" by touch (musicindex ADR 0027 R-NAV-2, ADR 0031 R-NAV-3,
+// "Back" by touch (musicindex ADR 0080 R-NAV-2 and R-NAV-3,
 // R-PROFILE-1).
 // A chevron icon of the back control and of the forward control, with the
 // path of the Lucide icons "chevron-left" and "chevron-right" (musicindex
-// ADR 0022). Its size is the line height of its text (musicindex ADR 0025).
+// ADR 0022). Its size is the line height of its text (musicindex ADR 0068 R-ICON-1).
 function Chevron({ direction }) {
   return html`<svg class="chevron" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor"
     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -3825,7 +3825,7 @@ function OutlinePage({ feed, panel, draft, changedFeeds, feeds, go, onAdding, on
   </div>`;
 }
 
-// The sort menu of a list (musicindex ADR 0027 R-LIST-1, ADR 0043 R-LIST-6).
+// The sort menu of a list (musicindex ADR 0080 R-LIST-1, ADR 0043 R-LIST-6).
 // Each sort has two entries: its usual direction, then its reversed direction
 // (musicindex ADR 0054 R-LIST-13, ADR 0155). `onSort` gets the sort and direction.
 export function SortMenu({ sorts, sort, reversed, onSort }) {
@@ -3839,7 +3839,7 @@ export function SortMenu({ sorts, sort, reversed, onSort }) {
     onSelect=${(entry) => onSort(entry.sort, entry.reversed)} />`;
 }
 
-// The letter bar of "A to Z" (musicindex ADR 0027 R-LIST-1 item 2). A letter
+// The letter bar of "A to Z" (musicindex ADR 0080 R-LIST-1 item 2). A letter
 // scrolls its first row into view. `idOf` gives the element ID of a row.
 export function LetterBar({ letters, idOf }) {
   const show = (firstId) => {
@@ -3852,7 +3852,7 @@ export function LetterBar({ letters, idOf }) {
 }
 
 // The Releases page, the start page (ADR 0039 items 2, 2a and 3, musicindex
-// ADR 0027 R-LIST-1). `list` is the sort and the view from the address.
+// ADR 0080 R-LIST-1). `list` is the sort and the view from the address.
 // `marked` is the feed that the last Back selection left marked. With a
 // `group`, the page shows the releases of one destination below Releases,
 // and the sort of that page is `groupSort` (ADR 0085 items 4 to 6).
@@ -4147,11 +4147,11 @@ function writeNav(nav) {
 
 // The shell. It owns the list of views, the left panel at a wide width, the
 // one stack at a narrow width and the Releases page. Each new view is a history entry, so
-// that the browser Back button works (musicindex ADR 0027 R-NAV-2).
+// that the browser Back button works (musicindex ADR 0080 R-NAV-2).
 function Shell({ vault, onLock, version }) {
   const [feeds, setFeeds] = useState(null);
   const [connectors, setConnectors] = useState([]);
-  // At 760 px or less the window is one stack (musicindex ADR 0030 R-SHELL-2).
+  // At 760 px or less the window is one stack (musicindex ADR 0080 R-SHELL-2).
   const narrow = useNarrow();
   const [nav, setNavState] = useState(() => navAtWidth(readNav(), narrow));
   // The newest state. A scroll change saves here, without a new render.
@@ -4217,7 +4217,7 @@ function Shell({ vault, onLock, version }) {
   };
   // True while the browser history has one entry for each entry of the
   // state, up to the current one. Then the browser Back button and the back
-  // control do the same (musicindex ADR 0030 R-SHELL-2).
+  // control do the same (musicindex ADR 0080 R-SHELL-2).
   const mirrored = useRef(false);
   // Back. When the history agrees with the state, the browser goes back,
   // and `popstate` moves the state. Otherwise the state moves in place, for
@@ -4328,7 +4328,7 @@ function Shell({ vault, onLock, version }) {
   // After a change of view, the page scrolls to the saved position. With no
   // saved position, it scrolls to the marked row of Releases, or to the top.
   // A marked row that the saved position does not show moves into view by
-  // the smallest scroll (musicindex ADR 0027 R-NAV-2 item 2).
+  // the smallest scroll (musicindex ADR 0080 R-NAV-2 item 2).
   useEffect(() => {
     const main = mainRef.current;
     if (!main) return;

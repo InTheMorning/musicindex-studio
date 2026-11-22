@@ -860,7 +860,7 @@ export function queryText({ sort, view, reversed }) {
   return params.toString();
 }
 
-// ---- Navigation (musicindex ADR 0027 R-NAV-2) ----
+// ---- Navigation (musicindex ADR 0080 R-NAV-2) ----
 // The state is { entries, index }. Each function gives a new state and does
 // not change its argument.
 
@@ -934,7 +934,7 @@ export function setScroll(nav, y) {
   return { entries, index: nav.index };
 }
 
-// ---- Narrow width (musicindex ADR 0030 R-SHELL-2, ADR 0039 items 10 to 11a) ----
+// ---- Narrow width (musicindex ADR 0080 R-SHELL-2, ADR 0206 items 11 to 14) ----
 
 // The stack that a narrow window shows for one view. The entries go from the
 // root page to the view, and the view is the last entry.

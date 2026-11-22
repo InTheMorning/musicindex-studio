@@ -64,7 +64,7 @@
 // A finding of the sheet check is a fit finding.
 // $fieldText() gives each visible text field and select with text smaller
 // than 16 px. iOS Safari zooms the page when such a field gets the focus
-// (musicindex ADR 0024 R-TYPE-1, Body on Touch). Use it with "touch": true.
+// (musicindex ADR 0068 R-TYPE-1, Body on Touch). Use it with "touch": true.
 // The script prints each result and each console error. It exits with status 1
 // when the fit check has a finding, after the last step and its screenshot.
 // DRIVE_UI_PORT sets the DevTools port. The default is 9333.

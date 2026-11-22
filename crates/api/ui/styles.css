@@ -61,7 +61,7 @@
   --grain-opacity: .22;
   --brand-filter: none;
   --bar-h: 56px;
-  /* musicindex ADR 0041 R-SCALE-4 and ADR 0024 R-TARGET-1: the macOS targets. */
+  /* musicindex ADR 0068 R-SCALE-4 and R-TARGET-1: the macOS targets. */
   --target: 28px;
   --target-min: 20px;
   /* A group row, and the line height of the body text of R-TYPE-1. */
@@ -74,8 +74,8 @@
   --window-height: calc(100dvh / var(--window-unit-zoom));
   --window-width: calc(100vw / var(--window-unit-zoom));
   --leading: 1.23;
-  /* musicindex ADR 0041 R-SCALE-4 and ADR 0024 R-TYPE-1: the macOS text styles.
-     With Touch, the block below gives the iOS sizes of ADR 0024 R-TYPE-1. */
+  /* musicindex ADR 0068 R-SCALE-4 and R-TYPE-1: the macOS text styles.
+     With Touch, the block below gives the iOS sizes of R-TYPE-1. */
   --text-large-title: 26px;
   --text-title-1: 22px;
   --text-title-2: 17px;
@@ -120,12 +120,12 @@
   --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
-/* musicindex ADR 0024 R-PROFILE-1 and R-TARGET-1: a coarse pointer selects Touch. */
+/* musicindex ADR 0068 R-PROFILE-1 and R-TARGET-1: a coarse pointer selects Touch. */
 @media (pointer: coarse) {
   :root { --target: 44px; --target-min: 28px; --row: 52px; --leading: 1.45; }
 }
 
-/* musicindex ADR 0041 R-SCALE-4 item 2: with Touch, the iOS text sizes of ADR 0024 R-TYPE-1. */
+/* musicindex ADR 0068 R-SCALE-4 item 2: with Touch, the iOS text sizes of R-TYPE-1. */
 @media (pointer: coarse) {
   :root { --text-large-title: 34px; --text-title-1: 28px; --text-title-2: 22px; --text-title-3: 20px; --text-headline: 17px; --text-body: 17px; --text-callout: 16px; --text-subheadline: 15px; --text-footnote: 13px; --text-caption-1: 12px; --text-caption-2: 11px; }
 }
@@ -182,7 +182,7 @@
    "live now" (ADR 0018). Contrast is 4.5:1 or more on each surface. */
 :root { --error: #ff6961; }
 :root[data-theme="light"] { --error: #c41e3a; }
-/* The Warning text color of musicindex ADR 0025 R-STATUS-1. The
+/* The Warning text color of musicindex ADR 0068 R-STATUS-1. The
    Experimental badge uses it (musicindex ADR 0034 R-EXPERIMENT-1). */
 :root { --warning: #ff9f0a; }
 :root[data-theme="light"] { --warning: #a05a00; }
@@ -286,7 +286,7 @@ code, .mono {
 /* A line of muted help text, in a field or on its own. */
 .hint { color: var(--muted); font-size: var(--text-callout); }
 
-/* musicindex ADR 0041 R-SCALE-4 item 6: the ring of the macOS scale. */
+/* musicindex ADR 0068 R-SCALE-4 item 6: the ring of the macOS scale. */
 :focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 0;
@@ -391,7 +391,7 @@ code, .mono {
 .type-panel code { color: var(--text); }
 /* The button that changes the type of an address (ADR 0217 item 11). */
 .field-body > .use-type { justify-self: start; }
-/* A warning uses the Warning color (musicindex ADR 0025 R-STATUS-1, ADR 0161). */
+/* A warning uses the Warning color (musicindex ADR 0068 R-STATUS-1, ADR 0161). */
 .field-warning { color: var(--warning); font-size: var(--text-callout); font-weight: 500; }
 /* A control with a pending change has a mark at its start edge (ADR 0116 item 6). */
 .pending { box-shadow: inset 3px 0 0 var(--accent); }
@@ -490,7 +490,7 @@ input[type="checkbox"]:disabled { opacity: .5; cursor: default; }
 }
 /* A notice has a fill and no border (ADR 0029). The border shows the
    error only. A warning has no border: its title has the triangle icon
-   and the Warning color (ADR 0191 item 1, musicindex ADR 0025 R-STATUS-1
+   and the Warning color (ADR 0191 item 1, musicindex ADR 0068 R-STATUS-1
    item 4 and R-ELEVATION-1 item 1). */
 .notice.error { border: 1px solid var(--error); }
 .notice.warning > strong { display: flex; align-items: center; gap: 6px; color: var(--warning); }
@@ -830,7 +830,7 @@ input[type="checkbox"]:disabled { opacity: .5; cursor: default; }
 /* The feed title part of a breadcrumb title (review of task 014c, defect 5). */
 .bar-title .muted { color: var(--muted); font-weight: 400; }
 /* The touch back control is a circular icon button that does not shrink
-   (musicindex ADR 0031 R-NAV-3). */
+   (musicindex ADR 0080 R-NAV-3). */
 .bar .back { flex: none; }
 /* The home button and the title button of a narrow window (musicindex ADR
    0080 R-TITLE-1). The home button is the first control of the bar, before
@@ -877,7 +877,7 @@ input[type="checkbox"]:disabled { opacity: .5; cursor: default; }
   mask: var(--mark-mask) center / contain no-repeat;
 }
 /* The chevron of the back and forward controls has the line height of the
-   text as its size (musicindex ADR 0025). */
+   text as its size (musicindex ADR 0068 R-ICON-1). */
 .bar .chevron { display: block; width: 1.45em; height: 1.45em; margin: auto; }
 
 /* The draft toolbar: the short status, then "Versions" and "Review" (ADR
@@ -1061,7 +1061,7 @@ dialog.sheet > *, .sheet .body > * { min-width: 0; }
 
 @media (max-width: 760px) {
   /* `Shell` shows no nav.sidebar at this width. The stack of pages fills
-     the main pane (musicindex ADR 0030 R-SHELL-2). */
+     the main pane (musicindex ADR 0080 R-SHELL-2). */
   .shell { grid-template-columns: 1fr; }
   /* The root page holds the destinations, with Hosts and Lock Studio at its
      bottom (ADR 0039 item 11). */
@@ -2330,7 +2330,7 @@ button.outline-feed {
 }
 .player-bar:disabled { opacity: .5; }
 /* The waiting mark of the play button, with the size of its icon. With Reduce
-   Motion it is a still ring (musicindex ADR 0025). */
+   Motion it is a still ring (musicindex ADR 0068 R-A11Y-1). */
 .player-wait { display: block; width: 16px; height: 16px; box-sizing: border-box; border: 2px solid var(--fill); border-top-color: currentColor; border-radius: 50%; animation: player-wait 0.8s linear infinite; }
 @keyframes player-wait { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .player-wait { animation: none; } }
@@ -2535,7 +2535,7 @@ button.outline-feed {
 .attribute dd { position: relative; margin: 0; overflow-wrap: anywhere; padding-right: 32px; }
 .attribute dd .copy-button { position: absolute; top: -4px; right: 0; }
 .attribute-sub { display: block; color: var(--muted); }
-/* The tag of the default address (ADR 0139 item 2). It has the radius of a badge (musicindex ADR 0024). */
+/* The tag of the default address (ADR 0139 item 2). It has the radius of a badge (musicindex ADR 0068 R-RADIUS-1). */
 .default-tag { display: inline-flex; align-items: center; gap: 3px; margin-left: 6px; padding: 0 6px; border-radius: 6px; background: var(--accent-tint); color: var(--accent); font-size: var(--text-footnote); font-weight: 600; vertical-align: 1px; }
 .default-tag .icon { display: block; width: 12px; height: 12px; stroke-width: 3; }
 /* The default value of a list: the tag is in the place of Make Default
@@ -2631,7 +2631,7 @@ button.outline-feed {
 .sheet footer .footer-error { flex: 1 0 100%; min-width: 0; }
 .sheet footer .footer-error:empty { display: none; }
 
-/* musicindex ADR 0024 R-TYPE-1: with Touch, a field has the Body size of 17 px.
+/* musicindex ADR 0068 R-TYPE-1: with Touch, a field has the Body size of 17 px.
    iOS Safari zooms the page when a field with text under 16 px gets the focus.
    This rule is the last rule of the file, and its selector is as specific as
    `.field input`, so that it replaces the size of each earlier rule. */

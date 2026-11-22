@@ -2211,6 +2211,170 @@ async fn a_link_gives_422_for_a_music_feed_and_409_for_a_read_only_feed() {
     assert_eq!(body["error"]["code"], "read_only");
 }
 
+/// The pages of the move route tests (ADR 0240 item 18): two artist pages, a
+/// label page, a hosting page and one release. Gives the IDs in this order.
+async fn move_pages(app: &App, connector: i64) -> [i64; 5] {
+    let page = |path: &str, title: &str, role: &str| {
+        new_feed_body(connector, path, title, Some("publisher"), Some(role))
+    };
+    let first = make_feed(app, page("first.xml", "First", "artist")).await;
+    let second = make_feed(app, page("second.xml", "Second", "artist")).await;
+    let label = make_feed(app, page("label.xml", "Label", "label")).await;
+    let hosting = make_feed(app, page("hosting.xml", "Hosting", "hosting")).await;
+    let release = make_feed(
+        app,
+        new_feed_body(connector, "release.xml", "Release", None, None),
+    )
+    .await;
+    [first, second, label, hosting, release].map(|feed| feed["id"].as_i64().unwrap())
+}
+
+// Read each full draft row for the refusal check (ADR 0240 item 18).
+fn move_draft_rows(app: &App, ids: &[i64]) -> Vec<Option<studio_core::collection::DraftRow>> {
+    let workspace = Workspace::open(app.data.path()).unwrap();
+    ids.iter()
+        .map(|id| {
+            workspace
+                .collection
+                .draft(studio_core::collection::FeedId(*id))
+                .unwrap()
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn the_move_route_links_three_pages_and_unlinks_the_other_artist_page() {
+    let (app, connector) = publisher_app().await;
+    let [first, second, label, hosting, release] = move_pages(&app, connector).await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{second}/links"),
+        Some(json!({ "release": release })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    // ADR 0240 item 17: a link to a page that is not in the collection stays.
+    let draft_path = format!("/api/v1/feeds/{release}/draft");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    let mut outside = model["publisher"]["remote_items"][0].clone();
+    outside["key"] = json!(null);
+    outside["feed_guid"] = json!("outside-page-guid");
+    outside["feed_url"] = json!("https://outside.example/page.xml");
+    outside["title"] = json!("Outside page");
+    model["publisher"]["remote_items"]
+        .as_array_mut()
+        .unwrap()
+        .push(outside);
+    let (status, saved) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{saved}");
+
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{release}/move-to"),
+        Some(json!({ "artist_id": first, "label_id": label, "hosting_id": hosting })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let changed: Vec<i64> = body["changed"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|feed| feed["id"].as_i64().unwrap())
+        .collect();
+    assert!(
+        changed.contains(&release) && changed.contains(&second),
+        "{body}"
+    );
+
+    // ADR 0240 item 16: both sides of each page link contain the release.
+    for page in [first, label, hosting] {
+        assert_eq!(listed(&app, page).await["release_ids"], json!([release]));
+    }
+    let mut linked: Vec<i64> = listed(&app, release).await["publisher_ids"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|id| id.as_i64().unwrap())
+        .collect();
+    linked.sort_unstable();
+    assert_eq!(linked, vec![first, label, hosting]);
+    // ADR 0240 item 17: the other artist page has no link.
+    assert_eq!(listed(&app, second).await["release_ids"], json!([]));
+    let items = draft_model(&app, release).await["publisher"]["remote_items"].clone();
+    let guids: Vec<&str> = items
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(|item| item["feed_guid"].as_str())
+        .collect();
+    assert!(guids.contains(&"outside-page-guid"), "{items}");
+    assert_eq!(guids.len(), 4, "{items}");
+}
+
+#[tokio::test]
+async fn the_move_route_changes_no_draft_when_a_page_fails_its_check() {
+    let (app, connector) = publisher_app().await;
+    let [first, _, label, hosting, release] = move_pages(&app, connector).await;
+    write_once(&app, first).await;
+    // A page that Studio cannot write has no connector.
+    let (_, read_only) = call(&app, "POST", "/api/v1/feeds", Some(json!({}))).await;
+    let read_only_id = read_only["id"].as_i64().unwrap();
+    let workspace = Workspace::open(app.data.path()).unwrap();
+    workspace
+        .collection
+        .set_publisher_roles(
+            studio_core::collection::FeedId(read_only_id),
+            &[studio_core::collection::PublisherRole::Label],
+            true,
+        )
+        .unwrap();
+    let touched = [first, read_only_id, hosting, release];
+    let before = move_draft_rows(&app, &touched);
+    assert_eq!(
+        before[0], None,
+        "ADR 0240 item 18: the first page has no draft."
+    );
+    let path = format!("/api/v1/feeds/{release}/move-to");
+    let (status, body) = call(
+        &app,
+        "POST",
+        &path,
+        Some(json!({ "artist_id": first, "label_id": read_only_id, "hosting_id": hosting })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["error"]["code"], "read_only");
+    assert_eq!(
+        move_draft_rows(&app, &touched),
+        before,
+        "ADR 0240 item 18: a later connector refusal changes no draft row."
+    );
+    // ADR 0240 item 13: a label page is not an artist page.
+    let (status, body) = call(
+        &app,
+        "POST",
+        &path,
+        Some(json!({ "artist_id": label, "label_id": null, "hosting_id": null })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(body["error"]["code"], "invalid_publisher");
+    // ADR 0240 item 18: after a refusal, no draft has a link.
+    assert_eq!(listed(&app, release).await["publisher_ids"], json!([]));
+    for page in [first, label, hosting] {
+        assert_eq!(listed(&app, page).await["release_ids"], json!([]));
+    }
+}
+
 #[tokio::test]
 async fn each_publisher_route_needs_the_token() {
     let app = app();
@@ -2221,6 +2385,11 @@ async fn each_publisher_route_needs_the_token() {
             Some(json!({ "release": 2 })),
         ),
         ("DELETE", "/api/v1/feeds/1/links/2", None),
+        (
+            "POST",
+            "/api/v1/feeds/1/move-to",
+            Some(json!({ "artist_id": 2 })),
+        ),
         (
             "PUT",
             "/api/v1/feeds/1/role",

@@ -25,13 +25,34 @@ test('the search sheet gives the two import rows and hides the folder row withou
 
 const artistPage = { id: 9, medium: 'publisher', connector_id: 1, publisher_roles: ['artist'] };
 
-test('the add menu has the values of ADR 0230 item 1 in their sequence', () => {
-  const owner = 'ADR 0233 item 1: the add menu has five entries and no Add One You Have row. Fix addMenuEntries in crates/api/ui/addfeeds.js.';
+test('the add menu of Releases has the values of ADR 0240 item 1 in their sequence', () => {
+  const owner = 'ADR 0240 item 1: the add menu has Release, Artist, Label, Hosting, Show and Playlist. Fix addMenuEntries in crates/api/ui/addfeeds.js.';
   const entries = addMenuEntries(null);
-  assert.deepEqual(entries.map((e) => e.label), ['Release', 'Artist', 'Label', 'Show', 'Playlist'], owner);
-  assert.deepEqual(entries.map((e) => e.open), ['album', 'publisher', 'publisher', 'show', 'playlist'], owner);
+  assert.deepEqual(entries.map((e) => e.label), ['Release', 'Artist', 'Label', 'Hosting', 'Show', 'Playlist'], owner);
+  assert.deepEqual(entries.map((e) => e.open), ['album', 'publisher', 'publisher', 'publisher', 'show', 'playlist'], owner);
   assert.deepEqual(entries[1].start, { role: 'artist' }, owner);
   assert.deepEqual(entries[2].start, { role: 'label' }, owner);
+  assert.deepEqual(entries[3].start, { role: 'hosting' }, owner);
+});
+
+test('the add menu of a label page and a hosting page has no Release and no role of the same or a higher rank', () => {
+  const owner = 'ADR 0240 item 4: a label page or a hosting page has no Release, and its roles make a page below it. Fix addMenuEntries in crates/api/ui/addfeeds.js.';
+  const hosting = { id: 5, medium: 'publisher', connector_id: 1, publisher_roles: ['hosting'] };
+  const onHosting = addMenuEntries(releaseAdd(hosting, 'Host'), hosting);
+  assert.deepEqual(onHosting.map((e) => e.label), ['Artist', 'Label', 'Show', 'Playlist'], owner);
+  assert.deepEqual(onHosting[0].start, { role: 'artist', below_id: 5 }, owner);
+  assert.deepEqual(onHosting[1].start, { role: 'label', below_id: 5 }, owner);
+  const label = { ...hosting, id: 6, publisher_roles: ['label'] };
+  const onLabel = addMenuEntries(releaseAdd(label, 'Label'), label);
+  assert.deepEqual(onLabel.map((e) => e.label), ['Artist', 'Show', 'Playlist'], owner);
+  assert.deepEqual(onLabel[0].start, { role: 'artist', below_id: 6 }, owner);
+});
+
+test('the add menu of an artist page keeps Release and no publisher role actions', () => {
+  const owner = 'ADR 0240 item 4: an artist page keeps the menu of Releases, and Release has the artist as its parent. Fix addMenuEntries.';
+  const onArtist = addMenuEntries(releaseAdd(artistPage, 'Pixel Palace'), artistPage);
+  assert.deepEqual(onArtist.map((e) => e.label), ['Release', 'Show', 'Playlist'], owner);
+  assert.deepEqual(onArtist[0].start, { author: 'Pixel Palace', publisher_id: 9 }, owner);
 });
 
 test('the add menu of an artist page gives that artist as the start parent of Release', () => {

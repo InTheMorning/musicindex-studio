@@ -1,15 +1,25 @@
 // The model of the add forms (ADR 0233, ADR 0042). These functions have no
 // Preact and no browser state. `app.js` shows their rows and forms.
-import { feedKind, kindGlow, publisherArt } from './shell.js';
+import { feedKind, kindGlow, publisherArt, headingIndex } from './shell.js';
 
-// The entries of the add menu of Releases and of an artist page (ADR 0230
-// items 1 to 4). `release` is the add action of the artist of the page, or null
-// when Release has no start parent.
-export function addMenuEntries(release) {
+// The entries of the add menu of Releases and of a page head (ADR 0230 items
+// 1 to 4, ADR 0240 items 1 and 4). `release` is the add action of the artist
+// of the page, or null when Release has no start parent. `head` is the feed of
+// the page head, or null on the page Releases. On a hosting page or a label
+// page, the menu has no Release and no role of the same rank or a higher rank,
+// and each remaining role makes a page below the head.
+export function addMenuEntries(release, head = null) {
+  const roles = [['artist', 'Artist'], ['label', 'Label'], ['hosting', 'Hosting']];
+  const rank = head ? headingIndex(head) : null;
+  const publisherHead = head && (head.publisher_roles || []).some((role) => ['artist', 'label', 'hosting'].includes(role));
+  const appliesRank = head && (head.publisher_roles || []).some((role) => role === 'label' || role === 'hosting');
+  const below = Boolean(appliesRank && rank !== null && rank <= 1);
+  const roleEntries = roles
+    .filter(([role]) => !publisherHead || (appliesRank && (!below || headingIndex({ publisher_roles: [role] }) > rank)))
+    .map(([role, label]) => ({ id: role, label, open: 'publisher', start: below ? { role, below_id: head.id } : { role } }));
   return [
-    { id: 'release', label: 'Release', open: 'album', start: release ? release.start : {} },
-    { id: 'artist', label: 'Artist', open: 'publisher', start: { role: 'artist' } },
-    { id: 'label', label: 'Label', open: 'publisher', start: { role: 'label' } },
+    ...(below ? [] : [{ id: 'release', label: 'Release', open: 'album', start: release ? release.start : {} }]),
+    ...roleEntries,
     { id: 'show', label: 'Show', open: 'show', start: {} },
     { id: 'playlist', label: 'Playlist', open: 'playlist', start: {} },
   ];

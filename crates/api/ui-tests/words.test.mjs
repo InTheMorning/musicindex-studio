@@ -150,6 +150,8 @@ const HOST_ALLOWED = [
   'Empty means host.',
   // The person of the hosting role (ADR 0238 item 5).
   'Type the name of the person who hosts',
+  // The person of the hosting role on the Welcome page (ADR 0240 item 2).
+  'The artists and labels that you host go on it.',
   // The network names of a server (ADR 0092 item 4).
   'Studio uses the host name when you leave this empty.',
   'Studio uses the host name of the first server when you leave this empty.',

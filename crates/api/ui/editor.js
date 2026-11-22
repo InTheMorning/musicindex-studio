@@ -14,7 +14,7 @@ import { onListKey, onTreeKey } from './listkeys.js';
 import { creditPickRows, supportPickRows, creditChoices, creditFillRows, creditFillValue, creditFillNote, creditFillNoteText, CREDIT_FIELD_LABELS, fundingChoices, nostrChoices, withPersonValues, filterRows, nostrPickRows, feedWord, memberRowLine, memberSectionNote } from './people.js';
 import { withCids, STATUS } from './draft.js';
 import { roleSummary } from './roles.js';
-import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName, newFeedView, pageLevel } from './shell.js';
+import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName, newFeedView, pageLevel, movedReleaseView } from './shell.js';
 import { isLiveItem, liveKey, liveDot, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner, OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning, hasBadAddress, problemGroup, setLiveStreamType, viewAfterLiveGone, withoutLive } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
 import { checkRows, unreadableRows, hasShowGrant, checkTexts, pageRefusalView, wrongAddressSet, OPEN_ACTIONS, COPY_SHEET_TEXT, WAYS_SHEET_TEXT } from './feedcheck.js';
@@ -34,6 +34,7 @@ import { platformBlocks } from './listing.js';
 import { deleteWrite } from './feeddelete.js';
 import { pageSequence } from './pages.js';
 import { releaseKindOptions, shouldAddTracksAfterNewRelease } from './addfeeds.js';
+import { moveTitle, moveMenus, moveStart, moveForArtist, moveReady, moveBody, hasArtistPage, NEEDS_ARTIST_LINE, NEW_PAGE_PREFIX } from './movepages.js';
 import { nextStep, firstStart, releaseAdd, releaseArtistChoices, FIRST_STEPS, HOST_STEP } from './welcome.js';
 import {
   fileState, fileStatus, canDownloadToDevice, canCopyFile, missingCount, missingNotice, reviewNotice, dayText,
@@ -2463,7 +2464,8 @@ function toolbarStatus(draft) {
   return draft.changed ? { text: 'Saved, not written' } : { text: 'No changes' };
 }
 
-// The form of AddFeedRowSheet that makes an artist page.
+// The form of AddFeedRowSheet that makes a page of one role (the sheet "Move" of
+// ADR 0240 item 14 also uses it).
 const ARTIST_PAGE_FORM = 'publisher';
 
 // The toolbar of the editor: the draft status, and the buttons that open
@@ -2774,10 +2776,55 @@ function FeedDelete({ feed, draft, onListChanged }) {
     </dialog>`;
 }
 
+// The sheet "Move {title}" (ADR 0240 items 12 to 19). It has three select
+// menus: Artist, Label and Hosting. "New … Page…" opens the form of a page
+// with that role, and the menu then selects the new page. **Move** calls the
+// route of ADR 0240 item 18. `prepare` runs before the call, and it gives
+// false when the page cannot leave its state. `onMoved` gets the list of the
+// feeds that the route changed, and it can give the next view.
+export function MoveSheet({ release, feeds, connectors, prepare, onMoved, onListChanged, onClose }) {
+  const ref = useSheet(true);
+  const { busy, error, run } = useAction();
+  const [values, setValues] = useState(() => moveStart(feeds, release));
+  // The role of the page that the user makes, or null.
+  const [making, setMaking] = useState(null);
+  const select = (role) => (value) => {
+    if (value.startsWith(NEW_PAGE_PREFIX)) { setMaking(value.slice(NEW_PAGE_PREFIX.length)); return; }
+    // A new artist page gives its label page and hosting page (ADR 0240 item 15).
+    setValues((current) => (role === 'artist' && value !== '' ? moveForArtist(feeds, value) : { ...current, [role]: value }));
+  };
+  const made = async (page) => {
+    const role = making;
+    setMaking(null);
+    await onListChanged();
+    setValues((current) => ({ ...current, [role]: String(page.id) }));
+  };
+  const move = () => run(async () => {
+    if (prepare && !(await prepare())) return;
+    const answer = await api(`/feeds/${release.id}/move-to`, { method: 'POST', body: moveBody(values) });
+    await onMoved(answer.changed || [], moveBody(values));
+    if (ref.current) ref.current.close();
+  });
+  return html`<dialog ref=${ref} class="sheet small" aria-labelledby="move-pages-title" onClose=${onClose}>
+    <header><h2 id="move-pages-title">${moveTitle(release)}</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button></header>
+    <div class="body"><div class="form">
+      ${moveMenus(feeds, values).map((menu) => html`<${ChoiceSelect} key=${menu.role} id=${`move-${menu.role}`} label=${menu.label}
+        value=${menu.value} options=${menu.options} onChange=${select(menu.role)} />`)}
+      <${ErrorNotice} error=${error} />
+      <div class="actions"><button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
+        <button class="button primary" type="button" disabled=${busy || !moveReady(values)} onClick=${move}>Move</button></div>
+    </div></div>
+  </dialog>
+  ${making && html`<${AddFeedRowSheet} open=${ARTIST_PAGE_FORM} connectors=${connectors} feeds=${feeds} start=${{ role: making }}
+    onAdded=${made} onClose=${() => setMaking(null)} />`}`;
+}
+
 // The section "Artists and labels" of an album or a playlist: its publisher
 // feeds, in the sequence of `podcast:publisher` (ADR 0041 item 9, ADR 0086
 // item 4). Each link changes this draft and the draft of the other feed.
 function ArtistsAndLabels({ feed, feeds, model, update, draft, go, onListChanged }) {
+  const { connectors = [] } = useContext(PickerContext) || {};
   const linkAction = useAction();
   // The feeds whose draft the last link change altered.
   const [changed, setChanged] = useState([]);
@@ -2809,10 +2856,25 @@ function ArtistsAndLabels({ feed, feeds, model, update, draft, go, onListChanged
     const done = await twoDrafts(linkAction, () => linkPublisherPage(chosen, feed.id));
     if (done) setChosen('');
   };
+  // ADR 0240 item 11: **Move To…** opens the sheet of the release. The sheet
+  // saves the page first, then loads the drafts again.
+  const [moving, setMoving] = useState(false);
+  const listed = (feeds || []).find((f) => f.id === feed.id) || feed;
+  const reload = async (named, body) => {
+    await draft.load();
+    await onListChanged();
+    setChanged(named.filter((c) => c.id !== feed.id));
+    go(movedReleaseView(body.artist_id));
+  };
   return html`<section id="linked-artist-and-label-pages" class="page-section"><h2>Linked artist and label pages</h2>
     <div class="group">
       <${ChangedNotices} changed=${changed} go=${go} />
       ${rows.length === 0 && html`<p class="hint">Not linked to an artist or label page yet.</p>`}
+      ${!hasArtistPage(feeds, listed) && html`<p class="hint">${NEEDS_ARTIST_LINE}</p>`}
+      ${!feed.host_deleted && feed.connector_id && html`<div class="actions"><button class="button" type="button" disabled=${linkAction.busy}
+        onClick=${() => setMoving(true)}>Move To…</button></div>`}
+      ${moving && html`<${MoveSheet} release=${listed} feeds=${feeds} connectors=${connectors} prepare=${() => draft.flush()}
+        onMoved=${reload} onListChanged=${onListChanged} onClose=${() => setMoving(false)} />`}
       ${rows.map((row) => html`<div class="release-row" key=${row.entry._cid}>
         <span class="title">${row.entry.title || row.entry.feed_url}</span>
         <span class="sub">${publisherLine(row.entry, row.match, row.index)}</span>
@@ -4086,6 +4148,8 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, onLis
   const [chosen, setChosen] = useState('');
   // The row of the Add feeds page that is open, from the first steps (ADR 0119).
   const [addOpen, setAddOpen] = useState(null);
+  // The start role of the form that a row of a new hosting page opens (ADR 0240 item 3).
+  const [addRole, setAddRole] = useState(null);
   // The members of this feed, from `GET /feeds/{id}/members` (ADR 0118 item 9).
   const [members, setMembers] = useState([]);
   const [membersError, setMembersError] = useState(null);
@@ -4273,10 +4337,6 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, onLis
     if (f && makeInfo && nav && shouldAddTracksAfterNewRelease(makeInfo.type)) nav.addTracksNext(f.id);
     go(f ? newFeedView(f.id, from) : { name: 'releases' });
   };
-  const artistChoices = releaseArtistChoices(feeds);
-  const addReleaseFromLabel = () => {
-    setAddOpen(artistChoices.length > 0 ? 'release-form' : 'publisher');
-  };
   return html`<${ChangedNotices} changed=${changed} go=${go} />
     ${first === 'album' && html`<div class="group first-step">
       <div class="link-row static first-step-row">
@@ -4285,13 +4345,13 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, onLis
         <button class="button primary" type="button" onClick=${() => setAddOpen('album')}>${FIRST_STEPS.album.action}</button>
       </div>
     </div>`}
-    ${first === 'label' && html`<div class="group">${FIRST_STEPS.label.map((step) => html`<button class="link-row" type="button" key=${step.open}
-      onClick=${() => step.open === 'album' ? addReleaseFromLabel() : setAddOpen(step.open)}><span class="step-icon" aria-hidden="true"><${Icon} name=${step.icon} /></span>
+    ${(first === 'label' || first === 'hosting') && html`<div class="group">${FIRST_STEPS[first].map((step) => html`<button class="link-row" type="button" key=${step.title}
+      onClick=${() => { setAddRole(step.role || null); setAddOpen(step.open); }}><span class="step-icon" aria-hidden="true"><${Icon} name=${step.icon} /></span>
       <span class="text"><span class="label">${step.title}</span><span class="summary">${step.line}</span></span><span class="go" aria-hidden="true">›</span></button>`)}</div>`}
     ${addOpen === 'release-form' && html`<${AddFeedRowSheet} open="album" connectors=${connectors} feeds=${feeds}
       start=${{}} onAdded=${addedFeed} onClose=${() => setAddOpen(null)} />`}
     ${addOpen && addOpen !== 'release-form' && html`<${AddFeedRowSheet} open=${addOpen} connectors=${connectors} feeds=${feeds}
-      start=${firstStart(first, addOpen, model, feed.id)} onAdded=${addedFeed} onClose=${() => setAddOpen(null)} />`}
+      start=${firstStart(first, addOpen, model, feed.id, addRole)} onAdded=${addedFeed} onClose=${() => setAddOpen(null)} />`}
     ${showSections(pageSequence('publisher'), shown)}`;
 }
 

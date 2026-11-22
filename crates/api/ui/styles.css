@@ -1491,6 +1491,9 @@ select option { background: var(--level-3); color: var(--text); }
    button does not cover text (ADR 0177 item 9). */
 @media (max-width: 760px) {
   .link-row:has(> .actions) { flex-direction: column; align-items: stretch; }
+  .releases-list.rows li:has(> .actions) { flex-wrap: wrap; }
+  .releases-list.rows li:has(> .actions) > .releases-row { flex-basis: 100%; }
+  .releases-list.rows li:has(> .actions) > .actions { margin-inline-start: calc(var(--target) + var(--target) + var(--target-min) / 2); }
 }
 /* The check boxes of the custom roles of a publisher feed (ADR 0082 item 7),
    in the field body below the Role menu. */
@@ -1973,6 +1976,9 @@ button.outline-feed {
    row of the artist or label (ADR 0228 item 19). */
 .releases-list.rows.nested { padding-left: 32px; }
 .releases-list li { min-width: 0; scroll-margin-top: calc(var(--bar-h) + 12px); }
+.releases-list.rows li:has(> .actions) { display: flex; align-items: center; }
+.releases-list.rows li:has(> .actions) > .releases-row { flex: 1; width: auto; }
+.releases-list.rows li:has(> .actions) > .actions { flex: none; margin-inline-start: auto; }
 .releases-list li[data-marked="true"] > button { background: var(--level-3); }
 .releases-row, .releases-tile {
   display: flex;

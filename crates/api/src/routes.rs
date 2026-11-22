@@ -3422,6 +3422,139 @@ pub(crate) async fn add_link(
     .await
 }
 
+#[derive(Deserialize)]
+pub(crate) struct MoveToBody {
+    // The field names of the body are `artist_id`, `label_id` and
+    // `hosting_id` (ADR 0240 item 18). The renames keep the Rust names short.
+    #[serde(rename = "artist_id")]
+    artist: i64,
+    #[serde(rename = "label_id")]
+    label: Option<i64>,
+    #[serde(rename = "hosting_id")]
+    hosting: Option<i64>,
+}
+
+/// Check one page of the move route: it is a writable publisher page with
+/// the wanted role (ADR 0240 item 13).
+fn check_move_page(
+    w: &Workspace,
+    page: FeedId,
+    release: FeedId,
+    role: PublisherRole,
+) -> Result<(), ApiError> {
+    if !w.collection.feed(page)?.publisher_roles.contains(&role) {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "invalid_publisher",
+            format!("feed {} does not have the role {role:?}", page.0),
+        ));
+    }
+    check_mediums(w, page, Some(release))?;
+    Ok(())
+}
+
+/// Move a release to its pages: link the artist page and the optional label
+/// page and hosting page, then unlink each other page of the collection with
+/// the role artist, label or hosting. Each check runs before the first
+/// change, so a failed check changes no draft (ADR 0240 items 16 to 18).
+pub(crate) async fn move_release_to_pages(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(body): Json<MoveToBody>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let release_id = FeedId(id);
+        let mut selected = vec![(FeedId(body.artist), PublisherRole::Artist)];
+        selected.extend(body.label.map(|id| (FeedId(id), PublisherRole::Label)));
+        selected.extend(body.hosting.map(|id| (FeedId(id), PublisherRole::Hosting)));
+        for (page, role) in &selected {
+            check_move_page(w, *page, release_id, *role)?;
+        }
+        // Keep unreadable rows so linked collection pages remain visible (ADR 0240 item 17).
+        let rows = w.collection.feeds()?;
+        let catalog_feeds: Vec<_> = rows
+            .into_iter()
+            .map(|row| {
+                let model = files_feed(w, row.id).ok().flatten();
+                (row, model)
+            })
+            .collect();
+        let catalogs = publisher::catalogs(&catalog_feeds);
+        let release_index = catalog_feeds
+            .iter()
+            .position(|(row, _)| row.id == release_id)
+            .ok_or_else(|| ApiError::internal("the release is missing"))?;
+        if catalog_feeds[release_index].1.is_none() {
+            return Err(ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "unreadable_feed",
+                "the release has no readable feed model",
+            ));
+        }
+        let mut others = Vec::new();
+        for page in &catalogs[release_index].publishers {
+            let index = catalog_feeds
+                .iter()
+                .position(|(row, _)| row.id == *page)
+                .ok_or_else(|| ApiError::internal("a linked page is missing"))?;
+            let (row, model) = &catalog_feeds[index];
+            let has_page_role = row.publisher_roles.iter().any(|role| {
+                matches!(
+                    role,
+                    PublisherRole::Artist | PublisherRole::Label | PublisherRole::Hosting
+                )
+            });
+            if has_page_role && !selected.iter().any(|(chosen, _)| chosen == page) {
+                check_mediums(w, *page, Some(release_id))?;
+                if model.is_none() {
+                    return Err(ApiError::new(
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                        "unreadable_page",
+                        format!("linked page {} has no readable feed model", page.0),
+                    ));
+                }
+                others.push(*page);
+            }
+        }
+        let mut touched: Vec<FeedId> = selected.iter().map(|(page, _)| *page).collect();
+        touched.extend(&others);
+        touched.push(release_id);
+        touched.sort_by_key(|feed| feed.0);
+        touched.dedup();
+        for feed in &touched {
+            let guid = if w.collection.draft(*feed)?.is_some() {
+                pipeline::draft_model(&w.collection, *feed)?.0.podcast_guid
+            } else {
+                catalog_feeds
+                    .iter()
+                    .find(|(candidate, _)| candidate.id == *feed)
+                    .and_then(|(_, model)| model.as_ref())
+                    .and_then(|model| model.podcast_guid.clone())
+            };
+            if guid.is_none() {
+                return Err(ApiError::new(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "no_guid",
+                    format!("the draft of feed {} has no podcast:guid", feed.0),
+                ));
+            }
+        }
+        let before = before_change(w, &touched)?;
+        for feed in &touched {
+            ensure_draft(w, *feed)?;
+        }
+        for (page, _) in &selected {
+            publisher::link(&w.collection, *page, release_id)?;
+        }
+        for page in &others {
+            publisher::unlink(&w.collection, *page, release_id)?;
+        }
+        remove_shared_kept_levels(w)?;
+        changed_json(w, &before)
+    })
+    .await
+}
+
 /// Add a release to a publisher page draft without changing the release.
 pub(crate) async fn list_release_on_page(
     State(shared): State<Shared>,

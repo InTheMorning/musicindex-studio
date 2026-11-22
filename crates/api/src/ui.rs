@@ -52,6 +52,11 @@ const FILES: &[(&str, &str, &[u8])] = &[
         include_bytes!("../ui/editor.js"),
     ),
     (
+        "movepages.js",
+        "text/javascript; charset=utf-8",
+        include_bytes!("../ui/movepages.js"),
+    ),
+    (
         "writeresult.js",
         "text/javascript; charset=utf-8",
         include_bytes!("../ui/writeresult.js"),

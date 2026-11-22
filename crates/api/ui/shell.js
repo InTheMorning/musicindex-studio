@@ -184,19 +184,29 @@ function outlineItems(feed, view, model, narrow, feeds) {
     current: isCurrentPage(view, pageName, track),
   });
   if (isPublisher(feed)) {
-    // The panel of a publisher feed lists its releases, and the tabs hold its
-    // pages (ADR 0239 item 4).
+    // The panel of a publisher feed shows the groups of its level, and the
+    // tabs hold its pages (ADR 0239 item 4, ADR 0240 item 7).
     const byId = new Map((feeds || []).map((f) => [f.id, f]));
-    const owned = (feed.release_ids || []).map((id) => byId.get(id)).filter(Boolean);
-    items.push({ id: 'releases-heading', label: 'Releases', heading: true });
     const level = pageLevel(feed.id, from);
-    owned.forEach((release) => items.push({
-      id: `release:${release.id}`,
-      label: displayTitle(release),
-      target: openFeedView(release.id, narrow, level),
-    }));
-    items.push({ id: 'add-release', label: 'Add release', action: 'add-feed', open: 'album',
-      start: releaseStart(feed, feed.title) || {}, from: level });
+    const groups = pageGroups(feed, feeds || []);
+    for (const section of groups.sections) {
+      items.push({ id: `${section.heading.toLowerCase()}-heading`, label: section.heading, heading: true });
+      section.feeds.forEach((child) => items.push({
+        id: `page:${child.id}`,
+        label: displayTitle(child),
+        target: openFeedView(child.id, narrow, level),
+      }));
+      if (section.add) items.push({ id: `add-${section.add.add}`, label: section.add.label, action: 'add-feed', open: section.add.open, start: section.add.start, from: level });
+    }
+    if (groups.releases) {
+      items.push({ id: 'releases-heading', label: 'Releases', heading: true });
+      (feed.release_ids || []).map((id) => byId.get(id)).filter(Boolean).forEach((release) => items.push({
+        id: `release:${release.id}`,
+        label: displayTitle(release),
+        target: openFeedView(release.id, narrow, level),
+      }));
+      if (groups.releaseAdd) items.push({ id: 'add-release', label: groups.releaseAdd.label, action: 'add-feed', open: groups.releaseAdd.open, start: groups.releaseAdd.start, from: level });
+    }
     return items;
   }
   // A playlist has no track pages, so its tracks are a tab (ADR 0053 item 4).
@@ -354,7 +364,7 @@ const HEADINGS = [
   ...ROLES.filter((role) => !FIRST_CLASS_ROLES.includes(role)).map((role) => [role, `${roleWord(role)}s`]),
 ];
 
-function headingIndex(feed) {
+export function headingIndex(feed) {
   const roles = feed.publisher_roles || [];
   const first = ROLES.find((role) => roles.includes(role));
   return first ? HEADINGS.findIndex(([role]) => role === first) : HEADINGS.length;
@@ -423,29 +433,46 @@ function titleOf(feeds, id) {
   return feed ? displayTitle(feed) : 'Releases';
 }
 
-// The left panel of a level (ADR 0088 item 5): "‹" to the level above, the
-// head of the feed, the feeds directly below it under their role headings,
-// then its releases in feed order.
-function feedLevel(owner, view, feeds) {
-  const trail = Array.isArray(view.trail) ? view.trail : [];
+// The groups of a publisher feed (ADR 0240 items 5 and 6). The level panel
+// and the outline use this one function (ADR 0240 item 7). A hosting feed has
+// Labels and Artists with their add rows, and no group Releases. A label feed
+// has Artists with its add row, then Releases with no add row. An artist feed
+// has Releases with its add row. A group of a different role heading shows
+// only when it has rows, and it has no add row. `sections` hold the feeds
+// below `owner` under their role headings. `releases` is false for a hosting
+// feed. `releaseAdd` is null when the feed is not an artist feed.
+function pageGroups(owner, feeds) {
   const byId = new Map(feeds.map((feed) => [feed.id, feed]));
-  const from = { group: owner.id, trail };
   const children = (owner.child_ids || []).map((id) => byId.get(id)).filter(Boolean);
   const rank = headingIndex(owner);
   const addHeadings = rank === 0 ? ['Labels', 'Artists'] : rank === 1 ? ['Artists'] : [];
-  const sections = headed(children, (feed) => ({
-    id: feed.id,
-    label: displayTitle(feed),
-    dot: feedKind(feed).dot,
-    glow: kindGlow(feedKind(feed)),
-    art: publisherArt(feed, feeds),
-    count: (feed.release_ids || []).length,
-    view: { name: 'releases', group: feed.id, trail: [...trail, owner.id] },
-  }));
+  const sections = headed(children, (feed) => feed);
   for (const heading of addHeadings) {
     if (!sections.some((section) => section.heading === heading)) sections.push({ heading, items: [] });
   }
   sections.sort((a, b) => HEADINGS.findIndex((entry) => entry[1] === a.heading) - HEADINGS.findIndex((entry) => entry[1] === b.heading));
+  const adds = {
+    Artists: { add: 'artist', label: 'Add artist', open: 'publisher', start: { role: 'artist', below_id: owner.id } },
+    Labels: { add: 'label', label: 'Add label', open: 'publisher', start: { role: 'label', below_id: owner.id } },
+  };
+  const releases = rank !== 0;
+  return {
+    sections: sections.map((section) => ({ heading: section.heading, feeds: section.items, add: adds[section.heading] || null })),
+    releases,
+    releaseAdd: releases && (owner.publisher_roles || []).includes('artist')
+      ? { add: 'release', label: 'Add release', open: 'album', start: releaseStart(owner, owner.title) || {} }
+      : null,
+  };
+}
+
+// The left panel of a level (ADR 0088 item 5): "‹" to the level above, the
+// head of the feed, the feeds directly below it under their role headings,
+// then its releases in feed order. The groups follow ADR 0240 item 5.
+function feedLevel(owner, view, feeds) {
+  const trail = Array.isArray(view.trail) ? view.trail : [];
+  const byId = new Map(feeds.map((feed) => [feed.id, feed]));
+  const from = { group: owner.id, trail };
+  const groups = pageGroups(owner, feeds);
   return {
     kind: 'level',
     back: { label: trail.length > 0 ? titleOf(feeds, trail[trail.length - 1]) : 'Releases', view: upView(trail, owner.id) },
@@ -458,16 +485,28 @@ function feedLevel(owner, view, feeds) {
       dot: feedKind(owner).dot,
       from,
     },
-    sections: sections.map((section) => ({ ...section,
-      add: section.heading === 'Artists' ? { add: 'artist', label: 'Add artist', open: 'publisher', start: { role: 'artist', below_id: owner.id }, from }
-        : section.heading === 'Labels' ? { add: 'label', label: 'Add label', open: 'publisher', start: { role: 'label', below_id: owner.id }, from } : null })),
-    releaseAdd: { add: 'release', label: 'Add release', open: 'album', start: releaseStart(owner, owner.title) || {}, from },
-    from,
-    releases: (owner.release_ids || []).map((id) => byId.get(id)).filter(Boolean).map((feed) => ({
-      id: feed.id,
-      title: displayTitle(feed),
-      from,
+    sections: groups.sections.map((section) => ({
+      heading: section.heading,
+      items: section.feeds.map((feed) => ({
+        id: feed.id,
+        label: displayTitle(feed),
+        dot: feedKind(feed).dot,
+        glow: kindGlow(feedKind(feed)),
+        art: publisherArt(feed, feeds),
+        count: (feed.release_ids || []).length,
+        view: { name: 'releases', group: feed.id, trail: [...trail, owner.id] },
+      })),
+      add: section.add && { ...section.add, from },
     })),
+    releaseAdd: groups.releaseAdd && { ...groups.releaseAdd, from },
+    from,
+    releases: groups.releases
+      ? (owner.release_ids || []).map((id) => byId.get(id)).filter(Boolean).map((feed) => ({
+        id: feed.id,
+        title: displayTitle(feed),
+        from,
+      }))
+      : null,
   };
 }
 
@@ -551,9 +590,18 @@ function relatedLevels(feeds, owner) {
   return found;
 }
 
-// The releases with no artist or label in the collection (ADR 0085 item 3).
+// The releases with no artist, label or hosting page in the collection (ADR 0240 item 9).
 export function unlinkedReleases(feeds) {
-  return feeds.filter((feed) => isRelease(feed) && (feed.publisher_ids || []).length === 0);
+  const byId = new Map((feeds || []).map((feed) => [feed.id, feed]));
+  return (feeds || []).filter((feed) => isRelease(feed) && !(feed.publisher_ids || []).some((id) => {
+    const page = byId.get(id);
+    return isPublisher(page) && (page.publisher_roles || []).some((role) => ['artist', 'label', 'hosting'].includes(role));
+  }));
+}
+
+// The destination after a release move (ADR 0240 item 19).
+export function movedReleaseView(artistId) {
+  return { name: 'releases', group: artistId };
 }
 
 // The cover of a feed row. The row has the `itunes:image` as `image` and
@@ -687,7 +735,7 @@ export function releasesList({ feeds, connectors, sort, view, reversed, marked, 
     };
   } else if (group === 'none') {
     chosen = unlinkedReleases(list);
-    head = { id: null, title: 'Not linked', typeLabel: null, dot: null, note: 'These releases have no link to an artist or a label.' };
+    head = { id: null, title: 'Not linked', typeLabel: null, dot: null, note: 'These releases have no artist page, label page or hosting page.' };
   } else if (group === 'other') {
     chosen = otherFeeds(list);
     head = { id: null, title: 'Other feeds', typeLabel: null, dot: null, note: 'Studio edits albums, playlists, and artist and label feeds. It shows only the facts of these feeds.' };

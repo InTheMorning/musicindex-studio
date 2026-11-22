@@ -7,7 +7,7 @@ import { UI_SCALES, SCALE_KEY, normalizeScale, measureWindowUnits } from './uisc
 import { LOCK_HINT, START_HINT, lockChoiceText } from './vaultlock.js';
 import { serverFilesRows, sizeText, SERVER_FILES_NOTE } from './assets.js';
 import { failedLine } from './failures.js';
-import { OPEN_MERGE, OPEN_FEED_MOVE, MoveAllSheet, AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, OUTSIDE_RECHECK, restoreDeletedFile, checkDeletedAgain, AnnounceChoice, UndoButtons, useUndoKeys, DeleteUndoBar, removeFeedFromCollection } from './editor.js';
+import { OPEN_MERGE, OPEN_FEED_MOVE, MoveAllSheet, MoveSheet, AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, OUTSIDE_RECHECK, restoreDeletedFile, checkDeletedAgain, AnnounceChoice, UndoButtons, useUndoKeys, DeleteUndoBar, removeFeedFromCollection } from './editor.js';
 import {
   recipientKey,
   outcomeText, blockedText, operationLine, nameOf, writableIds, firstOpenId, initialStatuses, refreshedStatuses, startWrite,
@@ -55,7 +55,7 @@ import {
   mediumKind, feedKind, FIRST_CLASS_ROLES, roleWord, kindGlow, isEditable, isReadOnly, isPublisher, trackKey, isTrack,
   leftPanel, releasesList, listQuery, queryText, sortLabel, sortEntries, mosaicCells, otherFeedText, feedCover,
   startNav, pushNav, backNav, forwardNav, releasesView, canBack, canForward, setScroll,
-  isFeedView, openFeedView, newFeedView, navAtWidth, pageTabs, tabsFit, showsRootButtons, rootNav, segmentKey, levelFeedSet, isTabChange } from './shell.js';
+  isFeedView, openFeedView, newFeedView, navAtWidth, pageTabs, tabsFit, showsRootButtons, rootNav, segmentKey, levelFeedSet, isTabChange, movedReleaseView } from './shell.js';
 import {
   eventsToSign, signErrorText,
   npubOf, addressLines, linesText, invalidConfigField, blossomDefaultName, siteAddress, siteNameFromGuid, isNsec,
@@ -3524,7 +3524,8 @@ function Level({ panel, go, back, onAddFeedRow = () => {} }) {
   let cursor = back ? 1 : 0;
   const headIndex = cursor++;
   // A different level can have fewer rows, so the current row stays in range.
-  const total = cursor + panel.sections.reduce((n, section) => n + section.items.length + (section.add ? 1 : 0), 0) + panel.releases.length + 1;
+  const total = cursor + panel.sections.reduce((n, section) => n + section.items.length + (section.add ? 1 : 0), 0)
+    + (panel.releases ? panel.releases.length + (panel.releaseAdd ? 1 : 0) : 0);
   const currentIndex = current === null || current >= total ? (back ? 0 : headIndex) : current;
   // A row with no child rows has no `aria-expanded` (musicindex ADR 0061
   // R-LISTKEY-2 item 1).
@@ -3546,11 +3547,11 @@ function Level({ panel, go, back, onAddFeedRow = () => {} }) {
         attrs=${rowAttrs(index, headIndex)} onOpen=${() => go(item.view)} />`; })}
       ${section.add && html`<${AddTreeRow} item=${section.add} attrs=${rowAttrs(cursor++, headIndex)} onAdd=${onAddFeedRow} />`}
     </div>`)}
-    ${html`<div class="destination-group">
+    ${panel.releases && html`<div class="destination-group">
       <h2 class="panel-heading">Releases</h2>
       ${panel.releases.map((item) => { const index = cursor++; return html`<${LevelRow} item=${item} set=${feeds.filter((feed) => feed.id === item.id)} label=${item.title}
         attrs=${rowAttrs(index, headIndex)} onOpen=${() => go(openFeedView(item.id, narrow, item.from))} />`; })}
-      <${AddTreeRow} item=${panel.releaseAdd} attrs=${rowAttrs(cursor++, headIndex)} onAdd=${onAddFeedRow} />
+      ${panel.releaseAdd && html`<${AddTreeRow} item=${panel.releaseAdd} attrs=${rowAttrs(cursor++, headIndex)} onAdd=${onAddFeedRow} />`}
     </div>`}</div>`;
 }
 
@@ -3724,7 +3725,7 @@ export function LetterBar({ letters, idOf }) {
 // `marked` is the feed that the last Back selection left marked. With a
 // `group`, the page shows the releases of one destination below Releases,
 // and the sort of that page is `groupSort` (ADR 0085 items 4 to 6).
-function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, groupReversed, changedFeeds, onQuery, onGroupSort, onOpen, onAddedFeed, onConnect, from }) {
+function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, groupReversed, changedFeeds, onQuery, onGroupSort, onOpen, onAddedFeed, onConnect, onListChanged, onGo, from }) {
   const inGroup = group !== undefined;
   // The search text stays in the page and not in the address (ADR 0223
   // item 6). A different feed group starts with no text.
@@ -3742,6 +3743,9 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
   const headFeed = inGroup && head && head.id !== null ? feeds.find((f) => f.id === head.id) : null;
   const more = releaseAdd(headFeed, headFeed && headFeed.title);
   const [adding, setAdding] = useState(null);
+  // The ID of the release in the sheet "Move {title}" (ADR 0240 item 10).
+  const [moving, setMoving] = useState(null);
+  const movingFeed = moving === null ? null : feeds.find((f) => f.id === moving);
   // The groups "Not linked" and "Other" have no add menu (ADR 0230 item 2
   // names the top page and the pages of a publisher).
   const hideAdd = inGroup && !headFeed;
@@ -3770,7 +3774,7 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
           ${hasUnfilteredRows && html`<${SortMenu} sorts=${releases.sorts} sort=${releases.sort} reversed=${releases.reversed} onSort=${pickSort} />`}
           ${hasUnfilteredRows && viewButton('rows', 'Rows', html`<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>`)}
           ${hasUnfilteredRows && viewButton('tiles', 'Tiles', html`<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"></rect><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"></rect><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"></rect><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"></rect></svg>`)}
-          ${!hideAdd && html`<${AddMenu} release=${more} from=${from} onOpenForm=${setAdding} />`}
+          ${!hideAdd && html`<${AddMenu} release=${more} head=${headFeed} from=${from} onOpenForm=${setAdding} />`}
           ${head && head.id !== null && html`<button class="button" type="button" onClick=${() => onOpen(head.id)}>${head.typeLabel} Page</button>`}
         </div>`}
       </div>
@@ -3795,6 +3799,8 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
                   ${releases.view === 'rows' && html`<span class="sub">${row.draftLabel}</span>`}
                 </span>
               </button>
+              ${group === 'none' && feeds.some((f) => f.id === row.id && f.connector_id) && html`<div class="actions"><button class="button" type="button"
+                aria-label=${`Move ${row.title} to pages`} onClick=${() => setMoving(row.id)}>Move To…</button></div>`}
             </li>`)}
           <//>`
         : query.trim()
@@ -3803,17 +3809,21 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
         ? html`<div class="empty-releases"><p class="empty">No releases are linked yet.</p></div>`
         : html`<div class="empty-releases">
             <p class="empty">No releases yet.</p>
-            <div class="actions"><${AddMenu} release=${more} from=${from} onOpenForm=${setAdding} /></div>
+            <div class="actions"><${AddMenu} release=${more} head=${headFeed} from=${from} onOpenForm=${setAdding} /></div>
           </div>`}
     </section>
     ${adding && html`<${AddFeedRowSheet} open=${adding.open} connectors=${connectors} feeds=${feeds}
       start=${adding.start} onAdded=${addedRelease} onConnect=${onConnect} onClose=${() => setAdding(null)} />`}
+    ${movingFeed && html`<${MoveSheet} release=${movingFeed} feeds=${feeds} connectors=${connectors} onListChanged=${onListChanged}
+      onMoved=${async (changed, body) => { setMoving(null); await onListChanged(); onGo(movedReleaseView(body.artist_id)); }}
+      onClose=${() => setMoving(null)} />`}
   </div>`;
 }
 
-// The add menu of Releases and a publisher page (ADR 0233 item 1).
-function AddMenu({ release, from, onOpenForm }) {
-  const items = addMenuEntries(release);
+// The add menu of Releases and a publisher page (ADR 0233 item 1). `head` is
+// the feed of the page head, or null on Releases (ADR 0240 item 4).
+function AddMenu({ release, head, from, onOpenForm }) {
+  const items = addMenuEntries(release, head);
   return html`<${MenuControl} className="add-menu" buttonLabel="＋ Add" accessibleName="Add" menuLabel="Add" items=${items}
     onSelect=${(entry) => onOpenForm({ open: entry.open, start: entry.start, from })} />`;
 }
@@ -3851,6 +3861,7 @@ function WelcomePage({ connectors, feeds, onAdded }) {
       <div class="group welcome-group">
         <${WelcomeRow} row=${WELCOME.rows.music} primary=${true} onClick=${() => setSheet('music')} />
         <${WelcomeRow} row=${WELCOME.rows.label} onClick=${() => setSheet('label')} />
+        <${WelcomeRow} row=${WELCOME.rows.hosting} onClick=${() => setSheet('hosting')} />
       </div>
       <div class="group">
         <${WelcomeRow} row=${WELCOME.rows.online} onClick=${() => setSheet('find')} />
@@ -3861,7 +3872,7 @@ function WelcomePage({ connectors, feeds, onAdded }) {
         <button class="button link" type="button" onClick=${() => setImporting(true)}>${WELCOME.importButton}</button></p>
         <p class="hint">${DESKTOP_IMPORT_HINT}</p>`}
     </section>
-    ${(sheet === 'music' || sheet === 'label') && html`<${StartSheet} key=${sheet} path=${sheet}
+    ${(sheet === 'music' || sheet === 'label' || sheet === 'hosting') && html`<${StartSheet} key=${sheet} path=${sheet}
       connectors=${connectors} feeds=${feeds} onAdded=${onAdded} onClose=${() => setSheet(null)} />`}
     ${(sheet === 'find' || sheet === 'msp') && html`<${AddFeedRowSheet} open=${sheet} connectors=${connectors} feeds=${feeds}
       onAdded=${onAdded} onClose=${() => setSheet(null)} />`}
@@ -3879,7 +3890,7 @@ function WelcomeRow({ row, primary = false, selected = null, onClick }) {
   </button>`;
 }
 
-// The sheet of a musician or a label (ADR 0119 items 4 to 7, ADR 0122 item 2).
+// The sheet of a musician, a label or a host (ADR 0240 item 3, ADR 0119 items 4 to 7, ADR 0122 item 2).
 // Step 1 asks the name. Step 2 always shows. It has the select menu of the
 // connected file hosts, when one exists, and the rows of the file host types.
 // Then the draft of the publisher feed is made. Studio writes nothing (ADR 0007).
@@ -4360,7 +4371,7 @@ function Shell({ vault, onLock, version }) {
       onGroupSort=${(sort, reversed) => go({ ...view, sort, reversed }, { replace: true })}
       changedFeeds=${changedFeeds} onQuery=${changeList}
       onOpen=${(id) => go(openFeedView(id, narrow, from))}
-      onAddedFeed=${addedFeed} onConnect=${() => go({ name: 'hosts' })} from=${from} />`;
+      onAddedFeed=${addedFeed} onConnect=${() => go({ name: 'hosts' })} onListChanged=${() => load()} onGo=${go} from=${from} />`;
   }
 
   const navValue = { coarse, canBack: canBack(nav), canForward: canForward(nav), back, forward, setLeaveGuard,

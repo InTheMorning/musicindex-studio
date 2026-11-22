@@ -3,6 +3,7 @@
 // state. `app.js` and `editor.js` show the rows and the sheets.
 import { isPublisher, releaseStart } from './shell.js';
 import { feedFileStart } from './addfeeds.js';
+import { writablePages } from './movepages.js';
 
 // The texts of the Welcome page (ADR 0119 items 2 and 3).
 export const WELCOME = {
@@ -11,6 +12,7 @@ export const WELCOME = {
   rows: {
     music: { icon: 'music', title: 'I make music', line: 'Start with your artist page. Your albums go on it.' },
     label: { icon: 'tag', title: 'I run a label', line: 'Start with your label page. Your artists and releases go on it.' },
+    hosting: { icon: 'users', title: "I'm hosting for other artists", line: 'Start with your hosting page. The artists and labels that you host go on it.' },
     online: { icon: 'search', title: 'My music is online already', line: 'Find your artist or albums, and bring them into Studio.' },
   },
   mspBefore: 'Moving from MSP 2.0?',
@@ -46,9 +48,18 @@ const PATHS = {
     hint: null,
     page: 'label page',
   },
+  // ADR 0240 item 3: the third path makes a hosting page.
+  hosting: {
+    role: 'hosting',
+    steps: ['Your name', 'Where it lives', 'Your first artist'],
+    sheet: 'Your hosting page',
+    nameLabel: 'Your name',
+    hint: null,
+    page: 'hosting page',
+  },
 };
 
-// The step names of a path, `music` or `label`.
+// The step names of a path, `music`, `label` or `hosting`.
 export function welcomeSteps(path) {
   return PATHS[path].steps;
 }
@@ -123,9 +134,10 @@ export function welcomeBody(path, name, connectorId) {
   };
 }
 
-// The next step of the page of a publisher feed (ADR 0119 item 8). It is
-// `album` for an artist with no release, `label` for a label with no
-// release, and `null` for any other feed. `release_ids` holds the releases
+// The next step of the page of a publisher feed (ADR 0119 item 8, ADR 0240
+// item 3). It is `album` for an artist with no release, `label` for a label
+// with no release, `hosting` for a hosting page with no page below it, and
+// `null` for any other feed. `release_ids` holds the releases
 // of the feed, and `child_ids` the publisher feeds below it (ADR 0088).
 export function nextStep(feed) {
   if (!feed || !isPublisher(feed)) return null;
@@ -133,6 +145,7 @@ export function nextStep(feed) {
   const role = (feed.publisher_roles || [])[0];
   if (role === 'artist') return 'album';
   if (role === 'label') return 'label';
+  if (role === 'hosting') return 'hosting';
   return null;
 }
 
@@ -147,8 +160,7 @@ export function releaseAdd(feed, name) {
 // The artist pages that can receive a new release. A read-only page cannot
 // receive the link of the new release.
 export function releaseArtistChoices(feeds) {
-  return (feeds || [])
-    .filter((feed) => isPublisher(feed) && feed.connector_id && (feed.publisher_roles || []).includes('artist'))
+  return writablePages(feeds, 'artist')
     .map((feed) => [String(feed.id), feed.title || feed.path || 'Untitled feed']);
 }
 
@@ -164,17 +176,25 @@ export const FIRST_STEPS = {
   },
   label: [
     { icon: 'music', title: 'Add an artist', line: 'Make a page for an artist on your label. Their albums go on it.', open: 'publisher' },
-    { icon: 'disc', title: 'Add a release', line: 'An album that the label puts out, with its artist.', open: 'album' },
+    { icon: 'search', title: 'Find an artist that is online', line: 'Link an artist page that exists already.', open: 'find' },
+  ],
+  // ADR 0240 item 3: the rows of the page of a new hosting page. `role` is the
+  // start role of the form that the row opens.
+  hosting: [
+    { icon: 'music', title: 'Add an artist', line: 'Make a page for an artist on your hosting page. Their albums go on it.', open: 'publisher', role: 'artist' },
+    { icon: 'tag', title: 'Add a label', line: 'Make a page for a label on your hosting page. Its artists go on it.', open: 'publisher', role: 'label' },
     { icon: 'search', title: 'Find an artist that is online', line: 'Link an artist page that exists already.', open: 'find' },
   ],
 };
 
 // The start values of the form that a first-step row opens (ADR 0119 item
 // 8). An album of an artist starts with the artist as its author. A new
-// artist of a label starts with the role `artist`. These are edit aids, not
-// feed rules (ADR 0065).
-export function firstStart(first, open, model, publisherId) {
+// artist of a label starts with the role `artist`. A new page of a hosting
+// page starts with the role of its row, below the hosting page (ADR 0240 item
+// 3). These are edit aids, not feed rules (ADR 0065).
+export function firstStart(first, open, model, publisherId, role) {
   if (first === 'album' && open === 'album') return { author: (model && model.title) || '', publisher_id: publisherId };
   if (first === 'label' && open === 'publisher') return { role: 'artist' };
+  if (first === 'hosting' && open === 'publisher') return { role: role || 'artist', below_id: publisherId };
   return {};
 }

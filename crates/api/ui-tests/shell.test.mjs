@@ -154,11 +154,11 @@ test('a publisher feed gives its releases, and a feed that the editor does not o
   // musicindex ADR 0033 R-WORD-3: the page has the role word.
   const label = { ...publisher, publisher_roles: ['label'], roles_confirmed: true };
   const pub = leftPanel({ view: { name: 'feed', id: 2 }, feeds: [label], model: null, vaultOpen: false });
-  assert.deepEqual(labels(pub.items), ['Releases', 'Releases', 'Add release'], 'ADR 0232 item 3: the outline shows Releases and its add row when it has no release.');
+  assert.deepEqual(labels(pub.items), ['Releases', 'Artists', 'Add artist', 'Releases'], 'ADR 0240 items 5 and 7: the outline of a label feed shows Artists with its add row, then Releases with no add row. Fix outlineItems in crates/api/ui/shell.js.');
   const owner = { ...label, release_ids: [1] };
   const full = leftPanel({ view: { name: 'feed', id: 2 }, feeds: [owner, album], model: null, vaultOpen: false });
-  assert.deepEqual(labels(full.items), ['Releases', 'Releases', 'Night Songs', 'Add release'], 'ADR 0232 item 3: the Releases group ends with its add row.');
-  assert.deepEqual(full.items[2].target, { name: 'feed', id: 1, from: { group: 2, trail: [] } });
+  assert.deepEqual(labels(full.items), ['Releases', 'Artists', 'Add artist', 'Releases', 'Night Songs'], 'ADR 0240 items 5 and 7: the Releases of a label feed have no add row. Fix outlineItems in crates/api/ui/shell.js.');
+  assert.deepEqual(full.items[4].target, { name: 'feed', id: 1, from: { group: 2, trail: [] } });
   const podcast = { ...readOnly, medium: 'podcast' };
   const read = leftPanel({ view: { name: 'feed', id: 3 }, feeds: [podcast], model: null, vaultOpen: false });
   assert.deepEqual(labels(read.items), ['Releases']);
@@ -599,13 +599,22 @@ test('the page of a feed with roles gives its releases in feed order, with a not
 
 test('Not linked gives the releases with no link, and Releases gives each release', () => {
   const none = releasesList({ feeds: catalog, connectors: [], sort: 'order', view: 'rows', group: 'none' });
-  assert.deepEqual(none.rows.map((r) => r.id), [23], 'ADR 0085 item 3: "Not linked" gives each release with no link.');
+  assert.deepEqual(none.rows.map((r) => r.id), [23], 'ADR 0085 item 3: Not linked gives each release with no page link.');
   assert.equal(none.sort, 'newest', 'ADR 0085 item 4: "Not linked" has no feed order.');
   assert.equal(none.head.title, 'Not linked');
+  assert.equal(none.head.note, 'These releases have no artist page, label page or hosting page.');
   const all = releasesList({ feeds: catalog, connectors: [], sort: 'newest', view: 'rows' });
   assert.deepEqual(all.rows.map((r) => r.id), [21, 23, 22], 'ADR 0085 item 6: Releases gives each album and playlist.');
   assert.equal(all.head, null);
   assert.equal(all.rows.every((r) => r.note === null), true);
+});
+
+test('Not linked includes a release linked only to a page of another role (ADR 0240 item 9)', () => {
+  const producer = { id: 24, title: 'Producer', medium: 'publisher', publisher_roles: ['producer'], connector_id: 'c1' };
+  const release = { id: 25, title: 'Linked elsewhere', medium: 'music', publisher_ids: [24], added_at: 25, draft_state: 'none' };
+  const list = releasesList({ feeds: [producer, release], connectors: [], sort: 'newest', view: 'rows', group: 'none' });
+  assert.deepEqual(list.rows.map((row) => row.id), [25]);
+  assert.equal(list.head.note, 'These releases have no artist page, label page or hosting page.');
 });
 
 test('a destination below Releases is a page of the root at narrow width', () => {
@@ -654,6 +663,7 @@ test('a level gives the way up, the head, the feeds below and the releases', () 
 });
 
 test('a level gives its ranked groups and add rows when they have no feed rows', () => {
+  const owner = 'ADR 0240 items 5 and 6: a hosting feed has Labels and Artists and no Releases, a label feed has Artists and Releases with no add row, and an artist feed has Releases with its add row. Fix pageGroups and feedLevel in crates/api/ui/shell.js.';
   const hosting = { ...host, child_ids: [], connector_id: 'host' };
   const label = { ...labelA, child_ids: [], release_ids: [], connector_id: 'label' };
   const artist = { ...artistX, child_ids: [], release_ids: [], connector_id: 'artist' };
@@ -662,26 +672,48 @@ test('a level gives its ranked groups and add rows when they have no feed rows',
   assert.deepEqual(hostPanel.sections.map((section) => [section.heading, section.add.label, section.add.start]), [
     ['Labels', 'Add label', { role: 'label', below_id: hosting.id }],
     ['Artists', 'Add artist', { role: 'artist', below_id: hosting.id }],
-  ]);
-  assert.deepEqual(hostPanel.releaseAdd.start, {});
+  ], owner);
+  assert.equal(hostPanel.releases, null, owner);
+  assert.equal(hostPanel.releaseAdd, null, owner);
   const labelPanel = panelOf(label);
-  assert.deepEqual(labelPanel.sections.map((section) => section.heading), ['Artists']);
-  assert.deepEqual(labelPanel.sections[0].add.start, { role: 'artist', below_id: label.id });
+  assert.deepEqual(labelPanel.sections.map((section) => section.heading), ['Artists'], owner);
+  assert.deepEqual(labelPanel.sections[0].add.start, { role: 'artist', below_id: label.id }, owner);
+  assert.deepEqual(labelPanel.releases, [], owner);
+  assert.equal(labelPanel.releaseAdd, null, owner);
   const artistPanel = panelOf(artist);
-  assert.deepEqual(artistPanel.sections, []);
-  assert.deepEqual(artistPanel.releaseAdd.start, { author: artist.title, publisher_id: artist.id });
+  assert.deepEqual(artistPanel.sections, [], owner);
+  assert.deepEqual(artistPanel.releaseAdd.start, { author: artist.title, publisher_id: artist.id }, owner);
+  assert.deepEqual(artistPanel.releases, [], owner);
 });
 
-test('the outline gives the Releases heading and an add row with its correct parent', () => {
-  const artist = { ...artistX, connector_id: 'artist', release_ids: [] };
-  const artistPanel = leftPanel({ view: { name: 'feed', id: artist.id }, feeds: [artist], model: null, vaultOpen: false });
-  const artistAdd = artistPanel.items.find((item) => item.id === 'add-release');
-  assert.deepEqual(artistPanel.items.find((item) => item.id === 'releases-heading'),
-    { id: 'releases-heading', label: 'Releases', heading: true });
-  assert.deepEqual(artistAdd.start, { author: artist.title, publisher_id: artist.id });
-  const label = { ...labelA, connector_id: 'label', release_ids: [] };
-  const labelPanel = leftPanel({ view: { name: 'feed', id: label.id }, feeds: [label], model: null, vaultOpen: false });
-  assert.deepEqual(labelPanel.items.find((item) => item.id === 'add-release').start, {});
+test('the outline gives the groups and add rows of the level of its role', () => {
+  const owner = 'ADR 0240 item 7: the outline of a publisher feed holds the groups and the add rows of its level. Fix outlineItems in crates/api/ui/shell.js.';
+  const outlineOf = (feed) => leftPanel({ view: { name: 'feed', id: feed.id }, feeds: [feed], model: null, vaultOpen: false }).items;
+  const artist = { ...artistX, connector_id: 'artist', release_ids: [], child_ids: [] };
+  const artistItems = outlineOf(artist);
+  assert.deepEqual(artistItems.find((item) => item.id === 'releases-heading'),
+    { id: 'releases-heading', label: 'Releases', heading: true }, owner);
+  assert.deepEqual(artistItems.find((item) => item.id === 'add-release').start, { author: artist.title, publisher_id: artist.id }, owner);
+  const label = { ...labelA, connector_id: 'label', release_ids: [], child_ids: [] };
+  const labelItems = outlineOf(label);
+  assert.equal(labelItems.some((item) => item.id === 'add-release'), false, owner);
+  assert.deepEqual(labelItems.find((item) => item.id === 'add-artist').start, { role: 'artist', below_id: label.id }, owner);
+  assert.deepEqual(labelItems.filter((item) => item.heading).map((item) => item.label), ['Artists', 'Releases'], owner);
+  const hosting = { ...host, connector_id: 'host', release_ids: [], child_ids: [] };
+  const hostItems = outlineOf(hosting);
+  assert.deepEqual(hostItems.filter((item) => item.heading).map((item) => item.label), ['Labels', 'Artists'], owner);
+  assert.deepEqual(hostItems.filter((item) => item.action).map((item) => [item.label, item.start]), [
+    ['Add label', { role: 'label', below_id: hosting.id }],
+    ['Add artist', { role: 'artist', below_id: hosting.id }],
+  ], owner);
+  assert.equal(hostItems.some((item) => item.id === 'add-release'), false, owner);
+});
+
+test('a hosting outline lists the pages below it, and a playlist has only its head (ADR 0240 item 7)', () => {
+  const owner = 'ADR 0240 item 7: the rows below a heading are the pages below the feed. Fix outlineItems in crates/api/ui/shell.js.';
+  const items = leftPanel({ view: { name: 'feed', id: 40 }, feeds: tree, model: null, vaultOpen: false }).items;
+  assert.deepEqual(items.map((item) => item.label), ['Releases', 'Labels', 'Label A', 'Label B', 'Add label', 'Artists', 'Add artist'], owner);
+  assert.deepEqual(items[2].target, { name: 'feed', id: 41, from: { group: 40, trail: [] } }, owner);
 });
 
 test('a new feed keeps the view of its source level', () => {

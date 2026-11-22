@@ -4,7 +4,9 @@ Decision: [ADR 0122](../adr/0122-a-new-user-starts-with-a-default-file-host.md) 
 
 Operator choice (2026-11-21): on a server, the form "Add a file host" of the File Hosts page also offers the temporary area, as step 2 of the Welcome sheet does. On the desktop, the same form offers "Folder on this computer". No decision record is necessary. The route and the limit of one temporary area exist (ADR 0122 item 9), and only one form changes.
 
-Status: Open. Start after task 224 is committed, because task 224 changes `crates/api/ui/app.js`.
+Status: Done. The main session checked the visual criteria with screenshots of a server-mode Studio on 2026-11-21, in the dark theme at 1280 px. On File Hosts, "Temporary area (7 days)" was the first type, with its hint. After the add, the type was not in the menu. Step 2 of the Welcome sheet made the page on the temporary area.
+
+Operator choice (2026-11-21), defect correction: the match route after an add gave 422 for the temporary area. `apply_folder_address` made the connector with no temporary folder. After the correction, it gets the host environment of the workspace, and the test `the_match_route_accepts_the_temporary_area` covers it.
 
 ## Problem
 

@@ -21,7 +21,7 @@ import {
   nip46State, nip46ErrorText, isBunkerAddress, qrSource, UNLOCK_AGAIN_TEXT, needsRecentUnlock,
 } from './account.js';
 import { addMenuEntries, addSearchRows, addRowIsArtist, addSheetRows, addResultMark, addFoundValues, foundPageValues, foundPages, foundIndexPage, MAKE_TYPES, RELEASE_KINDS, makeFields, makeTitle, feedFileStart, parentCard, shouldAddTracksAfterNewRelease } from './addfeeds.js';
-import { WELCOME, HOST_STEP, showWelcome, welcomeSteps, pathTexts, hostStepModel, welcomeBody, releaseAdd, releaseArtistChoices, libraryResult } from './welcome.js';
+import { WELCOME, HOST_STEP, showWelcome, welcomeSteps, pathTexts, hostStepModel, hostTypeOptions, welcomeBody, releaseAdd, releaseArtistChoices, libraryResult } from './welcome.js';
 import { isLiveItem } from './live.js';
 import { appRowLines, pairingPhase, pairingNotice, doneRemovesApp } from './apps.js';
 import { CONFIRMS, confirmButtons } from './confirms.js';
@@ -1408,17 +1408,23 @@ export function RoleMenu({ id, label = 'Role', role, group, hint, status, pendin
 // `start` is the type that the form opens with (ADR 0119 item 6). `showType`
 // hides the choice when the sheet shows the rows of step 2 (ADR 0122 item 2).
 // `startRoot` and `submitLabel` go to the folder form (ADR 0122 item 3).
-function AddHostForm({ feeds, onAdded, start, showType = true, startRoot = '', submitLabel = null, busyLabel = null }) {
-  const [type, setType] = useState(start || (serverMode ? 's3' : 'local'));
+function AddHostForm({ feeds, connectors = [], onAdded, start, showType = true, startRoot = '', submitLabel = null, busyLabel = null }) {
+  const options = hostTypeOptions(serverMode, connectors);
+  const [type, setType] = useState(start || options[0][0]);
+  const temporary = useAction();
+  const addTemporary = (event) => {
+    event.preventDefault();
+    temporary.run(async () => onAdded(await api('/connectors', { method: 'POST', body: { kind: 'temporary' } })));
+  };
   return html`<div class="form">
-    ${showType && html`<${ChoiceSelect} id="host-type" label="Type of file host" value=${type} onChange=${setType} options=${[
-      ...(serverMode ? [] : [['local', 'Folder on this computer']]),
-      ['s3', 'S3 or R2 bucket'],
-      ['sftp', 'SFTP server'],
-      ['nsite', 'nsite site'],
-      ['blossom', 'Blossom server'],
-    ]} />`}
-    ${type === 's3'
+    ${showType && html`<${ChoiceSelect} id="host-type" label="Type of file host" value=${type} onChange=${setType} options=${options} />`}
+    ${type === 'temporary'
+      ? html`<form class="form" onSubmit=${addTemporary}>
+          ${showType && html`<p class="hint">${HOST_STEP.temporary}</p>`}
+          <${ErrorNotice} error=${temporary.error} action="Studio could not add the temporary area." />
+          <div class="actions"><button class="button primary" type="submit" disabled=${temporary.busy}>${temporary.busy ? (busyLabel || 'Adding…') : (submitLabel || 'Add the Temporary Area')}</button></div>
+        </form>`
+      : type === 's3'
       ? html`<${S3HostForm} onAdded=${onAdded} submitLabel=${submitLabel || 'Add the Bucket'}
           busyLabel=${busyLabel || 'Testing the Bucket…'} />`
       : type === 'sftp'
@@ -3086,7 +3092,7 @@ function Hosts({ connectors, feeds, onChanged, onOpen, onMoved, view }) {
         onRemove=${() => remove(c)} onOpen=${onOpen} onChanged=${onChanged} />`)}`,
     add: () => (showForm
       ? html`<div class="panel"><h2>${connectors.length === 0 ? 'Connect your first file host' : 'Add a file host'}</h2>
-          <${AddHostForm} feeds=${feeds} onAdded=${added} />
+          <${AddHostForm} feeds=${feeds} connectors=${connectors} onAdded=${added} />
           ${connectors.length > 0 && html`<button class="button link" type="button" onClick=${() => setAdding(false)}>Cancel</button>`}</div>`
       : html`<div class="actions"><button class="button action" type="button" onClick=${() => setAdding(true)}>＋ Add a File Host</button></div>`),
   };
@@ -3928,12 +3934,6 @@ function StartSheet({ path, connectors, feeds, onAdded, onClose }) {
   const now = step === 'name' ? 0 : 1;
   const makePage = async (id) => onAdded(await api('/feeds/new', { method: 'POST', body: welcomeBody(path, name.trim(), id) }));
   const createFeed = (id) => run(() => makePage(id));
-  // The row "Try it here (temporary)" sends the kind `temporary` with no other field (ADR 0122 item 4).
-  const addTemporary = () => run(async () => {
-    const connector = await api('/connectors', { method: 'POST', body: { kind: 'temporary' } });
-    setMadeHost(connector);
-    await makePage(connector.id);
-  });
   // Continue of step 1 opens step 2, which always shows (ADR 0122 item 2).
   const next = (event) => {
     event.preventDefault();
@@ -3944,11 +3944,10 @@ function StartSheet({ path, connectors, feeds, onAdded, onClose }) {
     createFeed(Number(connectorId));
   };
   // The form of the selected row. Its submit button adds the file host and makes the page.
-  const selectedForm = hostType === null ? null : hostType === 'temporary'
-    ? html`<div class="actions"><button class="button primary" type="button" disabled=${busy} onClick=${addTemporary}>${busy ? 'Making the Page…' : 'Make the Page'}</button></div>`
-    : html`<${AddHostForm} key=${hostType} feeds=${feeds} start=${hostType} showType=${false}
+  const selectedForm = hostType === null ? null
+    : html`<${AddHostForm} key=${hostType} feeds=${feeds} connectors=${connectors} start=${hostType} showType=${false}
         startRoot=${defaultRoot} submitLabel="Make the Page" busyLabel="Making the Page…"
-        onAdded=${(connector) => { setMadeHost(connector); createFeed(connector.id); }} />`;
+        onAdded=${(connector) => { setMadeHost(connector); return createFeed(connector.id); }} />`;
   return html`<dialog ref=${ref} class="sheet small" aria-labelledby="start-title" onClose=${onClose}>
     <header>
       <h2 id="start-title">${text.sheet}</h2>

@@ -10,11 +10,9 @@ use serde::Serialize;
 
 use crate::collection::{Collection, CollectionError, ConnectorId, ConnectorRow, FeedId, FeedRow};
 use crate::connector::{
-    self, ConnectorError, LocalFolder, NsiteHost, S3Bucket, S3Config, SftpConfig, SftpHost,
+    self, ConnectorError, HostEnv, LocalFolder, NsiteHost, S3Bucket, S3Config, SftpConfig, SftpHost,
 };
-use crate::net::NetPolicy;
 use crate::nostr_events;
-use crate::vault::OpenVault;
 
 /// A source of a feed address (ADR 0021 item 1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
@@ -170,8 +168,9 @@ fn candidates(feeds: &[FeedRow]) -> Candidates {
 /// all the candidates are the same. It does not replace an address that the
 /// user typed. An S3 host has only a typed address.
 ///
-/// The vault gives the secret of a connector that needs one. A host of the
-/// kind `s3` thus needs the open vault.
+/// The host environment gives the vault, the network policy and the folder
+/// of the temporary area. A host of the kind `s3` thus needs the open vault,
+/// and the temporary area needs its folder (ADR 0122 item 9).
 ///
 /// # Errors
 ///
@@ -180,8 +179,7 @@ fn candidates(feeds: &[FeedRow]) -> Candidates {
 pub fn apply_folder_address(
     collection: &mut Collection,
     id: ConnectorId,
-    vault: Option<&OpenVault>,
-    policy: &NetPolicy,
+    env: &HostEnv<'_>,
 ) -> Result<FolderAddress, AddressError> {
     let row = collection.connector(id)?;
     let linked: Vec<FeedRow> = collection
@@ -212,7 +210,7 @@ pub fn apply_folder_address(
     } else {
         FolderAddress::Unknown
     };
-    let made = connector::from_row(&collection.connector(id)?, vault, policy)?;
+    let made = connector::from_row_in(&collection.connector(id)?, env)?;
     for feed in &linked {
         if let Some(path) = &feed.path {
             collection.set_address(
@@ -486,7 +484,7 @@ mod tests {
             "https://m.example/feeds/b.xml",
             None,
         );
-        let outcome = apply_folder_address(&mut collection, id, None, &NetPolicy::Open).unwrap();
+        let outcome = apply_folder_address(&mut collection, id, &HostEnv::default()).unwrap();
         let url = "https://m.example/feeds".to_owned();
         assert_eq!(
             outcome,
@@ -506,7 +504,7 @@ mod tests {
         assert_eq!(disagreements(&collection, id), Vec::new());
         // A second match keeps the inferred address.
         assert_eq!(
-            apply_folder_address(&mut collection, id, None, &NetPolicy::Open).unwrap(),
+            apply_folder_address(&mut collection, id, &HostEnv::default()).unwrap(),
             FolderAddress::Inferred { url, new: false }
         );
     }
@@ -518,7 +516,7 @@ mod tests {
             "https://cdn.example/b.xml",
             None,
         );
-        let outcome = apply_folder_address(&mut collection, id, None, &NetPolicy::Open).unwrap();
+        let outcome = apply_folder_address(&mut collection, id, &HostEnv::default()).unwrap();
         assert_eq!(outcome, FolderAddress::Different);
         assert_eq!(folder_url(&collection.connector(id).unwrap()), None);
         assert_eq!(collection.feed(third).unwrap().public_url, None);
@@ -532,7 +530,7 @@ mod tests {
             "https://cdn.example/b.xml",
             Some("https://m.example"),
         );
-        let outcome = apply_folder_address(&mut collection, id, None, &NetPolicy::Open).unwrap();
+        let outcome = apply_folder_address(&mut collection, id, &HostEnv::default()).unwrap();
         assert_eq!(
             outcome,
             FolderAddress::Typed {

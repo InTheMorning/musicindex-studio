@@ -1813,15 +1813,19 @@ impl Workspace {
         if row.secret_ref.is_some() && self.vault.is_some() {
             self.touch_vault();
         }
-        connector::from_row_in(
-            row,
-            &HostEnv {
-                vault: self.vault.as_ref(),
-                policy: self.net_policy.clone(),
-                temporary_root: self.temporary_root(),
-                ..HostEnv::default()
-            },
-        )
+        connector::from_row_in(row, &self.host_env())
+    }
+
+    /// The host environment of a connector of this workspace: the vault,
+    /// the network policy (ADR 0057) and the folder of the temporary area
+    /// (ADR 0122 item 9).
+    pub(crate) fn host_env(&self) -> HostEnv<'_> {
+        HostEnv {
+            vault: self.vault.as_ref(),
+            policy: self.net_policy.clone(),
+            temporary_root: self.temporary_root(),
+            ..HostEnv::default()
+        }
     }
 
     /// The connector of each host, like [`Workspace::hosts`], with the

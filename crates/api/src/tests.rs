@@ -16008,6 +16008,27 @@ async fn a_server_makes_one_temporary_area_in_the_user_folder() {
     assert_eq!(body["error"]["code"], "temporary_exists");
 }
 
+/// The File Hosts page calls the match route after it adds a host. The
+/// temporary area must get its folder there too (ADR 0122 items 3 and 9).
+#[tokio::test]
+async fn the_match_route_accepts_the_temporary_area() {
+    let app = app_with_rules(1 << 30);
+    let id = make_temporary_area(&app).await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/connectors/{id}/match"),
+        None,
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0122 item 9: the match route must make the temporary area with its folder. \
+         Give apply_folder_address the host environment of the workspace: {body}"
+    );
+}
+
 #[tokio::test]
 async fn the_temporary_area_is_refused_on_the_desktop() {
     let app = app();
@@ -18097,8 +18118,7 @@ async fn the_outside_check_finds_a_folder_pointer_when_the_public_address_alread
     studio_core::address::apply_folder_address(
         &mut collection,
         connector_id,
-        None,
-        &studio_core::net::NetPolicy::Open,
+        &studio_core::connector::HostEnv::default(),
     )
     .unwrap();
     let new_root = tempfile::tempdir().unwrap();

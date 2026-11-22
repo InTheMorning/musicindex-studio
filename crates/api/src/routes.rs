@@ -1195,6 +1195,22 @@ pub(crate) fn make_default_host_folder(
         .map_err(|e| ApiError::internal(format!("{}: {e}", default.display())))
 }
 
+/// The host environment for `apply_folder_address`. The route gives the
+/// fields of the workspace one at a time, because the call also borrows the
+/// collection of the workspace (ADR 0122 item 9).
+fn folder_address_env<'a>(
+    vault: Option<&'a studio_core::vault::OpenVault>,
+    policy: &studio_core::net::NetPolicy,
+    temporary_root: Option<std::path::PathBuf>,
+) -> studio_core::connector::HostEnv<'a> {
+    studio_core::connector::HostEnv {
+        vault,
+        policy: policy.clone(),
+        temporary_root,
+        ..studio_core::connector::HostEnv::default()
+    }
+}
+
 /// Add the temporary area of a server (ADR 0122 items 3 and 9). The
 /// account has one area only. The folder is made with the workspace.
 fn add_temporary_connector(w: &Workspace) -> Result<(StatusCode, Json<Value>), ApiError> {
@@ -1292,12 +1308,8 @@ pub(crate) async fn update_connector(
             w.collection.set_connector_config(id, config)?;
             if body.gateway.is_some() {
                 // A new gateway changes the address of each linked feed.
-                studio_core::address::apply_folder_address(
-                    &mut w.collection,
-                    id,
-                    w.vault.as_ref(),
-                    &w.net_policy,
-                )?;
+                let env = folder_address_env(w.vault.as_ref(), &w.net_policy, w.temporary_root());
+                studio_core::address::apply_folder_address(&mut w.collection, id, &env)?;
             }
         }
         // A change of the host can change a secret. The grant vaults of the
@@ -1398,12 +1410,8 @@ fn set_connector_base_url(
     }
     w.collection
         .set_connector_config(row.id, &config.to_string())?;
-    studio_core::address::apply_folder_address(
-        &mut w.collection,
-        row.id,
-        w.vault.as_ref(),
-        &w.net_policy,
-    )?;
+    let env = folder_address_env(w.vault.as_ref(), &w.net_policy, w.temporary_root());
+    studio_core::address::apply_folder_address(&mut w.collection, row.id, &env)?;
     Ok(())
 }
 
@@ -3154,12 +3162,9 @@ pub(crate) async fn match_connector(
                 linked.push(feed.id);
             }
         }
-        let folder_address = studio_core::address::apply_folder_address(
-            &mut w.collection,
-            row.id,
-            w.vault.as_ref(),
-            &w.net_policy,
-        )?;
+        let env = folder_address_env(w.vault.as_ref(), &w.net_policy, w.temporary_root());
+        let folder_address =
+            studio_core::address::apply_folder_address(&mut w.collection, row.id, &env)?;
         // A new host gets its inventory immediately, so that the Files
         // page shows its copies (ADR 0036 item 6).
         // A folder address can be new, so a feed with a placeholder GUID

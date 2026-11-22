@@ -110,6 +110,19 @@ export function HOST_ROWS(serverMode) {
   ];
 }
 
+// The choices of the File Hosts form (ADR 0122 items 3 and 9).
+export function hostTypeOptions(serverMode, connectors) {
+  const hasTemporary = (connectors || []).some((connector) => connector.kind === 'temporary');
+  return [
+    ...(!serverMode ? [['local', 'Folder on this computer']] : []),
+    ...(serverMode && !hasTemporary ? [['temporary', 'Temporary area (7 days)']] : []),
+    ['s3', 'S3 or R2 bucket'],
+    ['sftp', 'SFTP server'],
+    ['nsite', 'nsite site'],
+    ['blossom', 'Blossom server'],
+  ];
+}
+
 // The rows of a library setup result. An empty library has one explanatory line.
 export function libraryResult(report) {
   const rows = [

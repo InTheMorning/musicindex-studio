@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import {
   firstStart, releaseAdd, releaseArtistChoices, libraryResult,
-  WELCOME, HOST_STEP, showWelcome, welcomeSteps, pathTexts, hostStepModel, HOST_ROWS, welcomeBody, nextStep, FIRST_STEPS,
+  WELCOME, HOST_STEP, showWelcome, welcomeSteps, pathTexts, hostStepModel, HOST_ROWS, hostTypeOptions, welcomeBody, nextStep, FIRST_STEPS,
 } from '../ui/welcome.js';
 import { isTitleCase } from '../ui/casing.js';
 
@@ -53,6 +53,15 @@ test('HOST_ROWS gives the server rows, with the temporary area as the first row'
   assert.deepEqual(server.map((r) => r.title), ['Try it here (temporary)', 'Nostr site (nsite)', 'S3 or Cloudflare R2', 'SFTP server']);
   assert.deepEqual(server.map((r) => r.type), ['temporary', 'nsite', 's3', 'sftp']);
   assert.equal(server[0].primary, true);
+});
+
+test('hostTypeOptions gives the shell default and offers only one temporary area (ADR 0122 items 3 and 9)', () => {
+  assert.deepEqual(hostTypeOptions(false, []), [
+    ['local', 'Folder on this computer'], ['s3', 'S3 or R2 bucket'], ['sftp', 'SFTP server'],
+    ['nsite', 'nsite site'], ['blossom', 'Blossom server'],
+  ]);
+  assert.deepEqual(hostTypeOptions(true, [])[0], ['temporary', 'Temporary area (7 days)']);
+  assert.equal(hostTypeOptions(true, [{ kind: 'temporary' }]).some(([kind]) => kind === 'temporary'), false);
 });
 
 test('hostStepModel selects the first row, or the menu with a connected file host', () => {

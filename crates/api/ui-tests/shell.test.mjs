@@ -1,5 +1,5 @@
 // The shell models (ADR 0042). Each test checks one rule of ADR 0039 and of
-// musicindex ADR 0027 R-NAV-2.
+// musicindex ADR 0080 R-NAV-2.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {

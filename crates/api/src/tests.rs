@@ -5628,7 +5628,7 @@ fn no_ui_file_has_the_select_a_feed_placeholder() {
     }
 }
 
-/// musicindex ADR 0041 R-SCALE-4: on 2026-10-24 Studio gave each control
+/// musicindex ADR 0068 R-SCALE-4: on 2026-10-24 Studio gave each control
 /// 44 px with a mouse. A control takes its height from the `--target`
 /// token: 28 px with a mouse, and 44 px with a coarse pointer.
 #[test]
@@ -5639,13 +5639,13 @@ fn each_control_height_uses_the_target_token() {
     let touch = "@media (pointer: coarse) {\n  :root { --target: 44px; --target-min: 28px; --row: 52px; --leading: 1.45; }\n}";
     assert!(
         css.contains("  --target: 28px;\n  --target-min: 20px;\n") && css.contains(touch),
-        "musicindex ADR 0041 R-SCALE-4: styles.css must set --target to 28 px and \
+        "musicindex ADR 0068 R-SCALE-4: styles.css must set --target to 28 px and \
          --target-min to 20 px in :root, and to 44 px and 28 px for a coarse pointer."
     );
     let rest = css.replacen(touch, "", 1);
     assert!(
         !rest.contains("44px"),
-        "musicindex ADR 0041 R-SCALE-4: styles.css has a fixed 44px. Use var(--target), \
+        "musicindex ADR 0068 R-SCALE-4: styles.css has a fixed 44px. Use var(--target), \
          which is 28 px with a mouse and 44 px with touch."
     );
 }

@@ -3674,7 +3674,7 @@ function LeftPanelFooter({ panel, go, onLock, collections }) {
   return html`<footer>
     ${panelRows(panel.bottom, go, onLock, onSignOut, () => setSwitchOpen(true), busy)}
     <${ErrorNotice} error=${error} />
-    <${SwitchCollectionSheet} open=${switchOpen} collections=${collections || []}
+    <${SwitchCollectionSheet} open=${switchOpen} collections=${collections || []} go=${go}
       onClose=${() => setSwitchOpen(false)}
       onDone=${() => setSwitchOpen(false)} />
   </footer>`;
@@ -3688,17 +3688,16 @@ function panelRows(items, go, onLock, onSignOut, onSwitch, busy) {
       : item.id === 'unlock'
       ? html`<button class="row" type="button" onClick=${() => { askUnlock(); }}><${Icon} name=${item.icon} />Unlock Studio</button>`
       : item.id === 'collection'
-      ? html`<button class="row collection-mark" type="button" onClick=${() => go({ name: 'settings' })}><${Icon} name=${item.icon} /><span class="row-label">${item.label}</span></button>`
+      // ADR 0242 item 2: the collection row opens the sheet "Switch Collection".
+      ? html`<button class=${item.mark ? 'row collection-mark' : 'row'} type="button" onClick=${onSwitch}><${Icon} name=${item.icon} /><span class="row-label">${item.label}</span></button>`
       : item.id === 'signout'
       ? html`<button class="row" type="button" disabled=${busy} onClick=${onSignOut}><${Icon} name=${item.icon} />${item.label}</button>`
-      : item.id === 'switch'
-      ? html`<button class="row" type="button" onClick=${onSwitch}><${Icon} name=${item.icon} />${item.label}</button>`
       : html`<button class="row" type="button" aria-current=${currentAttr(item)}
           onClick=${() => { if (item.opens ?? !item.current) go({ name: item.id }); }}><${Icon} name=${item.icon} />${item.label}</button>`))}`;
 }
 
 // ADR 0241 item 5: show one row for each collection in Settings order.
-function SwitchCollectionSheet({ open, collections, onClose, onDone }) {
+function SwitchCollectionSheet({ open, collections, go, onClose, onDone }) {
   const ref = useSheet(open);
   const cancelRef = useRef(null);
   const { busy, error, run } = useAction();
@@ -3712,6 +3711,8 @@ function SwitchCollectionSheet({ open, collections, onClose, onDone }) {
     setOpening(true);
     setTimeout(() => { setOpening(false); onDone(); }, 10000);
   });
+  // ADR 0242 item 4: "Manage Collections…" opens Settings, tab Data, which
+  // holds the section Collections.
   return html`<dialog ref=${ref} class="sheet small" aria-labelledby="switch-collection-title" onClose=${onClose}>
     <header>
       <h2 id="switch-collection-title">Switch Collection</h2>
@@ -3729,7 +3730,10 @@ function SwitchCollectionSheet({ open, collections, onClose, onDone }) {
       ${opening && html`<p class="hint" role="status">${OPENING_TEXT}</p>`}
       <${ErrorNotice} error=${error} />
     </div>
-    <footer><button class="button" type="button" ref=${cancelRef} onClick=${() => ref.current.close()}>Cancel</button></footer>
+    <footer>
+      <button class="button link switch-manage" type="button" onClick=${() => { ref.current.close(); go({ name: 'settings', tab: 'data' }); }}>Manage Collections…</button>
+      <button class="button" type="button" ref=${cancelRef} onClick=${() => ref.current.close()}>Cancel</button>
+    </footer>
   </dialog>`;
 }
 

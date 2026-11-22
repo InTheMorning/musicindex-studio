@@ -307,10 +307,11 @@ export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, 
     { id: 'hosts', label: 'File hosts', icon: 'hard-drive', current: inHosts(view), opens: view.name !== 'hosts' },
     { id: 'settings', label: 'Settings', icon: 'settings', current: view.name === 'settings' },
   ];
-  // The mark of a collection that is not "Main collection" (ADR 0149 item 17).
-  if (collection) bottom.push({ id: 'collection', label: collection, icon: 'folder', current: false });
-  // ADR 0241 item 4: put the switch row after the collection row.
-  if (!serverMode && collectionCount >= 2) bottom.push({ id: 'switch', label: 'Switch Collection…', icon: 'folder-open', current: false });
+  // ADR 0242 items 1 and 6: one collection row on a desktop with a list of
+  // collections. With two or more, the row is the accent mark of the open
+  // collection. With one, the row is "Switch Collection…".
+  if (!serverMode && collectionCount >= 2 && collection) bottom.push({ id: 'collection', label: collection, icon: 'folder', mark: true, current: false });
+  else if (!serverMode && collectionCount >= 1) bottom.push({ id: 'collection', label: 'Switch Collection…', icon: 'folder-open', mark: false, current: false });
   if (vaultOpen) bottom.push({ id: 'lock', label: 'Lock Studio', icon: 'lock', current: false });
   else if (vaultLocked) bottom.push({ id: 'unlock', label: 'Unlock Studio', icon: 'lock-open', current: false });
   // ADR 0241 item 1: put Sign Out after the vault row.

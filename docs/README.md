@@ -216,6 +216,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0239: The panel holds the content and the page has tabs](adr/0239-the-panel-holds-the-content-and-the-page-has-tabs.md)
 - [ADR 0240: Hosting is a first role, and a stray release moves to its pages](adr/0240-hosting-is-a-first-role-and-a-stray-release-moves-to-its-pages.md)
 - [ADR 0241: Sign Out and Switch Collection are rows of the panel footer](adr/0241-sign-out-and-switch-collection-are-rows-of-the-panel-footer.md)
+- [ADR 0242: The collection row of the footer opens Switch Collection](adr/0242-the-collection-row-of-the-footer-opens-switch-collection.md)
 
 ## Plans
 

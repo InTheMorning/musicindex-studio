@@ -9,6 +9,7 @@
 - Changes: [ADR 0107](0107-a-user-can-export-and-import-an-account.md) item 3 and item 9 on the desktop app.
 - Source: the human checks of 2026-11-11.
 - Changed by: [ADR 0183](0183-each-collection-row-has-one-actions-menu.md). Items 2, 3 and 10: one **Actions** menu on each row, and the badge "✓ Current".
+- Changed by: [ADR 0242](0242-the-collection-row-of-the-footer-opens-switch-collection.md). Item 12: the row also shows with one collection, as "Switch Collection…".
 
 ## Context
 

@@ -1969,6 +1969,8 @@ button.outline-feed {
 .collections-group, .collection-rows { overflow: visible; }
 /* The status of the open collection is at the right end, as the Open button of each other row (ADR 0241 item 6). */
 .collection-rows > .link-row > .summary { flex: none; }
+/* The link of the sheet is at the left end of its footer (ADR 0242 item 4). */
+.sheet footer .switch-manage { margin-inline-end: auto; }
 /* A group with an address row does not clip the open menu of the row (ADR 0207 item 53). */
 .group:has(> .address-row .row-menu-wrap) { overflow: visible; }
 .letters {

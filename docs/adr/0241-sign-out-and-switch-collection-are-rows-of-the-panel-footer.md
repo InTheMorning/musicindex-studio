@@ -9,6 +9,7 @@
 - Changes: [ADR 0203](0203-people.md) item 36. The sequence of the bottom group gets the rows of items 1 and 4.
 - Changes: [ADR 0226](0226-the-typed-start-folder-the-program-name-the-root-order-and-person-tabs.md) item 7. The root page of a narrow window ends with the rows of item 3.
 - Uses: [ADR 0004](0004-server-sign-in-with-nostr-or-email.md) for the sign-in of a server. [ADR 0149](0149-the-desktop-app-has-many-collections.md) item 14 for "Open" of a collection. [ADR 0176](0176-the-user-controls-each-collection.md) item 12 for the row "Collection: {name}".
+- Changed by: [ADR 0242](0242-the-collection-row-of-the-footer-opens-switch-collection.md). Items 3, 4, 5 and 7: one collection row opens the sheet, and the sheet links to Settings.
 
 ## Context
 

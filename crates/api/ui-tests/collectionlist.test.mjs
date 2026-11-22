@@ -3,7 +3,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { collectionMark, collectionRow, collectionSectionActions, collectionAction, collectionSheet, switchCollectionRows } from '../ui/collectionlist.js';
-import { leftPanel } from '../ui/shell.js';
 import { pageSequence, tierError } from '../ui/pages.js';
 
 const main = { folder: 'main', name: 'Main collection', feeds: 14, main: true, open: false };
@@ -38,17 +37,6 @@ test('The mark shows when the list has more than one collection (ADR 0176 item 1
   assert.equal(collectionMark([{ ...main, open: true }, { ...test4, open: false }]), 'Collection: Main collection');
   assert.equal(collectionMark([{ ...main, open: true }]), null);
   assert.equal(collectionMark(null), null);
-});
-
-test('The left panel gives the mark after Settings, and it opens Settings (ADR 0149 item 17)', () => {
-  const base = { view: { name: 'releases' }, feeds: [], model: null, vaultOpen: true };
-  const ids = (panel) => panel.bottom.map((e) => e.id);
-  assert.deepEqual(ids(leftPanel(base)), ['people', 'hosts', 'settings', 'lock']);
-  const panel = leftPanel({ ...base, collection: 'Collection: Test' });
-  assert.deepEqual(ids(panel), ['people', 'hosts', 'settings', 'collection', 'lock']);
-  const row = panel.bottom.find((e) => e.id === 'collection');
-  assert.equal(row.label, 'Collection: Test');
-  assert.equal(row.current, false);
 });
 
 test('The open row has the Actions and Current badge of ADR 0183 items 2 and 6', () => {

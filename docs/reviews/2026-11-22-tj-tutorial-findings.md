@@ -38,5 +38,5 @@ The write of the new hosting page gave `not_reachable` (404) in the test, becaus
 ## Open
 
 - [ADR 0243](../adr/0243-a-move-is-a-change-set-and-a-level-gathers-its-pages.md) gives findings 1, 2, 3, 4 and 6. Tasks 229 to 232 build ADR 0243 and findings 5, 7 and 8. They are committed, the last in `9b1a300`.
-- [ADR 0245](../adr/0245-review-repairs-short-addresses-and-offers-the-people-values.md) gives findings 10 and 11. Each review repairs an address with no `https://` before the write, and offers the values of People. No task builds it now.
+- [ADR 0245](../adr/0245-review-repairs-short-addresses-and-offers-the-people-values.md) gives findings 10 and 11. Each review repairs an address with no `https://` before the write, and offers the values of People. Tasks 233, 234 and 235 build it, one at a time.
 - Findings 9 and 12 have no decision now. The tutorial tells the user how to correct the fault of finding 10 by hand.

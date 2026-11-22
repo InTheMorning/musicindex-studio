@@ -5330,7 +5330,7 @@ function CheckPage({ feed, model, check, go, onOpenFinding }) {
         ${unreadable.map((row) => html`<div class="host-op-row" key=${row.key}>
           <span class="kind">${row.level}</span>
           <span class="text">
-            <span class="title mono">${row.title}</span>
+            <span class="title mono" data-fit-allow-break>${row.title}</span>
             <span class="sub">${row.reason}</span>
           </span>
         </div>`)}

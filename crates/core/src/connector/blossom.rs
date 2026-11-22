@@ -485,6 +485,7 @@ impl Connector for BlossomHost {
             }
             if list.files.len() == LIST_MAX_FILES {
                 list.truncated = true;
+                list.file_limit_reached = true;
                 break;
             }
             list.files.push(ListedFile {

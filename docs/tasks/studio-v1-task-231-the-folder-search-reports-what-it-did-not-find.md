@@ -2,7 +2,7 @@
 
 Decision: [ADR 0243](../adr/0243-a-move-is-a-change-set-and-a-level-gathers-its-pages.md) items 13 to 15. Findings 7 and 8 of [the tutorial findings](../reviews/2026-11-22-tj-tutorial-findings.md).
 
-Status: Open. Task 230 must be committed first, because both tasks change `crates/api/ui/app.js`.
+Status: Done.
 
 ## Problem
 
@@ -58,3 +58,16 @@ Visual (the main session checks with screenshots, in the dark theme at 1280 px a
 ## Report
 
 Give the changed files, the new tests, the result of `tools/gate.sh` and `git status --short`.
+
+## Corrections Of The Main Session
+
+The main session found these defects in the screenshots and corrected them:
+
+1. The heading said "1 feeds stay read-only". `folderMatchReport` now gives "1 feed stays read-only. Studio did not find it in this folder." for one feed. The Node test examines one feed, two feeds and no feed.
+2. The title and the URL of a feed were on one line, with no space between them. Each row now has the class `feed-line`: the title is on the first line, and the URL is a `sub` line below it.
+3. **Add a File Host for Them** opened the add form at the end of the page, out of view. The form now scrolls into view when it opens.
+4. After **Connect**, the scroll put the first notice of the result below the sticky bar. The start of the result now has the class `match-result` with `scroll-margin-top: calc(var(--bar-h) + 12px)`, as the releases list has.
+
+Operator choice: one feed gives the singular heading, as one page gives "Move 1 Artist" in task 230.
+
+Known limit: the match of a folder with 5000 files took 4 s in the check, and the page then reloaded its data for more than 15 s. The notice of the file limit shows when the reload ends.

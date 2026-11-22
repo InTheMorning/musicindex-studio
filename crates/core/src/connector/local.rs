@@ -345,6 +345,7 @@ impl Connector for LocalFolder {
                 } else if kind.is_file() {
                     if list.files.len() == LIST_MAX_FILES {
                         list.truncated = true;
+                        list.file_limit_reached = true;
                         list.files.sort_by(|a, b| a.path.cmp(&b.path));
                         return Ok(list);
                     }
@@ -525,14 +526,27 @@ mod tests {
             "b.xml",
             "album/feed.xml",
             ".git/config",
-            "a/b/c/d/deep.xml",
+            "a/b/c/d/e/deep.xml",
+            "a/b/c/d/e/f/too-deep.xml",
             "a/b/c/ok.xml",
         ] {
             folder.write(path, b"x", &Expected::Absent).unwrap();
         }
         let list = folder.list().unwrap();
         let paths: Vec<&str> = list.files.iter().map(|f| f.path.as_str()).collect();
-        assert_eq!(paths, ["a/b/c/ok.xml", "album/feed.xml", "b.xml"]);
+        assert_eq!(
+            paths,
+            [
+                "a/b/c/d/e/deep.xml",
+                "a/b/c/ok.xml",
+                "album/feed.xml",
+                "b.xml"
+            ]
+        );
+        assert!(
+            !paths.contains(&"a/b/c/d/e/f/too-deep.xml"),
+            "ADR 0243 item 13: fix LocalFolder::list if the depth limit is wrong"
+        );
         assert!(list.files.iter().all(|f| f.size == 1));
         assert!(list.truncated);
     }

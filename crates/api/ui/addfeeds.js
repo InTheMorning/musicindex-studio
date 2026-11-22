@@ -155,6 +155,26 @@ export function makeFields(type) {
   return FIELDS[type] || FIELDS.album;
 }
 
+// A publisher form with a start role does not need the Type menu (ADR 0243 item 15).
+export function makeTypeVisible(type, startRole = null) {
+  return !(type === 'publisher' && startRole);
+}
+
+// The report after a folder match (ADR 0243 items 14 and 15).
+export function folderMatchReport(result = {}) {
+  const notFound = result.not_found || [];
+  return {
+    heading: notFound.length === 0 ? null
+      : notFound.length === 1 ? '1 feed stays read-only. Studio did not find it in this folder.'
+        : `${notFound.length} feeds stay read-only. Studio did not find them in this folder.`,
+    notFound,
+    truncated: result.truncated === true,
+    truncatedText: result.truncated === true
+      ? 'Studio stopped at 5000 files. Connect a smaller folder, for example the folder that holds your feeds.'
+      : null,
+  };
+}
+
 // The title of the sheet that makes a page or a release (ADR 0164 item 7, ADR
 // 0230 item 8). It follows the type, and the role of a publisher page. A
 // release names its parent, when it has one. It does not use the word "feed".

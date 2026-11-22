@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { addMenuEntries, addSearchRows, addRowIsArtist, addSheetRows, addResultMark, addFoundValues, foundPageValues, foundPages, foundIndexPage, makeFields, makeTitle, feedFileStart, parentCard, MAKE_TYPES, RELEASE_KINDS } from '../ui/addfeeds.js';
+import { addMenuEntries, addSearchRows, addRowIsArtist, addSheetRows, addResultMark, addFoundValues, foundPageValues, foundPages, foundIndexPage, makeFields, makeTitle, feedFileStart, parentCard, MAKE_TYPES, RELEASE_KINDS, makeTypeVisible, folderMatchReport } from '../ui/addfeeds.js';
 
 import { releaseAdd } from '../ui/welcome.js';
 
@@ -84,6 +84,26 @@ test('makeFields gives the fields of each type', () => {
   assert.deepEqual(makeFields('publisher'), { medium: 'publisher', titleLabel: 'Name', authorLabel: null, role: true, button: 'Make the Page', busyLabel: 'Making the Page…' });
   assert.deepEqual(makeFields('show'), { medium: 'music', titleLabel: 'Show title', authorLabel: 'Artist', role: false, button: 'Make the Show', busyLabel: 'Making the Show…' });
   assert.deepEqual(makeFields('playlist'), { medium: 'musicL', titleLabel: 'Playlist name', authorLabel: 'Author', role: false, button: 'Make the Playlist', busyLabel: 'Making the Playlist…' });
+});
+
+test('folderMatchReport names read-only feeds and reports the file limit (ADR 0243 items 14 and 15)', () => {
+  const owner = 'ADR 0243 items 14 and 15: folderMatchReport in crates/api/ui/addfeeds.js gives the folder match report.';
+  const result = folderMatchReport({
+    not_found: [{ id: 8, title: 'Feed A', url: 'https://example.com/a.xml' }],
+    truncated: true,
+  });
+  assert.equal(result.heading, '1 feed stays read-only. Studio did not find it in this folder.', owner);
+  assert.equal(folderMatchReport({ not_found: [{ id: 8 }, { id: 9 }] }).heading, '2 feeds stay read-only. Studio did not find them in this folder.', owner);
+  assert.equal(folderMatchReport({ not_found: [] }).heading, null, owner);
+  assert.equal(result.notFound[0].url, 'https://example.com/a.xml', owner);
+  assert.equal(result.truncatedText, 'Studio stopped at 5000 files. Connect a smaller folder, for example the folder that holds your feeds.', owner);
+});
+
+test('a publisher form with a start role hides the Type menu (ADR 0243 item 15)', () => {
+  const owner = 'ADR 0243 item 15: makeTypeVisible in crates/api/ui/addfeeds.js hides Type for a publisher form with a start role.';
+  assert.equal(makeTypeVisible('publisher', 'hosting'), false, owner);
+  assert.equal(makeTypeVisible('publisher'), true, owner);
+  assert.equal(makeTypeVisible('album', 'artist'), true, owner);
 });
 
 test('MAKE_TYPES leaves out album, and release fields have a kind menu', () => {

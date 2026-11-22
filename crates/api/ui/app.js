@@ -20,7 +20,7 @@ import {
   prfOutputOf, passkeyBrowserCode, defaultPasskeyName,
   nip46State, nip46ErrorText, isBunkerAddress, qrSource, UNLOCK_AGAIN_TEXT, needsRecentUnlock,
 } from './account.js';
-import { addMenuEntries, addSearchRows, addRowIsArtist, addSheetRows, addResultMark, addFoundValues, foundPageValues, foundPages, foundIndexPage, MAKE_TYPES, RELEASE_KINDS, makeFields, makeTitle, feedFileStart, parentCard, shouldAddTracksAfterNewRelease } from './addfeeds.js';
+import { addMenuEntries, addSearchRows, addRowIsArtist, addSheetRows, addResultMark, addFoundValues, foundPageValues, foundPages, foundIndexPage, MAKE_TYPES, RELEASE_KINDS, makeFields, makeTitle, feedFileStart, parentCard, shouldAddTracksAfterNewRelease, makeTypeVisible, folderMatchReport } from './addfeeds.js';
 import { WELCOME, HOST_STEP, showWelcome, welcomeSteps, pathTexts, hostStepModel, hostTypeOptions, welcomeBody, releaseAdd, releaseArtistChoices, libraryResult } from './welcome.js';
 import { isLiveItem } from './live.js';
 import { appRowLines, pairingPhase, pairingNotice, doneRemovesApp } from './apps.js';
@@ -1745,7 +1745,7 @@ function MakeFeedForm({ connectors, feeds, startType, start = {}, onAdded, onKin
   }
   return html`<form class="form" onSubmit=${submit}>
     <div class="group rows">${findRow}</div>
-    <${ChoiceSelect} id="make-type" label="Type" value=${type} options=${MAKE_TYPES} onChange=${setType} />
+    ${makeTypeVisible(type, start.role) && html`<${ChoiceSelect} id="make-type" label="Type" value=${type} options=${MAKE_TYPES} onChange=${setType} />`}
     ${hostField}
     ${titleField}
     ${authorField}
@@ -2229,7 +2229,7 @@ function FeedAddress({ url }) {
     link.title = link.scrollWidth > link.clientWidth ? url : '';
   };
   return html`<p class="sub feed-address">
-    <a class="mono" href=${url} target="_blank" rel="noopener noreferrer" onMouseEnter=${showTitle} onFocus=${showTitle}>${url}</a>
+    <a class="mono" data-fit-allow-break href=${url} target="_blank" rel="noopener noreferrer" onMouseEnter=${showTitle} onFocus=${showTitle}>${url}</a>
     <${CopyButton} text=${url} label="the feed address" />
   </p>`;
 }
@@ -3028,7 +3028,7 @@ function HostCard({ connector, connectors, feeds, removeBusy, onRemove, onOpen, 
                     <dt>Blossom servers</dt><dd><ul class="address-list">${(config.servers || []).map((r) => html`<li class="mono">${r}</li>`)}</ul></dd>
                     <dt>Signing</dt><dd>${signingText}</dd>`
                   : isTemporary ? null : html`<dt>Folder</dt><dd class="mono" data-fit-allow-break>${config.root}</dd>`}
-            ${!isNostr && !isTemporary && html`<dt>Public address</dt><dd><span class="mono">${config.base_url || '—'}</span>
+            ${!isNostr && !isTemporary && html`<dt>Public address</dt><dd><span class="mono" data-fit-allow-break>${config.base_url || '—'}</span>
               ${config.base_url && config.base_url_inferred && html`<span class="sub"> · Studio found it from the feeds</span>`}</dd>`}
             <dt>Feeds</dt><dd>${written.length === 0 ? 'None yet' : html`<details class="disclosure host-feeds">
               <summary>${written.length} ${written.length === 1 ? 'feed' : 'feeds'}</summary>
@@ -3095,17 +3095,23 @@ function Hosts({ connectors, feeds, onChanged, onOpen, onMoved, view }) {
   // new host card shows. A second click then cannot add the host again.
   const added = (connector) => run(async () => {
     const result = await api(`/connectors/${connector.id}/match`, { method: 'POST' });
-    setLinked({ connector, feeds: result.linked, folder: result.folder_address });
+    setLinked({ connector, feeds: result.linked, folder: result.folder_address, report: folderMatchReport(result) });
     await onChanged();
     setAdding(false);
   });
   const showForm = adding || connectors.length === 0;
+  // The button of the report opens the add form at the end of the page. The
+  // form scrolls into view, so that the user sees it (ADR 0243 item 14).
+  const addRef = useRef(null);
+  useEffect(() => {
+    if (adding && addRef.current) addRef.current.scrollIntoView({ block: 'nearest' });
+  }, [adding]);
   // The sections of the page come from `pageSequence('hosts')` (ADR 0071).
   const sections = {
     cards: () => html`${connectors.map((c) => html`<${HostCard} key=${c.id} connector=${c} connectors=${connectors} onMoved=${onMoved} feeds=${feeds} removeBusy=${busy} edit=${Number(view.edit) === c.id}
         onRemove=${() => remove(c)} onOpen=${onOpen} onChanged=${onChanged} />`)}`,
     add: () => (showForm
-      ? html`<div class="panel"><h2>${connectors.length === 0 ? 'Connect your first file host' : 'Add a file host'}</h2>
+      ? html`<div class="panel" ref=${addRef}><h2>${connectors.length === 0 ? 'Connect your first file host' : 'Add a file host'}</h2>
           <${AddHostForm} feeds=${feeds} connectors=${connectors} onAdded=${added} />
           ${connectors.length > 0 && html`<button class="button link" type="button" onClick=${() => setAdding(false)}>Cancel</button>`}</div>`
       : html`<div class="actions"><button class="button action" type="button" onClick=${() => setAdding(true)}>＋ Add a File Host</button></div>`),
@@ -3116,10 +3122,19 @@ function Hosts({ connectors, feeds, onChanged, onOpen, onMoved, view }) {
       ${error && error.code === 'in_use'
         ? html`<div class="notice error" role="alert"><strong>Feeds use this file host.</strong>Move those feeds to a different file host, or remove them from your collection.</div>`
         : html`<${ErrorNotice} error=${error} />`}
-      ${linked && html`<div ref=${resultRef}></div>`}
+      ${linked && html`<div class="match-result" ref=${resultRef}></div>`}
       ${linked && linked.feeds.length > 0 && html`<div class="notice" role="status">
         Studio can now write ${linked.feeds.length} feed${linked.feeds.length > 1 ? 's' : ''} through “${linked.connector.name}”.
       </div>`}
+      ${linked && linked.report && linked.report.notFound.length > 0 && html`<div class="panel form" role="status">
+        <h2>${linked.report.heading}</h2>
+        <ul class="address-list">${linked.report.notFound.map((feed) => html`<li class="feed-line">
+          <span>${feed.title || 'Untitled feed'}</span>
+          <a class="sub mono" data-fit-allow-break href=${feed.url} target="_blank" rel="noopener noreferrer">${feed.url}</a>
+        </li>`)}</ul>
+        <div class="actions"><button class="button action" type="button" onClick=${() => setAdding(true)}>Add a File Host for Them</button></div>
+      </div>`}
+      ${linked && linked.report && linked.report.truncated && html`<div class="notice" role="status">${linked.report.truncatedText}</div>`}
       ${linked && linked.folder && linked.folder.state === 'inferred' && linked.folder.new && html`<div class="notice" role="status">
         <strong>Studio found the public address of “${linked.connector.name}” from its feeds.</strong>
         <span class="mono">${linked.folder.url}</span>

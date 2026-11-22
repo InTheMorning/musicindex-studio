@@ -802,6 +802,7 @@ impl Connector for SftpHost {
                         FileKind::File => {
                             if list.files.len() == LIST_MAX_FILES {
                                 list.truncated = true;
+                                list.file_limit_reached = true;
                                 list.files.sort_by(|a, b| a.path.cmp(&b.path));
                                 return Ok(list);
                             }
@@ -1295,7 +1296,8 @@ mod tests {
             "album/feed.xml",
             ".git/config",
             ".hidden.xml",
-            "a/b/c/d/deep.xml",
+            "a/b/c/d/e/deep.xml",
+            "a/b/c/d/e/f/too-deep.xml",
             "a/b/c/ok.xml",
         ] {
             host.write(path, b"x", &Expected::Absent).expect("a write");
@@ -1304,7 +1306,19 @@ mod tests {
         std::os::unix::fs::symlink(root.join("album"), root.join("linked")).expect("a link");
         let list = host.list().expect("a list");
         let paths: Vec<&str> = list.files.iter().map(|f| f.path.as_str()).collect();
-        assert_eq!(paths, ["a/b/c/ok.xml", "album/feed.xml", "b.xml"]);
+        assert_eq!(
+            paths,
+            [
+                "a/b/c/d/e/deep.xml",
+                "a/b/c/ok.xml",
+                "album/feed.xml",
+                "b.xml"
+            ]
+        );
+        assert!(
+            !paths.contains(&"a/b/c/d/e/f/too-deep.xml"),
+            "ADR 0243 item 13: fix SftpHost::list if the depth limit is wrong"
+        );
         assert!(list.files.iter().all(|f| f.size == 1));
         assert!(list.truncated);
     }

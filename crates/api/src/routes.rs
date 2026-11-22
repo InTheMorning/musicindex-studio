@@ -3132,6 +3132,7 @@ pub(crate) async fn match_connector(
         }
         let made = w.connector_of(&row)?;
         let candidates = studio_core::discover::feed_candidates(made.as_ref())?;
+        let truncated = candidates.file_limit_reached;
         let mut linked = Vec::new();
         for feed in w.collection.feeds()? {
             if feed.connector_id.is_some() {
@@ -3165,6 +3166,33 @@ pub(crate) async fn match_connector(
         let env = folder_address_env(w.vault.as_ref(), &w.net_policy, w.temporary_root());
         let folder_address =
             studio_core::address::apply_folder_address(&mut w.collection, row.id, &env)?;
+        let folder_url = match &folder_address {
+            studio_core::address::FolderAddress::Typed { url }
+            | studio_core::address::FolderAddress::Inferred { url, .. } => Some(url.as_str()),
+            studio_core::address::FolderAddress::Different
+            | studio_core::address::FolderAddress::Unknown => None,
+        };
+        let folder_host = folder_url
+            .and_then(|url| url.parse::<axum::http::Uri>().ok())
+            .and_then(|url| url.host().map(|host| (host.to_owned(), url.port_u16())));
+        let not_found = if let Some(folder_host) = folder_host {
+            w.collection
+                .feeds()?
+                .into_iter()
+                .filter(|feed| feed.connector_id.is_none())
+                .filter_map(|feed| {
+                    let url = feed.public_url.as_deref()?;
+                    let parsed = url.parse::<axum::http::Uri>().ok()?;
+                    (parsed.host() == Some(folder_host.0.as_str())
+                        && parsed.port_u16() == folder_host.1)
+                        .then(|| {
+                        json!({ "id": feed.id.0, "title": feed.title, "url": url })
+                    })
+                })
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
         // A new host gets its inventory immediately, so that the Files
         // page shows its copies (ADR 0036 item 6).
         // A folder address can be new, so a feed with a placeholder GUID
@@ -3177,7 +3205,7 @@ pub(crate) async fn match_connector(
             .map(|id| w.collection.feed(id))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(Json(
-            json!({ "linked": linked, "folder_address": folder_address, "inventory": inventory }),
+            json!({ "linked": linked, "folder_address": folder_address, "inventory": inventory, "not_found": not_found, "truncated": truncated }),
         ))
     })
     .await

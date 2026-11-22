@@ -1190,6 +1190,9 @@ textarea:focus { background: var(--fill); }
 /* The addresses of a feed or a folder. A long address breaks on any character. */
 .address-list { list-style: none; display: grid; gap: 4px; margin: 6px 0; }
 .address-list .mono { overflow-wrap: anywhere; }
+.address-list .feed-line { display: grid; gap: 2px; }
+/* The scroll to the result of a new file host stops below the sticky bar. */
+.match-result { scroll-margin-top: calc(var(--bar-h) + 12px); }
 .address-list .button.link { padding: 0 8px 0 0; }
 .host .sub { color: var(--muted); }
 

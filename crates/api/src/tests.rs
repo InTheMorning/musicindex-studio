@@ -3731,6 +3731,88 @@ async fn a_connected_folder_takes_the_read_only_feeds_that_it_holds() {
     );
 }
 
+#[tokio::test]
+async fn a_folder_match_reports_read_only_feeds_that_it_did_not_find() {
+    let server = web_feeds();
+    server.set("/album.xml", 200, FEED.as_bytes().to_vec());
+    server.set("/other.xml", 200, FEED.replace("g-1", "g-2").into_bytes());
+    let other_host = web_feeds();
+    other_host.set("/remote.xml", 200, FEED.replace("g-1", "g-3").into_bytes());
+    let app = app_with_index(&server.url(""));
+    call(
+        &app,
+        "POST",
+        "/api/v1/feeds/import",
+        Some(json!({ "urls": [server.url("/album.xml"), server.url("/other.xml"), other_host.url("/remote.xml")] })),
+    )
+    .await;
+    let root = app.feeds.path().to_str().unwrap();
+    std::fs::write(app.feeds.path().join("album.xml"), FEED).unwrap();
+    let (_, connector) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({ "kind": "local", "name": "Home", "root": root, "base_url": server.url("") })),
+    )
+    .await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/connectors/{}/match", connector["id"]),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        body["not_found"].as_array().unwrap().len(),
+        1,
+        "ADR 0243 item 14: fix match_connector in crates/api/src/routes.rs"
+    );
+    assert_eq!(
+        body["not_found"][0]["url"],
+        server.url("/other.xml"),
+        "ADR 0243 item 14: fix match_connector in crates/api/src/routes.rs"
+    );
+    assert_eq!(
+        body["truncated"], false,
+        "ADR 0243 item 15: fix match_connector in crates/api/src/routes.rs"
+    );
+}
+
+#[tokio::test]
+async fn a_folder_match_reports_when_its_file_list_stops_at_the_limit() {
+    let app = app();
+    let host = tempfile::tempdir().unwrap();
+    for n in 0..=studio_core::connector::LIST_MAX_FILES {
+        std::fs::write(host.path().join(format!("{n:05}.jpg")), b"x").unwrap();
+    }
+    let (_, connector) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({ "kind": "local", "name": "Files", "root": host.path().to_str().unwrap() })),
+    )
+    .await;
+    let id = connector["id"].as_i64().unwrap();
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/connectors/{id}/match"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        body["truncated"], true,
+        "ADR 0243 item 15: fix match_connector in crates/api/src/routes.rs"
+    );
+    assert_eq!(
+        body["not_found"],
+        json!([]),
+        "ADR 0243 item 14: fix match_connector in crates/api/src/routes.rs"
+    );
+}
+
 /// The example of ADR 0021: a folder with no public address holds a feed that
 /// discovery found and a feed that only the folder has.
 #[tokio::test]

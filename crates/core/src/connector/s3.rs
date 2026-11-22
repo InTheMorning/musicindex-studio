@@ -652,6 +652,7 @@ impl Connector for S3Bucket {
                 }
                 if list.files.len() == LIST_MAX_FILES {
                     list.truncated = true;
+                    list.file_limit_reached = true;
                     list.files.sort_by(|a, b| a.path.cmp(&b.path));
                     return Ok(list);
                 }
@@ -1202,7 +1203,8 @@ mod tests {
             "feeds/album/feed.xml",
             "feeds/.hidden/a.xml",
             "feeds/a/.b/c.xml",
-            "feeds/a/b/c/d/deep.xml",
+            "feeds/a/b/c/d/e/deep.xml",
+            "feeds/a/b/c/d/e/f/too-deep.xml",
             "feeds/a/b/c/ok.xml",
             "other/x.xml",
         ] {
@@ -1210,16 +1212,32 @@ mod tests {
         }
         let list = connector(&server, "feeds/").list().unwrap();
         let paths: Vec<&str> = list.files.iter().map(|f| f.path.as_str()).collect();
-        assert_eq!(paths, ["a/b/c/ok.xml", "album/feed.xml", "b.xml"]);
+        assert_eq!(
+            paths,
+            [
+                "a/b/c/d/e/deep.xml",
+                "a/b/c/ok.xml",
+                "album/feed.xml",
+                "b.xml"
+            ]
+        );
+        assert!(
+            !paths.contains(&"a/b/c/d/e/f/too-deep.xml"),
+            "ADR 0243 item 13: fix S3Bucket::list if the depth limit is wrong"
+        );
         assert!(list.files.iter().all(|f| f.size == 1));
         assert!(list.truncated);
         // The list stamp is the stamp of a stat.
         let stat = connector(&server, "feeds/").stat("b.xml").unwrap().unwrap();
-        assert_eq!(list.files[2].stamp, stat.stamp);
+        assert_eq!(list.files[3].stamp, stat.stamp);
         // A bucket with no prefix lists every key.
         let all = connector(&server, "").list().unwrap();
         // The keys below `feeds/` are one segment deeper without the prefix.
-        assert_eq!(all.files.len(), 3);
+        assert_eq!(
+            all.files.len(),
+            4,
+            "ADR 0243 item 13: fix S3Bucket::list if the deeper file count is wrong"
+        );
     }
 
     #[test]

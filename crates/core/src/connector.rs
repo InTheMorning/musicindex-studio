@@ -74,10 +74,10 @@ pub struct FileRead {
     pub last_modified: Option<i64>,
 }
 
-/// The limits of a file list (ADR 0019).
-pub const LIST_MAX_DEPTH: usize = 4;
-/// The maximum number of files in a list (ADR 0019).
-pub const LIST_MAX_FILES: usize = 1000;
+/// The limits of a file list (ADR 0019 item 3 and ADR 0243 item 13).
+pub const LIST_MAX_DEPTH: usize = 6;
+/// The maximum number of files in a list (ADR 0019 item 3 and ADR 0243 item 13).
+pub const LIST_MAX_FILES: usize = 5000;
 
 /// A change marker of a file that a list gives with no read of the file,
 /// for example the size and the modification time, or an `ETag`. Two
@@ -119,6 +119,8 @@ pub struct FileList {
     pub files: Vec<ListedFile>,
     /// True when a limit stopped the list before the end.
     pub truncated: bool,
+    /// True when the file count limit stopped the list (ADR 0243 item 15).
+    pub file_limit_reached: bool,
 }
 
 /// The kind of a [`ConnectorError`].
@@ -371,7 +373,7 @@ pub trait Connector {
     }
 
     /// List the files of the host, with the limits [`LIST_MAX_DEPTH`] and
-    /// [`LIST_MAX_FILES`]. Hidden folders are not in the list (ADR 0019).
+    /// [`LIST_MAX_FILES`]. Hidden folders are not in the list (ADR 0019 item 3 and ADR 0243 item 13).
     ///
     /// # Errors
     ///

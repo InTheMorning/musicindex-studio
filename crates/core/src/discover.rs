@@ -54,6 +54,8 @@ pub struct Candidates {
     pub feeds: Vec<Candidate>,
     /// True when a limit stopped the file list before the end.
     pub truncated: bool,
+    /// True when the connector stopped at its file count limit (ADR 0243 item 15).
+    pub file_limit_reached: bool,
 }
 
 /// List the RSS feed files on a host. A file that is not an RSS feed, or
@@ -89,6 +91,7 @@ pub fn feed_candidates(connector: &dyn Connector) -> Result<Candidates, Connecto
     Ok(Candidates {
         feeds,
         truncated: list.truncated,
+        file_limit_reached: list.file_limit_reached,
     })
 }
 

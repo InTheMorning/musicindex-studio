@@ -263,21 +263,21 @@ export function fitMessage(finding, width) {
         + 'Give it a size in CSS or with the width and height attributes.';
     case 'word-break':
       return `${head} the text "${finding.text}" breaks inside a word (in "${finding.detail}").\n`
-        + 'Give the text more width, make the text shorter, or let the row wrap between the controls (ADR 0020 R-FIT-1 item 2). '
+        + 'Give the text more width, make the text shorter, or let the row wrap between the controls (musicindex ADR 0080 R-FIT-1 item 2). '
         + `If the text must break inside a word, such as a URL or a GUID, give its element the attribute ${ALLOW_BREAK_ATTRIBUTE}.`;
     case 'edge-cut':
       return `${head} "${finding.text}" is too near an edge of its group (${finding.detail}).\n`
-        + 'Give the row its inner space, make the content narrower, or let the row wrap (ADR 0020 R-FIT-1 item 2).';
+        + 'Give the row its inner space, make the content narrower, or let the row wrap (musicindex ADR 0080 R-FIT-1 item 2).';
     case 'overflow':
       if (finding.box === 'control') {
         return `${head} the content of the control "${finding.text}" is wider than the control (${finding.detail}).\n`
-          + 'Give the control more width, make the text shorter, or let the row wrap between the controls (ADR 0020 R-FIT-1 item 2).';
+          + 'Give the control more width, make the text shorter, or let the row wrap between the controls (musicindex ADR 0080 R-FIT-1 item 2).';
       }
       return `${head} ${finding.text} goes ${finding.detail} past the right edge of the window.\n`
         + 'Make the element narrower, let it wrap, or put it in a scroll area.';
     case 'overlap':
       return `${head} the controls ${finding.text} overlap (${finding.detail}).\n`
-        + 'Give each control its own space: let the row wrap, make a control narrower, or move a control to a different row at this width (ADR 0020 R-FIT-1 item 2).';
+        + 'Give each control its own space: let the row wrap, make a control narrower, or move a control to a different row at this width (musicindex ADR 0080 R-FIT-1 item 2).';
     default:
       return `${head} the fit check found the fault "${finding.fault}": ${finding.text}.`;
   }

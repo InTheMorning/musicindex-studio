@@ -5892,7 +5892,7 @@ mod tests {
             .record_state(feed, &Feed::read(&doc).unwrap(), &Version::new("v1"))
             .unwrap();
         let rows = collection.feed_credits().unwrap();
-        assert_eq!(rows.len(), 1, "ADR 0120 item 3: equal keys give one row");
+        assert_eq!(rows.len(), 1, "ADR 0203 item 6: equal credits give one row");
         let item = |guid: &str, title: &str, number: Option<u32>| CreditPlace::Item {
             guid: guid.into(),
             title: title.into(),

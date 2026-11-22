@@ -144,7 +144,7 @@ export function releaseKindOptions(kindShown, trackCount, liveItemCount = 0) {
 const FIELDS = {
   album: { medium: 'music', titleLabel: 'Title', authorLabel: 'Artist name', role: false, button: 'Make the Release', busyLabel: 'Making the Release…' },
   publisher: { medium: 'publisher', titleLabel: 'Name', authorLabel: null, role: true, button: 'Make the Page', busyLabel: 'Making the Page…' },
-  show: { medium: 'music', titleLabel: 'Show title', authorLabel: 'Artist', role: false, button: 'Make the Show', busyLabel: 'Making the Show…' },
+  show: { medium: 'music', titleLabel: 'Show title', authorLabel: 'Artist name', role: false, button: 'Make the Show', busyLabel: 'Making the Show…' },
   playlist: { medium: 'musicL', titleLabel: 'Playlist name', authorLabel: 'Author', role: false, button: 'Make the Playlist', busyLabel: 'Making the Playlist…' },
 };
 

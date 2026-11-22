@@ -4125,7 +4125,7 @@ function LivePage({ feed, model, update, bad, liveIndex, draft, go }) {
             <span class="summary">${live.item.guid ? 'Has a GUID' : 'No GUID yet'}</span></summary>
           <div class="form">
             <dl class="facts">
-              <dt>Show GUID</dt><dd class="mono">${live.item.guid || 'Studio gives one when it saves'}</dd>
+              <dt>Live item GUID</dt><dd class="mono">${live.item.guid || 'Studio gives one when it saves'}</dd>
             </dl>
           </div>
         </details>

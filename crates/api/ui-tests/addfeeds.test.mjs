@@ -82,7 +82,7 @@ test('no label of an add control has the word "feed" except "feed file"', () => 
 test('makeFields gives the fields of each type', () => {
   assert.deepEqual(makeFields('album'), { medium: 'music', titleLabel: 'Title', authorLabel: 'Artist name', role: false, button: 'Make the Release', busyLabel: 'Making the Release…' });
   assert.deepEqual(makeFields('publisher'), { medium: 'publisher', titleLabel: 'Name', authorLabel: null, role: true, button: 'Make the Page', busyLabel: 'Making the Page…' });
-  assert.deepEqual(makeFields('show'), { medium: 'music', titleLabel: 'Show title', authorLabel: 'Artist', role: false, button: 'Make the Show', busyLabel: 'Making the Show…' });
+  assert.deepEqual(makeFields('show'), { medium: 'music', titleLabel: 'Show title', authorLabel: 'Artist name', role: false, button: 'Make the Show', busyLabel: 'Making the Show…' });
   assert.deepEqual(makeFields('playlist'), { medium: 'musicL', titleLabel: 'Playlist name', authorLabel: 'Author', role: false, button: 'Make the Playlist', busyLabel: 'Making the Playlist…' });
 });
 

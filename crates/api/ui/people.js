@@ -1087,6 +1087,43 @@ export function saveBody(saved, values) {
   return body;
 }
 
+// The error of a refused save, for the field (ADR 0245 item 9). The core
+// gives the error `bad_address` with the field and the repair text. The
+// result is null for another error. `kind` is the list of the field.
+export const ADDRESS_REPAIR_BUTTON = 'Add https://';
+export function addressErrorView(error) {
+  if (!error || error.code !== 'bad_address') return null;
+  const details = error.details || {};
+  const field = (details.fields || [])[0];
+  const kind = field === 'img' || field === 'pictures' ? 'picture' : field === 'href' || field === 'websites' ? 'website' : null;
+  if (!kind) return null;
+  const repair = details.repair || null;
+  // The field error uses the words of the feed finding, not the field name
+  // of the API (ADR 0245 items 3 and 9). The status line names the list.
+  const message = repair
+    ? `${repair.replace(/^https:\/\//, '')} has no https://. Studio cannot save it.`
+    : 'An address is not correct. It must start with https:// and have no space.';
+  const list = kind === 'picture' ? 'Pictures' : 'Websites';
+  return { message, status: `Studio could not save. See ${list}.`, kind, repair, button: repair ? ADDRESS_REPAIR_BUTTON : null };
+}
+
+// The patch that puts the repair text in the field (ADR 0245 item 9). A value
+// of the list, and the default value of the field, change when their text
+// without the spaces at the ends is the repair text without `https://`. The
+// core made the repair text.
+export function repairAddressValues(values, view) {
+  if (!view || !view.repair) return {};
+  const key = view.kind === 'picture' ? 'pictures' : 'websites';
+  const field = view.kind === 'picture' ? 'img' : 'href';
+  const bare = view.repair.replace(/^https:\/\//, '');
+  const matches = (text) => String(text ?? '').trim() === bare;
+  const patch = {};
+  const list = values[key] || [];
+  if (list.some((item) => matches(item.value))) patch[key] = list.map((item) => (matches(item.value) ? { ...item, value: view.repair } : item));
+  if (matches(values[field])) patch[field] = view.repair;
+  return patch;
+}
+
 // The body of PATCH /people/{id} for an immediate nickname save.
 export const nicknameBody = (saved, nickname) => ({
   name: saved.name, nickname, usual_role: saved.usual_role, usual_group: saved.usual_group,

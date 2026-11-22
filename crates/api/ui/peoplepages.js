@@ -47,8 +47,10 @@ import {
   CHECK_TITLE, checkSummary, differenceBlocks, openLabel, useValuesLabel,
   recipientChoices, creditChoices, fundingChoices, ALREADY_VALUE, FIND_HINT, FIND_EMPTY, FIND_WAIT, FILL_NOTE, lookupGroups, lookupKind, hasLine, fillRows, splitFillRows, linkName, linkRow, linkFillButton, VALUES_WAIT, ALREADY_LINKED, fillPatch, fillSource, musicindexFeedUrl,
   creditOffers, creditAddTitle, creditRemoveTitle, creditAddNote, creditPublicNote, creditRemoveNote, creditOperation, REMOVE_CREDIT_OPERATION,
-  lookupAddress, showFindEmpty, addPersonView, addPersonSelection, addPersonPlan, findPersonPageModel,
+  addressErrorView, repairAddressValues, ADDRESS_REPAIR_BUTTON, lookupAddress, showFindEmpty, addPersonView, addPersonSelection, addPersonPlan, findPersonPageModel,
 } from './people.js';
+import { addressPanelView, repairAddresses, peoplePanelView } from './feedcheck.js';
+import { eachLimited } from './outsidecheck.js';
 
 // The panel explains the selected payment address type (ADR 0217 item 8).
 export function TypePanel({ type }) {
@@ -445,7 +447,7 @@ const AddRow = ({ title, onClick }) => html`<button class="link-row add" type="b
 
 // The fields and value groups of a person. Each change stays pending until
 // Save. A page suggestion adds a value to its list (ADR 0196 items 6 to 13).
-function PersonFields({ values, saved, update, detail, profiles, titles, feeds, sources = {}, pageRows = { img: [], href: [] } }) {
+function PersonFields({ values, saved, update, detail, profiles, titles, feeds, sources = {}, pageRows = { img: [], href: [] }, addressError = null }) {
   const [adding, setAdding] = useState(null);
   const [newValue, setNewValue] = useState('');
   // A filled field shows the line of its source until Save or Discard (ADR 0117 item 14).
@@ -483,6 +485,9 @@ function PersonFields({ values, saved, update, detail, profiles, titles, feeds, 
       setNewValue('');
       setAdding(null);
     };
+    // ADR 0245 item 9: the error of the save shows under the list of the
+    // field, with the button that puts the repair text in the field.
+    const refused = addressError && addressError.kind === kind ? addressError : null;
     return html`<p class="hint suggest-heading">${title}</p><div class="group rows">
       ${sorted.length === 0 ? html`<p class="empty">${empty}</p>` : sorted.map((item) => {
         const isDefault = item.value === values[field];
@@ -502,7 +507,10 @@ function PersonFields({ values, saved, update, detail, profiles, titles, feeds, 
         <div class="actions"><button class="button" type="button" onClick=${() => { setAdding(null); setNewValue(''); }}>Cancel</button>
           <button class="button action" type="button" disabled=${!newValue.trim()} onClick=${commit}>Add</button></div>`
         : html`<${AddRow} title=${kind === 'picture' ? 'Add a Picture Address' : 'Add a Website'} onClick=${() => { setNewValue(''); setAdding(kind); }} />`}
-    </div>`;
+    </div>
+    ${refused && html`<p class="field-error" role="alert">${refused.message}</p>`}
+    ${refused && refused.repair && html`<div class="actions"><button class="button action" type="button"
+      onClick=${() => update(repairAddressValues(values, refused))}>${ADDRESS_REPAIR_BUTTON}</button></div>`}`;
   };
   return html`<div class="group rows">
     ${field('person-name', 'Name', 'name', sources.name || 'Studio puts this name in a new credit.')}
@@ -955,6 +963,8 @@ export function PersonPage({ id, feeds, go, view, tab: requestedTab }) {
   const [saving, setSaving] = useState(false);
   const [nicknameOpen, setNicknameOpen] = useState(false);
   const [saveFailure, setSaveFailure] = useState(null);
+  // The error `bad_address` of the last save, for the field (ADR 0245 item 9).
+  const [saveError, setSaveError] = useState(null);
   // The error text of an operation step that failed (ADR 0228 item 5), and a
   // counter that draws the page again after a step changes the history.
   const [stepError, setStepError] = useState(null);
@@ -966,7 +976,7 @@ export function PersonPage({ id, feeds, go, view, tab: requestedTab }) {
     if (readPerson.current === String(id)) history.clear();
     readPerson.current = String(id);
     latest.current = null;
-    setValues(savedValues(data.person)); setSavedOverride(null); setSaveFailure(null); setSources({});
+    setValues(savedValues(data.person)); setSavedOverride(null); setSaveFailure(null); setSaveError(null); setSources({});
   }, [data, id]);
   const saved = data ? (savedOverride || savedValues(data.person)) : null;
   const shown = values || saved;
@@ -974,6 +984,7 @@ export function PersonPage({ id, feeds, go, view, tab: requestedTab }) {
   const dirty = keys.length > 0;
   const update = (patch) => {
     setSaveFailure(null);
+    setSaveError(null);
     setStepError(null);
     const before = latest.current || values || saved;
     history.record(before, focusedField(), Date.now());
@@ -995,12 +1006,12 @@ export function PersonPage({ id, feeds, go, view, tab: requestedTab }) {
   };
   const step = (state, direction) => {
     if (isOperationStep(state)) { runStep(state, direction); return; }
-    if (state) { latest.current = { ...state, nickname: saved.nickname }; setValues(latest.current); setSaveFailure(null); setStepError(null); }
+    if (state) { latest.current = { ...state, nickname: saved.nickname }; setValues(latest.current); setSaveFailure(null); setSaveError(null); setStepError(null); }
   };
   const undo = () => step(history.undo(latest.current || values || saved), 'undo');
   const redo = () => step(history.redo(latest.current || values || saved), 'redo');
   useUndoKeys(undo, redo);
-  const discard = () => { history.clear(); latest.current = null; setValues(saved); setSaveFailure(null); setSources({}); };
+  const discard = () => { history.clear(); latest.current = null; setValues(saved); setSaveFailure(null); setSaveError(null); setSources({}); };
   // A fill makes pending changes, and closes the values sheet (ADR 0117 item 14).
   const fill = (patch, source) => {
     update(patch);
@@ -1020,6 +1031,7 @@ export function PersonPage({ id, feeds, go, view, tab: requestedTab }) {
     const linksChanged = keys.includes('member');
     setSaving(true);
     setSaveFailure(null);
+    setSaveError(null);
     let saveDone = false;
     try {
       await api(`/people/${id}/save`, { method: 'POST', body: saveBody(saved, shown) });
@@ -1027,7 +1039,9 @@ export function PersonPage({ id, feeds, go, view, tab: requestedTab }) {
       history.clear();
       await reload();
     } catch (e) {
-      setSaveFailure((e && e.message) || 'Studio could not save this person');
+      const refused = addressErrorView(e);
+      setSaveFailure(refused ? refused.status : (e && e.message) || 'Studio could not save this person');
+      setSaveError(refused);
     } finally {
       setSaving(false);
     }
@@ -1180,7 +1194,7 @@ export function PersonPage({ id, feeds, go, view, tab: requestedTab }) {
           () => withLeave(() => setEditing({ add: true, start: walletValues({ ...row.key, recipient_type: row.recipient_type }), others: [] }))))} />`)}
       <div class="group"><${AddRow} title="Add a Wallet" onClick=${() => withLeave(() => setLinking('wallets'))} /></div></section>`,
     credits: () => html`<section class="page-section"><h2>Credits</h2>
-      <${PersonFields} values=${shown} saved=${saved} update=${update} detail=${detail} profiles=${profiles} titles=${titles} feeds=${feeds} sources=${sources}
+      <${PersonFields} values=${shown} saved=${saved} update=${update} detail=${detail} profiles=${profiles} titles=${titles} feeds=${feeds} sources=${sources} addressError=${saveError}
         pageRows=${{ img: fromPages.img.map((row) => pageRow(row, () => update(addPersonValue(shown, 'picture', row.value, row.source)), true)), href: fromPages.href.map((row) => pageRow(row, () => update(addPersonValue(shown, 'website', row.value, row.source)))) }} />
       ${(person.credit_names.length > 0 || person.keys.length > 0) && html`<details class="disclosure group credit-fold">
         <summary class="link-row"><span class="text"><span class="label">${creditFoldSummary(person).title}</span>
@@ -1519,15 +1533,15 @@ export function CheckPage({ id, feeds, go }) {
 // preview of the core lists the feeds that the selected corrections change.
 // The primary button makes the change set, and the review follows. With
 // `feedIds`, the sheet covers only those feeds (ADR 0120 item 3).
-function CorrectSheet({ open, person, check, titles, placeRows, go, onClose, feedIds = null }) {
+function CorrectSheet({ open, person, check, titles, placeRows, go, onClose, feedIds = null, onApplied = null }) {
   const ref = useSheet(open);
   return html`<dialog ref=${ref} class="sheet" aria-labelledby="correct-title" onClose=${onClose}>
     ${open && person && check && html`<${CorrectForm} person=${person} check=${check} titles=${titles} placeRows=${placeRows} go=${go}
-      onlyIds=${feedIds} onCancel=${() => ref.current.close()} />`}
+      onlyIds=${feedIds} onApplied=${onApplied} onCancel=${() => ref.current.close()} />`}
   </dialog>`;
 }
 
-function CorrectForm({ person, check, titles, placeRows, go, onCancel, onlyIds = null }) {
+function CorrectForm({ person, check, titles, placeRows, go, onCancel, onlyIds = null, onApplied = null }) {
   const [fields, setFields] = useState(() => correctStart(person));
   const [list, setList] = useState(null);
   const [previewError, setPreviewError] = useState(null);
@@ -1555,7 +1569,15 @@ function CorrectForm({ person, check, titles, placeRows, go, onCancel, onlyIds =
   }, [JSON.stringify(fields)]);
   const rows = list ? list.rows : [];
   const ids = checkedIds(rows);
+  // ADR 0245 item 12: in a review, the button applies the corrections to the
+  // drafts and makes no change set. The review then reads the diffs again.
   const submit = () => run(async () => {
+    if (onApplied) {
+      await api(`/people/${person.id}/correct-drafts`, { method: 'POST', body: { operation: correctBody(fields), feed_ids: ids } });
+      onCancel();
+      await onApplied();
+      return;
+    }
     const made = await api(`/people/${person.id}/changes`, { method: 'POST', body: { operation: correctBody(fields), feed_ids: ids } });
     go({ name: 'change-set', id: made.id });
   });
@@ -1577,8 +1599,113 @@ function CorrectForm({ person, check, titles, placeRows, go, onCancel, onlyIds =
       <${ErrorNotice} error=${previewError || error} />
     </div>
     <footer>
-      <button class="button primary" type="button" disabled=${busy || ids.length === 0} onClick=${submit}>${busy ? BUSY_REVIEW : reviewLabel(ids.length)}</button>
+      <button class="button primary" type="button" disabled=${busy || ids.length === 0} onClick=${submit}>${onApplied ? (busy ? APPLY_BUSY : APPLY_LABEL) : (busy ? BUSY_REVIEW : reviewLabel(ids.length))}</button>
     </footer>`;
+}
+
+// ---- The panels of a review (ADR 0245 items 6, 7 and 11 to 13) ----
+
+// The primary button of the sheet "Correct the Feeds" in a review (ADR 0245
+// item 12).
+const APPLY_LABEL = 'Apply to the Drafts';
+const APPLY_BUSY = 'Applying…';
+
+// The findings of a review for the feeds that it writes (ADR 0245 items 5,
+// 6 and 10). The hook reads the check of each feed and the People findings
+// when `active` is true, and again after each change of `token`. `act` runs a
+// repair or a correction and keeps its busy state and its error. The core
+// finds each address and each difference. The hook only reads the answers.
+export function useReviewFindings({ feedIds, active, token, titleOf }) {
+  const key = feedIds.join(',');
+  const [state, setState] = useState({ loading: false, checks: [], people: null, persons: new Map(), error: null });
+  const [acting, setActing] = useState(false);
+  const [actError, setActError] = useState(null);
+  useEffect(() => {
+    if (!active || feedIds.length === 0) {
+      setState({ loading: false, checks: [], people: null, persons: new Map(), error: null });
+      return undefined;
+    }
+    let live = true;
+    setState((before) => ({ ...before, loading: true }));
+    (async () => {
+      try {
+        let failure = null;
+        const found = new Map();
+        await eachLimited(feedIds, 4, async (feedId) => {
+          try { found.set(feedId, await api(`/feeds/${feedId}/check`)); } catch (e) { failure = failure || e; }
+        });
+        if (failure) throw failure;
+        const people = await api('/people/review-findings', { method: 'POST', body: { feed_ids: feedIds } });
+        const persons = new Map();
+        await Promise.all((people.people || []).filter((p) => (p.feeds || []).some((f) => (f.findings || []).length > 0))
+          .map(async (p) => {
+            try { persons.set(p.person_id, await api(`/people/${p.person_id}`)); } catch (_) { /* The block then shows no value of the person. */ }
+          }));
+        const checks = feedIds.map((feedId) => ({ feedId, check: found.get(feedId) }));
+        if (live) setState({ loading: false, checks, people, persons, error: null });
+      } catch (e) {
+        if (live) setState({ loading: false, checks: [], people: null, persons: new Map(), error: e });
+      }
+    })();
+    return () => { live = false; };
+  }, [active, key, token]);
+  const act = async (work) => {
+    setActing(true);
+    setActError(null);
+    try { await work(); } catch (e) { setActError(e); } finally { setActing(false); }
+  };
+  const address = addressPanelView(state.checks.map(({ feedId, check }) => ({ feedId, title: titleOf(feedId), check })));
+  const people = peoplePanelView(state.people, titleOf);
+  return { loading: state.loading, address, people, persons: state.persons, error: state.error, acting, actError, act };
+}
+
+// The two panels of a review. The address panel stops the write. The People
+// panel does not (ADR 0245 items 7 and 13). `onRepair` repairs each listed
+// address. `onUse(group)` opens the sheet of the person.
+export function ReviewPanels({ findings, feeds, busy, onRepair, onUse }) {
+  const { address, people, persons, acting, actError, error } = findings;
+  const feedOf = (feedId) => (feeds || []).find((f) => f.id === feedId);
+  return html`<${Fragment}>
+    <${ErrorNotice} error=${actError || error} action="Studio could not check the addresses and the People values." />
+    ${address && html`<div class="notice error" role="alert"><strong>${address.title}</strong>
+      <div class="actions"><button class="button action" type="button" disabled=${busy || acting} onClick=${onRepair}>${address.button}</button></div>
+      ${address.feeds.map((feed) => html`<div key=${feed.feedId}><div class="notice-label">${feed.title}</div>
+        <div class="group">${feed.rows.map((row) => html`<div class="link-row static" key=${row.key}><span class="text">
+          <span class="label">${row.place}</span>
+          <span class="summary">Address · <span class="mono address-text" data-fit-allow-break>${row.address}</span></span>
+          <span class="summary">New address · <span class="mono address-text" data-fit-allow-break>${row.newAddress}</span></span></span></div>`)}</div></div>`)}</div>`}
+    ${people && html`<div class="notice" role="status"><strong>${people.title}</strong>
+      ${people.groups.map((group) => html`<div key=${group.personId}><div class="notice-label">${group.name}</div>
+        <div class="actions"><button class="button action" type="button" disabled=${busy || acting} onClick=${() => onUse(group)}>${group.button}</button></div>
+        <div class="group">${group.entries.map((entry) => html`<details class="disclosure" key=${entry.feedId}>
+          <summary class="link-row"><span class="text"><span class="label">${entry.title}</span>
+            <span class="summary">${checkSummary(entry.entry, feedOf(entry.feedId))}</span></span></summary>
+          <div class="change-diff">${differenceBlocks(entry.entry, group.name, feedOf(entry.feedId), null, persons.get(group.personId) || {})
+            .map((block, i) => html`<${DifferenceBlock} key=${i} block=${block} />`)}</div>
+        </details>`)}</div></div>`)}</div>`}
+  <//>`;
+}
+
+// The sheet "Correct the Feeds: {name}" in a review (ADR 0245 item 12).
+// `target` is `{ personId, feedIds }`, or null when the sheet is closed. The
+// sheet covers only those feeds. After the corrections, `onApplied` runs.
+export function ReviewCorrectSheet({ target, feeds, onApplied, onClose }) {
+  const [loaded, setLoaded] = useState(null);
+  const [error, setError] = useState(null);
+  useEffect(() => {
+    setLoaded(null);
+    setError(null);
+    if (!target) return undefined;
+    let live = true;
+    Promise.all([api(`/people/${target.personId}`), api(`/people/${target.personId}/check`)])
+      .then(([data, check]) => { if (live) setLoaded({ person: data, check }); }, (e) => { if (live) setError(e); });
+    return () => { live = false; };
+  }, [target && target.personId, target && target.feedIds.join(',')]);
+  const titles = new Map((feeds || []).map((f) => [f.id, f.title || 'Untitled feed']));
+  const rows = new Map((loaded ? feedRows(loaded.person.places, feeds) : []).map((r) => [r.id, r]));
+  return html`<${Fragment}><${ErrorNotice} error=${error} />
+    <${CorrectSheet} open=${Boolean(target && loaded)} feedIds=${target ? target.feedIds : null} person=${loaded && loaded.person}
+      check=${loaded && loaded.check} titles=${titles} placeRows=${rows} go=${() => {}} onClose=${onClose} onApplied=${onApplied} /><//>`;
 }
 
 // ---- The page of a wallet with no person (ADR 0099 items 7 and 10, task 065d) ----

@@ -2,7 +2,28 @@
 
 Decision: [ADR 0245](../adr/0245-review-repairs-short-addresses-and-offers-the-people-values.md) items 6 to 9, 11 to 13. Run it after tasks 233 and 234.
 
-Status: Open.
+Status: Done 2026-11-22. The gate passed (2061 Rust tests, 987 Node tests). The main session checked three scenes with screenshots:
+
+- From the base data, a move of 3 artists to "Doerfel-Verse Hosting" gives the panel "1 feed has addresses that are not full" with "Bloodshot Lies - The Album". The write is disabled and "Repair these addresses first." shows. After **Add https:// in 1 Feed**, the panel goes and the write is enabled.
+- With the person "The Doerfels", the same review gives "8 feeds differ from People" and **Use The Doerfels's Values in 8 Feeds**. The sheet "Correct the Feeds: The Doerfels" has **Apply to the Drafts**. After the apply, the panels go and the diff shows the corrections.
+- The person page refuses the website `www.doerfelverse.com`. The field shows "www.doerfelverse.com has no https://. Studio cannot save it." and **Add https://**. After the repair, the save works.
+
+The fit checks at 390 px and 761 px are clean, and the console has no error.
+
+Corrections of the main session:
+
+- The address panel shows the button below the title. Each feed shows its title one time, and then its rows.
+- The People panel shows each feed as a closed row with the summary of the check. The row holds the differences, as in the check of a person.
+- The sheet reads the person from the answer of the API directly.
+- **Apply to the Drafts** is on the footer of the correct form, not on the footer of the operation form.
+- The field error of the person page uses the words of the feed finding, not the field name of the API. The status line gives "Studio could not save. See Websites." and not a second copy of the error.
+
+Open points:
+
+- An address with no `short_address` finding still shows its model path in the list of the review of one feed.
+- The correct sheet opens as a dialog in the review dialog.
+- The write is not disabled while the findings load.
+- The button label for a name that ends in "s" is "The Doerfels's".
 
 ## Problem
 

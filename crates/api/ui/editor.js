@@ -9,7 +9,7 @@ import { VIEWS, VIEW_LABELS, VIEW_HINTS, normalizeView, shownLines, localTimeNot
 import { LoadErrorNotice, FeedCheckRow, onSegmentKey, dropAreaClass, useFileDrop, api, saveTicket, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ChoiceSelect, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext, Icon, AddFeedRowSheet, inDesktopApp, NavContext } from './app.js';
 import { AlbumPayments, TrackPayments } from './values.js';
 import { PickerLayout, PickFillRow, FindOneSheet, PickFold, TakenTag, useFieldList } from './pickers.js';
-import { PersonArt, useProfiles } from './peoplepages.js';
+import { PersonArt, useProfiles, useReviewFindings, ReviewPanels, ReviewCorrectSheet } from './peoplepages.js';
 import { onListKey, onTreeKey } from './listkeys.js';
 import { creditPickRows, supportPickRows, creditChoices, creditFillRows, creditFillValue, creditFillNote, creditFillNoteText, CREDIT_FIELD_LABELS, fundingChoices, nostrChoices, withPersonValues, filterRows, nostrPickRows, feedWord, memberRowLine, memberSectionNote } from './people.js';
 import { withCids, STATUS } from './draft.js';
@@ -17,7 +17,7 @@ import { roleSummary } from './roles.js';
 import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName, newFeedView, pageLevel, movedReleaseView } from './shell.js';
 import { isLiveItem, liveKey, liveDot, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner, OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning, hasBadAddress, problemGroup, setLiveStreamType, viewAfterLiveGone, withoutLive } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
-import { checkRows, unreadableRows, hasShowGrant, checkTexts, pageRefusalView, wrongAddressSet, OPEN_ACTIONS, COPY_SHEET_TEXT, WAYS_SHEET_TEXT } from './feedcheck.js';
+import { checkRows, unreadableRows, hasShowGrant, checkTexts, pageRefusalView, repairAddresses, wrongAddressSet, OPEN_ACTIONS, COPY_SHEET_TEXT, WAYS_SHEET_TEXT } from './feedcheck.js';
 import { addressParts } from './breaks.js';
 import { buildDateNotices } from './builddate.js';
 import { versionLabel, LOCK_HELP, hasSpace, spaceNotice, ROW_SPACE_NOTE, newFeedAddress, newFeedAddressLine, libraryFolderRow } from './feedfacts.js';
@@ -2068,6 +2068,30 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
     setDiff(await api(`/feeds/${feedId}/diff`));
   });
   const undoMove = () => setHost(readOnly ? null : feedConnectorId);
+  // The address panel and the People panel of the review (ADR 0245 items 5 to
+  // 7 and 11 to 13). A change of `reviewTick` reads the findings again.
+  const [reviewTick, setReviewTick] = useState(0);
+  const [correcting, setCorrecting] = useState(null);
+  const titleOfFeed = (id) => (feeds.find((f) => f.id === id) || {}).title || 'Untitled feed';
+  const findings = useReviewFindings({ feedIds: [feedId], active: open && !!diff, token: `${diff && diff.id}:${reviewTick}`, titleOf: titleOfFeed });
+  // The repair of ADR 0245 item 4 changes the draft in the core. The sheet
+  // loads the draft again and examines the diff again (item 6).
+  const repairShortAddresses = () => findings.act(async () => {
+    await draft.flush();
+    const answers = await repairAddresses(findings.address, (id, body) => api(`/feeds/${id}/check/repair`, { method: 'POST', body }));
+    const last = answers.get(feedId);
+    if (last) draft.show(last.draft);
+    setDiff(await api(`/feeds/${feedId}/diff`));
+    await checkLinks();
+    setReviewTick((n) => n + 1);
+  });
+  // The corrections of ADR 0245 item 12 change the drafts in the core.
+  const afterCorrection = () => findings.act(async () => {
+    await draft.load();
+    setDiff(await api(`/feeds/${feedId}/diff`));
+    await checkLinks();
+    setReviewTick((n) => n + 1);
+  });
   // The hosts that can take the file of a read-only feed. The core refuses
   // a host with no public address, and Review shows its error.
   const targets = connectors || [];
@@ -2254,7 +2278,14 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
   // Studio cannot write while an address of the draft is not correct. A
   // host operation of `diff` does not block the write on its own: Studio
   // skips a deletion that `diff.blocked` names, and the user sees it here.
-  const addressesBlocked = draft.bad.length > 0;
+  // The addresses with a finding `short_address` show in the address panel
+  // and not in this list (ADR 0245 item 6).
+  // A deletion writes no address, so it shows no panel.
+  const addressPanel = diff && !deleteWrite(diff) ? findings.address : null;
+  const shownFindings = diff && deleteWrite(diff) ? { ...findings, address: null, people: null } : findings;
+  const panelFields = new Set(addressPanel ? addressPanel.rows.map((row) => row.field) : []);
+  const otherBad = draft.bad.filter((b) => !panelFields.has(b.field));
+  const addressesBlocked = otherBad.length > 0;
   const stale = releaseError && releaseError.code === 'diff_not_approved';
   // The files that the write sends. On a server that holds no assets,
   // Studio then removes its copies (ADR 0105 item 19).
@@ -2292,7 +2323,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
         : signErrorText(error && error.code)
           ? html`<div class="notice error" role="alert"><strong>${signErrorText(error.code)}</strong></div>`
           : html`<${ErrorNotice} error=${error} action=${discarding ? discardFailureTitle() : isPublisher(feeds.find((f) => f.id === feedId) || {}) ? 'Studio could not write the page.' : 'Studio could not write the release.'} onRetry=${retry} />`;
-  const hasWork = !pageRefusal && diff && (diff.changed || diff.operations.length > 0 || diff.blocked.length > 0 || !!diff.feed_move || diff.grants.length > 0);
+  const hasWork = !pageRefusal && !addressPanel && diff && (diff.changed || diff.operations.length > 0 || diff.blocked.length > 0 || !!diff.feed_move || diff.grants.length > 0);
   return html`<dialog ref=${ref} class="sheet" aria-labelledby="review-title" onClose=${onClose}>
     <header>
       <h2 id="review-title" ref=${result ? resultTitle : undefined} tabIndex=${result ? -1 : undefined}>${result ? result.title : 'Review changes'}</h2>
@@ -2313,6 +2344,8 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
       </div>` : html`
       <p class="hint" role="status">${STATUS[draft.status]}</p>
       ${diff && html`<${ReturnWarning} move=${diff.feed_move} wait=${returnWait} />`}
+      ${diff && html`<${ReviewPanels} findings=${shownFindings} feeds=${feeds} busy=${busy} onRepair=${repairShortAddresses}
+        onUse=${(group) => setCorrecting({ personId: group.personId, feedIds: group.feedIds })} />`}
       ${draft.error && draft.error.code === 'stale_revision'
         ? html`<div class="notice error" role="alert"><strong>The draft changed in a different window.</strong>
             Load the draft again to continue. The changes in this window since the last save go out.
@@ -2327,7 +2360,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
       ${addressesBlocked && html`<div class="notice error" role="alert">
         <strong>Studio cannot write while an address is not correct.</strong>
         Correct the fields with red text. Each address starts with https:// or http://.
-        <ul class="address-list">${draft.bad.map((b) => html`<li><span class="mono">${b.field}</span>: <span class="mono">${b.value}</span></li>`)}</ul>
+        <ul class="address-list">${otherBad.map((b) => html`<li><span class="mono">${b.field}</span>: <span class="mono">${b.value}</span></li>`)}</ul>
       </div>`}
       ${refusal && html`<${LinkRefusal} refusal=${refusal} busy=${busy} onRepair=${repair} />`}
       ${pageRefusal && html`<div class="notice error" role="alert"><strong>${pageRefusal.title}</strong><p>${pageRefusal.line}</p>
@@ -2345,7 +2378,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
         : html`<p class="field-warning" role="status" key=${problem.guid + problem.text}><strong>${problem.title}:</strong> ${problem.text}</p>`)}
       ${diff && (diff.changed
         ? html`<${DiffView} diff=${diff} />`
-        : !hasWork && !pageRefusal && html`<p>The draft is the same as the hosted file.</p>`)}
+        : !hasWork && !pageRefusal && !addressPanel && html`<p>The draft is the same as the hosted file.</p>`)}
       ${diff && alsoShown.length > 0 && html`<div class="group also-write">
         ${alsoShown.map((row) => html`<div key=${row.id} class="also-write-row">
           <label class="check"><input type="checkbox" checked=${row.checked} disabled=${busy || row.locked}
@@ -2396,6 +2429,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
       </div>`}
       `}
       ${!result && pageRefusal && html`<p class="hint" role="status">${pageRefusal.write}</p>`}
+      ${!result && addressPanel && html`<p class="hint" role="status">${addressPanel.write}</p>`}
     </div>
     <footer>
       ${!result && html`
@@ -2404,12 +2438,13 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
       ${deletion && diff && hasWork && !addressesBlocked && !choosing && html`<button class="button destructive" type="button" disabled=${busy || waiting || needsSigner || streamRefusal || alsoPending || blocksWrite(links)} onClick=${write}>
         ${progress ? signProgressLabel(progress) : busy ? 'Writing…' : deletion.label}</button>`}
       <button class=${`button${deletion ? '' : ' destructive'}`} type="button" disabled=${busy || (!deletion && !draft.changed)} onClick=${discard}>${deletion && deletion.cancel ? deletion.cancel : reviewRemoveLabel((feeds.find((f) => f.id === feedId) || {}).draft_state)}</button>
-      ${!deletion && diff && pageRefusal && html`<button class="button primary" type="button" disabled>${busy ? 'Writing…' : 'Write to the File Host'}</button>`}
+      ${!deletion && diff && (pageRefusal || addressPanel) && html`<button class="button primary" type="button" disabled>${busy ? 'Writing…' : 'Write to the File Host'}</button>`}
       ${!deletion && diff && hasWork && !addressesBlocked && !choosing && html`<button class="button primary" type="button" disabled=${busy || waiting || needsSigner || streamRefusal || alsoPending || blocksWrite(links)} onClick=${write}>
         ${progress ? signProgressLabel(progress) : busy ? 'Writing…' : 'Write to the File Host'}</button>`}
       `}
       ${result && html`<button class="button primary" type="button" onClick=${() => ref.current.close()}>Close</button>`}
     </footer>
+    <${ReviewCorrectSheet} target=${correcting} feeds=${feeds} onApplied=${afterCorrection} onClose=${() => setCorrecting(null)} />
   </dialog>`;
 }
 

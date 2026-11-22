@@ -1,6 +1,6 @@
 // Music Index Studio UI (ADR 0016). Preact and htm, with no build step.
 import { html, render, useState, useEffect, useLayoutEffect, useCallback, useRef, useContext, createContext } from './vendor/htm-preact-standalone.module.js';
-import { checkCount, releaseChecklist } from './feedcheck.js';
+import { checkCount, releaseChecklist, repairAddresses } from './feedcheck.js';
 import { pageSequence, settingsTabs } from './pages.js';
 import { useFieldList, RowList, PickerLayout, SearchResults } from './pickers.js';
 import { UI_SCALES, SCALE_KEY, normalizeScale, measureWindowUnits } from './uiscale.js';
@@ -25,7 +25,7 @@ import { WELCOME, HOST_STEP, showWelcome, welcomeSteps, pathTexts, hostStepModel
 import { isLiveItem } from './live.js';
 import { appRowLines, pairingPhase, pairingNotice, doneRemovesApp } from './apps.js';
 import { CONFIRMS, confirmButtons } from './confirms.js';
-import { changeTitle, afterDiscard, changeLine, changeSetView } from './people.js';
+import { changeTitle, afterDiscard, changeLine, changeSetView, openLabel } from './people.js';
 import { makeSettingsDraft, changeSetting, settingsDraftView, discardSettings, saveSettings, asksSettingsLeave, lockStartMenu } from './settingsdraft.js';
 import { makeHistory } from './undohistory.js';
 import { DeleteUndoProvider, useDeleteUndo, undoNoticeText, UNDO_COMPLETE } from './undonotice.js';
@@ -33,7 +33,7 @@ import { DeleteUndoProvider, useDeleteUndo, undoNoticeText, UNDO_COMPLETE } from
 // The undo history of the Settings draft. It stays when the user opens a
 // different page and comes back (ADR 0227 item 7).
 const settingsHistory = makeHistory();
-import { PeoplePage, PersonPage, CheckPage, WalletPage, useLookup } from './peoplepages.js';
+import { PeoplePage, PersonPage, CheckPage, WalletPage, useLookup, useReviewFindings, ReviewPanels, ReviewCorrectSheet } from './peoplepages.js';
 import { deletedNotice } from './feeddelete.js';
 import { OUTSIDE_LIMIT, OUTSIDE_SETTING_LABEL, OUTSIDE_SETTING_HINT, outsideMark, outsideNotice, readOnlyHostNotice, indexNotice, releaseMusicIndexLink, moveNotice, moveAgainDelay, writeNotice, nextNoticeLoad, eachLimited, panelSet, stateMark, feedsToCheck } from './outsidecheck.js';
 import { collectionMark, collectionRow, collectionSectionActions, collectionSheet, collectionAction, switchCollectionRows, CLOSED_EXPORT_HINT, COLLECTIONS_HINT, OPENING_TEXT } from './collectionlist.js';
@@ -3351,6 +3351,8 @@ function ChangeSetPage({ id, go, onChanged, feeds }) {
   const [openId, setOpenId] = useState(null);
   const [diffs, setDiffs] = useState({});
   const [writing, setWriting] = useState(false);
+  // The feeds that a write refused with `bad_address` (ADR 0245 item 8).
+  const [badFeeds, setBadFeeds] = useState(() => new Set());
   const { busy, error, run } = useAction();
   useEffect(() => {
     run(async () => {
@@ -3377,16 +3379,32 @@ function ChangeSetPage({ id, go, onChanged, feeds }) {
     return () => window.removeEventListener(UNLOCKED, again);
   }, [id]);
   // A feed opens its diff in a closed entry. One entry is open at a time.
+  const loadDiff = (feedId) => api(`/feeds/${feedId}/diff`).then(
+    (diff) => setDiffs((all) => ({ ...all, [feedId]: { diff } })),
+    (e) => setDiffs((all) => ({ ...all, [feedId]: { error: e } })),
+  );
   const toggle = (feedId, isOpen) => {
     setOpenId((current) => (isOpen ? feedId : current === feedId ? null : current));
-    if (isOpen && !diffs[feedId]) {
-      api(`/feeds/${feedId}/diff`).then(
-        (diff) => setDiffs((all) => ({ ...all, [feedId]: { diff } })),
-        (e) => setDiffs((all) => ({ ...all, [feedId]: { error: e } })),
-      );
-    }
+    if (isOpen && !diffs[feedId]) loadDiff(feedId);
   };
   const order = set ? writableIds(set) : [];
+  // The address panel and the People panel of the review (ADR 0245 items 5
+  // to 7 and 11 to 13). A change of `reviewTick` reads the findings again.
+  const [reviewTick, setReviewTick] = useState(0);
+  const [correcting, setCorrecting] = useState(null);
+  const titleOfFeed = (feedId) => ((set && set.feeds.find((f) => f.feed_id === feedId)) || {}).title || 'Untitled feed';
+  const findings = useReviewFindings({ feedIds: order, active: set !== null, token: reviewTick, titleOf: titleOfFeed });
+  // After a repair or a correction, the drafts are not the same, so the
+  // diffs are read again (ADR 0245 items 6 and 12).
+  const readAgain = async () => {
+    setDiffs({});
+    if (openId !== null) loadDiff(openId);
+    setReviewTick((n) => n + 1);
+  };
+  const repairShortAddresses = () => findings.act(async () => {
+    await repairAddresses(findings.address, (feedId, body) => api(`/feeds/${feedId}/check/repair`, { method: 'POST', body }));
+    await readAgain();
+  });
   const pending = Object.values(statuses).filter((s) => s.state === 'waiting' || s.state === 'failed').length;
   const writeAll = async () => {
     setWriting(true);
@@ -3401,6 +3419,7 @@ function ChangeSetPage({ id, go, onChanged, feeds }) {
         window.dispatchEvent(new Event(ANNOUNCE_RELOAD));
       } catch (e) {
         failure = writeFailText(e);
+        if (e.code === 'bad_address') setBadFeeds((before) => new Set(before).add(feedId));
       }
       current = finishWrite(current, feedId, failure);
       setStatuses(current);
@@ -3419,9 +3438,10 @@ function ChangeSetPage({ id, go, onChanged, feeds }) {
   };
   const notFound = error && error.status === 404;
   const pendingWrite = set !== null && pending > 0;
+  const addressBlocked = Boolean(findings.address);
   return html`<div><${Bar}><span class="bar-title">Review the changes</span>
     ${set && html`<div class="draft-toolbar"><button class="button destructive" type="button" disabled=${writing || busy} onClick=${discard}>Discard</button>
-      ${pendingWrite && html`<button class="button primary" type="button" disabled=${writing || busy} onClick=${writeAll}>
+      ${pendingWrite && html`<button class="button primary" type="button" disabled=${writing || busy || addressBlocked} onClick=${writeAll}>
         ${writing ? 'Writing…' : writeLabel(pending)}</button>`}</div>`}<//><section class="section">
     ${notFound
       ? html`<div class="notice" role="status"><strong>Studio did not find these changes.</strong>It is written or discarded.
@@ -3430,6 +3450,8 @@ function ChangeSetPage({ id, go, onChanged, feeds }) {
     ${set === null && !error && html`<p class="empty" role="status">Loading the changes…</p>`}
     ${set && html`<header class="recipient-head"><h1>${changeTitle(set.operation)}</h1>
       <p class="hint">${set.person_id != null ? changeLine(set, personName) : operationLine(set.operation, nameOf(known, set.recipient))}</p></header>
+      <${ReviewPanels} findings=${findings} feeds=${feeds} busy=${busy || writing} onRepair=${repairShortAddresses}
+        onUse=${(group) => setCorrecting({ personId: group.personId, feedIds: group.feedIds })} />
       <${AnnounceChoice} />
       <section class="page-section"><h2>Feeds</h2><div class="group">${set.feeds.map((feed) => {
         const outcome = outcomeText(feed.outcome, set.operation);
@@ -3442,7 +3464,9 @@ function ChangeSetPage({ id, go, onChanged, feeds }) {
           ${status && html`<span class=${`status ${status.state}`} role="status">${statusText(status)}</span>`}`;
         if (!outcome.changed) return html`<div key=${feed.feed_id} class="link-row static">${summary}</div>`;
         const shown = diffs[feed.feed_id];
-        return html`<details key=${feed.feed_id} class="disclosure" open=${openId === feed.feed_id}
+        const openFeed = badFeeds.has(feed.feed_id) && html`<div class="actions" key=${`open-${feed.feed_id}`}>
+          <button class="button action" type="button" onClick=${() => go({ name: 'feed', id: feed.feed_id })}>${openLabel((feeds || []).find((f) => f.id === feed.feed_id))}</button></div>`;
+        return [html`<details key=${feed.feed_id} class="disclosure" open=${openId === feed.feed_id}
           onToggle=${(e) => toggle(feed.feed_id, e.currentTarget.open)}>
           <summary class="link-row">${summary}</summary>
           <div class="change-diff">
@@ -3452,8 +3476,10 @@ function ChangeSetPage({ id, go, onChanged, feeds }) {
               ? html`<${DiffView} diff=${shown.diff} />`
               : html`<p class="hint">The draft is the same as the hosted file.</p>`)}
           </div>
-        </details>`;
-      })}</div></section>`}
+        </details>`, openFeed];
+      })}</div></section>
+      ${addressBlocked && html`<p class="hint" role="status">${findings.address.write}</p>`}
+      <${ReviewCorrectSheet} target=${correcting} feeds=${feeds} onApplied=${() => findings.act(readAgain)} onClose=${() => setCorrecting(null)} />`}
   </section></div>`;
 }
 

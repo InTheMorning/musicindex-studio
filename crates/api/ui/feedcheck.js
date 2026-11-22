@@ -105,6 +105,88 @@ export function pageRefusalView(reason, selected = false, candidates = 1) {
   };
 }
 
+// The write line of the address panel (ADR 0245 item 7).
+export const ADDRESS_WRITE_LINE = 'Repair these addresses first.';
+
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+// The address panel of a review (ADR 0245 items 6 and 7). `feeds` lists
+// `{ feedId, title, check }` for each feed of the review. `check` is the
+// answer of the check route. The core finds each address and gives the place
+// in words. The function only reads the findings `short_address`. It gives
+// null when no feed has one. `feeds` of the result has the data that
+// `repairAddresses` needs.
+export function addressPanelView(feeds) {
+  const shown = [];
+  for (const feed of feeds || []) {
+    const findings = ((feed.check && feed.check.findings) || []).filter((finding) => finding.kind === 'short_address');
+    if (findings.length === 0) continue;
+    shown.push({
+      feedId: feed.feedId,
+      title: feed.title,
+      revision: feed.check.revision,
+      rows: findings.map((finding) => ({
+        key: `${feed.feedId}|${findingKey(finding)}`,
+        feedId: feed.feedId,
+        feedTitle: feed.title,
+        field: finding.field ?? null,
+        place: finding.place,
+        address: finding.url,
+        newAddress: `https://${String(finding.url ?? '').trim()}`,
+        body: { kind: finding.kind, entry: finding.entry ?? null, url: finding.url ?? null, ...(finding.field ? { field: finding.field } : {}) },
+      })),
+    });
+  }
+  if (shown.length === 0) return null;
+  const n = shown.length;
+  return {
+    title: n === 1 ? '1 feed has addresses that are not full' : `${n} feeds have addresses that are not full`,
+    button: `Add https:// in ${plural(n, 'Feed', 'Feeds')}`,
+    write: ADDRESS_WRITE_LINE,
+    feeds: shown,
+    rows: shown.flatMap((feed) => feed.rows),
+  };
+}
+
+// The repair of each listed address (ADR 0245 items 4 and 6). `call(feedId,
+// body)` asks the repair route of the feed and gives its answer. Each answer
+// has the check with the new revision for the next repair of the same feed.
+// The result maps each feed ID to its last answer.
+export async function repairAddresses(view, call) {
+  const answers = new Map();
+  for (const feed of view.feeds) {
+    let revision = feed.revision;
+    for (const row of feed.rows) {
+      const answer = await call(feed.feedId, { ...row.body, revision });
+      revision = answer.check.revision;
+      answers.set(feed.feedId, answer);
+    }
+  }
+  return answers;
+}
+
+// The People panel of a review (ADR 0245 items 11 and 13). `answer` is the
+// answer of the People route of the review findings. `titleOf(feedId)` gives
+// the title of a feed. A person with no finding is left out. The panel does
+// not stop the write. The core finds each difference.
+export function peoplePanelView(answer, titleOf = () => '') {
+  const groups = ((answer && answer.people) || []).map((person) => {
+    const entries = (person.feeds || []).filter((feed) => (feed.findings || []).length > 0)
+      .map((feed) => ({ feedId: feed.feed_id, title: titleOf(feed.feed_id), entry: feed }));
+    if (entries.length === 0) return null;
+    return {
+      personId: person.person_id,
+      name: person.name,
+      entries,
+      feedIds: entries.map((entry) => entry.feedId),
+      button: `Use ${person.name}'s Values in ${plural(entries.length, 'Feed', 'Feeds')}`,
+    };
+  }).filter(Boolean);
+  if (groups.length === 0) return null;
+  const n = new Set(groups.flatMap((group) => group.feedIds)).size;
+  return { title: n === 1 ? '1 feed differs from People' : `${n} feeds differ from People`, groups };
+}
+
 // The label of the tab: "Issues (5)", or "Issues" for no finding and before
 // the first answer (ADR 0228 item 13).
 export function tabLabel(count) {

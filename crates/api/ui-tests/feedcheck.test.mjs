@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   tabLabel, checkCount, checkRows, unreadableRows, repairLabel, hasShowGrant, checkTexts,
   PAGE_FINDING_TEXT, pageRefusalView,
+  addressPanelView, repairAddresses, peoplePanelView, ADDRESS_WRITE_LINE,
   releaseChecklist, wrongAddressSet,
   CHECK_LEAD, CHECK_NONE, CHECK_GRANT, CHECK_READ_ONLY, CHECK_UNREADABLE,
   COPY_SHEET_TEXT, WAYS_SHEET_TEXT,
@@ -248,4 +249,82 @@ test('a show grant is active until it ends', () => {
   assert.equal(hasShowGrant([{ item_guid: 'live-1', ended_at: null }], live, now + 3 * 86400), false, owner);
   assert.equal(hasShowGrant([], live, now), false, owner);
   assert.equal(hasShowGrant(null, live, now), false, owner);
+});
+
+const shortFinding = (extra = {}) => ({
+  kind: 'short_address', level: 'stop', title: 'T', reason: 'R', entry: null, repair: 'add_https',
+  field: 'items/0/persons/0/href', place: 'Credit · The Doerfels · Information address', url: 'www.doerfelverse.com', ...extra,
+});
+
+test('the address panel for one feed gives the texts of ADR 0245 items 6 and 7', () => {
+  const owner = 'ADR 0245 items 6 and 7: check addressPanelView in feedcheck.js.';
+  const view = addressPanelView([{ feedId: 4, title: 'Bloodshot Lies - The Album', check: check([shortFinding(), finding('no_cover', 'add_a_cover')]) }]);
+  assert.equal(view.title, '1 feed has addresses that are not full', owner);
+  assert.equal(view.button, 'Add https:// in 1 Feed', owner);
+  assert.equal(view.write, 'Repair these addresses first.', owner);
+  assert.equal(ADDRESS_WRITE_LINE, view.write, owner);
+  assert.deepEqual(view.rows.map((row) => [row.feedTitle, row.place, row.address, row.newAddress]), [
+    ['Bloodshot Lies - The Album', 'Credit · The Doerfels · Information address', 'www.doerfelverse.com', 'https://www.doerfelverse.com'],
+  ], owner);
+  assert.deepEqual(view.rows[0].body, { kind: 'short_address', entry: null, url: 'www.doerfelverse.com', field: 'items/0/persons/0/href' }, owner);
+});
+
+test('the address panel for two feeds counts the feeds and trims the new address', () => {
+  const owner = 'ADR 0245 item 6: check addressPanelView in feedcheck.js.';
+  const view = addressPanelView([
+    { feedId: 1, title: 'One', check: check([shortFinding({ url: ' doerfelverse.com/artists ' }), shortFinding({ field: 'items/1/persons/0/href' })]) },
+    { feedId: 2, title: 'Two', check: check([]) },
+    { feedId: 3, title: 'Three', check: check([shortFinding()]) },
+  ]);
+  assert.equal(view.title, '2 feeds have addresses that are not full', owner);
+  assert.equal(view.button, 'Add https:// in 2 Feeds', owner);
+  assert.equal(view.rows.length, 3, owner);
+  assert.equal(view.rows[0].newAddress, 'https://doerfelverse.com/artists', owner);
+  assert.equal(addressPanelView([{ feedId: 2, title: 'Two', check: check([]) }]), null, owner);
+  assert.equal(addressPanelView([]), null, owner);
+});
+
+test('repairAddresses repairs each row and passes the new revision on', async () => {
+  const owner = 'ADR 0245 items 4 and 6: check repairAddresses in feedcheck.js.';
+  const view = addressPanelView([
+    { feedId: 1, title: 'One', check: check([shortFinding(), shortFinding({ field: 'items/1/persons/0/href' })], { revision: 'r1' }) },
+    { feedId: 3, title: 'Three', check: check([shortFinding()], { revision: 'r9' }) },
+  ]);
+  const calls = [];
+  const answers = await repairAddresses(view, async (feedId, body) => {
+    calls.push([feedId, body.field, body.revision]);
+    return { draft: { feedId }, check: { revision: `${body.revision}+` } };
+  });
+  assert.deepEqual(calls, [[1, 'items/0/persons/0/href', 'r1'], [1, 'items/1/persons/0/href', 'r1+'], [3, 'items/0/persons/0/href', 'r9']], owner);
+  assert.deepEqual([...answers.keys()], [1, 3], owner);
+  assert.equal(answers.get(1).check.revision, 'r1++', owner);
+});
+
+const peopleAnswer = (people) => ({ people });
+const entry = (feedId, findings) => ({ feed_id: feedId, state: findings.length > 0 ? 'needs_correction' : 'correct', findings });
+
+test('the People panel gives the texts of ADR 0245 item 11 for one feed', () => {
+  const owner = 'ADR 0245 item 11: check peoplePanelView in feedcheck.js.';
+  const view = peoplePanelView(peopleAnswer([{ person_id: 7, name: 'The Doerfels', feeds: [entry(4, [{ kind: 'credit_details', href: true }])] }]), (id) => `Feed ${id}`);
+  assert.equal(view.title, '1 feed differs from People', owner);
+  assert.equal(view.groups.length, 1, owner);
+  assert.equal(view.groups[0].button, "Use The Doerfels's Values in 1 Feed", owner);
+  assert.deepEqual(view.groups[0].feedIds, [4], owner);
+  assert.equal(view.groups[0].entries[0].title, 'Feed 4', owner);
+});
+
+test('the People panel for two feeds and two persons counts each feed once', () => {
+  const owner = 'ADR 0245 items 11 and 13: check peoplePanelView in feedcheck.js.';
+  const view = peoplePanelView(peopleAnswer([
+    { person_id: 7, name: 'Ann', feeds: [entry(1, [{ kind: 'credit_role' }]), entry(2, [{ kind: 'credit_role' }]), entry(3, [])] },
+    { person_id: 8, name: 'Bob', feeds: [entry(2, [{ kind: 'credit_key' }])] },
+    { person_id: 9, name: 'Cy', feeds: [entry(5, [])] },
+  ]));
+  assert.equal(view.title, '2 feeds differ from People', owner);
+  assert.deepEqual(view.groups.map((group) => [group.name, group.button]), [
+    ['Ann', "Use Ann's Values in 2 Feeds"], ['Bob', "Use Bob's Values in 1 Feed"],
+  ], owner);
+  assert.deepEqual(view.groups[0].feedIds, [1, 2], owner);
+  assert.equal(peoplePanelView(peopleAnswer([{ person_id: 9, name: 'Cy', feeds: [entry(5, [])] }])), null, owner);
+  assert.equal(peoplePanelView(null), null, owner);
 });

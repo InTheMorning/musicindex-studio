@@ -48,3 +48,9 @@ test('the failed import row and each named list load have a retry state', async 
   assert.equal(loads(app, 'the feeds of this folder'), 1, 'ADR 0222 item 5: app.js must show LoadErrorNotice for the feeds of a folder.');
   assert.ok(app.includes('Studio could not load ${list}.'));
 });
+
+test('the step of bad_address is the message with the places (ADR 0245 item 8)', () => {
+  assert.equal(errorStep({ code: 'bad_address', message: 'Credit · The Doerfels · Information address is not correct.' }),
+    'Credit · The Doerfels · Information address is not correct.',
+    'ADR 0245 item 8: the refusal names each place in words. Fix errorStep in crates/api/ui/errors.js.');
+});

@@ -25,7 +25,10 @@ export function canTryAgain(error) {
   return error?.status === 0 || error?.status >= 500;
 }
 
+// ADR 0245 item 8: the message of `bad_address` names each place in words,
+// so it is the step of the user.
 export function errorStep(error) {
+  if (error?.code === 'bad_address' && error.message) return error.message;
   return ERROR_STEPS[error?.code]?.step || 'Try again. If the error stays, restart Studio.';
 }
 

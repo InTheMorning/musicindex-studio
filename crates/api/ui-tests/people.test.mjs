@@ -8,6 +8,7 @@ import {
   lookupAddress, showFindEmpty, feedWords,
   addressMenu, recipientAddressMenu,
   nicknameBody, afterNicknameSave,
+  addressErrorView, repairAddressValues, ADDRESS_REPAIR_BUTTON,
 } from '../ui/people.js';
 import { pageSequence, tierError } from '../ui/pages.js';
 
@@ -2209,4 +2210,34 @@ test('the add forms use their own Music Index search sheet', async () => {
     const source = await readFile(new URL(`../ui/${name}`, import.meta.url), 'utf8');
     assert.doesNotMatch(source, /FindOneSheet[^>]*noun=/, `ADR 0231 item 3: ${name} keeps the words Feeds and Feed. ${fix}`);
   }
+});
+
+test('the save error bad_address gives the button text and the repair text', () => {
+  const owner = 'ADR 0245 item 9: check addressErrorView in crates/api/ui/people.js.';
+  const error = { code: 'bad_address', message: 'The information address is not correct.', details: { fields: ['href'], repair: 'https://www.doerfelverse.com' } };
+  assert.deepEqual(addressErrorView(error), {
+    message: 'www.doerfelverse.com has no https://. Studio cannot save it.', status: 'Studio could not save. See Websites.',
+    kind: 'website', repair: 'https://www.doerfelverse.com', button: 'Add https://',
+  }, owner);
+  assert.equal(ADDRESS_REPAIR_BUTTON, 'Add https://', owner);
+  const none = addressErrorView({ code: 'bad_address', message: 'M', details: { fields: ['pictures'], repair: null } });
+  assert.deepEqual([none.kind, none.repair, none.button, none.status], ['picture', null, null, 'Studio could not save. See Pictures.'], owner);
+  assert.equal(none.message, 'An address is not correct. It must start with https:// and have no space.', owner);
+  assert.equal(addressErrorView({ code: 'invalid_person', message: 'M' }), null, owner);
+  assert.equal(addressErrorView(null), null, owner);
+});
+
+test('the repair text goes into the list and the default of the field', () => {
+  const owner = 'ADR 0245 item 9: check repairAddressValues in crates/api/ui/people.js.';
+  const values = {
+    img: '', href: ' www.doerfelverse.com',
+    pictures: [],
+    websites: [{ value: ' www.doerfelverse.com', source: null }, { value: 'https://other.example/', source: null }],
+  };
+  const view = addressErrorView({ code: 'bad_address', message: 'M', details: { fields: ['websites'], repair: 'https://www.doerfelverse.com' } });
+  const patch = repairAddressValues(values, view);
+  assert.deepEqual(patch.websites.map((item) => item.value), ['https://www.doerfelverse.com', 'https://other.example/'], owner);
+  assert.equal(patch.href, 'https://www.doerfelverse.com', owner);
+  assert.equal('pictures' in patch, false, owner);
+  assert.deepEqual(repairAddressValues(values, { kind: 'website', repair: null }), {}, owner);
 });

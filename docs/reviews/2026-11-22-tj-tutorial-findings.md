@@ -24,7 +24,18 @@ This file records the possible improvements. It states no rule. Each fix needs i
 
 8. **The hosting form shows "Artist or label" as its type.** The sheet "Make a new hosting page" has Type "Artist or label" and Role "Hosting". The two fields seem to disagree. Proposal: name the type "Publisher page", or hide the field when the role is set.
 
+## Findings Of The Second Walk
+
+The main session ran the tutorial again after commit `a0ed27c`, in `.studio-dev/v-230` with the data copy `data-tut`. In that copy, the three artist pages have no role, the collection has no hosting page, and the folders of sirtjthewrathful.com are not connected.
+
+9. **The role of a page does not go into an artist feed if its links have no medium.** "Move Artists Here…" gave the three pages the role artist, but the change set holds only The Doerfels and Middle Season. `set_roles` in `crates/core/src/publisher.rs` puts the `rel` only on a `podcast:remoteItem` with a release medium, such as `medium="music"`. The six links of `elijahliedpubfeed.xml` have no `medium`, so the file of Elijah Lied gets no role, but its linked releases change. Proposal: when a link has no medium, use the medium of the feed in the collection that the link names.
+10. **The feed check does not find an address that is not full.** The release "Bloodshot Lies - The Album" has credits with the information address `www.doerfelverse.com`, with no `https://`. The Check tab shows no finding. Studio finds the fault only at the write, and refuses that feed with the code `bad_address`. Proposal: a finding with the repair "Use the https address" for each such field.
+11. **The refusal of a bad address names model paths.** The write message is "these address fields are not full http or https addresses: items/0/persons/0/href …". A user does not know what `items/0/persons/0/href` is. Proposal: name the track, the credit and the field, for example "Track 1, credit Ben Doerfel: Information address".
+12. **The review of a role change repeats one line.** The review of The Doerfels shows "Remote items: 18 entries get the relation artist", then the line "Relation: none → artist" for each entry. Proposal: show the count line only.
+
+The write of the new hosting page gave `not_reachable` (404) in the test, because the test does not put the file on the public site. This is a limit of the test, not a finding.
+
 ## Open
 
-- [ADR 0243](../adr/0243-a-move-is-a-change-set-and-a-level-gathers-its-pages.md) gives findings 1, 2, 3, 4 and 6. Tasks 229 to 232 build ADR 0243 and findings 5, 7 and 8.
-- After tasks 229 to 232, the main session makes the tutorial again with the shorter steps.
+- [ADR 0243](../adr/0243-a-move-is-a-change-set-and-a-level-gathers-its-pages.md) gives findings 1, 2, 3, 4 and 6. Tasks 229 to 232 build ADR 0243 and findings 5, 7 and 8. They are committed, the last in `9b1a300`.
+- Findings 9 to 12 have no decision now. The tutorial tells the user how to correct the fault of finding 10 by hand.

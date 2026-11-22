@@ -5,6 +5,7 @@
 - Owner: operator
 - Accepted: 2026-11-22 by the operator, with two options from drawings in the questionnaire. Review shows a repair panel before the write, and the write stays off until the repair. Review also offers the values of People, and a difference does not stop the write. The operator wrote: "we want our users to have correct info in their People list which corrects all the feeds before writing."
 - Technical choices: the main session selected the name of the finding kind, the texts and the condition of item 2. It also put the People rule in ADR 0023 (item 9).
+- Revised: 2026-11-22 by the main session, before the build. Item 12: the correction changes the drafts directly. ADR 0091 does not let a second change set change a feed of an open change set (`Cause::InOpenChangeSet` in `crates/core/src/change_set.rs`).
 - Bar: crosses modules. It changes the feed check of the core, the save of a person, the review of a draft and the review of a change set. Without this record, an agent can add `https://` at the write with no review, or put the People values into the feeds with no button.
 - Changes: [ADR 0023](0023-web-addresses-and-audio-file-facts.md) items 1, 3 and 4. A person value is an address field, and an address with no scheme gets a repair.
 - Changes: [ADR 0219](0219-a-release-checklist-and-a-check-of-the-address-type.md) item 1. The feed check gets the finding kind `short_address`, with the level Stop.
@@ -47,7 +48,7 @@ People saves a picture and an information address with no check of the address.
 9. ADR 0023 item 1 also covers the picture and the information address of a person in People. The save of a person refuses an address that is not correct. The field shows the error of ADR 0023 item 4. For a text of item 2, the field also has the button **Add https://**, which changes the text in the field.
 10. Each review runs the check of ADR 0203 item 64 for each person with a credit or a payee in the feeds that it writes. It keeps the findings for those feeds only. The neutral finding "Not your default address" does not count.
 11. When item 10 gives findings, the review shows a second panel under the panel of item 6. Its title is "{n} feeds differ from People", or "1 feed differs from People". It lists each person with each finding, as ADR 0203 item 68 gives. Each person has the button **Use {name}'s Values in {n} Feeds** or **Use {name}'s Values in 1 Feed**.
-12. The button of item 11 opens the sheet "Correct the Feeds: {name}" of ADR 0203 item 71 for those feeds only, with the start selections of item 71. In this sheet, the primary button reads **Apply to the Drafts**. It applies the operation **Correct** to the drafts, and the user goes back to the same review, which reads the diffs again.
+12. The button of item 11 opens the sheet "Correct the Feeds: {name}" of ADR 0203 item 71 for those feeds only, with the start selections of item 71. In this sheet, the primary button reads **Apply to the Drafts**. The core applies the selected corrections of the operation **Correct** to the drafts of those feeds directly, as a repair of item 6 does. It makes no change set of its own. The user goes back to the same review, which reads the diffs again. **Discard** of the review also removes these corrections (ADR 0207 item 27).
 13. The panel of item 11 does not stop the write. A difference can be intentional, for example another picture on one release.
 14. Studio applies no People value and adds no `https://` without a button of the user.
 
@@ -66,7 +67,7 @@ Mechanical:
 - The API of a change-set review gives the short addresses of each feed and refuses the write while a short address stays.
 - The save of a person with the information address `www.doerfelverse.com` gives an error, and the person keeps the old value.
 - The People findings of a review contain only the feeds of the review, and contain no neutral finding.
-- After **Apply to the Drafts**, the drafts have the values of the person, and the review gives no People finding for them.
+- After **Apply to the Drafts**, the drafts have the values of the person, and the review gives no People finding for them. This also applies to a feed of an open change set, and **Discard** of that change set removes the corrections.
 - A Node test gives the texts of items 1, 6, 7 and 11 from the view model.
 
 Visual, by the main session with screenshots of the tutorial data:

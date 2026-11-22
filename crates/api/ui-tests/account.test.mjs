@@ -1,4 +1,4 @@
-// The account models (ADR 0042). Each test checks one rule of ADR 0055 or
+// The account models (ADR 0042). Each test checks one rule of ADR 0204 or
 // ADR 0056.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

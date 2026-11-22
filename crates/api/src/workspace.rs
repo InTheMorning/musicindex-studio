@@ -56,7 +56,7 @@ const LOCK_CHOICES: [u64; 4] = [5, 10, 30, 60];
 const LOCK_WATCH_INTERVAL: Duration = Duration::from_secs(30);
 
 /// A clone of the shared workspace, for the shell that owns it. The server
-/// uses it for the vault (ADR 0055 items 4 and 5). Each function runs on a
+/// uses it for the vault (ADR 0204 items 26 and 27). Each function runs on a
 /// blocking thread.
 #[derive(Debug, Clone)]
 pub struct WorkspaceHandle {
@@ -64,7 +64,7 @@ pub struct WorkspaceHandle {
 }
 
 /// Run the remote file records in a background task when they wait for
-/// the unlock (ADR 0038 item 3, task 126). The unlock response does not
+/// the unlock (ADR 0204 item 3, task 126). The unlock response does not
 /// wait for the pass.
 pub(crate) fn schedule_remote_records_if_waiting(
     shared: Arc<Mutex<Workspace>>,
@@ -399,7 +399,7 @@ impl WorkspaceHandle {
             .unwrap_or(0)
     }
 
-    /// Close the vault and remove the user folder (ADR 0055 item 9). The
+    /// Close the vault and remove the user folder (ADR 0204 item 31). The
     /// workspace must have server rules, because they name the folder.
     ///
     /// # Errors
@@ -414,7 +414,7 @@ impl WorkspaceHandle {
                 .as_ref()
                 .ok_or_else(|| ApiError::internal("the workspace has no user folder"))?;
             // The removal runs three times. A folder that is gone counts as
-            // removed (ADR 0055 item 9, task 072c).
+            // removed (ADR 0204 item 31, task 072c).
             let mut last = None;
             for attempt in 0..3 {
                 if attempt > 0 {
@@ -470,10 +470,10 @@ pub(crate) fn lock_workspace(
 }
 
 /// The bytes that a storage check counts between two checks of a transfer
-/// (ADR 0055 item 21).
+/// (ADR 0204 item 43).
 pub(crate) const STORAGE_CHECK_BYTES: u64 = 8 * 1024 * 1024;
 
-/// The rules of the server for one workspace (ADR 0055 items 21, 24 and
+/// The rules of the server for one workspace (ADR 0204 items 43 and 46 and
 /// 25). The desktop sets none.
 #[derive(Debug, Clone)]
 pub struct ServerRules {
@@ -824,7 +824,7 @@ pub struct Workspace {
     /// The scheme of a NIP-05 request: `https`. A test sets `http`.
     pub(crate) nip05_scheme: &'static str,
     /// The scheme of a keysend lookup: `Some("https")`. `None` means that
-    /// Studio sends no lookup (ADR 0095 item 3). A test sets `None` or
+    /// Studio sends no lookup (ADR 0207 item 36). A test sets `None` or
     /// `Some("http")`.
     pub(crate) keysend_scheme: Option<&'static str>,
     /// The feeds of the last discovery, by address, so that an import does
@@ -842,12 +842,12 @@ pub struct Workspace {
     /// A data folder with no such files has no such folder either, and
     /// the move then does nothing for it.
     pub(crate) imports_dir: PathBuf,
-    /// The queue of downloads (ADR 0038 items 7 and 9). A route clones the
+    /// The queue of downloads (ADR 0204 items 7 and 9). A route clones the
     /// `Arc` and then unlocks the workspace.
     pub(crate) downloads: Arc<DownloadQueue>,
-    /// The hub that gets the announcements (ADR 0052 item 1).
+    /// The hub that gets the announcements (ADR 0205 item 15).
     pub(crate) hub: String,
-    /// The times of the announcement queue (ADR 0052 items 14 and 15).
+    /// The times of the announcement queue (ADR 0205 items 28 and 29).
     pub(crate) announce_timing: Timing,
     /// The worker of the announcement queue.
     pub(crate) announcer: Arc<Announcer>,
@@ -863,7 +863,7 @@ pub struct Workspace {
     /// A clock for the signed requests of the apps. `None` means the clock
     /// of the computer.
     pub(crate) wall_clock: Option<WallClock>,
-    /// The time of the last use of a vault secret (ADR 0055 item 16).
+    /// The time of the last use of a vault secret (ADR 0204 item 38).
     vault_used: Mutex<Instant>,
     /// The clock of the recent unlock (ADR 0106 item 2).
     clock: Clock,
@@ -949,7 +949,7 @@ impl SignerSlot {
     }
 }
 
-/// The hub of a new workspace (ADR 0052 item 1).
+/// The hub of a new workspace (ADR 0205 item 15).
 #[cfg(not(test))]
 const NEW_HUB: &str = announce::DEFAULT_HUB;
 
@@ -1090,7 +1090,7 @@ impl Workspace {
     }
 
     /// Use the rules of the server: no local folder host, one library
-    /// folder and a storage limit (ADR 0055 items 21, 24 and 25).
+    /// folder and a storage limit (ADR 0204 items 43, 46 and 47).
     ///
     /// # Errors
     ///
@@ -1840,7 +1840,7 @@ impl Workspace {
 
     /// The connector of each host that needs no secret. A host with a secret
     /// is marked as locked, and the vault is not read or touched, so that
-    /// the vault window does not change (ADR 0055 item 16). The sweep of
+    /// the vault window does not change (ADR 0204 item 38). The sweep of
     /// ADR 0105 uses this.
     pub(crate) fn hosts_without_secrets(&self) -> Result<Hosts, ApiError> {
         self.hosts_for(Signing::default(), false)
@@ -2184,7 +2184,7 @@ impl Workspace {
     }
 
     /// Keep the remote file records of one feed current, with `feed` as
-    /// the hosted feed (ADR 0038 item 3). A feed with no release folder
+    /// the hosted feed (ADR 0204 item 3). A feed with no release folder
     /// has no records.
     ///
     /// The function first merges the library records that are one file
@@ -2253,7 +2253,7 @@ impl Workspace {
 
     /// Keep the remote file records of each feed with a release folder
     /// current. Each feed gives its hosted feed from the feed XML in its
-    /// release folder (ADR 0038 item 3). The function does nothing when
+    /// release folder (ADR 0204 item 3). The function does nothing when
     /// Studio has no library folder yet.
     ///
     /// An error for one feed goes into the log, and the other feeds still
@@ -2293,7 +2293,7 @@ impl Workspace {
     }
 
     /// Put each download that the collection kept as `queued` into the
-    /// queue again (ADR 0038 item 9). The workers start when the router
+    /// queue again (ADR 0204 item 9). The workers start when the router
     /// is ready. A download that failed stays failed, until the user
     /// starts it again.
     ///
@@ -2322,7 +2322,7 @@ impl Workspace {
         }
     }
 
-    /// Prepare the announcement queue at the start (ADR 0052 item 18). An
+    /// Prepare the announcement queue at the start (ADR 0205 item 32). An
     /// interrupted announcement waits again, and a waiting announcement
     /// older than the maximum age fails. The worker starts when the router
     /// is ready, and it then sends each due announcement.

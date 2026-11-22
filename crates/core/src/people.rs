@@ -1,9 +1,9 @@
-//! The people of one user (ADR 0098).
+//! The people of one user (ADR 0203).
 //!
 //! A person has a name and links: wallets, Nostr keys, credit names, support
 //! links and publisher feeds. The user makes each link. This module writes
 //! no feed, and it keeps no secret. A value from a person is a start value
-//! in a feed (ADR 0098 item 3).
+//! in a feed (ADR 0203 item 3).
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::hash::BuildHasher;
@@ -32,7 +32,7 @@ use crate::xml::Document;
 #[serde(transparent)]
 pub struct PersonId(pub i64);
 
-/// The key of a credit (ADR 0098 item 12): the `npub`, else the name with
+/// The key of a credit (ADR 0203 item 13): the `npub`, else the name with
 /// the information address, else the name.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Identity {
@@ -96,7 +96,7 @@ pub fn normal_name(name: &str) -> String {
         .to_lowercase()
 }
 
-/// The proof of a link (ADR 0098 item 24): the statement of the user, the
+/// The proof of a link (ADR 0203 item 34): the statement of the user, the
 /// keysend lookup or a Nostr signature.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -580,7 +580,7 @@ pub fn remove_person(collection: &Collection, id: PersonId) -> Result<(), Collec
 }
 
 /// Set the name of each person that has a wallet in `keys`. A name of only
-/// spaces changes nothing (ADR 0098 item 23).
+/// spaces changes nothing (ADR 0203 item 29).
 ///
 /// # Errors
 ///
@@ -606,7 +606,7 @@ pub fn rename_with_wallets(
     Ok(())
 }
 
-/// The type of a wallet row from its address (ADR 0098 item 26). A Lightning
+/// The type of a wallet row from its address (ADR 0203 item 12). A Lightning
 /// address has `@`, and a node key has none. A row from before this rule can
 /// hold a different type, so a read also applies it. A row with no type stays.
 fn wallet_type(address: &str, stored: &str) -> String {
@@ -937,7 +937,7 @@ pub struct WalletMember {
     pub recipient_type: String,
 }
 
-/// The members of `wallet` (ADR 0095 item 5). The list always holds
+/// The members of `wallet` (ADR 0207 item 38). The list always holds
 /// `wallet.key`, with the recipient type of the wallet row. Each other
 /// member, and a wallet row with no type, has the type `lnaddress` for an
 /// address with `@`, else `node`.
@@ -1672,7 +1672,7 @@ fn replace_pages(
 
 /// The default address of a person: the stored default when a wallet of the
 /// person still has it, else the key of the first wallet by `position`
-/// (ADR 0098 item 7).
+/// (ADR 0203 item 10).
 #[must_use]
 pub fn default_address<S: BuildHasher>(
     person: &Person,
@@ -1685,7 +1685,7 @@ pub fn default_address<S: BuildHasher>(
         .or_else(|| person.wallets.first().map(|w| w.key.clone()))
 }
 
-/// Save a recipient as a person (ADR 0027 item 5, ADR 0098). When a person
+/// Save a recipient as a person (ADR 0207 item 5, ADR 0203). When a person
 /// has the wallet of the recipient, nothing changes and the result is that
 /// person. Else the core makes a person with the name of the recipient, or
 /// its address, and one wallet.
@@ -1754,7 +1754,7 @@ pub enum JoinedBy {
     Wallet,
 }
 
-/// The reason to join an item to a suggestion (ADR 0098 item 13).
+/// The reason to join an item to a suggestion (ADR 0203 item 18).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Evidence {
@@ -1783,8 +1783,8 @@ pub struct SuggestedCredit {
     pub feeds: Vec<FeedId>,
     /// False when the normal name is not the normal name of the suggestion.
     pub same_name: bool,
-    /// For each feed, the places of each role of the credit (ADR 0158 item 5,
-    /// ADR 0156 item 7).
+    /// For each feed, the places of each role of the credit (ADR 0203 item 54,
+    /// ADR 0203 item 54).
     pub feed_places: Vec<FeedRoles>,
 }
 
@@ -1805,7 +1805,7 @@ pub struct SuggestedRecipient {
     pub joined_by: JoinedBy,
 }
 
-/// The items of the feeds that can be one person (ADR 0098 items 12 and 13).
+/// The items of the feeds that can be one person (ADR 0203 items 13 to 18).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Suggestion {
     /// [`Identity::key`] of the group.
@@ -1825,12 +1825,12 @@ pub struct Suggestion {
     /// The key of each item, for [`dismiss`].
     pub item_keys: Vec<String>,
     /// The person whose normal name, or one of whose credit names, has the
-    /// normal name of the suggestion (ADR 0111 item 6). With two matches,
+    /// normal name of the suggestion (ADR 0203 item 39). With two matches,
     /// the person with the lowest ID.
     pub person_id: Option<PersonId>,
 }
 
-/// The items that the user selects to make a person (ADR 0098 item 14).
+/// The items that the user selects to make a person (ADR 0203 item 19).
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
 pub struct MakePerson {
@@ -1900,7 +1900,7 @@ impl CreditAgg {
 }
 
 struct Group {
-    /// The identity key of the suggestion (ADR 0103 item 5).
+    /// The identity key of the suggestion (ADR 0203 item 17).
     key: String,
     /// The distinct `npub` values of the credits, trimmed and in lowercase.
     npubs: BTreeSet<String>,
@@ -1938,7 +1938,7 @@ impl Group {
         if credit.img.is_empty() {
             credit.img.clone_from(&row.img);
         }
-        // The roles, the feeds and the places of each role (ADR 0158 item 5).
+        // The roles, the feeds and the places of each role (ADR 0203 item 43).
         credit.add(row);
     }
 }
@@ -2038,7 +2038,7 @@ fn dismissals(db: &Connection) -> Result<HashMap<String, HashSet<String>>, Colle
     Ok(map)
 }
 
-/// Group the credits as ADR 0103 items 1 to 3 say. Two or more `npub` values
+/// Group the credits as ADR 0203 items 13 to 15 say. Two or more `npub` values
 /// with one normal name make one group for each `npub`, and one group for the
 /// credits of that name with no `npub`.
 fn credit_groups(
@@ -2138,7 +2138,7 @@ fn join_recipients(recipients: &[RecipientAgg], group_name: &str) -> Vec<Suggest
 }
 
 /// The name of each group, its normal name, and whether a payee can join it
-/// (ADR 0103 item 4). A payee joins the group with no `npub` when a name has
+/// (ADR 0203 item 16). A payee joins the group with no `npub` when a name has
 /// more than one group, else it joins each group of the name.
 fn plan_groups(groups: &[Group]) -> Vec<(Option<String>, String, bool)> {
     let names: Vec<(Option<String>, String)> = groups
@@ -2170,7 +2170,7 @@ fn plan_groups(groups: &[Group]) -> Vec<(Option<String>, String, bool)> {
         .collect()
 }
 
-/// The feeds that use a person (ADR 0099 item 6).
+/// The feeds that use a person (ADR 0203 item 49).
 #[derive(Debug, Clone, Default, PartialEq, Serialize)]
 pub struct PersonUses {
     /// Each feed whose recipients have a member of a wallet of the person.
@@ -2179,11 +2179,11 @@ pub struct PersonUses {
     /// person.
     pub credited: Vec<FeedId>,
     /// The places of the person in each feed of `pays` and `credited`, by
-    /// feed ID (ADR 0099 item 5).
+    /// feed ID (ADR 0203 item 64).
     pub places: Vec<FeedPlaces>,
 }
 
-/// The places of a person in one feed (ADR 0099 item 5).
+/// The places of a person in one feed (ADR 0203 item 64).
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct FeedPlaces {
     /// The feed.
@@ -2196,18 +2196,18 @@ pub struct FeedPlaces {
     pub roles: Vec<String>,
     /// The places of each address of `pays`, in the same sequence (ADR 0143).
     /// Each entry has the fields of the place and `percent`, the split of
-    /// that address in that place (ADR 0156 item 4).
+    /// that address in that place (ADR 0203 item 62).
     pub pay_places: Vec<Vec<RecipientPlace>>,
     /// Each place of the credits of `roles` (ADR 0143).
     pub role_places: Vec<CreditPlace>,
     /// The places of `pay_places` and `role_places` in one list, each place
-    /// one time. The channel is first, then the items by number (ADR 0156
+    /// one time. The channel is first, then the items by number (ADR 0203
     /// item 3).
     pub places: Vec<PersonPlace>,
 }
 
 /// One place of a person in a feed, with the split and the roles of the
-/// person in that place (ADR 0156 items 3 and 4).
+/// person in that place (ADR 0203 items 61 and 62).
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct PersonPlace {
     /// The place. Its fields (`kind`, `guid`, `title` and `number`) are next
@@ -2384,7 +2384,7 @@ pub fn uses<S: BuildHasher>(
     })
 }
 
-/// The state of a feed in the check of a person (ADR 0111 item 9).
+/// The state of a feed in the check of a person (ADR 0203 item 64).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CheckState {
@@ -2396,7 +2396,7 @@ pub enum CheckState {
     Correct,
 }
 
-/// One difference between a feed and a person (ADR 0111 item 9).
+/// One difference between a feed and a person (ADR 0203 item 64).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Finding {
@@ -2409,7 +2409,7 @@ pub enum Finding {
         group: String,
         /// The `npub` of the credit, or empty text.
         npub: String,
-        /// The places of the credit (ADR 0120 item 2).
+        /// The places of the credit (ADR 0203 item 68).
         places: Vec<CreditPlace>,
     },
     /// A credit of the person has a picture or an information address that
@@ -2421,7 +2421,7 @@ pub enum Finding {
         img: bool,
         /// True when the information address differs.
         href: bool,
-        /// The picture of the feed, or empty text (ADR 0120 item 5).
+        /// The picture of the feed, or empty text (ADR 0203 item 6).
         feed_img: String,
         /// The information address of the feed, or empty text.
         feed_href: String,
@@ -2429,12 +2429,12 @@ pub enum Finding {
         person_img: String,
         /// The information address of the person, or empty text.
         person_href: String,
-        /// The places of the credit (ADR 0120 item 2).
+        /// The places of the credit (ADR 0203 item 68).
         places: Vec<CreditPlace>,
     },
     /// A credit of the person has no role.
     CreditRole {
-        /// The places of the credit (ADR 0120 item 6).
+        /// The places of the credit (ADR 0203 item 70).
         places: Vec<CreditPlace>,
     },
     /// A recipient of a wallet of the person does not use the default
@@ -2495,7 +2495,7 @@ fn check_state(findings: &[Finding]) -> CheckState {
     }
 }
 
-/// The credits of a person (ADR 0111 item 10). A credit of the person has a
+/// The credits of a person (ADR 0203 item 65). A credit of the person has a
 /// credit name or a key of the person, or the normal name of the person or
 /// of a credit name. `person_names` holds those normal names.
 fn person_credits(
@@ -2717,7 +2717,7 @@ fn credit_findings(
     Ok(found)
 }
 
-/// Compare each feed with `person` (ADR 0111 items 9 and 10). A credit of
+/// Compare each feed with `person` (ADR 0203 items 64 and 65). A credit of
 /// the person has a credit name or a key of the person, or the normal name
 /// of the person or of a credit name. This function reads the index of the
 /// collection and makes no request.
@@ -2853,7 +2853,7 @@ pub fn review_findings<S: BuildHasher>(
 }
 
 /// The normal name of each person and of each credit name, with the ID of
-/// its person (ADR 0111 item 6).
+/// its person (ADR 0203 item 39).
 fn person_names(collection: &Collection) -> Result<Vec<(String, PersonId)>, CollectionError> {
     let mut names = Vec::new();
     for person in people(collection)? {
@@ -2870,7 +2870,7 @@ fn person_names(collection: &Collection) -> Result<Vec<(String, PersonId)>, Coll
 }
 
 /// The suggestions of people from the credits and the recipients of the
-/// feeds (ADR 0098 items 12 to 16). This function makes no person and no
+/// feeds (ADR 0203 items 13 to 21). This function makes no person and no
 /// link.
 ///
 /// # Errors
@@ -2883,7 +2883,7 @@ pub fn suggestions<S: BuildHasher>(
     suggestion_list(collection, lookups, false)
 }
 
-/// The suggestions that the user hid and that have no new item (ADR 0158
+/// The suggestions that the user hid and that have no new item (ADR 0203
 /// item 2). A suggestion with a new item is in [`suggestions`] again.
 ///
 /// # Errors
@@ -3009,7 +3009,7 @@ fn suggestion_list<S: BuildHasher>(
     Ok(list)
 }
 
-/// Keep a dismissal of a suggestion (ADR 0098 item 15). `items` are the
+/// Keep a dismissal of a suggestion (ADR 0203 item 21). `items` are the
 /// item keys of the suggestion. A suggestion with a new item comes back.
 /// A second dismissal of the same identity replaces the first.
 ///
@@ -3031,7 +3031,7 @@ pub fn dismiss(
     Ok(())
 }
 
-/// Remove the dismissal of a suggestion, so that it shows again (ADR 0158
+/// Remove the dismissal of a suggestion, so that it shows again (ADR 0203
 /// item 3). An identity with no dismissal changes nothing.
 ///
 /// # Errors
@@ -3045,7 +3045,7 @@ pub fn show_again(collection: &Collection, identity: &str) -> Result<(), Collect
     Ok(())
 }
 
-/// Make a person from the items that the user selected (ADR 0098 item 14).
+/// Make a person from the items that the user selected (ADR 0203 item 19).
 /// One transaction makes the person and each link. A conflict of one link
 /// makes no person.
 ///
@@ -3128,9 +3128,9 @@ pub fn make_person<S: BuildHasher>(
     Ok(id)
 }
 
-// ---- Add items to a person, more items and merge (ADR 0103) ----
+// ---- Add items to a person, more items and merge (ADR 0203) ----
 
-/// The items that the user selects to add to a person (ADR 0103 item 10).
+/// The items that the user selects to add to a person (ADR 0203 item 30).
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(default)]
 pub struct PersonItems {
@@ -3161,7 +3161,7 @@ fn link_count(db: &Connection, id: PersonId) -> Result<usize, CollectionError> {
     Ok(usize::try_from(count).unwrap_or_default())
 }
 
-/// Add the items that the user selected to a person (ADR 0103 items 8 to
+/// Add the items that the user selected to a person (ADR 0203 item 38 to
 /// 10). One transaction adds each item that the person does not have. The
 /// function changes no field of the person. A conflict of one item adds no
 /// item.
@@ -3202,7 +3202,7 @@ pub fn add_to_person<S: BuildHasher>(
     Ok(AddedItems { added })
 }
 
-/// Why an item of the feeds matches a person (ADR 0103 item 11).
+/// Why an item of the feeds matches a person (ADR 0203 item 53).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MoreCause {
@@ -3236,7 +3236,7 @@ pub enum MoreItem {
         /// The feeds that have the credit, by ID.
         feeds: Vec<FeedId>,
         /// For each feed of `feeds`, the places of each role of the credit
-        /// (ADR 0156 item 7).
+        /// (ADR 0203 item 54).
         feed_places: Vec<FeedRoles>,
         /// The cause of the match.
         cause: MoreCause,
@@ -3256,7 +3256,7 @@ pub enum MoreItem {
     },
 }
 
-/// The places of the roles of a credit in one feed (ADR 0156 item 7).
+/// The places of the roles of a credit in one feed (ADR 0203 item 54).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FeedRoles {
     /// The feed.
@@ -3275,7 +3275,7 @@ pub struct RolePlaces {
 }
 
 /// The places of the roles of a credit, by feed, as the list of the
-/// answer (ADR 0156 item 7).
+/// answer (ADR 0203 item 54).
 fn feed_roles(places: BTreeMap<i64, BTreeMap<String, Vec<CreditPlace>>>) -> Vec<FeedRoles> {
     places
         .into_iter()
@@ -3327,7 +3327,7 @@ fn wallet_sets<S: BuildHasher>(
 }
 
 /// The items of the feeds that match a person and are not a link of a
-/// person (ADR 0103 items 11 to 13). The credits come first, then the
+/// person (ADR 0203 items 53 to 55). The credits come first, then the
 /// payees. The function reads only the collection.
 ///
 /// # Errors
@@ -3438,7 +3438,7 @@ pub fn more_items<S: BuildHasher>(
 }
 
 /// Move each link of the person `other` to the person `keep`, then delete
-/// `other` (ADR 0103 items 14 to 16). One transaction does all of it. The
+/// `other` (ADR 0203 items 50, 31 and 32). One transaction does all of it. The
 /// fields and the default address of `keep` stay. A membership that `keep`
 /// has already is not copied. A change set of `other` gets `keep`. The
 /// function changes no feed.
@@ -4407,10 +4407,10 @@ fn feed_host(feed_url: &str) -> Option<String> {
         .and_then(|url| url.host_str().map(str::to_owned))
 }
 
-// ---- The Lightning address of a profile (ADR 0098 items 17 to 19) ----
+// ---- The Lightning address of a profile (ADR 0203 items 23 to 25) ----
 
 /// Dismiss the Lightning address of a profile for `person` (the button
-/// "Dismiss", ADR 0098 item 18). [`profile_addresses`] then leaves it out.
+/// "Dismiss", ADR 0203 item 24). [`profile_addresses`] then leaves it out.
 /// The address is kept in lowercase. A second dismissal changes nothing.
 ///
 /// # Errors
@@ -4475,7 +4475,7 @@ pub struct ProfileAddress {
 }
 
 /// The Lightning addresses of the Nostr keys of `person` that can be
-/// added to a wallet (ADR 0098 items 17 to 19).
+/// added to a wallet (ADR 0203 items 23 to 25).
 ///
 /// The function reads the `lud16` of the newest kind 0 of each key. It
 /// leaves out an address in `dismissed` and an address that is a member of
@@ -4723,7 +4723,7 @@ fn join_details(
 }
 
 /// The suggestions for the picture and the information address of a person
-/// (ADR 0113). The credits follow ADR 0111 item 10, as [`check`] does.
+/// (ADR 0113). The credits follow ADR 0203 item 65, as [`check`] does.
 /// `feeds` holds the publisher feeds. The function uses only those in
 /// `person.members`. `profiles` holds the values that the caller read from
 /// the relays. This function makes no request.
@@ -4796,7 +4796,7 @@ pub fn add_profile_address(
     add_wallet(collection, id, &key, "node", LinkEvidence::Nostr)
 }
 
-// ---- The export (ADR 0098 items 24 and 25) ----
+// ---- The export (ADR 0203 items 34 and 35) ----
 
 /// A feed of which a person is a member.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -4878,7 +4878,7 @@ pub struct ExportPerson {
     pub pages: Vec<ExportPage>,
 }
 
-/// The export of the people (ADR 0098 items 24 and 25).
+/// The export of the people (ADR 0203 items 34 and 35).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PeopleExport {
     /// Always `studio-people`.
@@ -5679,7 +5679,7 @@ mod tests {
         list.feeds
             .iter()
             .find(|f| f.feed_id.0 == feed_id)
-            .expect("ADR 0111 item 9: the check must list this feed. Check people::check.")
+            .expect("ADR 0203 item 64: the check must list this feed. Check people::check.")
     }
 
     #[test]
@@ -5738,7 +5738,7 @@ mod tests {
                 npub: "npub1city".into(),
                 places: Vec::new(),
             }],
-            "ADR 0111 item 10: a credit with the name of the person and a wrong key must be a finding."
+            "ADR 0203 item 65: a credit with the name of the person and a wrong key must be a finding."
         );
         assert_eq!(
             feed_check(&list, 2).findings,
@@ -5928,7 +5928,7 @@ mod tests {
                     },
                 ],
             }],
-            "ADR 0120 item 6: a finding gives the four values and the places of the credit."
+            "ADR 0203 item 70: a finding gives the four values and the places of the credit."
         );
     }
 
@@ -5943,7 +5943,7 @@ mod tests {
         assert_eq!(
             feed_check(&list, 2).state,
             CheckState::Correct,
-            "ADR 0111 item 9: the key check needs a key of the person."
+            "ADR 0203 item 64: the key check needs a key of the person."
         );
     }
 
@@ -5965,7 +5965,7 @@ mod tests {
             [Finding::NotDefault {
                 key: key("ann@example.com")
             }],
-            "ADR 0111 item 9: a different member of the wallet must be the neutral finding."
+            "ADR 0203 item 64: a different member of the wallet must be the neutral finding."
         );
         assert_eq!(feed_check(&list, 3).state, CheckState::NeedsCorrection);
         assert_eq!(
@@ -5987,7 +5987,7 @@ mod tests {
         assert_eq!(list.len(), 1);
         assert_eq!(list[0].name, "Ann Lee");
         assert_eq!(list[0].evidence, [Evidence::SameNpub]);
-        // The credit with no name has `same_name`, as ADR 0103 item 4 says.
+        // The credit with no name has `same_name`, as ADR 0203 item 16 says.
         assert!(list[0].credits.iter().all(|c| c.same_name));
         let first = list[0]
             .credits
@@ -7160,14 +7160,14 @@ mod tests {
             hidden.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(),
             ["Ann"]
         );
-        // ADR 0158 item 3: "Show Again" puts the suggestion back.
+        // ADR 0203 item 21: "Show Again" puts the suggestion back.
         show_again(&collection, &ann.identity).unwrap();
         assert_eq!(
             hidden_suggestions(&collection, &HashMap::new()).unwrap(),
             Vec::new()
         );
         assert_eq!(suggest(&collection).len(), 2);
-        // ADR 0158 item 4: a new item brings it back, with no hidden row.
+        // ADR 0203 item 21: a new item brings it back, with no hidden row.
         dismiss(&collection, &ann.identity, &ann.item_keys).unwrap();
         payee(&collection, 2, "node-1", "ann");
         assert_eq!(
@@ -7677,7 +7677,7 @@ mod tests {
         assert_eq!(
             dismissed,
             HashSet::from([ann_address.to_lowercase()]),
-            "ADR 0098 item 18: a dismissal keeps the address one time, in lowercase. Check dismiss_profile_address."
+            "ADR 0203 item 24: a dismissal keeps the address one time, in lowercase. Check dismiss_profile_address."
         );
         let list = profile_addresses(
             &Web::new(),
@@ -7691,7 +7691,7 @@ mod tests {
         );
         assert!(
             list.is_empty(),
-            "ADR 0098 item 18: \"Dismiss\" must hide the address for the person. Check the filter of profile_addresses. {list:?}"
+            "ADR 0203 item 24: \"Dismiss\" must hide the address for the person. Check the filter of profile_addresses. {list:?}"
         );
         assert!(dismiss_profile_address(&collection, PersonId(99), &ann_address).is_err());
         assert!(dismiss_profile_address(&collection, ann, " ").is_err());
@@ -8201,7 +8201,7 @@ mod tests {
                 // Item 2: ann-a (1 of 4) and ann-b (3 of 4) are in one place.
                 (Some(2), true, Some(100.0), Vec::new()),
             ],
-            "ADR 0156 items 3 and 4"
+            "ADR 0203 items 61 and 62"
         );
         let json = serde_json::to_value(&found.places[0]).unwrap();
         assert_eq!(json["places"][1]["number"], 1);
@@ -8256,7 +8256,7 @@ mod tests {
             .iter()
             .map(|r| (r.role.as_str(), r.places.len()))
             .collect();
-        // ADR 0156 item 7: A to Z, each role with its places.
+        // ADR 0203 item 54: A to Z, each role with its places.
         assert_eq!(roles, [("Mixer", 2), ("Vocals", 2)]);
         let json = serde_json::to_value(&items[0]).unwrap();
         assert_eq!(json["feed_places"][0]["roles"][1]["places"][0]["number"], 1);

@@ -1,5 +1,5 @@
 //! The musicindex API (Stophammer): feed addresses by GUID, search, and the
-//! payment routes of a feed and of a track (ADR 0027 item 6).
+//! payment routes of a feed and of a track (ADR 0207 item 6).
 
 use serde::{Deserialize, Serialize};
 
@@ -48,7 +48,7 @@ pub struct IndexTrack {
 }
 
 /// The payment routes of a feed or of a track, from musicindex
-/// (ADR 0027 item 6).
+/// (ADR 0207 item 6).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct IndexRoutes {
     /// The title of the feed or of the track.
@@ -236,7 +236,7 @@ pub fn plan_publisher_search(text: &str, plain: bool) -> SearchPlan {
 }
 
 /// The plan of `text`. The words of each note come from the crate (musicindex
-/// ADR 0052 R-QUERY-8). Studio has no Library in the sense of musicindex ADR
+/// ADR 0205 R-QUERY-8). Studio has no Library in the sense of musicindex ADR
 /// 0049. A `scope` gives the note of the crate when that entity gets no
 /// request, after the general note.
 fn plan_for(text: &str, plain: bool, scope: Option<IndexEntity>) -> SearchPlan {
@@ -254,7 +254,7 @@ fn plan_for(text: &str, plain: bool, scope: Option<IndexEntity>) -> SearchPlan {
             return SearchPlan::Send(IndexSearchRequest::words(text.trim()));
         }
     }
-    // The first field error in text order (musicindex ADR 0052 R-QUERY-8).
+    // The first field error in text order (musicindex ADR 0205 R-QUERY-8).
     if let Some((_, error)) = query.field_errors().first() {
         return SearchPlan::FieldError(error.message());
     }
@@ -330,7 +330,7 @@ pub struct NameQuery {
     pub prefix: String,
 }
 
-/// The field list for one query text and one cursor (musicindex ADR 0052
+/// The field list for one query text and one cursor (musicindex ADR 0205
 /// R-QUERY-7). The core gives each range, and the UI has no parser (ADR 0151).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct FieldList {
@@ -923,7 +923,7 @@ impl MusicIndex {
     }
 
     /// The title, the payment routes and the tracks of a feed, from the
-    /// `payment_routes` and `tracks` of the musicindex feed (ADR 0027
+    /// `payment_routes` and `tracks` of the musicindex feed (ADR 0207
     /// item 6). Gives `None` when musicindex does not know the feed.
     ///
     /// # Errors
@@ -947,7 +947,7 @@ impl MusicIndex {
     }
 
     /// The title and the payment routes of one track, from the
-    /// `payment_routes` of the musicindex track (ADR 0027 item 6). The
+    /// `payment_routes` of the musicindex track (ADR 0207 item 6). The
     /// result has no tracks. Gives `None` when musicindex does not know the
     /// track.
     ///
@@ -1681,7 +1681,7 @@ mod tests {
         ));
         assert_eq!(sent_q("\"in:flux\"", false).as_deref(), Some("\"in:flux\""));
         // The `kind:` values of a text such as `kind:ep` send no request, and
-        // the crate gives the note (musicindex ADR 0052 R-QUERY-8).
+        // the crate gives the note (musicindex ADR 0205 R-QUERY-8).
         assert_eq!(
             plan_search("kind:ep", false),
             SearchPlan::Skip(Some(SearchNote {
@@ -1750,7 +1750,7 @@ mod tests {
             note("able kind:single after:2026-01 release:x after:2026-02"),
             "kind:, after: and release: do not apply to artists and labels. Remove the fields to search artists and labels."
         );
-        // The general note of the crate comes first (musicindex ADR 0052
+        // The general note of the crate comes first (musicindex ADR 0205
         // R-QUERY-8).
         assert_eq!(
             note("able kind:ep"),

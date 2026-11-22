@@ -1,5 +1,5 @@
 //! The limits of the server: the Argon2id derivations, the failed sign-ins,
-//! the challenges and the address of the client (ADR 0055 item 22, ADR 0106
+//! the challenges and the address of the client (ADR 0204 item 44, ADR 0106
 //! items 4 and 5).
 
 use std::collections::HashMap;
@@ -260,7 +260,7 @@ pub fn client_address(header: Option<&str>, request: &Request) -> String {
 
 /// Wait for one of the permits of the Argon2id derivations. A request that
 /// waits longer than the wait of the server gets 503 `busy`
-/// (ADR 0055 item 22).
+/// (ADR 0204 item 44).
 ///
 /// # Errors
 ///

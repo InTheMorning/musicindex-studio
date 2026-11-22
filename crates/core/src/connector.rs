@@ -407,7 +407,7 @@ pub trait Connector {
     fn delete(&self, path: &str, expected: &Stamp) -> Result<(), ConnectorError>;
 
     /// True when the connector can make an HTTP 301 redirect from a path
-    /// to a URL (ADR 0038 item 17).
+    /// to a URL (ADR 0204 item 17).
     fn can_redirect(&self) -> bool {
         false
     }

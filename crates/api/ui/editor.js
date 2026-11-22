@@ -588,7 +588,7 @@ function AddTrackSheet({ open, onClose, onAdd, onFiles }) {
   const [session, setSession] = useState(0);
   // "Properties" opens by itself when the lookup finds fewer than two facts.
   // It stays closed while the lookup is not done. The user can open it at
-  // each time (ADR 0073 item 14).
+  // each time (ADR 0212 item 18).
   const mustOpen = (facts.state === 'partial' || facts.state === 'failed')
     && propertiesOpen({ length, media_type: type }, []);
   // Clear the sheet each time that it opens.
@@ -1343,7 +1343,7 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd, onAddress })
           });
           // The import sheet takes audio files and image files only. The
           // upload route also accepts a lyrics file, so remove it and show
-          // the error of an unsupported file (ADR 0064 item 9).
+          // the error of an unsupported file (ADR 0206 item 24).
           if (facts.kind !== 'audio' && facts.kind !== 'image') {
             removeFiles(facts);
             throw { code: 'unsupported_media' };
@@ -1705,7 +1705,7 @@ function HostOperationRow({ op, connectors, onRemove, busy }) {
   </div>`;
 }
 
-// The move of the feed XML to a different host (ADR 0038 item 16). It
+// The move of the feed XML to a different host (ADR 0204 item 16). It
 // is the first row of the operations. "Undo" puts the feed XML back on the
 // host of the feed.
 function FeedMoveRow({ move, connectors, onUndo, busy, fromConnectorId = null }) {
@@ -1878,7 +1878,7 @@ function AnnounceFooterChoice({ choice, skip }) {
   </div>`;
 }
 
-// The grant control of each pending show of the draft (ADR 0054 item 11,
+// The grant control of each pending show of the draft (ADR 0205 item 46,
 // ADR 0110 item 19). `grantControl` of `apps.js` chooses the control: a
 // check box for one app, a select menu for two or more apps and a disabled
 // menu for no app. The control asks the grant route and takes the new diff
@@ -2254,7 +2254,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
     setDiff(await api(`/feeds/${feedId}/diff`));
     await checkLinks();
   });
-  // An operation waits for a download of its file (ADR 0038 item 12). The
+  // An operation waits for a download of its file (ADR 0204 item 12). The
   // write refuses the draft until each download is complete.
   const waiting = !!diff && diff.operations.some((op) => op.waiting);
   // While an operation waits, the sheet examines the draft again each
@@ -2600,7 +2600,7 @@ export function DeleteUndoBar() {
 function FeedFacts({ feed, draft, onRemoved, onListChanged }) {
   const { busy, error, run } = useAction();
   const deleteUndo = useDeleteUndo();
-  // The announcements of the feed, the newest first (ADR 0052 item 20). The
+  // The announcements of the feed, the newest first (ADR 0205 item 34). The
   // list loads when the page opens, after each write, and each 5 seconds
   // while the newest one waits.
   const [announcements, setAnnouncements] = useState(null);
@@ -2905,7 +2905,7 @@ export function GatherPagesSheet({ page, role, feeds, onMoved, onAddHost, onOpen
 }
 
 // The section "Artists and labels" of an album or a playlist: its publisher
-// feeds, in the sequence of `podcast:publisher` (ADR 0041 item 9, ADR 0086
+// feeds, in the sequence of `podcast:publisher` (ADR 0205 item 9, ADR 0086
 // item 4). Each link changes this draft and the draft of the other feed.
 function ArtistsAndLabels({ feed, feeds, model, update, draft, go, onListChanged }) {
   const { connectors = [] } = useContext(PickerContext) || {};
@@ -2914,20 +2914,20 @@ function ArtistsAndLabels({ feed, feeds, model, update, draft, go, onListChanged
   const [changed, setChanged] = useState([]);
   const [chosen, setChosen] = useState('');
   // The publisher feeds of this release, in the sequence of
-  // `podcast:publisher` (ADR 0041 item 9). The first one is the primary.
+  // `podcast:publisher` (ADR 0205 item 9). The first one is the primary.
   const publishers = model.publisher ? model.publisher.remote_items : [];
   const rows = publishers.map((entry, index) => ({ index, entry, match: linkedFeed(feeds, entry) }));
   const candidates = pageLinkCandidates(feeds, model);
   const twoDrafts = (action, call) => changeTwoDrafts(action, { feedId: feed.id, draft, onListChanged, setChanged, call });
   // Swap this publisher feed with the one above or below it. No other feed
-  // changes (ADR 0041 item 9).
+  // changes (ADR 0205 item 9).
   const movePublisher = (index, by) => update((m) => set(m, 'publisher',
     set(m.publisher, 'remote_items', move(m.publisher.remote_items, index, by))));
   const removeRow = (row) => {
     if (!row.match) {
       // Studio keeps no link to a feed that is not in the collection. The
       // entry leaves this release only. Without entries, the element goes
-      // (ADR 0041 item 13).
+      // (ADR 0205 item 13).
       update((m) => {
         const rest = m.publisher.remote_items.filter((_, i) => i !== row.index);
         return set(m, 'publisher', rest.length === 0 ? null : set(m.publisher, 'remote_items', rest));
@@ -3009,7 +3009,7 @@ async function linkPublisherPage(pageId, releaseId) {
 // The album page: the album fields, the album details and the tracks
 // (task 014c step 3).
 // The second line of a publisher row on the album page: the role, the link
-// state and the primary mark (ADR 0041 items 6 and 9).
+// state and the primary mark (ADR 0205 items 6 and 9).
 function publisherLine(entry, match, index) {
   const parts = [relLabel(entry.rel)];
   if (!match) parts.push('Not in the collection');
@@ -3046,7 +3046,7 @@ function ArtworkRow({ summary, image, onOpen }) {
 }
 
 // The channel fields that the album page and the playlist page share. The
-// list `fields` gives the sequence of the page (ADR 0068). The language is
+// list `fields` gives the sequence of the page (ADR 0206). The language is
 // on the page "Feed settings".
 // The row "Nostr profile" of the album, the publisher feed and the playlist:
 // the feed key, a `podcast:txt` with `purpose="npub"` (ADR 0074).
@@ -3082,7 +3082,7 @@ const showSections = (list, shown) => list.map((section) => shown[section.id](se
 // function that gives its markup.
 const showEach = (ids, shown) => ids.map((id) => shown[id]());
 
-// The explicit switch of a channel (ADR 0064 item 4, ADR 0065). The switch
+// The explicit switch of a channel (ADR 0206 item 19, ADR 0065). The switch
 // shows off when the feed has no `itunes:explicit`, and Studio sets no value
 // until the user changes it. A change sends `true` or `false`. The core
 // keeps the form of the feed at the draft save.
@@ -3123,7 +3123,7 @@ function ReleaseKindField({ feed, draft, onListChanged }) {
 const isLocked = (locked) => !!locked && (locked.value || '').trim().toLowerCase() === 'yes';
 
 // The page "Feed settings": the language, the owner, the keywords, the lock
-// and the two editor fields (ADR 0064 items 3 to 7, ADR 0068 item 8). An empty field gives `null`, so that
+// and the two editor fields (ADR 0206 items 18 to 22, ADR 0206 item 37). An empty field gives `null`, so that
 // Studio writes no empty element. No field refuses a value that is not an
 // email address. The core removes the space at the ends of each text.
 function SettingsPage({ model, update, album, op3Tracks }) {
@@ -3447,11 +3447,11 @@ function PlaylistPickerSheet({ open, remoteItems, onAdd, onClose }) {
   </dialog>`;
 }
 
-// ---- The artwork list (ADR 0064 items 10 to 12) ----
+// ---- The artwork list (ADR 0206 items 25 to 27) ----
 
 const BLANK_IMAGE = { href: '', alt: null, aspect_ratio: null, width: null, height: null, media_type: null, purpose: null };
 
-// The facts of the image at an address (ADR 0064 items 10 to 12, ADR 0109).
+// The facts of the image at an address (ADR 0206 items 25 to 27, ADR 0109).
 // The browser reads the size of the image from its host. The core reads the
 // type of the response (item 7 of the ADR). A held file comes through
 // Studio. A failure gives `null`.
@@ -3631,7 +3631,7 @@ function CreditsPage({ model, update, bad }) {
 
 // The Value routes page: the album recipients, with no details around them
 // (task 014c step 3, ADR 0029 item 9). The page is at most 560 px wide
-// (ADR 0039 item 12).
+// (ADR 0206 item 15).
 function RecipientsPage({ model, update, openAdd, onAddOpened, wrongAddresses }) {
   return html`<div class="value-routes"><p class="hint">Value Routes tell podcast apps where to send the payments of listeners.</p><${AlbumPayments} model=${model} update=${update} openAdd=${openAdd} onAddOpened=${onAddOpened} wrongAddresses=${wrongAddresses} /></div>`;
 }
@@ -3821,7 +3821,7 @@ function TrackPage({ feed, model, update, bad, trackIndex, go, onArtwork }) {
     </div>`;
 }
 
-// ---- The live item page (task 033b, ADR 0054) ----
+// ---- The live item page (task 033b, ADR 0205) ----
 
 // The start time of a live item in the language of the user, for the
 // summary line.
@@ -3831,7 +3831,7 @@ const timeText = (text) => {
 };
 
 // A small sheet that asks for the title and the start time of a new live
-// show (ADR 0054 item 2). `onAdd` gets the title and the start as RFC 3339 text.
+// show (ADR 0205 item 37). `onAdd` gets the title and the start as RFC 3339 text.
 function AddLiveSheet({ open, onClose, onAdd, busy, error }) {
   const ref = useSheet(open);
   const [title, setTitle] = useState('');
@@ -3867,7 +3867,7 @@ function AddLiveSheet({ open, onClose, onAdd, busy, error }) {
 }
 
 // The content links of a live item, each as one entry row (ADR 0028). A
-// show needs one link before Studio writes it (ADR 0054 item 4).
+// show needs one link before Studio writes it (ADR 0205 item 39).
 function ContentLinks({ id, links, onChange }) {
   const blank = { href: null, label: '' };
   return html`${links.length === 0 && html`<p class="hint">A content link is recommended. It gives a page for a person, for example a web player.</p>`}
@@ -3889,7 +3889,7 @@ function ContentLinks({ id, links, onChange }) {
 
 // The page of one live item. It edits the show, the stream, the content
 // links, the live value and the value routes. "Go live" and "End the show"
-// change the draft and open the review sheet (ADR 0054 items 3 and 5).
+// change the draft and open the review sheet (ADR 0205 items 38 and 40).
 // The tab "Live Shows" of an album (ADR 0239 item 5): one row for each show,
 // then the button that opens the sheet "Add a live show".
 function LiveShowsPage({ feed, model, go, onAdding }) {
@@ -3918,7 +3918,7 @@ function LivePage({ feed, model, update, bad, liveIndex, draft, go }) {
   // A change that works on the current model, also after a long upload.
   const editLive = (edit) => update((m) => set(m, 'live_items', m.live_items.map((l) => (l._cid === live._cid ? edit(l) : l))));
   // Before the first recording, the show has no audio file from before. The
-  // enclosure is then the stream (ADR 0054).
+  // enclosure is then the stream (ADR 0205).
   const recordingBefore = hasRecording(live) ? live.item : { ...live.item, enclosure: null, alternate_enclosures: [] };
   const pickRecording = useFilePick(
     'recording',
@@ -4172,7 +4172,7 @@ function LivePage({ feed, model, update, bad, liveIndex, draft, go }) {
     </div></div></section>`;
 }
 
-// ---- The publisher feed page (task 025c, ADR 0041) ----
+// ---- The publisher feed page (task 025c, ADR 0205) ----
 
 // The medium of a feed in lower case, or an empty text.
 function mediumOf(feed) {
@@ -4180,20 +4180,20 @@ function mediumOf(feed) {
 }
 
 // The feed of the list that a release entry names, by its feed GUID or its
-// public address (ADR 0041, the releases of a publisher feed).
+// public address (ADR 0205, the releases of a publisher feed).
 function linkedFeed(feeds, entry) {
   return feeds.find((f) => (f.podcast_guid && f.podcast_guid === entry.feed_guid)
     || (f.public_url && f.public_url === entry.feed_url)) || null;
 }
 
 // The text of an error of a publisher change. A missing role has its own
-// text, and each page gives that text (ADR 0041 item 4).
+// text, and each page gives that text (ADR 0205 item 4).
 function publisherError(error, roleText) {
   if (!error || error.code !== 'role_required') return error;
   return Object.assign(new Error(roleText), { code: error.code });
 }
 
-// The steps of a change of two drafts (task 025c, ADR 0041 item 8). `call`
+// The steps of a change of two drafts (task 025c, ADR 0205 item 8). `call`
 // makes the change and returns the `changed` list of the route. The
 // notices name each feed of that list, but not the open feed `feedId`.
 // The helper returns true when the change worked.
@@ -4210,7 +4210,7 @@ async function changeTwoDrafts(action, { feedId, draft, onListChanged, setChange
   return done === true;
 }
 
-// One notice for each feed whose draft a change altered (ADR 0041 item 8).
+// One notice for each feed whose draft a change altered (ADR 0205 item 8).
 // Each notice has a button that opens its feed.
 function ChangedNotices({ changed, go }) {
   return changed.map((c) => html`<div class="notice" role="status" key=${c.id}>
@@ -4222,7 +4222,7 @@ function ChangedNotices({ changed, go }) {
 
 const PUBLISHER_ROLE_TEXT = 'Select the role of this feed first.';
 
-// The publisher page: the fields, the role and the releases (ADR 0041 item
+// The publisher page: the fields, the role and the releases (ADR 0205 item
 // 3). Each link changes the draft of this feed and the draft of the release,
 // so the page loads both drafts and names each release that changed.
 function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, onMove, onListChanged, onArtwork, onRemoved, connectors }) {
@@ -4233,7 +4233,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, onMov
   // The feeds whose draft the last link or role change altered.
   const [changed, setChanged] = useState([]);
   const [chosen, setChosen] = useState('');
-  // The row of the Add feeds page that is open, from the first steps (ADR 0119).
+  // The row of the Add feeds page that is open, from the first steps (ADR 0221).
   const [addOpen, setAddOpen] = useState(null);
   // The start role of the form that a row of a new hosting page opens (ADR 0240 item 3).
   const [addRole, setAddRole] = useState(null);
@@ -4249,7 +4249,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, onMov
   };
   useEffect(() => { loadMembers(); }, [feed.id]);
   const items = model.remote_items;
-  // The releases in the sequence of the model (ADR 0041 item 10).
+  // The releases in the sequence of the model (ADR 0205 item 10).
   const rows = items
     .map((entry, index) => ({ index, entry, match: linkedFeed(feeds, entry) }))
     .filter((row) => row.entry.medium === 'music' || row.entry.medium === 'musicL');
@@ -4270,7 +4270,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, onMov
   const [custom, setCustom] = useState(false);
   const choice = custom ? 'custom' : roleChoice(roles);
   // A role change writes the links, so it needs the host of the feed, as a
-  // link does (ADR 0041 item 5).
+  // link does (ADR 0205 item 5).
   const readOnly = !feed.connector_id;
   // The add row at the end of the Releases section. It does not show with a
   // first-step row (ADR 0164 item 1).
@@ -4297,13 +4297,13 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, onMov
   const removeRow = (row) => {
     if (!row.match) {
       // Studio keeps no link to a feed that is not in the collection. Only
-      // this feed changes (ADR 0041 item 13).
+      // this feed changes (ADR 0205 item 13).
       update((m) => set(m, 'remote_items', m.remote_items.filter((e) => e._cid !== row.entry._cid)));
       return;
     }
     twoDrafts(linkAction, async () => (await api(`/feeds/${feed.id}/links/${row.match.id}`, { method: 'DELETE' })).changed);
   };
-  // Move a release to a position among the releases (ADR 0041 item 10,
+  // Move a release to a position among the releases (ADR 0205 item 10,
   // ADR 0081 item 5). The other entries of the list keep their index.
   const moveRow = (position, to) => {
     const slots = rows.map((row) => row.index);
@@ -4403,7 +4403,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, onMov
       </div>
     </section>`,
   };
-  // The first steps of a new publisher feed with no release (ADR 0119 item 8),
+  // The first steps of a new publisher feed with no release (ADR 0221 item 8),
   // and the add row of the Releases section (ADR 0164). Each row opens a
   // sheet of the Add feeds page. A new album or playlist becomes a release
   // of this feed before its page opens (ADR 0164 item 3). When the link
@@ -4446,7 +4446,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, onMov
 // The user starts a copy or a deletion, and sees each host file of the
 // release folder that is not a copy of a library file.
 
-// The summary text of a file that is not in the library (ADR 0038 items
+// The summary text of a file that is not in the library (ADR 0204 items
 // 6 and 7). `download` is the row of the downloads route, or undefined.
 function downloadSummary(download) {
   if (!download) return 'Not in the library';
@@ -4460,7 +4460,7 @@ function downloadPercent(download) {
   return Math.min(100, Math.floor((download.bytes / download.total) * 100));
 }
 
-// The download controls of an open remote entry (ADR 0038 items 6 and 7,
+// The download controls of an open remote entry (ADR 0204 items 6 and 7,
 // ADR 0037): "Download" and "Try again" are actions. "Stop" is normal.
 function DownloadControls({ download, busy, onDownload, onStop }) {
   if (!download) {
@@ -4547,7 +4547,7 @@ function FileEntry({ file, defaultHost, connectors, busy, download, onDownload, 
   const hostName = connectorName(connectors, defaultHost);
   const reference = (connectorId) => onOperation({ op: 'reference', file: file.id, connector_id: connectorId, from_url: file.url });
   const del = (connectorId, path) => onOperation({ op: 'delete', connector_id: connectorId, path });
-  // A copy of a remote file asks first (ADR 0038 item 12). The size comes
+  // A copy of a remote file asks first (ADR 0204 item 12). The size comes
   // from the row.
   const askFirst = async () => file.local || !mode.holdAssets
     || await askConfirm(CONFIRMS.downloadFirst(file.size > 0 ? fileSize(file.size) : null));
@@ -4659,7 +4659,7 @@ function OtherFileRow({ file, connectors, busy, onDelete, onUndo }) {
   </div>`;
 }
 
-// One difference of the library folder (ADR 0038 items 13 to 15, ADR
+// One difference of the library folder (ADR 0204 items 13 to 15, ADR
 // 0037). `file` is the row of the files route for a missing or a changed
 // file. `onAct` sends the decision of the user. An error shows in the row.
 function ChangeRow({ difference, file, busy, onAct }) {

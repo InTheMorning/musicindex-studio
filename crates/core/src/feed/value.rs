@@ -52,7 +52,7 @@ impl Modeled for ValueBlock {
     }
 }
 
-/// The meaning of the `fee` text of a recipient (musicindex ADR 0088 R-FEED-6
+/// The meaning of the `fee` text of a recipient (musicindex ADR 0215 R-FEED-6
 /// item 3, musicindex ADR 0086 R-FEED-4 item 5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FeeReading {
@@ -85,7 +85,7 @@ impl FeeReading {
 }
 
 /// The place of a recipient: the place of its value block, and the split of
-/// the recipient in that block (ADR 0156 item 4).
+/// the recipient in that block (ADR 0203 item 62).
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct RecipientPlace {
     /// The place of the value block. Its fields are next to `percent` in
@@ -93,7 +93,7 @@ pub struct RecipientPlace {
     #[serde(flatten)]
     pub place: CreditPlace,
     /// The split of the recipient in percent. `None` when the share is not
-    /// a number. A place from before ADR 0156 has none.
+    /// a number. A place from before ADR 0203 has none.
     #[serde(default)]
     pub percent: Option<f64>,
 }

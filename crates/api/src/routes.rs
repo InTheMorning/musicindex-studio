@@ -1138,7 +1138,7 @@ pub(crate) async fn add_connector(
                 base_url,
             } => {
                 // A local folder host reads and writes folders of the server
-                // computer (ADR 0055 item 24).
+                // computer (ADR 0204 item 46).
                 if w.rules.is_some() {
                     return Err(not_on_server(
                         "a local folder file host is not available on the server",
@@ -1238,7 +1238,7 @@ fn add_temporary_connector(w: &Workspace) -> Result<(StatusCode, Json<Value>), A
     Ok((StatusCode::CREATED, to_json(w.collection.connector(id)?)?))
 }
 
-/// The refusal of a function of the desktop only (ADR 0055 items 24 and 25).
+/// The refusal of a function of the desktop only (ADR 0204 items 46 and 47).
 fn not_on_server(message: &str) -> ApiError {
     ApiError::new(StatusCode::FORBIDDEN, "not_on_server", message)
 }
@@ -1416,7 +1416,7 @@ fn set_connector_base_url(
 }
 
 /// The feeds of the collection. Each row has its draft state and its cover
-/// image (ADR 0039 item 2, task 026a).
+/// image (ADR 0206 item 2, task 026a).
 #[expect(
     clippy::too_many_lines,
     reason = "Feed rows combine stored fields and derived feed values."
@@ -1546,7 +1546,7 @@ pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
                 json!(catalog.publishers.iter().map(|id| id.0).collect::<Vec<_>>());
             // The two sides of a link give the first role (ADR 0087).
             value["roles_linked"] = json!(catalog.roles_linked);
-            // The levels of the hierarchy (ADR 0088).
+            // The levels of the hierarchy (ADR 0215).
             value["child_ids"] = json!(catalog.children.iter().map(|id| id.0).collect::<Vec<_>>());
             value["parent_ids"] = json!(catalog.parents.iter().map(|id| id.0).collect::<Vec<_>>());
             rows.push(value);
@@ -1620,7 +1620,7 @@ pub(crate) fn unlisted_pages(
 }
 
 /// The draft state of a feed: `none`, `new`, `changed` or `unchanged`.
-/// A failed change check gives `changed` (ADR 0039 item 2, task 026a).
+/// A failed change check gives `changed` (ADR 0206 item 2, task 026a).
 fn draft_state(w: &Workspace, row: &FeedRow) -> Result<&'static str, ApiError> {
     if w.collection.draft(row.id)?.is_none() {
         return Ok("none");
@@ -1678,10 +1678,10 @@ pub(crate) struct NewAlbumFeed {
     path: String,
     title: String,
     author: String,
-    /// `music` (the default), `publisher` (ADR 0041 item 2) or `musicL`
+    /// `music` (the default), `publisher` (ADR 0205 item 2) or `musicL`
     /// (ADR 0053 item 2).
     medium: Option<String>,
-    /// `artist` or `label`. A publisher feed needs it (ADR 0041 item 1).
+    /// `artist` or `label`. A publisher feed needs it (ADR 0205 item 1).
     role: Option<String>,
     /// The kind kept for the new release (ADR 0213 item 10).
     kind: Option<String>,
@@ -1995,7 +1995,7 @@ fn check_found_request(body: &NewAlbumFeed) -> Result<(), ApiError> {
 }
 
 /// Make a new feed in a connected folder, as a draft with no hosted file
-/// (ADR 0032 items 6 to 9, ADR 0041 items 1 and 2).
+/// (ADR 0032 items 6 to 9, ADR 0205 items 1 and 2).
 pub(crate) async fn new_album_feed(
     State(shared): State<Shared>,
     Json(body): Json<NewAlbumFeed>,
@@ -2320,7 +2320,7 @@ pub(crate) async fn refresh_feed(State(shared): State<Shared>, Path(id): Path<i6
         let made = w.connector_of(&connector_row)?;
         let hosted = pipeline::refresh(&mut w.collection, made.as_ref(), id)?;
         // A feed that the user added from a host folder gets its release
-        // folder at its first read (ADR 0038 item 4).
+        // folder at its first read (ADR 0204 item 4).
         if row.folder.is_none()
             && let Some(path) = row.path.as_deref()
         {
@@ -3060,7 +3060,7 @@ fn add_read_feed(
     let id = w.collection.add_feed(Some(&read.url), None)?;
     w.collection.record_state(id, &read.feed, &read.version)?;
     // A published feed gets its release folder and its feed XML at once
-    // (ADR 0038 item 4). Without a library folder, the move into the
+    // (ADR 0204 item 4). Without a library folder, the move into the
     // library gives the folder later. A failure here does not stop the
     // add: the feed stays in the collection with no folder.
     if w.collection.setting("library_root")?.is_some() {
@@ -3212,7 +3212,7 @@ pub(crate) async fn match_connector(
 }
 
 /// Give a feed that a folder match linked its release folder and its feed
-/// XML, from the file on the host (ADR 0038 item 4). A feed that has a
+/// XML, from the file on the host (ADR 0204 item 4). A feed that has a
 /// folder keeps it. A feed with no library folder yet gets its folder at
 /// the move into the library. An error goes into the log.
 fn give_linked_feed_folder(w: &Workspace, made: &dyn connector::Connector, id: FeedId, path: &str) {
@@ -3340,7 +3340,7 @@ pub(crate) fn ensure_writable_draft(w: &Workspace, id: FeedId) -> Result<(), Api
     ensure_draft(w, id)
 }
 
-/// Start the draft of a feed when it has none (ADR 0041 item 8). A feed
+/// Start the draft of a feed when it has none (ADR 0205 item 8). A feed
 /// with a draft is not changed. A feed with no connector starts its draft
 /// from its release folder (ADR 0067 item 3).
 pub(crate) fn ensure_draft(w: &Workspace, id: FeedId) -> Result<(), ApiError> {
@@ -3358,7 +3358,7 @@ pub(crate) fn ensure_draft(w: &Workspace, id: FeedId) -> Result<(), ApiError> {
 
 /// Refuse a link route for a read-only feed or a feed of the wrong medium
 /// before a draft starts, so that a refusal starts no draft. The core
-/// makes the same checks again (ADR 0041 items 1 and 5).
+/// makes the same checks again (ADR 0205 items 1 and 5).
 fn check_mediums(
     w: &Workspace,
     publisher: FeedId,
@@ -3411,7 +3411,7 @@ fn before_change(w: &Workspace, ids: &[FeedId]) -> Result<DraftBytes, ApiError> 
 }
 
 /// The feeds whose draft a publisher change altered, the publisher feed
-/// too, in the sequence of their IDs (ADR 0041 item 8). Each page leaves
+/// too, in the sequence of their IDs (ADR 0205 item 8). Each page leaves
 /// out its own feed. The title is the title of the feed row.
 fn changed_json(w: &Workspace, before: &DraftBytes) -> ApiResult {
     let mut changed = Vec::new();
@@ -3474,7 +3474,7 @@ pub(crate) struct RoleBody {
     roles: Vec<String>,
 }
 
-/// Link a publisher feed to a release. Both drafts change (ADR 0041
+/// Link a publisher feed to a release. Both drafts change (ADR 0205
 /// items 6 to 8).
 pub(crate) async fn add_link(
     State(shared): State<Shared>,
@@ -4182,7 +4182,7 @@ pub(crate) async fn list_release_on_page(
 }
 
 /// Remove the link between a publisher feed and a release from both
-/// drafts (ADR 0041 items 7 and 8).
+/// drafts (ADR 0205 items 7 and 8).
 pub(crate) async fn remove_link(
     State(shared): State<Shared>,
     Path((id, release)): Path<(i64, i64)>,
@@ -4201,7 +4201,7 @@ pub(crate) async fn remove_link(
 }
 
 /// Change and confirm the roles of a publisher feed. The `rel` of each link
-/// changes in its draft and in each linked release (ADR 0041 item 11, ADR
+/// changes in its draft and in each linked release (ADR 0205 item 11, ADR
 /// 0082 items 7 and 8).
 pub(crate) async fn set_publisher_role(
     State(shared): State<Shared>,
@@ -4455,7 +4455,7 @@ pub(crate) struct NewLiveItem {
     start: String,
 }
 
-/// Add a live item to the draft of a music feed (ADR 0054 items 1 and 2).
+/// Add a live item to the draft of a music feed (ADR 0205 items 36 and 37).
 /// The route changes the draft only. It never writes to a host.
 pub(crate) async fn add_live_item(
     State(shared): State<Shared>,
@@ -4497,7 +4497,7 @@ pub(crate) struct SentLiveStatus {
     status: String,
 }
 
-/// Change the status of a live item in the draft (ADR 0054 item 5). The
+/// Change the status of a live item in the draft (ADR 0205 item 40). The
 /// route changes the draft only. It never writes to a host.
 pub(crate) async fn set_live_status(
     State(shared): State<Shared>,
@@ -5051,7 +5051,7 @@ pub(crate) async fn write_feed(
     .await?;
     // The write is done. A failure of this step keeps the usual send time.
     let moved = move_return_send_time(&shared, id, return_read).await;
-    // The write put its announcements into the queue (ADR 0052).
+    // The write put its announcements into the queue (ADR 0205).
     blocking(shared, move |w| {
         w.announcer.wake();
         Ok(())
@@ -5211,7 +5211,7 @@ pub(crate) async fn put_announce_settings(
     .await
 }
 
-/// The recent announcements of a feed, the newest first (ADR 0052 item 19).
+/// The recent announcements of a feed, the newest first (ADR 0205 item 33).
 pub(crate) async fn list_announcements(
     State(shared): State<Shared>,
     Path(id): Path<i64>,
@@ -5339,7 +5339,7 @@ pub(crate) async fn put_library(
             .collection
             .library_root()?
             .map(|p| p.to_string_lossy().into_owned());
-        // The server has one library folder for each user (ADR 0055 item 25).
+        // The server has one library folder for each user (ADR 0204 item 47).
         if let Some(rules) = &w.rules
             && rules.library_root.to_str() != Some(body.root.trim())
         {
@@ -5379,7 +5379,7 @@ pub(crate) async fn put_library(
         let stored = w.collection.library_root_setting(std::path::Path::new(&root));
         w.collection.set_setting("library_root", &json!(stored))?;
         // Each feed with a release folder now gets its remote file records
-        // (ADR 0038 item 3).
+        // (ADR 0204 item 3).
         w.record_all_remote_files();
         Ok(Json(move_report_json(&report)))
     })
@@ -5440,7 +5440,7 @@ fn feed_library_file(
 
 /// The feed that the Files page compares with: the draft, or the hosted
 /// feed from the release folder when the feed has no draft, such as a
-/// read-only feed (ADR 0036 item 11, ADR 0038 item 5). Gives `None` when
+/// read-only feed (ADR 0036 item 11, ADR 0204 item 5). Gives `None` when
 /// the feed has neither.
 pub(crate) fn files_feed(w: &Workspace, id: FeedId) -> Result<Option<Feed>, ApiError> {
     match pipeline::draft_model(&w.collection, id) {
@@ -5468,7 +5468,7 @@ fn feed_address_list(feed: Option<&Feed>) -> Vec<String> {
 }
 
 /// The length that `feed` gives for each address of an enclosure or of an
-/// alternative source (ADR 0038 item 11).
+/// alternative source (ADR 0204 item 11).
 fn feed_lengths(feed: Option<&Feed>) -> std::collections::HashMap<String, u64> {
     let mut lengths = std::collections::HashMap::new();
     let Some(feed) = feed else {
@@ -5484,7 +5484,7 @@ fn feed_lengths(feed: Option<&Feed>) -> std::collections::HashMap<String, u64> {
                 .or_insert(length);
         }
         // An alternative source has the length of its alternative
-        // enclosure, as the remote records do (ADR 0038 item 2).
+        // enclosure, as the remote records do (ADR 0204 item 2).
         for alternate in &item.value.alternate_enclosures {
             let Some(length) = alternate
                 .value
@@ -5604,7 +5604,7 @@ fn extra_folder_files(
 }
 
 /// The planned path of a library file, or `None` when its feed and the
-/// file give no connected host (ADR 0036 item 9, ADR 0038 item 1).
+/// file give no connected host (ADR 0036 item 9, ADR 0204 item 1).
 fn planned_or_none(
     collection: &Collection,
     hosts: &Hosts,
@@ -5626,7 +5626,7 @@ fn planned_or_none(
 }
 
 /// True when the draft uses the address of a remote file, or the address
-/// of a copy of it (ADR 0038 item 5).
+/// of a copy of it (ADR 0204 item 5).
 fn remote_file_in_use(
     collection: &Collection,
     hosts: &Hosts,
@@ -5641,7 +5641,7 @@ fn remote_file_in_use(
 
 /// True when the draft uses a library file: its source address, an
 /// address of a copy, or its planned address when it is in the library
-/// (ADR 0036 items 10 and 12, ADR 0038 item 5). `has_host` is true when the
+/// (ADR 0036 items 10 and 12, ADR 0204 item 5). `has_host` is true when the
 /// file has a planned address.
 fn file_in_use(
     collection: &Collection,
@@ -5829,10 +5829,10 @@ pub(crate) async fn list_release_files(
         for file in &library_files {
             // A file of a feed with no host, such as a read-only feed, has
             // no planned address. This is also true after its download
-            // (ADR 0038 items 1 and 11).
+            // (ADR 0204 items 1 and 11).
             let planned = planned_or_none(&w.collection, &hosts, &feed_row, file)?;
             // The draft can use the address that the file came from, also
-            // after a download, or the address of a copy (ADR 0038 item 5).
+            // after a download, or the address of a copy (ADR 0204 item 5).
             let in_use = file_in_use(&w.collection, &hosts, file, planned.is_some(), &addresses)?;
             if !file.local {
                 remote_count += 1;
@@ -6139,7 +6139,7 @@ pub(crate) struct SetFeedHost {
     replace: bool,
 }
 
-/// Put the feed XML on a different host through the draft (ADR 0038
+/// Put the feed XML on a different host through the draft (ADR 0204
 /// item 16). The host of the feed removes the move. A host that has a
 /// different file at the path gives 409 `file_exists` with the file in
 /// `error.details`, unless `replace` is true (ADR 0178 items 4 and 6).
@@ -7259,7 +7259,7 @@ fn delete_unused_copies(
 }
 
 /// Check that a remote library file can download now: it has a source and
-/// it breaks no limit (ADR 0038 items 8 and 10). Gives `false` for a file
+/// it breaks no limit (ADR 0204 items 8 and 10). Gives `false` for a file
 /// that is in the library already, which needs no download.
 fn check_download(w: &Workspace, hosts: &Hosts, file: &LibraryFile) -> Result<bool, ApiError> {
     if file.local {
@@ -7290,7 +7290,7 @@ fn start_download(w: &Workspace, file: &LibraryFile, needed: bool) -> Result<(),
     Ok(())
 }
 
-// ---- The download queue (ADR 0038 items 6 to 12) ----
+// ---- The download queue (ADR 0204 items 6 to 12) ----
 
 /// The progress of one download, as JSON.
 fn download_json(
@@ -7373,7 +7373,7 @@ pub(crate) struct StartDownloads {
 /// Queue the download of some remote files of a feed, or of all of them.
 /// A file that is in the library, or in the queue already, does nothing.
 /// A file that breaks a limit gives 422 `download_limit`, and then no file
-/// goes in the queue (ADR 0038 items 6 and 10).
+/// goes in the queue (ADR 0204 items 6 and 10).
 pub(crate) async fn start_downloads(
     State(shared): State<Shared>,
     Path(id): Path<i64>,
@@ -7424,7 +7424,7 @@ pub(crate) async fn start_downloads(
 }
 
 /// Stop a download and take it out of the queue. The partial file stays,
-/// so a later download continues from it (ADR 0038 item 8).
+/// so a later download continues from it (ADR 0204 item 8).
 pub(crate) async fn stop_download(
     State(shared): State<Shared>,
     Path((id, file)): Path<(i64, i64)>,
@@ -7440,7 +7440,7 @@ pub(crate) async fn stop_download(
     Ok(StatusCode::NO_CONTENT)
 }
 
-// ---- The folder scan (ADR 0038 items 13 to 15) ----
+// ---- The folder scan (ADR 0204 items 13 to 15) ----
 
 /// A difference of the folder scan as JSON: the fields of the
 /// difference, the title of the feed, and the path of the file.
@@ -7468,7 +7468,7 @@ fn difference_json(w: &Workspace, difference: &folder_scan::Difference) -> Resul
 
 /// Compare each release folder with its records, and give each
 /// difference. The scan changes only the stamp of a file whose bytes did
-/// not change (ADR 0038 items 13 to 15).
+/// not change (ADR 0204 items 13 to 15).
 pub(crate) async fn scan_library(State(shared): State<Shared>) -> ApiResult {
     blocking(shared, |w| {
         require_held_assets(w)?;
@@ -7484,7 +7484,7 @@ pub(crate) async fn scan_library(State(shared): State<Shared>) -> ApiResult {
 }
 
 /// The body of `POST /feeds/{id}/library-changes`: the decision of the
-/// user for one difference (ADR 0038 item 15).
+/// user for one difference (ADR 0204 item 15).
 #[derive(Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case")]
 pub(crate) enum LibraryChange {
@@ -7547,7 +7547,7 @@ fn set_length_at(feed: &mut Feed, url: &str, length: u64) {
 /// Decide a difference of the folder scan for one feed. Each action scans
 /// the feed again first, and gives 409 `no_change` when the difference is
 /// not there any more. No action writes to a host. The write of the draft
-/// does the uploads and the deletions (ADR 0038 item 15, ADR 0035 item
+/// does the uploads and the deletions (ADR 0204 item 15, ADR 0035 item
 /// 16).
 pub(crate) async fn library_changes(
     State(shared): State<Shared>,
@@ -7638,7 +7638,7 @@ pub(crate) async fn library_changes(
     .await
 }
 
-/// Set `local` false for a file and queue its download (ADR 0038 item
+/// Set `local` false for a file and queue its download (ADR 0204 item
 /// 15). The checks come first, so a refusal changes nothing.
 fn download_again(w: &Workspace, file: &LibraryFile) -> Result<(), ApiError> {
     let hosts = w.hosts()?;
@@ -7652,7 +7652,7 @@ fn download_again(w: &Workspace, file: &LibraryFile) -> Result<(), ApiError> {
 /// Record the new bytes of a changed file. Each address of a copy of the
 /// bytes from before that the draft uses changes to the new planned
 /// address, with the new length. Each such copy gets a deletion in the
-/// draft (ADR 0038 item 15, ADR 0035 item 16).
+/// draft (ADR 0204 item 15, ADR 0035 item 16).
 fn use_new_file(
     w: &Workspace,
     library: &Library,
@@ -8163,7 +8163,7 @@ pub(crate) async fn held_files(State(shared): State<Shared>) -> ApiResult {
     .await
 }
 
-// ---- Recipients (ADR 0027) ----
+// ---- Recipients (ADR 0207) ----
 
 /// The key of a recipient as a tuple, with empty text for a missing custom
 /// key or custom value.
@@ -8195,7 +8195,7 @@ fn keysend_map(w: &Workspace) -> Result<HashMap<String, Lookup>, ApiError> {
 
 /// Each recipient that Studio knows: from a feed of the collection, or
 /// from a save by the user. The list has one entry for each wallet
-/// (ADR 0095 items 1 to 3).
+/// (ADR 0207 items 34 to 36).
 pub(crate) async fn list_recipients(State(shared): State<Shared>) -> ApiResult {
     blocking(shared, |w| {
         let (known, mut feed_sets, fee_identities) = recipient_list_inputs(w)?;
@@ -8217,7 +8217,7 @@ fn recipient_list_inputs(w: &Workspace) -> Result<RecipientListInputs, ApiError>
     // `recipient_uses`. A recipient that only a draft has is added.
     let mut counts: HashMap<KeyParts, UsedRecipient> = HashMap::new();
     // An identity that is a fee in one or more feed models. The People
-    // page marks it (the mockups of ADR 0099).
+    // page marks it (the mockups of ADR 0203).
     let mut fee_identities: std::collections::HashSet<KeyParts> = std::collections::HashSet::new();
     for (row, feed) in feed_models(w)? {
         for recipient in recipient_places(&feed).all() {
@@ -8294,7 +8294,7 @@ pub(crate) async fn lookup_recipients(State(shared): State<Shared>) -> ApiResult
     .await
 }
 
-/// Group the recipients by wallet (ADR 0095 items 2 and 3). The list is by
+/// Group the recipients by wallet (ADR 0207 items 35 and 36). The list is by
 /// name, then by address.
 fn group_wallets(
     known: Vec<studio_core::collection::KnownRecipient>,
@@ -8416,7 +8416,7 @@ struct UsedRecipient {
 }
 
 /// The feeds of the collection with their models: the draft, or else the
-/// library copy. A feed with no model is not in the list (ADR 0091 item 2).
+/// library copy. A feed with no model is not in the list (ADR 0207 item 9).
 fn feed_models(w: &Workspace) -> Result<Vec<(studio_core::collection::FeedRow, Feed)>, ApiError> {
     let mut models = Vec::new();
     for row in w.collection.feeds()? {
@@ -8429,7 +8429,7 @@ fn feed_models(w: &Workspace) -> Result<Vec<(studio_core::collection::FeedRow, F
 
 /// The recipients of the value blocks of one feed model, by place: the
 /// channel, each track and each live item. A recipient of a value time
-/// split is not in the list (ADR 0091 item 10).
+/// split is not in the list (ADR 0207 item 17).
 struct RecipientPlaces<'a> {
     channel: Vec<&'a Recipient>,
     items: Vec<Vec<&'a Recipient>>,
@@ -8470,7 +8470,7 @@ fn recipient_places(feed: &Feed) -> RecipientPlaces<'_> {
 }
 
 /// Save a recipient as a person, in the field names of the UI model (ADR
-/// 0027 item 5, ADR 0098). Studio does not keep the split and the fee of a
+/// 0027 item 5, ADR 0203). Studio does not keep the split and the fee of a
 /// saved recipient.
 pub(crate) async fn save_recipient(
     State(shared): State<Shared>,
@@ -8496,10 +8496,10 @@ pub(crate) async fn remove_saved_recipient(
     .await
 }
 
-// ---- Change sets (ADR 0091) ----
+// ---- Change sets (ADR 0207) ----
 
 /// The feeds that use a recipient: the channel, the tracks and the live
-/// items. A recipient of a value time split does not count (ADR 0091
+/// items. A recipient of a value time split does not count (ADR 0207
 /// item 10).
 pub(crate) async fn recipient_uses(
     State(shared): State<Shared>,
@@ -8536,7 +8536,7 @@ pub(crate) async fn recipient_uses(
 }
 
 /// The feeds of the level of a publisher feed: the feed, each feed below
-/// it and the releases of these feeds (ADR 0091 item 9). A feed that is
+/// it and the releases of these feeds (ADR 0207 item 16). A feed that is
 /// not a publisher feed gives 422 `not_publisher`.
 pub(crate) async fn feed_level(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
     blocking(shared, move |w| {
@@ -8568,7 +8568,7 @@ pub(crate) async fn feed_level(State(shared): State<Shared>, Path(id): Path<i64>
     .await
 }
 
-/// Why Studio cannot write a changed feed now (ADR 0091 item 22).
+/// Why Studio cannot write a changed feed now (ADR 0207 item 29).
 fn change_blocked(w: &Workspace, id: FeedId) -> Option<&'static str> {
     let row = w.collection.feed(id).ok()?;
     let Some(connector_id) = row.connector_id else {
@@ -8622,7 +8622,7 @@ pub(crate) struct NewChangeSet {
 }
 
 /// Make a change set. The core puts the change in the draft of each feed
-/// of the scope. This route writes nothing to a file host (ADR 0091
+/// of the scope. This route writes nothing to a file host (ADR 0207
 /// items 17 to 19). The core also changes the saved recipient for a change
 /// of the address or of the name (item 12).
 pub(crate) async fn make_change_set(
@@ -8651,7 +8651,7 @@ pub(crate) async fn make_change_set(
         if body.recipient.address.trim().is_empty() {
             return Err(invalid("the recipient needs an address"));
         }
-        // The core refuses an operation with no type too (ADR 0095 item 14).
+        // The core refuses an operation with no type too (ADR 0207 item 47).
         // The core error has no code for the route, so the route checks the
         // type first to give 422.
         if let RecipientOperation::ChangeAddress { recipient_type, .. }
@@ -8755,7 +8755,7 @@ pub(crate) async fn lnaddress_suggestions(
 }
 
 /// Check the Lightning address of a Use Lightning address operation before
-/// the core runs (ADR 0095 items 11 to 13). `lookups` gets the new lookup.
+/// the core runs (ADR 0207 items 44 to 46). `lookups` gets the new lookup.
 fn check_lnaddress(
     w: &Workspace,
     recipient: &RecipientKey,
@@ -8845,7 +8845,7 @@ pub(crate) async fn get_change_set(State(shared): State<Shared>, Path(id): Path<
 }
 
 /// Discard a change set: the draft of each unwritten feed goes back to its
-/// state from before the change (ADR 0091 item 20).
+/// state from before the change (ADR 0207 item 27).
 pub(crate) async fn discard_change_set(
     State(shared): State<Shared>,
     Path(id): Path<i64>,
@@ -8868,7 +8868,7 @@ fn index_not_found(entity: &str, guid: &str) -> ApiError {
 }
 
 /// The title, the payment routes and the tracks of a feed in musicindex
-/// (ADR 0027 item 6).
+/// (ADR 0207 item 6).
 pub(crate) async fn index_feed_recipients(
     State(shared): State<Shared>,
     Path(guid): Path<String>,
@@ -8907,7 +8907,7 @@ fn routes_with_providers(
     Ok(Json(body))
 }
 
-/// The title and the payment routes of one track in musicindex (ADR 0027
+/// The title and the payment routes of one track in musicindex (ADR 0207
 /// item 6). The result has no tracks.
 pub(crate) async fn index_track_recipients(
     State(shared): State<Shared>,
@@ -9288,7 +9288,7 @@ pub(crate) async fn whoami(Extension(app): Extension<ConnectedApp>) -> Json<Valu
     Json(who_json(&app))
 }
 
-// ---- Show grants (ADR 0054 items 11 to 17) ----
+// ---- Show grants (ADR 0205 items 46 to 52) ----
 
 /// The time of the computer, in seconds since the Unix epoch.
 fn unix_now() -> u64 {
@@ -9354,7 +9354,7 @@ pub(crate) struct GrantApp {
     app_id: Option<i64>,
 }
 
-/// Ask for a show grant in the draft (ADR 0054 item 11). The body names the
+/// Ask for a show grant in the draft (ADR 0205 item 46). The body names the
 /// app: `{"app_id": 3}`. A body with no active app gives 422
 /// `app_required` (ADR 0110 item 19).
 pub(crate) async fn put_draft_grant(
@@ -9370,7 +9370,7 @@ pub(crate) async fn put_draft_grant(
     .await
 }
 
-/// Remove a show grant from the draft (ADR 0054 item 11).
+/// Remove a show grant from the draft (ADR 0205 item 46).
 pub(crate) async fn delete_draft_grant(
     State(shared): State<Shared>,
     Path((id, guid)): Path<(i64, String)>,
@@ -9383,7 +9383,7 @@ pub(crate) async fn delete_draft_grant(
 }
 
 /// End the open grant of a live item: "Stop the grant" on the live item
-/// page (ADR 0054 item 17). After it, a connected app gets 409
+/// page (ADR 0205 item 52). After it, a connected app gets 409
 /// `grant_ended` for this show. A grant that has ended stays ended.
 pub(crate) async fn end_feed_grant(
     State(shared): State<Shared>,
@@ -9417,7 +9417,7 @@ pub(crate) async fn end_feed_grant(
 }
 
 /// The show grants of a feed with their granted writes, for the live item
-/// page (ADR 0054 item 17).
+/// page (ADR 0205 item 52).
 pub(crate) async fn list_feed_grants(
     State(shared): State<Shared>,
     Path(id): Path<i64>,
@@ -9548,7 +9548,7 @@ fn grant_ended() -> ApiError {
     )
 }
 
-/// Each active show grant of the app (ADR 0054 item 8). The route has no
+/// Each active show grant of the app (ADR 0205 item 43). The route has no
 /// grant vault key, so it reads the hosted file of a feed only from a host
 /// that needs no secret. A show on a host with a secret is in the list with
 /// its feed and its live value origin, and with no status, no times and no
@@ -9611,7 +9611,7 @@ pub(crate) async fn list_shows(
     .await
 }
 
-/// Write one granted change for a connected app (ADR 0054 item 15, ADR
+/// Write one granted change for a connected app (ADR 0205 item 50, ADR
 /// 0058 items 11 to 13). Give the version, the status and the live value
 /// after the write. The app never gets a secret. The connectors get their
 /// secrets from the grant vault, which the grant vault key of the body
@@ -9710,7 +9710,7 @@ fn granted_write(
         checked,
         now,
     )?;
-    // The write put its announcements into the queue (ADR 0052).
+    // The write put its announcements into the queue (ADR 0205).
     w.announcer.wake();
     let hosted = hosted_feed(w, &hosts, show.feed_id)?;
     if let Some(feed) = &hosted {

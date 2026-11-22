@@ -85,7 +85,7 @@ fn io_error(error: &std::io::Error) -> ApiError {
 }
 
 /// Give 507 when the user folder, with `extra` more bytes, goes over the
-/// storage limit (ADR 0055 item 21). The size of an open upload is in the
+/// storage limit (ADR 0204 item 43). The size of an open upload is in the
 /// folder from its start, because the staging file has its full size.
 async fn check_room(rules: Option<ServerRules>, extra: u64) -> Result<(), ApiError> {
     let Some(rules) = rules else {
@@ -166,7 +166,7 @@ pub(crate) async fn start_upload(
     };
     let restore = row.replace.clone().filter(|text| text != "true");
     // The check of the room and the staging file of full size are one step
-    // under the lock of the workspace (ADR 0055 item 21). The file counts
+    // under the lock of the workspace (ADR 0204 item 43). The file counts
     // against the limit from the moment that it has its size, so a second
     // start at the same time sees the space of the first. The file goes
     // out when the upload ends, stops or expires.
@@ -253,7 +253,7 @@ pub(crate) async fn put_part(
         )));
     }
     // The staging file has its full size already, so the check counts the
-    // folder only (ADR 0055 item 21).
+    // folder only (ADR 0204 item 43).
     check_room(rules, 0).await?;
     let mut file = tokio::fs::OpenOptions::new()
         .write(true)
@@ -408,7 +408,7 @@ pub(crate) fn sweep_pending(w: &Workspace, now: i64) -> Result<(), ApiError> {
 /// Remove the bytes of each asset that a host has with the same SHA-256
 /// (ADR 0105 items 5 and 13). This is the step at the start. A host that
 /// needs a secret counts as locked, so the step does not read or touch the
-/// vault (ADR 0055 item 16). A file whose host gives no answer stays on the
+/// vault (ADR 0204 item 38). A file whose host gives no answer stays on the
 /// server. The function does nothing when the workspace holds assets, or
 /// has no library folder.
 pub(crate) fn sweep_hosted(w: &Workspace) -> Result<(), ApiError> {

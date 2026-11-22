@@ -1,7 +1,7 @@
 //! A small Podcast Index hub for tests. It runs in the test process.
 //!
 //! It answers `GET /pubnotify` and records the query values of each request
-//! (ADR 0052 item 1).
+//! (ADR 0205 item 15).
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};

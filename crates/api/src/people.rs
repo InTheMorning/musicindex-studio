@@ -1,4 +1,4 @@
-//! The routes of the people (ADR 0098, ADR 0099).
+//! The routes of the people (ADR 0203, ADR 0203).
 //!
 //! Only the routes of the profile addresses make a request to a host or a
 //! relay. The other routes read the lookups that the collection keeps.
@@ -109,7 +109,7 @@ fn person_json(
         value["credit_name_uses"] = json!(people::credit_name_uses(collection, person)?);
         // ADR 0132 item 4: the links with a credit of the person.
         value["linked_credits"] = json!(people::linked_credits(collection, person)?);
-        // ADR 0111 item 12: the number of feeds that need a correction.
+        // ADR 0203 item 63: the number of feeds that need a correction.
         value["needs_correction"] =
             json!(people::check(collection, person, lookups)?.needs_correction());
     }
@@ -248,7 +248,7 @@ pub(crate) async fn save_linked_page_changes(
     .await
 }
 
-/// The check of the feeds of one person (ADR 0111 items 9 to 13). The route
+/// The check of the feeds of one person (ADR 0203 items 64, 65, 66, 63 and 70). The route
 /// reads the collection and makes no request.
 pub(crate) async fn check_person(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
     blocking(shared, move |w| {
@@ -307,7 +307,7 @@ pub(crate) async fn change_person(
 /// (ADR 0116). The core applies them in one transaction. Before the save,
 /// Studio stores the keysend lookup of each Lightning address of the save, as
 /// `add_profile_address` does. The core then finds the person of its node,
-/// and the wallet joins the address and the node (ADR 0095, ADR 0117 item 7).
+/// and the wallet joins the address and the node (ADR 0207, ADR 0117 item 7).
 pub(crate) async fn save_person(
     State(shared): State<Shared>,
     Path(id): Path<i64>,
@@ -515,7 +515,7 @@ pub(crate) async fn remove_link(
     .await
 }
 
-/// Each suggestion of a person from the feeds (ADR 0098 items 12 to 16).
+/// Each suggestion of a person from the feeds (ADR 0203 items 13 to 21).
 pub(crate) async fn list_suggestions(State(shared): State<Shared>) -> ApiResult {
     blocking(shared, |w| {
         let lookups = lookups(&w.collection)?;
@@ -525,7 +525,7 @@ pub(crate) async fn list_suggestions(State(shared): State<Shared>) -> ApiResult 
     .await
 }
 
-/// The suggestions that the user hid (ADR 0158 item 2).
+/// The suggestions that the user hid (ADR 0203 item 37).
 pub(crate) async fn hidden_suggestions(State(shared): State<Shared>) -> ApiResult {
     blocking(shared, |w| {
         let lookups = lookups(&w.collection)?;
@@ -548,7 +548,7 @@ pub(crate) async fn make_person(
     .await
 }
 
-/// Add the items that the user selected to a person (ADR 0103 item 10).
+/// Add the items that the user selected to a person (ADR 0203 item 30).
 /// The answer is `{ "added": N }`.
 pub(crate) async fn add_items(
     State(shared): State<Shared>,
@@ -564,7 +564,7 @@ pub(crate) async fn add_items(
     .await
 }
 
-/// The items of the feeds that match a person (ADR 0103 items 11 to 13).
+/// The items of the feeds that match a person (ADR 0203 items 53 to 55).
 /// The answer is `{ "items": [...] }`.
 pub(crate) async fn more_items(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
     blocking(shared, move |w| {
@@ -581,7 +581,7 @@ pub(crate) struct MergeBody {
     other: i64,
 }
 
-/// Merge the person `other` into the person of the path (ADR 0103 items 14
+/// Merge the person `other` into the person of the path (ADR 0203 item 50
 /// to 16).
 pub(crate) async fn merge_person(
     State(shared): State<Shared>,
@@ -633,7 +633,7 @@ pub(crate) struct ShowAgainBody {
     identity: String,
 }
 
-/// Remove the dismissal of a suggestion (ADR 0158 item 3).
+/// Remove the dismissal of a suggestion (ADR 0203 item 21).
 pub(crate) async fn show_suggestion(
     State(shared): State<Shared>,
     Json(body): Json<ShowAgainBody>,
@@ -646,7 +646,7 @@ pub(crate) async fn show_suggestion(
 }
 
 /// The Lightning addresses in the profiles of the Nostr keys of a person
-/// (ADR 0098 items 17 to 19). The answer is `{ "suggestions": [...] }`. A
+/// (ADR 0203 items 23 to 25). The answer is `{ "suggestions": [...] }`. A
 /// shell with no keysend scheme gives no suggestion. The requests run
 /// with no lock of the workspace.
 pub(crate) async fn list_profile_addresses(
@@ -953,7 +953,7 @@ pub(crate) struct FieldsQuery {
     scope: Option<String>,
 }
 
-/// The rows of the field list for a text and a cursor (musicindex ADR 0052
+/// The rows of the field list for a text and a cursor (musicindex ADR 0205
 /// R-QUERY-7). The core gives each edit range. The route sends no request.
 pub(crate) async fn field_rows(Query(query): Query<FieldsQuery>) -> ApiResult {
     let cursor = query
@@ -1062,7 +1062,7 @@ pub(crate) async fn musicindex_values(
     .await
 }
 
-/// Dismiss the Lightning address of a profile for a person (ADR 0098 item
+/// Dismiss the Lightning address of a profile for a person (ADR 0203 item
 /// 18). The address does not come back as a suggestion for that person.
 pub(crate) async fn dismiss_profile_address(
     State(shared): State<Shared>,
@@ -1077,7 +1077,7 @@ pub(crate) async fn dismiss_profile_address(
     .await
 }
 
-/// The people as a JSON file (ADR 0098 items 24 and 25).
+/// The people as a JSON file (ADR 0203 items 34 and 35).
 pub(crate) async fn export_people(State(shared): State<Shared>) -> Result<Response, ApiError> {
     let export = blocking(shared, |w| {
         let lookups = lookups(&w.collection)?;
@@ -1103,7 +1103,7 @@ pub(crate) struct PersonChanges {
 
 /// Check the body of a person change set, and make the snapshot of the
 /// operation. An operation that is not valid gives 422
-/// `invalid_person_operation` (ADR 0098 item 20).
+/// `invalid_person_operation` (ADR 0203 item 26).
 fn person_snapshot(
     w: &Workspace,
     id: i64,
@@ -1147,7 +1147,7 @@ fn person_snapshot(
 }
 
 /// Make the change set of a person operation. The route writes nothing to a
-/// file host (ADR 0098 item 20).
+/// file host (ADR 0203 item 26).
 pub(crate) async fn make_changes(
     State(shared): State<Shared>,
     Path(id): Path<i64>,

@@ -155,7 +155,7 @@ pub fn import(source: &Path, name: &str) -> Result<Imported, MediaError> {
     let Some(file_type) = probe.file_type() else {
         // An audio file or an image file has its result before this
         // point. A file with a lyrics extension is a lyrics file when its
-        // content is valid UTF-8 (ADR 0064 item 9).
+        // content is valid UTF-8 (ADR 0206 item 24).
         if kind_of_path(name) == Some(FileKind::Lyrics) {
             return import_lyrics(source, name);
         }
@@ -665,7 +665,7 @@ pub enum FileKind {
     /// An audio file of the formats of ADR 0032 item 1.
     Audio,
     /// A lyrics file: `.srt`, `.vtt`, `.txt`, `.json` or `.html`
-    /// (ADR 0064 item 9).
+    /// (ADR 0206 item 24).
     Lyrics,
 }
 
@@ -684,7 +684,7 @@ impl FileKind {
 
 /// The kind of the file at `path`, from its extension. The comparison
 /// ignores case. The result is `None` for any other extension (ADR 0032
-/// item 1, ADR 0062 item 3, ADR 0064 item 9).
+/// item 1, ADR 0062 item 3, ADR 0206 item 24).
 #[must_use]
 pub fn kind_of_path(path: &str) -> Option<FileKind> {
     let (_, extension) = path.rsplit_once('.')?;

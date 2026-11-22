@@ -1,4 +1,4 @@
-// The model of the field list (ADR 0154, musicindex ADR 0052 R-QUERY-7).
+// The model of the field list (ADR 0154, musicindex ADR 0205 R-QUERY-7).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

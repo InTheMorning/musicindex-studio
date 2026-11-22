@@ -526,7 +526,7 @@ impl Web {
 const BLOCK_BYTES: usize = 64 * 1024;
 
 impl Web {
-    /// Read a file into `part`, in blocks of 64 KiB (ADR 0038 item 8).
+    /// Read a file into `part`, in blocks of 64 KiB (ADR 0204 item 8).
     ///
     /// When `part` has bytes, the request has `Range: bytes={len}-`. A 206
     /// response adds to the file. A 200 response starts the file again

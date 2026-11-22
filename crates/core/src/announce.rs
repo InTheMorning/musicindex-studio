@@ -1,4 +1,4 @@
-//! The announcement of a written feed to the Podcast Index hub (ADR 0052).
+//! The announcement of a written feed to the Podcast Index hub (ADR 0205).
 //!
 //! An announcement is one request to the hub. A write puts the planned
 //! announcements into a queue in the collection. [`take_due`] gives the
@@ -13,20 +13,20 @@ use serde_json::Value;
 use crate::collection::{AnnouncementAttempt, Collection, CollectionError, FeedId};
 use crate::web::Web;
 
-/// The hub of Podcast Index (ADR 0052 item 1).
+/// The hub of Podcast Index (ADR 0205 item 15).
 pub const DEFAULT_HUB: &str = "https://hub.podcastindex.org/pubnotify";
 
 /// The setting that turns the request to the hub on or off.
 pub const PUBNOTIFY_SETTING: &str = "announce_pubnotify";
 
 /// The number of finished announcements that Studio keeps for each feed
-/// (ADR 0052 item 19).
+/// (ADR 0205 item 33).
 const KEEP_FINISHED: i64 = 10;
 
 /// The largest answer of the hub that Studio reads.
 const MAX_ANSWER_BYTES: u64 = 64 * 1024;
 
-/// The two global settings of the announcements (ADR 0052 item 5).
+/// The two global settings of the announcements (ADR 0205 item 19).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct AnnounceSettings {
     /// Tell Podcast Index and send a podping after a write (ADR 0136).
@@ -66,7 +66,7 @@ fn flag(collection: &Collection, key: &str) -> Result<bool, CollectionError> {
     }
 }
 
-/// The times of the queue, in seconds (ADR 0052 items 14, 15 and 18).
+/// The times of the queue, in seconds (ADR 0205 items 28, 29 and 32).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Timing {
     /// The wait between a write and the first attempt.
@@ -78,7 +78,7 @@ pub struct Timing {
 }
 
 impl Timing {
-    /// The times that ADR 0052 gives.
+    /// The times that ADR 0205 gives.
     pub const DEFAULT: Self = Self {
         first_wait: 30,
         retry_waits: [60, 120, 240, 480],
@@ -123,7 +123,7 @@ impl AnnounceSkip {
 }
 
 /// The announcements that a write plans, or the reason for none
-/// (ADR 0052 items 7 to 9). It gives one announcement for each address, in
+/// (ADR 0205 items 21 to 23). It gives one announcement for each address, in
 /// the sequence of `addresses`. A second copy of an address goes out too.
 #[must_use]
 pub fn plan(
@@ -220,7 +220,7 @@ fn time(seconds: u64) -> i64 {
 /// Put the planned announcements of a feed into the queue.
 ///
 /// A `waiting` row for the same address takes the new values and its wait
-/// starts again. A `sending` row does not change (ADR 0052 item 16).
+/// starts again. A `sending` row does not change (ADR 0205 item 30).
 ///
 /// # Errors
 ///
@@ -323,7 +323,7 @@ pub fn record_sent(collection: &Collection, id: i64, now: u64) -> Result<(), Col
 }
 
 /// Record a failed attempt. After the fifth attempt, the announcement is
-/// `failed`. If not, it waits for the next retry (ADR 0052 item 15).
+/// `failed`. If not, it waits for the next retry (ADR 0205 item 29).
 ///
 /// # Errors
 ///
@@ -360,7 +360,7 @@ pub fn record_failure(
     collection.trim_announcements(KEEP_FINISHED)
 }
 
-/// Prepare the queue at the start of Studio (ADR 0052 item 18). A `sending`
+/// Prepare the queue at the start of Studio (ADR 0205 item 32). A `sending`
 /// row was interrupted, so it becomes `waiting`. A `waiting` row that is
 /// older than the maximum age becomes `failed`.
 ///
@@ -411,7 +411,7 @@ impl fmt::Display for AnnounceError {
 
 impl std::error::Error for AnnounceError {}
 
-/// Send one announcement to a hub (ADR 0052 items 1 to 3).
+/// Send one announcement to a hub (ADR 0205 items 15 to 17).
 ///
 /// The query has `url`, and `podping=1` when the announcement asks for it.
 ///

@@ -1,4 +1,4 @@
-// The rules of the Add feeds page and of the form that makes a feed (ADR 0073).
+// The rules of the Add feeds page and of the form that makes a feed (ADR 0212).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';

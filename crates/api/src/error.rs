@@ -116,9 +116,9 @@ impl From<CollectionError> for ApiError {
         let (status, code) = match error.kind() {
             CollectionErrorKind::NotFound => (StatusCode::NOT_FOUND, "not_found"),
             CollectionErrorKind::InUse => (StatusCode::CONFLICT, "in_use"),
-            // ADR 0027: a saved recipient needs an address.
+            // ADR 0207: a saved recipient needs an address.
             CollectionErrorKind::Invalid => (StatusCode::UNPROCESSABLE_ENTITY, "invalid_recipient"),
-            // ADR 0098: a link is in a different person already.
+            // ADR 0203: a link is in a different person already.
             CollectionErrorKind::Conflict => (StatusCode::CONFLICT, "link_in_other_person"),
             _ => (StatusCode::INTERNAL_SERVER_ERROR, "collection"),
         };
@@ -244,7 +244,7 @@ impl From<PipelineError> for ApiError {
             PipelineErrorKind::NoFolder => (StatusCode::CONFLICT, "no_library"),
             PipelineErrorKind::NotReachable => (StatusCode::BAD_GATEWAY, "not_reachable"),
             PipelineErrorKind::VaultLocked => (StatusCode::LOCKED, "vault_locked"),
-            // ADR 0038 item 12: a copy waits for the download of its file.
+            // ADR 0204 item 12: a copy waits for the download of its file.
             PipelineErrorKind::WaitingForDownload => (StatusCode::CONFLICT, "waiting_for_download"),
             // ADR 0105 item 10: a pending file that Studio removed.
             PipelineErrorKind::FileMissing => (StatusCode::CONFLICT, "file_missing"),
@@ -254,7 +254,7 @@ impl From<PipelineError> for ApiError {
                 (StatusCode::UNPROCESSABLE_ENTITY, "signature_invalid")
             }
             PipelineErrorKind::PlanExpired => (StatusCode::CONFLICT, "plan_expired"),
-            // ADR 0054 items 13 to 16: the refusals of a granted write.
+            // ADR 0205 items 48 to 51: the refusals of a granted write.
             PipelineErrorKind::GrantNotActive => (StatusCode::CONFLICT, "grant_ended"),
             PipelineErrorKind::DraftOpen => (StatusCode::CONFLICT, "draft_open"),
             PipelineErrorKind::BadStatus => (StatusCode::CONFLICT, "bad_status"),
@@ -279,7 +279,7 @@ impl From<PipelineError> for ApiError {
 
 impl From<PublisherError> for ApiError {
     fn from(error: PublisherError) -> Self {
-        // A pipeline failure keeps the mapping of its own error (ADR 0041).
+        // A pipeline failure keeps the mapping of its own error (ADR 0205).
         if error.kind() == PublisherErrorKind::Pipeline {
             return match error.pipeline() {
                 Some(pipeline) => pipeline.clone().into(),
@@ -348,7 +348,7 @@ impl From<studio_core::web::WebError> for ApiError {
 impl From<DownloadError> for ApiError {
     fn from(error: DownloadError) -> Self {
         let (status, code) = match error.kind() {
-            // ADR 0038 item 10: the download breaks a limit setting.
+            // ADR 0204 item 10: the download breaks a limit setting.
             DownloadErrorKind::TooLarge | DownloadErrorKind::NoSpace => {
                 (StatusCode::UNPROCESSABLE_ENTITY, "download_limit")
             }

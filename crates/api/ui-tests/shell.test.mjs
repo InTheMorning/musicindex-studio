@@ -1,4 +1,4 @@
-// The shell models (ADR 0042). Each test checks one rule of ADR 0039 and of
+// The shell models (ADR 0042). Each test checks one rule of ADR 0206 and of
 // musicindex ADR 0080 R-NAV-2.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -152,9 +152,9 @@ test('an open album gives the outline of ADR 0239 item 1', () => {
   assert.equal(panel.items[1].number, 1);
   assert.equal(panel.items[1].current, true);
   assert.equal(panel.items[2].current, false);
-  assert.equal(panel.items[3].action, 'add-tracks', 'ADR 0073 item 11: the outline has one row "Add tracks". Give it the action add-tracks.');
+  assert.equal(panel.items[3].action, 'add-tracks', 'ADR 0212 item 15: the outline has one row "Add tracks". Give it the action add-tracks.');
   assert.ok(!panel.items.some((item) => item.action === 'add-track' || item.action === 'import'),
-    'ADR 0073 item 11: the outline has no row with the action add-track or import. Remove it.');
+    'ADR 0212 item 15: the outline has no row with the action add-track or import. Remove it.');
 });
 
 test('a playlist and a publisher feed have no live shows', () => {
@@ -352,7 +352,7 @@ test('the navigation functions do not change their argument', () => {
   assert.equal(JSON.stringify(nav), before);
 });
 
-test('the narrow stack gives the root page below each view (ADR 0039 item 11)', () => {
+test('the narrow stack gives the root page below each view (ADR 0206 item 13)', () => {
   const root = { name: 'root' };
   const releases = { name: 'releases' };
   assert.deepEqual(narrowStack({ name: 'root' }), [root]);
@@ -570,20 +570,20 @@ test('a page move change set belongs to Releases', () => {
     'ADR 0243 item 3: fix narrowStack in crates/api/ui/shell.js.');
 });
 
-test('People is current on each view of its area (ADR 0099 item 1)', () => {
+test('People is current on each view of its area (ADR 0203 item 36)', () => {
   for (const name of ['people', 'person', 'check', 'wallet', 'change-set']) {
     const panel = leftPanel({ view: { name }, feeds: [], model: null, vaultOpen: true });
     const people = panel.bottom.find((e) => e.id === 'people');
-    assert.equal(people.current, true, `ADR 0099 item 1: People is current on the view ${name}.`);
-    assert.equal(people.icon, 'users', 'ADR 0099 item 1: People has the Lucide icon users.');
+    assert.equal(people.current, true, `ADR 0203 item 36: People is current on the view ${name}.`);
+    assert.equal(people.icon, 'users', 'ADR 0203 item 36: People has the Lucide icon users.');
   }
   const panel = leftPanel({ view: { name: 'releases' }, feeds: [], model: null, vaultOpen: true });
   assert.deepEqual(panel.bottom.map((e) => e.id), ['people', 'hosts', 'settings', 'lock'],
-    'ADR 0099 item 1: the bottom is People, File hosts, Settings, then Lock Studio.');
+    'ADR 0203 item 36: the bottom is People, File hosts, Settings, then Lock Studio.');
   assert.equal(panel.bottom.find((e) => e.id === 'people').current, false);
 });
 
-test('the narrow stack of the People area (ADR 0099 items 1 and 5)', () => {
+test('the narrow stack of the People area (ADR 0203 items 36 and 64)', () => {
   const root = { name: 'root' };
   const people = { name: 'people' };
   assert.deepEqual(narrowStack({ name: 'people' }), [root, people]);
@@ -670,7 +670,7 @@ test('a destination below Releases is a page of the root at narrow width', () =>
   assert.deepEqual(narrowStack(view), [{ name: 'root' }, view], 'ADR 0085 item 7: the root page opens the destination.');
 });
 
-// ---- The levels of the hierarchy (ADR 0088) ----
+// ---- The levels of the hierarchy (ADR 0215) ----
 
 const host = { id: 40, title: 'Some Host', medium: 'publisher', publisher_roles: ['hosting'], roles_confirmed: true, release_ids: [51, 52], child_ids: [41, 42], parent_ids: [] };
 const labelA = { id: 41, title: 'Label A', medium: 'publisher', publisher_roles: ['label'], roles_confirmed: true, release_ids: [51], child_ids: [43, 44], parent_ids: [40] };
@@ -682,14 +682,14 @@ const album2 = { id: 52, title: 'Album 2', medium: 'music', publisher_ids: [40, 
 const tree = [host, labelA, labelB, artistX, beatLab, album1, album2];
 
 test('level 0 gives only the top feeds, under their role headings', () => {
-  const message = 'ADR 0088 items 3 and 4: level 0 lists each feed with no feed above it, under its role heading. Use groupDestinations of crates/api/ui/shell.js.';
+  const message = 'ADR 0215 items 3 and 4: level 0 lists each feed with no feed above it, under its role heading. Use groupDestinations of crates/api/ui/shell.js.';
   const panel = leftPanel({ view: { name: 'releases' }, feeds: [...tree, { ...artistX, id: 45, title: 'Alone', parent_ids: [] }], model: null, vaultOpen: false });
   assert.deepEqual(panel.top.map((e) => [e.label, e.heading]),
     [['Releases', undefined], ['Some Host', 'Hosting'], ['Alone', 'Artists']], message);
 });
 
 test('a level gives the way up, the head, the feeds below and the releases', () => {
-  const message = 'ADR 0088 item 5: a level gives "‹" to the level above, the head, the feeds directly below under their headings, then the releases. Use feedLevel of crates/api/ui/shell.js.';
+  const message = 'ADR 0215 item 5: a level gives "‹" to the level above, the head, the feeds directly below under their headings, then the releases. Use feedLevel of crates/api/ui/shell.js.';
   const level = leftPanel({ view: { name: 'releases', group: 41, trail: [40] }, feeds: tree, model: null, vaultOpen: false });
   assert.equal(level.kind, 'level', message);
   assert.equal(level.back.label, 'Some Host', message);
@@ -838,7 +838,7 @@ test('the release rows of a group have an indent below the level row (ADR 0228 i
 });
 
 test('a feed opened from a level goes back to that level', () => {
-  const message = 'ADR 0088 item 6: the first outline row names the level. Use outlineItems of crates/api/ui/shell.js.';
+  const message = 'ADR 0215 item 6: the first outline row names the level. Use outlineItems of crates/api/ui/shell.js.';
   const from = { group: 41, trail: [40] };
   const panel = leftPanel({ view: { name: 'feed', id: 51, from }, feeds: tree, model: null, vaultOpen: false });
   const up = panel.items.find((i) => i.id === 'releases');
@@ -849,7 +849,7 @@ test('a feed opened from a level goes back to that level', () => {
 });
 
 test('each level is a page of the narrow stack', () => {
-  const message = 'ADR 0088 item 7: the levels above are pages below. Use narrowStack of crates/api/ui/shell.js.';
+  const message = 'ADR 0215 item 7: the levels above are pages below. Use narrowStack of crates/api/ui/shell.js.';
   const root = { name: 'root' };
   const level = { name: 'releases', group: 43, trail: [40, 41] };
   assert.deepEqual(narrowStack(level), [root, { name: 'releases', group: 40, trail: [] }, { name: 'releases', group: 41, trail: [40] }, level], message);
@@ -860,7 +860,7 @@ test('each level is a page of the narrow stack', () => {
 });
 
 test('the note of a release leaves out the feeds above and below the level', () => {
-  const message = 'ADR 0088 item 8: "Also on" names only the feeds that are not above or below the level. Use relatedLevels of crates/api/ui/shell.js.';
+  const message = 'ADR 0215 item 8: "Also on" names only the feeds that are not above or below the level. Use relatedLevels of crates/api/ui/shell.js.';
   const labelC = { id: 46, title: 'Label C', medium: 'publisher', publisher_roles: ['label'], roles_confirmed: true, release_ids: [51], child_ids: [], parent_ids: [] };
   const shared = { ...album1, publisher_ids: [40, 41, 43, 44, 46] };
   const list = releasesList({ feeds: [host, labelA, labelB, artistX, beatLab, labelC, shared, album2], connectors: [], sort: 'order', view: 'rows', group: 41 });
@@ -868,7 +868,7 @@ test('the note of a release leaves out the feeds above and below the level', () 
 });
 
 test('a feed with the roles artist and label is in Artists', () => {
-  const message = 'ADR 0088 item 4: the first role gives the heading. Use headingIndex of crates/api/ui/shell.js.';
+  const message = 'ADR 0215 item 4: the first role gives the heading. Use headingIndex of crates/api/ui/shell.js.';
   const own = { id: 60, title: 'HeyCitizen', medium: 'publisher', publisher_roles: ['artist', 'label', 'producer'], roles_confirmed: true, release_ids: [], child_ids: [], parent_ids: [] };
   const panel = leftPanel({ view: { name: 'releases' }, feeds: [own], model: null, vaultOpen: false });
   assert.deepEqual(panel.top.map((e) => [e.label, e.heading]), [['Releases', undefined], ['HeyCitizen', 'Artists']], message);
@@ -889,7 +889,7 @@ test('a publisher feed shows its cover, then the mosaic of its releases, then th
   assert.deepEqual(mosaicCells(['1', '2', '3']), ['1', '2', '3', '1']);
   assert.deepEqual(mosaicCells(['1', '2', '3', '4', '5']), ['1', '2', '3', '4']);
   const panel = leftPanel({ view: { name: 'releases' }, feeds, model: null, vaultOpen: false });
-  assert.deepEqual(panel.top.find((e) => e.group === 70).art, ['https://e.x/a.jpg', 'https://e.x/b.jpg'], 'musicindex ADR 0038 R-DOT-3 item 6: a destination row has the art of its feed.');
+  assert.deepEqual(panel.top.find((e) => e.group === 70).art, ['https://e.x/a.jpg', 'https://e.x/b.jpg'], 'musicindex ADR 0204 R-DOT-3 item 6: a destination row has the art of its feed.');
 });
 
 test('a feed that the editor does not open is only in Other feeds', () => {
@@ -916,7 +916,7 @@ test('a publisher feed with no role is in the heading No role', () => {
 });
 
 test('each head and row with art and a type word gives its dot', () => {
-  const message = 'musicindex ADR 0038 R-DOT-4: art with a type word shows its type dot. Fix: give `dot` from feedKind in shell.js.';
+  const message = 'musicindex ADR 0204 R-DOT-4: art with a type word shows its type dot. Fix: give `dot` from feedKind in shell.js.';
   const feeds = [
     { id: 20, title: 'Zed', medium: 'publisher', publisher_roles: ['artist'], roles_confirmed: true, release_ids: [1] },
     { id: 1, title: 'One', medium: 'music' },
@@ -939,7 +939,7 @@ test('a name order reads numbers as numbers', () => {
   assert.deepEqual(list.rows.map((r) => r.title), ['Volume 9', 'Volume 10']);
 });
 
-// musicindex ADR 0054 R-LIST-13 item 2, ADR 0155: each sort has two entries
+// musicindex ADR 0205 R-LIST-13 item 2, ADR 0155: each sort has two entries
 // in words, and the reversed entry follows its usual entry.
 test('the sort menu names both directions of each sort', () => {
   const labels = (sorts) => sortEntries(sorts).map((e) => e.label);

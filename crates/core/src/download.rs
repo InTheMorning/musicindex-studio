@@ -1,4 +1,4 @@
-//! The download of a remote library file into the library (ADR 0038
+//! The download of a remote library file into the library (ADR 0204
 //! items 6 to 12).
 //!
 //! A remote file has a row with `local` false. A download reads the bytes
@@ -100,7 +100,7 @@ impl From<WebError> for DownloadError {
     }
 }
 
-/// Where the bytes of a remote file come from (ADR 0038 item 8).
+/// Where the bytes of a remote file come from (ADR 0204 item 8).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Source {
     /// A file on a connected host. Studio reads it through the connector.
@@ -153,7 +153,7 @@ fn host_of_address(
 
 /// The source of a remote file: its first copy on a connected host, else
 /// its `source_url`. Gives `None` when the file has neither, and when its
-/// address is on a connected host that has no copy (ADR 0038 item 8, ADR
+/// address is on a connected host that has no copy (ADR 0204 item 8, ADR
 /// 0231 item 15).
 ///
 /// # Errors
@@ -208,7 +208,7 @@ pub fn max_file_bytes(collection: &Collection) -> Result<u64, DownloadError> {
     limit(collection, MAX_FILE_SETTING)
 }
 
-/// Refuse a download of `size` bytes that breaks a limit (ADR 0038 item
+/// Refuse a download of `size` bytes that breaks a limit (ADR 0204 item
 /// 10). The message names the setting.
 ///
 /// A size of 0 means that Studio does not know the size yet. Only the
@@ -252,7 +252,7 @@ pub fn check_limits(
     Ok(())
 }
 
-/// Read the bytes of `source` into `part` (ADR 0038 item 8). Gives the size
+/// Read the bytes of `source` into `part` (ADR 0204 item 8). Gives the size
 /// of the complete file.
 ///
 /// A host source reads the whole file through its connector, and writes
@@ -346,7 +346,7 @@ pub struct PartFacts {
 
 /// Move `part` to the name of `file` in its release folder, record the
 /// size and the SHA-256 from [`hash_part`] and the stamp, and remove the
-/// download record (ADR 0038 item 11).
+/// download record (ADR 0204 item 11).
 ///
 /// # Errors
 ///

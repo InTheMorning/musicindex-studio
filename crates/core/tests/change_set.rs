@@ -1,4 +1,4 @@
-//! Change sets over the local folder connector (ADR 0091).
+//! Change sets over the local folder connector (ADR 0207).
 
 use std::collections::HashMap;
 use std::fs;
@@ -433,7 +433,7 @@ fn rename_sets_the_name_of_the_person_and_discard_keeps_the_new_name() {
     assert_eq!(
         persons(&s.collection)[0].name,
         "New name",
-        "ADR 0098 item 23: Discard must not set the name of a person back."
+        "ADR 0203 item 29: Discard must not set the name of a person back."
     );
 }
 
@@ -459,7 +459,7 @@ fn change_address_does_not_change_the_wallets_of_the_person() {
     assert_eq!(
         persons(&s.collection),
         before,
-        "ADR 0098 item 23: a change set must not change a person."
+        "ADR 0203 item 29: a change set must not change a person."
     );
     discard_change_set(&s.collection, set.id).unwrap();
     assert_eq!(persons(&s.collection), before);
@@ -513,7 +513,7 @@ fn a_change_set_with_no_changed_feed_keeps_the_person_and_goes_at_the_next_one()
     assert_eq!(
         persons(&s.collection),
         before,
-        "ADR 0098 item 23: a Rename with no changed feed must not rename a person."
+        "ADR 0203 item 29: a Rename with no changed feed must not rename a person."
     );
     assert!(
         change_set::find_change_set(&s.collection, first.id).is_ok(),
@@ -534,7 +534,7 @@ fn a_change_set_with_no_changed_feed_keeps_the_person_and_goes_at_the_next_one()
     assert_eq!(
         rows.len(),
         1,
-        "ADR 0091 item 19: a closed change set must go at the next change set."
+        "ADR 0207 item 26: a closed change set must go at the next change set."
     );
     assert!(rows[0].operation.contains("change_address"));
 }
@@ -567,7 +567,7 @@ fn the_write_of_the_last_changed_feed_deletes_the_change_set() {
     .unwrap();
     assert!(
         change_set::find_change_set(&s.collection, set.id).is_err(),
-        "ADR 0091 item 19: the write of the last changed feed must delete the change set."
+        "ADR 0207 item 26: the write of the last changed feed must delete the change set."
     );
 }
 
@@ -617,7 +617,7 @@ fn rename_and_change_address_change_each_member_of_a_wallet_in_one_feed() {
             Some("Other".into()),
             Some("Anna".into())
         ],
-        "ADR 0095 item 9: Rename must act on each member of the wallet."
+        "ADR 0207 item 42: Rename must act on each member of the wallet."
     );
     discard_change_set(&s.collection, set.id).unwrap();
     let mut starter = start(&s);
@@ -637,7 +637,7 @@ fn rename_and_change_address_change_each_member_of_a_wallet_in_one_feed() {
     assert_eq!(
         addresses(&s.collection, one),
         ["new", "other", "new"],
-        "ADR 0095 item 9: Change address must act on each member of the wallet."
+        "ADR 0207 item 42: Change address must act on each member of the wallet."
     );
 }
 
@@ -774,7 +774,7 @@ fn an_operation_with_no_type_is_refused_and_leaves_no_change_set() {
                 .unwrap_err();
             assert!(
                 format!("{error:?}").contains("needs a type"),
-                "ADR 0095 item 14: an operation with no type must give the error invalid."
+                "ADR 0207 item 47: an operation with no type must give the error invalid."
             );
             assert_eq!(s.collection.change_set_rows().unwrap().len(), 0);
         }
@@ -867,7 +867,7 @@ fn person_operation_makes_the_wallet_and_the_credit_match_of_the_person() {
     assert_eq!(wallet.key, plain("first"));
     assert_eq!(wallet.members, [plain("first"), plain("second")]);
     let RecipientOperation::RemovePerson { credits, .. } = operation else {
-        panic!("ADR 0098 item 20: Remove must make the operation RemovePerson.");
+        panic!("ADR 0203 item 26: Remove must make the operation RemovePerson.");
     };
     assert_eq!(
         credits,
@@ -895,7 +895,7 @@ fn use_this_address_changes_a_feed_of_each_wallet_and_keeps_the_person() {
     .unwrap();
     assert!(
         set.feeds.iter().all(|f| f.outcome.is_changed()),
-        "ADR 0098 item 20: Use this address must change each wallet of the person."
+        "ADR 0203 item 26: Use this address must change each wallet of the person."
     );
     assert_eq!(set.person, Some(id));
     assert_eq!(addresses(&s.collection, s.feeds[0]), ["third", "other"]);
@@ -940,7 +940,7 @@ fn rename_sets_the_name_of_the_person_when_a_feed_changed_and_discard_keeps_it()
     assert_eq!(
         people::person(&s.collection, id).unwrap().name,
         "New",
-        "ADR 0098 item 23: Discard must not set the name of a person back."
+        "ADR 0203 item 29: Discard must not set the name of a person back."
     );
 }
 
@@ -977,7 +977,7 @@ fn a_person_with_no_default_address_gives_an_invalid_request_for_a_payee() {
     let error = person_operation(&s.collection, id, &operation, &no_lookups()).unwrap_err();
     assert!(
         format!("{error}").contains("no address"),
-        "ADR 0098 item 20: a payee with no default address must give an invalid request."
+        "ADR 0203 item 26: a payee with no default address must give an invalid request."
     );
     let mut starter = start(&s);
     assert!(make_person_change_set(&s.collection, &mut starter, id, &operation, &s.feeds).is_err());
@@ -1030,7 +1030,7 @@ fn add_to_releases_writes_the_usual_role_and_the_usual_group() {
     );
 }
 
-/// A feed with a person credit, and one payee for each case of ADR 0111.
+/// A feed with a person credit, and one payee for each case of ADR 0203.
 const CORRECT_FEED: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
 <rss version=\"2.0\" xmlns:podcast=\"https://podcastindex.org/namespace/1.0\">
   <channel>
@@ -1108,7 +1108,7 @@ fn correct_applies_only_the_selected_changes_and_keeps_a_role() {
     assert_eq!(
         feed.persons[0].value.href.as_deref(),
         Some("https://old.example"),
-        "ADR 0111 item 15: Correct must change only the selected parts."
+        "ADR 0203 item 71: Correct must change only the selected parts."
     );
     assert_eq!(feed.persons[1].value.role, None);
     assert_eq!(
@@ -1137,7 +1137,7 @@ fn correct_gives_a_credit_with_no_role_the_usual_role_and_keeps_the_other_roles(
     assert_eq!(
         feed.persons[0].value.role.as_deref(),
         Some("vocalist"),
-        "ADR 0111 item 17: Correct must keep the role of a credit that has one."
+        "ADR 0203 item 73: Correct must keep the role of a credit that has one."
     );
     assert_eq!(feed.persons[1].value.role.as_deref(), Some("vocalist"));
     assert_eq!(feed.persons[1].value.group.as_deref(), Some("music"));
@@ -1187,7 +1187,7 @@ fn correct_with_other_payees_keeps_the_split_and_the_fee() {
             ("first".to_owned(), "30".to_owned(), true),
             ("first".to_owned(), "70".to_owned(), false)
         ],
-        "ADR 0111 item 15: Correct must keep the split and the fee of each payee."
+        "ADR 0203 item 71: Correct must keep the split and the fee of each payee."
     );
 }
 
@@ -1211,7 +1211,7 @@ fn correct_gives_not_changed_for_a_feed_with_no_change_and_refuses_a_wrong_key()
     let outcome = change_set::apply(&mut feed, &wallet, &op);
     assert!(
         !outcome.is_changed(),
-        "ADR 0111 item 16: a feed with no change must give Not changed."
+        "ADR 0203 item 72: a feed with no change must give Not changed."
     );
     let error = person_operation(
         &s.collection,
@@ -1262,7 +1262,7 @@ fn correct_writes_through_a_change_set() {
     .unwrap();
     assert!(
         set.feeds.iter().all(|f| f.outcome.is_changed()),
-        "ADR 0111 item 16: Correct must make a change set with a diff for each feed."
+        "ADR 0203 item 72: Correct must make a change set with a diff for each feed."
     );
     assert_eq!(set.person, Some(id));
 }

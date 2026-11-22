@@ -1,4 +1,4 @@
-//! The routes `/auth/v1/` and the router of the server (ADR 0055 item 20,
+//! The routes `/auth/v1/` and the router of the server (ADR 0204 item 42,
 //! ADR 0056 items 4, 7 and 8).
 
 use axum::Router;
@@ -97,7 +97,7 @@ fn with_cookie(mut response: Response, cookie: &str) -> Response {
 }
 
 /// An email address in lowercase with no space at the start or the end
-/// (ADR 0055 item 8). Gives `None` when it is not an address.
+/// (ADR 0204 item 30). Gives `None` when it is not an address.
 pub(crate) fn normalize_email(email: &str) -> Option<String> {
     let email = email.trim().to_lowercase();
     let (name, host) = email.split_once('@')?;
@@ -298,7 +298,7 @@ async fn sign_up(State(state): State<Shared>, request: Request) -> Response {
         };
     }
     // The Argon2id derivation of the new vault needs a permit. The request
-    // waits before it uses the invite (ADR 0055 item 22).
+    // waits before it uses the invite (ADR 0204 item 44).
     let _permit = match limits::derivation_permit(&state).await {
         Ok(permit) => permit,
         Err(response) => return response,
@@ -443,7 +443,7 @@ async fn sign_out(State(state): State<Shared>, request: Request) -> Response {
         let gone = state.nip46.remove_session(&hash);
         crate::session::forget_signers(&state, gone).await;
         // The last session of the user ends here, so the vault locks
-        // (ADR 0055 item 16).
+        // (ADR 0204 item 38).
         session::lock_if_no_session(&state, session.account_id).await;
     }
     with_cookie(
@@ -457,7 +457,7 @@ struct DeleteAccount {
     confirm: String,
 }
 
-/// Delete the account of the session (ADR 0055 item 9). The vault must be
+/// Delete the account of the session (ADR 0204 item 31). The vault must be
 /// open, and the body repeats the email address of the account.
 async fn delete_account(State(state): State<Shared>, request: Request) -> Response {
     let session = match session::active_session(&state, request.headers()).await {

@@ -404,7 +404,7 @@ CREATE TABLE person_dismissals (
     dismissed_at INTEGER NOT NULL
 );
 -- A saved Lightning address with a found lookup joins the person of the
--- saved node key of that lookup (ADR 0098 item 11).
+-- saved node key of that lookup (ADR 0203 item 7).
 CREATE TEMP TABLE merged_saved AS
 SELECT s.id AS saved_id,
        t.id AS target_id,
@@ -509,7 +509,7 @@ ALTER TABLE grant_writes ADD COLUMN cause TEXT;
     r"
 ALTER TABLE people ADD COLUMN usual_group TEXT NOT NULL DEFAULT '';
 ",
-    // ADR 0098 item 18: the user can dismiss the Lightning address of a
+    // ADR 0203 item 24: the user can dismiss the Lightning address of a
     // profile for one person. The address then does not come back for that
     // person.
     r"
@@ -520,9 +520,9 @@ CREATE TABLE person_address_dismissals (
     PRIMARY KEY (person_id, address)
 );
 ",
-    // ADR 0120 item 1: the credit index keeps the places of each credit. A
+    // ADR 0203 item 6: the credit index keeps the places of each credit. A
     // credit from before has no places until the refill after this
-    // migration (ADR 0120 item 4).
+    // migration.
     r"
 ALTER TABLE feed_credits ADD COLUMN places TEXT NOT NULL DEFAULT '[]';
 ",
@@ -584,7 +584,7 @@ CREATE TABLE outside_checks (
     moved_url TEXT
 );
 ",
-    // ADR 0156 item 5: a place keeps the number of its track, and a payment
+    // ADR 0203 item 6: a place keeps the number of its track, and a payment
     // place keeps its split. SQL cannot read a feed, so the migration has no
     // statement. The refill after the migrations writes the new places.
     "SELECT 1;",
@@ -757,7 +757,7 @@ fn relative_to_data(data_dir: Option<&Path>, root: &Path) -> Option<String> {
 const ASSETS_OFF_SINCE: &str = "assets_off_since";
 
 /// The index in `MIGRATIONS` of the migration that makes the people. The
-/// credit index is refilled after the migrations of a run (ADR 0120 item 4),
+/// credit index is refilled after the migrations of a run (ADR 0203 item 6),
 /// because SQL cannot read a feed.
 #[cfg(test)]
 const PEOPLE_MIGRATION: usize = 20;
@@ -773,8 +773,8 @@ const RELATIVE_LIBRARY_MIGRATION: usize = 23;
 const APP_KEYS_MIGRATION: usize = 24;
 
 /// The index in `MIGRATIONS` of the migration that adds the places of each
-/// credit (ADR 0120 item 1). A run that applies it refills the credit index
-/// from the library copies (ADR 0120 item 4).
+/// credit (ADR 0203 item 6). A run that applies it refills the credit index
+/// from the library copies (ADR 0203 item 6).
 #[cfg(test)]
 const CREDIT_PLACES_MIGRATION: usize = 27;
 
@@ -784,7 +784,7 @@ const CREDIT_PLACES_MIGRATION: usize = 27;
 const RECIPIENT_PLACES_MIGRATION: usize = 29;
 
 /// The index in `MIGRATIONS` of the migration that adds the number and the
-/// split to each place (ADR 0156 item 5). A run that applies it refills the
+/// split to each place (ADR 0203 item 6). A run that applies it refills the
 /// credit index and the payment index from the library copies.
 const PLACE_NUMBERS_MIGRATION: usize = 32;
 
@@ -1155,7 +1155,7 @@ pub struct FeedRow {
 }
 
 /// The move of the feed XML to a different host, in the draft of a feed
-/// (ADR 0038 item 16).
+/// (ADR 0204 item 16).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DraftFeedMove {
     /// The new host of the feed XML.
@@ -1229,7 +1229,7 @@ pub struct LibraryFile {
     /// The size of the file, in bytes.
     pub size: u64,
     /// The SHA-256 of the file. `None` for a remote file, whose bytes
-    /// are not in the library (ADR 0038 item 1).
+    /// are not in the library (ADR 0204 item 1).
     pub sha256: Option<String>,
     /// The media type, such as `audio/mpeg`.
     pub media_type: String,
@@ -1242,7 +1242,7 @@ pub struct LibraryFile {
     pub added_at: i64,
     /// The size and the modification time of the file in the library,
     /// as `{size}-{mtime_ns}`. `None` for a remote file, and for a row
-    /// from before schema version 6 (ADR 0038 item 13).
+    /// from before schema version 6 (ADR 0204 item 13).
     pub stamp: Option<String>,
     /// The time of the import, an upload `finish` or a replacement, in
     /// seconds after the Unix epoch. A row from before the migration has
@@ -1253,7 +1253,7 @@ pub struct LibraryFile {
     pub removed_at: Option<i64>,
 }
 
-/// A download that is not complete (ADR 0038 item 9).
+/// A download that is not complete (ADR 0204 item 9).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct DownloadRow {
     /// The library file that Studio downloads.
@@ -1377,7 +1377,7 @@ pub struct OldCopy {
 }
 
 /// A recipient that the collection knows, from a feed that Studio read, or
-/// from a save by the user (ADR 0027).
+/// from a save by the user (ADR 0207).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct KnownRecipient {
     /// The name, from the most recent read or save.
@@ -1566,8 +1566,8 @@ impl Collection {
         // The refill writes the places of each credit and of each recipient.
         // It runs after the last migration of this run, and only when this
         // run applied PLACE_NUMBERS_MIGRATION. That migration is after the
-        // two migrations that add the places (ADR 0120 item 4, ADR 0143
-        // item 4, ADR 0156 item 5).
+        // two migrations that add the places (ADR 0203 item 6, ADR 0143
+        // item 4).
         if current <= PLACE_NUMBERS_MIGRATION {
             self.refill_credits()?;
         }
@@ -1668,7 +1668,7 @@ impl Collection {
     }
 
     /// Replace the `feed_credits` rows of each feed that has a library copy
-    /// (ADR 0098 item 10, ADR 0120 item 4). A feed with no library copy, or
+    /// (ADR 0203 item 6). A feed with no library copy, or
     /// with a copy that does not parse, keeps its rows as they are.
     fn refill_credits(&mut self) -> Result<(), CollectionError> {
         let Some(root) = self.library_root()?.filter(|root| root.is_dir()) else {
@@ -1693,7 +1693,7 @@ impl Collection {
         Ok(())
     }
 
-    /// Each stored keysend lookup (ADR 0095 item 2).
+    /// Each stored keysend lookup (ADR 0207 item 35).
     ///
     /// # Errors
     ///
@@ -2276,7 +2276,7 @@ impl Collection {
     }
 
     /// Keep the move of the feed XML in the draft of a feed. A move that
-    /// is there already is replaced (ADR 0038 item 16).
+    /// is there already is replaced (ADR 0204 item 16).
     ///
     /// # Errors
     ///
@@ -2485,7 +2485,7 @@ impl Collection {
         Ok(())
     }
 
-    /// Each path of a pointer file of `feed`, with its host (ADR 0038
+    /// Each path of a pointer file of `feed`, with its host (ADR 0204
     /// item 20).
     ///
     /// # Errors
@@ -2824,7 +2824,7 @@ impl Collection {
     }
 
     /// Record a pointer file: the old feed XML that tells the apps the new
-    /// address of `feed`. Studio keeps each pointer file (ADR 0038
+    /// address of `feed`. Studio keeps each pointer file (ADR 0204
     /// item 20).
     ///
     /// # Errors
@@ -2990,13 +2990,13 @@ impl Collection {
     }
 
     /// Change the host, the path and the public address of a feed in one
-    /// transaction (ADR 0038 item 19).
+    /// transaction (ADR 0204 item 19).
     ///
     /// The addresses of the sources "read" and "folder" are from the old
     /// location, so the function replaces them. The "folder" address
     /// becomes `public_url`. A feed with no default host of its files
     /// gets the host from before, so its files keep their host
-    /// (ADR 0038 item 16).
+    /// (ADR 0204 item 16).
     ///
     /// # Errors
     ///
@@ -3364,7 +3364,7 @@ impl Collection {
     /// Gives a [`CollectionError`] when SQLite fails.
     pub fn delete_draft(&self, id: FeedId) -> Result<(), CollectionError> {
         // The grants that the draft asks for go out with the draft
-        // (ADR 0054 item 12).
+        // (ADR 0205 item 47).
         self.remove_draft_grants(id)?;
         // A write ends the draft, so the kept file host goes out with it
         // (ADR 0230 item 21). A discard puts the value back before this.
@@ -3377,7 +3377,7 @@ impl Collection {
         Ok(())
     }
 
-    /// Keep a show grant that the draft of a feed asks for (ADR 0054
+    /// Keep a show grant that the draft of a feed asks for (ADR 0205
     /// item 11). The grant names one app (ADR 0110 item 19). A grant of the
     /// same live item that is there already takes the new app.
     ///
@@ -3606,7 +3606,7 @@ impl Collection {
 
     /// Record that the bytes of a library file are in the library now:
     /// `local` becomes true, with the size, the SHA-256 and the stamp of
-    /// the file (ADR 0038 item 11).
+    /// the file (ADR 0204 item 11).
     ///
     /// # Errors
     ///
@@ -3635,7 +3635,7 @@ impl Collection {
 
     /// Record the stamp of a library file again, with no other change.
     /// The folder scan uses this when the modification time of a file
-    /// changed and its bytes did not (ADR 0038 item 13).
+    /// changed and its bytes did not (ADR 0204 item 13).
     ///
     /// # Errors
     ///
@@ -3655,7 +3655,7 @@ impl Collection {
     /// Record that the bytes of a library file are not in the library
     /// now: `local` becomes false and the stamp goes. The size and the
     /// SHA-256 stay, so that Studio can find a copy of the bytes
-    /// (ADR 0038 item 15).
+    /// (ADR 0204 item 15).
     ///
     /// # Errors
     ///
@@ -3804,7 +3804,7 @@ impl Collection {
     }
 
     /// Record a download as queued. A download that failed before is
-    /// queued again, and loses its message (ADR 0038 item 9).
+    /// queued again, and loses its message (ADR 0204 item 9).
     ///
     /// # Errors
     ///
@@ -4528,7 +4528,7 @@ impl Collection {
         result
     }
 
-    /// Each row of `feed_credits`, by feed ID and then by name (ADR 0098
+    /// Each row of `feed_credits`, by feed ID and then by name (ADR 0203
     /// item 10).
     ///
     /// # Errors
@@ -4565,7 +4565,7 @@ impl Collection {
     }
 
     /// Each recipient that the collection knows: from a feed that Studio
-    /// read, or from a wallet of a person (ADR 0027 items 2 to 5, ADR 0098).
+    /// read, or from a wallet of a person (ADR 0207 items 2 to 5, ADR 0203).
     ///
     /// The list has each identity one time. The name and the type come from
     /// the feed row with the highest `seen_at`. A wallet of a person always
@@ -4646,7 +4646,7 @@ impl Collection {
     }
 }
 
-/// A row of `change_sets` (ADR 0091 item 19).
+/// A row of `change_sets` (ADR 0207 item 26).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChangeSetRow {
     /// The ID.
@@ -4662,7 +4662,7 @@ pub struct ChangeSetRow {
 }
 
 /// A row of `change_set_feeds`: the outcome for one feed, and the draft of
-/// the feed from before the change (ADR 0091 items 19 and 20).
+/// the feed from before the change (ADR 0207 items 26 and 27).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChangeSetFeedRow {
     /// The feed.
@@ -4857,7 +4857,7 @@ impl Collection {
     }
 
     /// Remove each closed change set: a change set with no changed feed
-    /// that is not written (ADR 0091 item 19). The feed rows go with it,
+    /// that is not written (ADR 0207 item 26). The feed rows go with it,
     /// through the foreign key. Gives the number of change sets.
     ///
     /// # Errors
@@ -4989,7 +4989,7 @@ fn put_address(
 }
 
 /// Replace the `feed_recipients` rows of a feed with its current
-/// recipients (ADR 0027 item 4).
+/// recipients (ADR 0207 item 4).
 ///
 /// A recipient that occurs two times in `recipients` gives one row. The
 /// last occurrence gives the name and the type.
@@ -5064,7 +5064,7 @@ fn library_copy(library: &Library, row: &FeedRow) -> Option<Feed> {
     Feed::read(&doc).ok()
 }
 
-/// One row of `feed_credits`: a credit of a feed (ADR 0098 item 10).
+/// One row of `feed_credits`: a credit of a feed (ADR 0203 item 6).
 ///
 /// Each text is trimmed. A missing attribute is empty text, and `role` is
 /// the raw role text.
@@ -5085,7 +5085,7 @@ pub struct CreditRow {
     /// `npub`, or empty text.
     pub npub: String,
     /// The places of the credit, in the sequence of the feed, each one time
-    /// (ADR 0120 item 2).
+    /// (ADR 0203 item 68).
     pub places: Vec<CreditPlace>,
 }
 
@@ -5114,7 +5114,7 @@ impl CreditCell {
 }
 
 /// Replace the `feed_credits` rows of a feed with its current credits
-/// (ADR 0098 item 10, ADR 0120 items 2 and 3).
+/// (ADR 0203 items 6 and 68).
 ///
 /// Two credits with the same key give one row. The last one gives `img`.
 /// The row gets the places of both, in the sequence of the feed, and each
@@ -5181,7 +5181,7 @@ struct RecipientRow {
 
 /// Add `place` to `places`. A place that is there already gets the sum of
 /// the two splits, as the many addresses of a person in one place do
-/// (ADR 0156 item 4).
+/// (ADR 0203 item 62).
 fn add_place(places: &mut Vec<RecipientPlace>, place: RecipientPlace) {
     match places.iter_mut().find(|p| p.place == place.place) {
         Some(found) => {
@@ -5905,7 +5905,7 @@ mod tests {
                 item("t1", "Track 1", Some(1)),
                 item("t2", "Track 2", Some(2)),
             ],
-            "ADR 0120 item 2: each place is one time, in the sequence of the feed"
+            "ADR 0203 item 68: each place is one time, in the sequence of the feed"
         );
     }
 
@@ -5953,7 +5953,7 @@ mod tests {
     fn the_credit_places_migration_has_its_index() {
         assert!(
             MIGRATIONS[CREDIT_PLACES_MIGRATION].contains("places"),
-            "ADR 0120 item 1: CREDIT_PLACES_MIGRATION must be the index of its entry in MIGRATIONS"
+            "ADR 0203 item 6: CREDIT_PLACES_MIGRATION must be the index of its entry in MIGRATIONS"
         );
     }
 
@@ -6005,7 +6005,7 @@ mod tests {
         assert_eq!(
             rows.len(),
             1,
-            "ADR 0120 item 4: the refill replaces the old rows"
+            "ADR 0203 item 6: the refill replaces the old rows"
         );
         assert_eq!(rows[0].name, "Ann");
         assert_eq!(

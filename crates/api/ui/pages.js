@@ -1,5 +1,5 @@
 // The sequence, the tiers and the fields of the sections of each page
-// (ADR 0071, ADR 0068, ADR 0042). This list is the sequence of the pages. The
+// (ADR 0071, ADR 0206, ADR 0042). This list is the sequence of the pages. The
 // functions have no Preact and no browser state. `editor.js` maps each ID to a
 // render function.
 
@@ -58,7 +58,7 @@ const PAGES = {
     // Linked pages give the suggestions below (ADR 0182 item 10).
     { id: 'member', tier: 'identity', tab: 'profile' },
     { id: 'credits', tier: 'identity', tab: 'feeds' },
-    // Where the feeds pay and credit the person (ADR 0156 item 1).
+    // Where the feeds pay and credit the person (ADR 0203 item 59).
     { id: 'where', tier: 'identity', tab: 'feeds' },
     { id: 'check', tier: 'identity', tab: 'profile' },
     { id: 'more', tier: 'content', tab: 'feeds' },

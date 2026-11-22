@@ -2103,7 +2103,7 @@ fn the_confirmation_does_not_read_the_uploaded_file() {
     assert!(!s.dir.path().join("stray.jpg").exists());
 }
 
-// ---- A move of the feed XML (ADR 0038 items 16 to 20) ----
+// ---- A move of the feed XML (ADR 0204 items 16 to 20) ----
 
 const MOVE_FEED: &str = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
 <rss version=\"2.0\" xmlns:podcast=\"https://podcastindex.org/namespace/1.0\" xmlns:atom=\"http://www.w3.org/2005/Atom\">
@@ -2312,7 +2312,7 @@ fn a_feed_move_puts_the_feed_on_the_new_host_and_a_pointer_file_on_the_old_host(
     assert_eq!(
         row.files_connector_id,
         Some(s.a),
-        "ADR 0038 item 16: the files of a moved feed keep their host"
+        "ADR 0204 item 16: the files of a moved feed keep their host"
     );
     assert_eq!(row.path.as_deref(), Some("album.xml"));
     assert_eq!(
@@ -3626,7 +3626,7 @@ fn a_live_item_with_a_stream_and_no_content_link_writes() {
     assert_ne!(live(&s), FEED);
 }
 
-// ---- Show grants (task 033e, ADR 0054 items 11 to 17) ----
+// ---- Show grants (task 033e, ADR 0205 items 46 to 52) ----
 
 /// The start and the end of the show of the grant tests.
 const SHOW_START: &str = "2026-11-01T10:00:00Z";

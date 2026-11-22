@@ -1,5 +1,5 @@
 //! The publisher feeds and their links, over the local folder connector
-//! (ADR 0041).
+//! (ADR 0205).
 
 use studio_core::collection::{
     Collection, ConnectorId, FeedId, PublisherRole, inferred_roles, rel_of, roles_from_rel,
@@ -680,7 +680,7 @@ fn the_levels_follow_the_rank_and_the_shared_releases() {
         catalog.parents.sort_by_key(|id| id.0);
         catalog
     };
-    let message = "ADR 0088 items 1 and 2: a feed is directly below a feed of a higher rank that shares a release";
+    let message = "ADR 0215 items 1 and 2: a feed is directly below a feed of a higher rank that shares a release";
     // The artists of the labels are below the labels, not again below the
     // hosting feed. Artist Z has no label, so it is directly below it.
     assert_eq!(
@@ -812,7 +812,7 @@ fn a_feed_with_the_roles_artist_and_label_is_one_feed_at_the_artist_rank() {
     let catalogs = publisher::catalogs(&feeds);
     let index = |id: FeedId| feeds.iter().position(|(row, _)| row.id == id).unwrap();
     let message =
-        "ADR 0088 item 1: the first role decides the rank, so the feed is below the label";
+        "ADR 0215 item 1: the first role decides the rank, so the feed is below the label";
     assert_eq!(catalogs[index(label)].children, vec![own], "{message}");
     assert_eq!(catalogs[index(own)].parents, vec![label], "{message}");
     assert_eq!(catalogs[index(own)].children, Vec::new(), "{message}");

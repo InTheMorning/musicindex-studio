@@ -4785,7 +4785,7 @@ async fn a_draft_is_edited_examined_written_and_rolled_back() {
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
-/// ADR 0064 item 8: a track that uses the album credits has no persons. A
+/// ADR 0206 item 23: a track that uses the album credits has no persons. A
 /// save with an empty list removes each item `podcast:person` and keeps the
 /// channel persons.
 #[tokio::test]
@@ -5460,7 +5460,7 @@ async fn recipients_are_listed_saved_and_removed() {
         .expect("Cara is in the list");
     assert_eq!(cara["saved_id"], saved_id);
 
-    // A second save of the same key gives the same person (ADR 0098).
+    // A second save of the same key gives the same person (ADR 0203).
     let (status, again) = call(
         &app,
         "POST",
@@ -5513,7 +5513,7 @@ async fn an_api_request_with_no_token_to_recipients_gives_401() {
     assert_eq!(body["error"]["code"], "token_required");
 }
 
-/// The payment routes of musicindex, for the recipient picker (ADR 0027
+/// The payment routes of musicindex, for the recipient picker (ADR 0207
 /// item 6). The track GUID has hex digits only. `MusicIndex` keeps only the
 /// hex digits and the hyphens of a GUID in its request path.
 #[tokio::test]
@@ -5615,20 +5615,20 @@ fn each_background_uses_a_token() {
     }
 }
 
-/// ADR 0039 item 4: no page is a placeholder. The text "Select a feed" was
+/// ADR 0206 item 5: no page is a placeholder. The text "Select a feed" was
 /// the placeholder of the editor area, so no UI file may show it again.
 #[test]
 fn no_ui_file_has_the_select_a_feed_placeholder() {
     for (name, text) in crate::ui::text_files() {
         assert!(
             !text.contains("Select a feed"),
-            "ADR 0039 item 4: {name} shows the placeholder \"Select a feed\". Show the \
+            "ADR 0206 item 5: {name} shows the placeholder \"Select a feed\". Show the \
              Releases page, or the feed that is open, instead."
         );
     }
 }
 
-/// musicindex ADR 0068 R-SCALE-4: on 2026-10-24 Studio gave each control
+/// musicindex ADR 0206 R-SCALE-4: on 2026-10-24 Studio gave each control
 /// 44 px with a mouse. A control takes its height from the `--target`
 /// token: 28 px with a mouse, and 44 px with a coarse pointer.
 #[test]
@@ -5639,13 +5639,13 @@ fn each_control_height_uses_the_target_token() {
     let touch = "@media (pointer: coarse) {\n  :root { --target: 44px; --target-min: 28px; --row: 52px; --leading: 1.45; }\n}";
     assert!(
         css.contains("  --target: 28px;\n  --target-min: 20px;\n") && css.contains(touch),
-        "musicindex ADR 0068 R-SCALE-4: styles.css must set --target to 28 px and \
+        "musicindex ADR 0206 R-SCALE-4: styles.css must set --target to 28 px and \
          --target-min to 20 px in :root, and to 44 px and 28 px for a coarse pointer."
     );
     let rest = css.replacen(touch, "", 1);
     assert!(
         !rest.contains("44px"),
-        "musicindex ADR 0068 R-SCALE-4: styles.css has a fixed 44px. Use var(--target), \
+        "musicindex ADR 0206 R-SCALE-4: styles.css has a fixed 44px. Use var(--target), \
          which is 28 px with a mouse and 44 px with touch."
     );
 }
@@ -6886,7 +6886,7 @@ async fn put_connector_changes_the_name_and_the_address_of_a_local_folder() {
 }
 
 /// A feed with two enclosures at other servers, for the tests of the
-/// remote file records (ADR 0038).
+/// remote file records (ADR 0204).
 fn feed_with_enclosures(title: &str, second: bool) -> String {
     let item = |guid: &str, name: &str, length: u32| {
         format!(
@@ -6918,7 +6918,7 @@ async fn remote_file_records_wait_for_unlock_and_run_once() {
     workspace.record_all_remote_files();
     assert!(
         workspace.take_remote_records_wait(),
-        "ADR 0038 item 3, task 126: with a locked vault the pass must wait for the unlock. Set remote_records_wait in record_all_remote_files"
+        "ADR 0204 item 3, task 126: with a locked vault the pass must wait for the unlock. Set remote_records_wait in record_all_remote_files"
     );
     assert!(
         workspace
@@ -6926,7 +6926,7 @@ async fn remote_file_records_wait_for_unlock_and_run_once() {
             .library_files(studio_core::collection::FeedId(1))
             .unwrap()
             .is_empty(),
-        "ADR 0038 item 3, task 126: with a locked vault the pass must add no row. Return before the hosts are read"
+        "ADR 0204 item 3, task 126: with a locked vault the pass must add no row. Return before the hosts are read"
     );
 
     workspace.record_all_remote_files();
@@ -6940,7 +6940,7 @@ async fn remote_file_records_wait_for_unlock_and_run_once() {
         .unwrap();
     assert!(
         !shared.lock().unwrap().take_remote_records_wait(),
-        "ADR 0038 item 3, task 126: the unlock must clear the wait and run the pass. Call schedule_remote_records_if_waiting after each unlock"
+        "ADR 0204 item 3, task 126: the unlock must clear the wait and run the pass. Call schedule_remote_records_if_waiting after each unlock"
     );
     {
         let mut workspace = shared.lock().unwrap();
@@ -6952,7 +6952,7 @@ async fn remote_file_records_wait_for_unlock_and_run_once() {
         .unwrap();
     assert!(
         !shared.lock().unwrap().take_remote_records_wait(),
-        "ADR 0038 item 3, task 126: a second unlock must not set the wait again. Use swap in take_remote_records_wait"
+        "ADR 0204 item 3, task 126: a second unlock must not set the wait again. Use swap in take_remote_records_wait"
     );
 }
 
@@ -6964,7 +6964,7 @@ async fn remote_file_records_run_at_once_with_an_open_vault() {
     workspace.record_all_remote_files();
     assert!(
         !workspace.take_remote_records_wait(),
-        "ADR 0038 item 3, task 126: with an open vault the pass must run at once. Check only VaultState::Locked"
+        "ADR 0204 item 3, task 126: with an open vault the pass must run at once. Check only VaultState::Locked"
     );
     assert!(
         workspace
@@ -6972,7 +6972,7 @@ async fn remote_file_records_run_at_once_with_an_open_vault() {
             .library_files(studio_core::collection::FeedId(1))
             .unwrap()
             .is_empty(),
-        "ADR 0038 item 3, task 126: a pass with no feed must add no row"
+        "ADR 0204 item 3, task 126: a pass with no feed must add no row"
     );
 }
 
@@ -10505,7 +10505,7 @@ async fn an_ended_live_item_gets_the_enclosure_of_an_uploaded_recording() {
     );
     assert!(!xml.contains("stream.m3u8"), "{xml}");
     assert!(xml.contains("status=\"ended\""), "{xml}");
-    // The write puts the recording on the host (ADR 0054 item 6).
+    // The write puts the recording on the host (ADR 0205 item 41).
     assert!(app.feeds.path().join("album/tagged.mp3").exists());
 }
 
@@ -10725,7 +10725,7 @@ async fn the_core_refuses_a_long_or_control_live_value_in_a_draft_save() {
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
     assert_eq!(
         body["error"]["code"], "invalid_live_value",
-        "ADR 0054 item 13: the draft save must refuse a long or control live value. Call live::check_live_values in replace_model."
+        "ADR 0205 item 48: the draft save must refuse a long or control live value. Call live::check_live_values in replace_model."
     );
 }
 
@@ -11562,7 +11562,7 @@ async fn uploads_that_are_open_together_cannot_go_over_the_storage_limit() {
 }
 
 /// Many starts at the same time cannot go over the storage limit (task 072b,
-/// ADR 0055 item 21).
+/// ADR 0204 item 43).
 #[tokio::test]
 async fn starts_at_the_same_time_cannot_go_over_the_storage_limit() {
     let server = studio_core::testing::TestServer::start(Vec::new());
@@ -11616,7 +11616,7 @@ async fn starts_at_the_same_time_cannot_go_over_the_storage_limit() {
         .count();
     assert!(
         created <= 2,
-        "ADR 0055 item 21: the check of the room and the staging file must be one step under the lock of the workspace. {created} of 8 starts passed a limit of 2 files: {statuses:?}"
+        "ADR 0204 item 43: the check of the room and the staging file must be one step under the lock of the workspace. {created} of 8 starts passed a limit of 2 files: {statuses:?}"
     );
     assert_eq!(created, 2, "{statuses:?}");
 }
@@ -11947,7 +11947,7 @@ async fn a_host_address_in_the_draft_uploads_nothing_and_gets_a_remote_row_after
     let app = app();
     set_library(&app).await;
     let id = set_up(&app).await;
-    // The first read gives the feed its release folder (ADR 0038 item 4).
+    // The first read gives the feed its release folder (ADR 0204 item 4).
     let (status, _) = call(&app, "POST", &format!("/api/v1/feeds/{id}/refresh"), None).await;
     assert_eq!(status, StatusCode::OK);
     let address = "https://other.example/art/cover.jpg";
@@ -12045,7 +12045,7 @@ async fn replace_image_and_delete_unused(shared: bool, in_draft: bool) -> usize 
         .await;
         assert_eq!(status, StatusCode::CREATED, "{feed}");
         // The first read gives the second feed its release folder with
-        // its live file (ADR 0038 item 4).
+        // its live file (ADR 0204 item 4).
         let other = feed["id"].as_i64().unwrap();
         let (status, _) = call(
             &app,
@@ -12955,7 +12955,7 @@ async fn a_new_release_ignores_the_removed_field_from() {
     );
 }
 
-// ---- Change sets (ADR 0091, task 054b) ----
+// ---- Change sets (ADR 0207, task 054b) ----
 
 /// A feed XML with value blocks. `channel` and `item` give the recipients
 /// of the channel block and of the block of the one track, each as
@@ -13580,7 +13580,7 @@ async fn each_change_set_route_needs_the_token() {
     }
 }
 
-// ---- Wallet recipients (ADR 0095, task 060c) ----
+// ---- Wallet recipients (ADR 0207, task 060c) ----
 
 const WALLET_KEYSEND: &str = r#"{"status":"OK","tag":"keysend","pubkey":"02abc","customData":[{"customKey":"696969","customValue":"x1"}]}"#;
 const OTHER_KEYSEND: &str = r#"{"status":"OK","tag":"keysend","pubkey":"02def"}"#;
@@ -13976,7 +13976,7 @@ async fn change_address_with_no_type_gives_422() {
     assert_eq!(body["error"]["code"], "invalid_recipient");
 }
 
-// ---- People (ADR 0098, task 063d) ----
+// ---- People (ADR 0203, task 063d) ----
 
 /// The ID of a new person that has the given name.
 async fn new_person(app: &App, name: &str) -> i64 {
@@ -14403,7 +14403,7 @@ async fn a_suggestion_makes_a_person_that_the_feeds_use() {
     assert_eq!(status, StatusCode::OK, "{person}");
     assert_eq!(person["pays"], json!([payee]));
     assert_eq!(person["credited"], json!([credit]));
-    // ADR 0099 item 5: the places give the address and the role of each feed.
+    // ADR 0203 item 64: the places give the address and the role of each feed.
     let places = person["places"].as_array().unwrap();
     assert_eq!(places.len(), 2, "{person}");
     assert!(
@@ -14466,7 +14466,7 @@ async fn a_person_gives_the_places_with_the_number_and_the_split() {
         .iter()
         .find(|p| p["feed_id"] == json!(feed))
         .unwrap();
-    // ADR 0156 items 3 and 4: one list, the channel first, then the items.
+    // ADR 0203 items 61 and 62: one list, the channel first, then the items.
     assert_eq!(
         entry["places"],
         json!([
@@ -14602,7 +14602,7 @@ async fn the_check_route_gives_the_places_and_the_values_of_a_finding() {
             "npub": "",
             "places": [{ "kind": "channel" }],
         }),
-        "ADR 0120 item 6: a finding gives its values and its places. {check}"
+        "ADR 0203 item 70: a finding gives its values and its places. {check}"
     );
 }
 
@@ -14716,7 +14716,7 @@ async fn a_dismissed_suggestion_leaves_the_list() {
     assert_eq!(status, StatusCode::NO_CONTENT);
     let (_, list) = call(&app, "GET", "/api/v1/people/suggestions", None).await;
     assert_eq!(list, json!([]));
-    // ADR 0158 items 2 and 3: the hidden list has it, and "Show Again"
+    // ADR 0203 items 37 and 21: the hidden list has it, and "Show Again"
     // puts it back.
     let (_, hidden) = call(&app, "GET", "/api/v1/people/suggestions/hidden", None).await;
     assert_eq!(hidden[0]["identity"], suggestion["identity"]);
@@ -14777,7 +14777,7 @@ async fn each_people_route_needs_the_token() {
     }
 }
 
-// ---- The profile addresses and the export of the people (ADR 0098, task 064c) ----
+// ---- The profile addresses and the export of the people (ADR 0203, task 064c) ----
 
 /// An app with a lookup relay and the keysend scheme `http`, so that a test
 /// server on loopback can answer the lookups.
@@ -14962,7 +14962,7 @@ async fn the_musicindex_lookup_gives_the_levels_and_the_states_of_a_feed() {
 
 /// A save of a Lightning address from the musicindex lookup links the
 /// address, and stores its lookup: the wallet then has the node of the
-/// address too (ADR 0095, ADR 0117 item 7).
+/// address too (ADR 0207, ADR 0117 item 7).
 #[tokio::test]
 async fn a_saved_lightning_address_from_musicindex_keeps_its_node() {
     let (server, address) = musicindex_lookup_server();
@@ -15064,7 +15064,7 @@ async fn a_dismissed_profile_address_does_not_come_back_and_a_merge_keeps_the_di
     assert_eq!(
         body["suggestions"],
         json!([]),
-        "ADR 0098 item 18: a dismissed address must not come back. Check list_profile_addresses."
+        "ADR 0203 item 24: a dismissed address must not come back. Check list_profile_addresses."
     );
     // A merge moves the dismissal to the person that it keeps.
     let keep = new_person(&app, "Keep").await;
@@ -15086,7 +15086,7 @@ async fn a_dismissed_profile_address_does_not_come_back_and_a_merge_keeps_the_di
     assert_eq!(
         body["suggestions"],
         json!([]),
-        "ADR 0098 item 18: a merge must keep the dismissal. Check merge_people."
+        "ADR 0203 item 24: a merge must keep the dismissal. Check merge_people."
     );
     let (status, _) = call(
         &app,
@@ -15172,7 +15172,7 @@ async fn the_export_gives_each_link_with_its_evidence_and_the_keysend_addresses_
     assert_eq!(person["default_address"]["address"], "02abc");
 }
 
-// ---- The change sets of a person (ADR 0098 item 20, task 064b) ----
+// ---- The change sets of a person (ADR 0203 item 26, task 064b) ----
 
 /// A person Ann with the wallet `ann@example.com`, and two feeds that pay
 /// only Bob. Gives the app, the person and the two feed IDs.
@@ -15237,7 +15237,7 @@ async fn the_preview_of_a_person_operation_changes_no_draft_and_the_change_set_l
                 .draft(studio_core::collection::FeedId(feed))
                 .unwrap()
                 .is_none(),
-            "ADR 0098 item 20: a preview must make no draft."
+            "ADR 0203 item 26: a preview must make no draft."
         );
     }
     assert_eq!(collection.change_set_rows().unwrap().len(), 0);
@@ -16092,7 +16092,7 @@ async fn add_the_file_again_gives_a_removed_file_its_bytes_and_the_write_then_su
     );
 }
 
-/// ADR 0055 item 16: the hourly step and the step at the start do not use
+/// ADR 0204 item 38: the hourly step and the step at the start do not use
 /// the vault, so they do not extend the vault window.
 #[tokio::test]
 async fn the_asset_sweeps_do_not_change_the_last_use_of_the_vault() {
@@ -16123,7 +16123,7 @@ async fn the_asset_sweeps_do_not_change_the_last_use_of_the_vault() {
         .await;
     assert_eq!(
         before, after,
-        "ADR 0055 item 16: a sweep must not touch the vault. Use hosts_without_secrets."
+        "ADR 0204 item 38: a sweep must not touch the vault. Use hosts_without_secrets."
     );
 }
 
@@ -16987,7 +16987,7 @@ async fn a_feed_of_an_expired_area_moves_to_a_public_host_and_gets_its_real_guid
         .await
         .unwrap();
 
-    // A server has no local folder host (ADR 0055 item 24), so the file
+    // A server has no local folder host (ADR 0204 item 46), so the file
     // host with the public address is a bucket.
     let bucket = studio_core::testing::fake_s3::FakeS3::start("bk");
     make_vault(&app).await;
@@ -19656,7 +19656,7 @@ async fn a_text_with_nothing_to_search_is_not_marked_as_a_search() {
     let (app, seen, person) = search_app(ONE_FEED).await;
     let (status, body) = call(&app, "GET", &format!("{person}?q=in%3Aindex"), None).await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    // The crate gives the note of a text with no word (musicindex ADR 0052
+    // The crate gives the note of a text with no word (musicindex ADR 0205
     // R-QUERY-8).
     assert_eq!(
         body["note"]["message"],

@@ -271,7 +271,7 @@ pub struct Copy {
 ///
 /// The function reads a SHA-256 only for a host file with the same size
 /// as `file`. A file with no SHA-256 is a remote file. Its copies are the
-/// host files whose public address is its `source_url` (ADR 0038 item 5).
+/// host files whose public address is its `source_url` (ADR 0204 item 5).
 ///
 /// # Errors
 ///
@@ -451,7 +451,7 @@ pub fn planned_path_on(
     let clean_path = release_path(feed_path, &file.path);
 
     // A remote file has no SHA-256. Studio reads no host file for it, and
-    // it plans the clean path (ADR 0038 item 1).
+    // it plans the clean path (ADR 0204 item 1).
     let Some(sha256) = file.sha256.as_deref() else {
         let url = planned_address(hosts.get(connector_id)?, &clean_path, None);
         return Ok(PlannedPath {

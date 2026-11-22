@@ -1,4 +1,4 @@
-//! The scan of the release folders of the library (ADR 0038 items 13 to
+//! The scan of the release folders of the library (ADR 0204 item 13 to
 //! 15).
 //!
 //! The scan compares each release folder with the records of its files
@@ -100,7 +100,7 @@ fn named(path: &Path, error: &io::Error) -> io::Error {
 }
 
 /// Compare the release folder of each feed with the records of its files
-/// (ADR 0038 items 13 and 14). A feed with no release folder gives no
+/// (ADR 0204 items 13 and 14). A feed with no release folder gives no
 /// difference.
 ///
 /// # Errors
@@ -223,7 +223,7 @@ fn scan_row(
 }
 
 /// Compare one file with its row. The function reads the file only when
-/// its stamp is different from the stamp of the row (ADR 0038 item 13).
+/// its stamp is different from the stamp of the row (ADR 0204 item 13).
 fn compare(
     collection: &Collection,
     library: &Library,
@@ -252,7 +252,7 @@ fn compare(
 
 /// Add a file of a release folder to the library as a row with `local`
 /// true: its size, SHA-256, stamp and the media type of its extension
-/// (ADR 0038 item 15). The row is not an address of the feed.
+/// (ADR 0204 item 15). The row is not an address of the feed.
 ///
 /// # Errors
 ///

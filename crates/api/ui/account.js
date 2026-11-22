@@ -1,4 +1,4 @@
-// The account models (ADR 0055 items 9 and 12, ADR 0056 items 6 to 11, ADR
+// The account models (ADR 0204 items 31 and 34, ADR 0056 items 6 to 11, ADR
 // 0042). This module has no Preact and no browser state. The Node tests in
 // `ui-tests/account.test.mjs` examine it.
 import { npubOf } from './signing.js';

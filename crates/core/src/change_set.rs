@@ -1,4 +1,4 @@
-//! Change sets: one recipient operation in many feeds (ADR 0091).
+//! Change sets: one recipient operation in many feeds (ADR 0207).
 //!
 //! [`apply`] changes the model of one feed. [`make_change_set`] puts the
 //! change in the draft of each feed of a scope, and keeps the draft from
@@ -19,7 +19,7 @@ use crate::pipeline::{self, PipelineError, PipelineErrorKind};
 use crate::publisher::Catalog;
 use crate::roles;
 
-/// The identity of a recipient (ADR 0027 item 3). An empty custom key or
+/// The identity of a recipient (ADR 0207 item 3). An empty custom key or
 /// custom value is the same as none.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct RecipientKey {
@@ -55,7 +55,7 @@ impl RecipientKey {
     }
 }
 
-/// The members of one wallet (ADR 0095 items 1 and 5). An operation acts on
+/// The members of one wallet (ADR 0207 items 34 and 38). An operation acts on
 /// each recipient that a member matches.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Wallet {
@@ -89,7 +89,7 @@ impl Wallet {
     }
 }
 
-/// One operation on a recipient (ADR 0091 items 5 to 7 and 9, ADR 0095).
+/// One operation on a recipient (ADR 0207 items 12, 14 and 16, ADR 0207).
 // The person operations hold their values, so that `apply` stays a pure
 // function. The operation is not in a hot path.
 #[allow(clippy::large_enum_variant)]
@@ -158,13 +158,13 @@ pub enum RecipientOperation {
         percent: u64,
     },
     /// Replace each `node` recipient of the wallet with an `lnaddress`
-    /// recipient (ADR 0095 item 11).
+    /// recipient (ADR 0207 item 44).
     UseLnaddress {
         /// The Lightning address.
         address: String,
     },
     /// Give each recipient of the wallet of a person a new address, and
-    /// merge the recipients that then have the same key (ADR 0098 item 20).
+    /// merge the recipients that then have the same key (ADR 0203 item 26).
     UseAddress {
         /// The new `address`.
         address: String,
@@ -216,7 +216,7 @@ pub enum RecipientOperation {
         /// The credits of the person.
         credits: CreditMatch,
     },
-    /// Correct the feeds of a person (ADR 0111 items 15 to 17). Each field
+    /// Correct the feeds of a person (ADR 0203 items 71 to 73). Each field
     /// that is `None` or `false` stays as it is.
     Correct {
         /// The key that each credit of the person gets.
@@ -264,7 +264,7 @@ pub struct CorrectRole {
 }
 
 /// The credits and the payees of a person for
-/// [`RecipientOperation::Correct`] (ADR 0111 item 10). A credit also matches
+/// [`RecipientOperation::Correct`] (ADR 0203 item 65). A credit also matches
 /// by the normal name of the person or of a credit name, whatever its key.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CorrectMatch {
@@ -283,7 +283,7 @@ impl CorrectMatch {
     }
 }
 
-/// The credits of a person (ADR 0098 item 6). The change set keeps the
+/// The credits of a person (ADR 0203 item 9). The change set keeps the
 /// values, so that it does not change when the person changes.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CreditMatch {
@@ -393,7 +393,7 @@ pub struct PartOutcome {
     pub cause: Option<Cause>,
 }
 
-/// The reason why a feed does not change (ADR 0091 item 17).
+/// The reason why a feed does not change (ADR 0207 item 24).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "cause", content = "reason", rename_all = "snake_case")]
 pub enum Cause {
@@ -481,7 +481,7 @@ impl Outcome {
 /// Scale `splits` so that their total is `total`. Each split keeps its
 /// relative share. The function rounds down, and gives the remainder to the
 /// largest split. With two or more equal largest splits, the first one gets
-/// the remainder (ADR 0091 items 13 and 14).
+/// the remainder (ADR 0207 items 20 and 21).
 ///
 /// A fee split is not an input. When the total of `splits` is 0, the
 /// function gives `splits` as they are, because no share exists.
@@ -512,7 +512,7 @@ pub fn scale(splits: &[u64], total: u64) -> Vec<u64> {
 }
 
 /// True when the recipient is a fee: its `fee` attribute is `true`, `1` or
-/// `yes` (musicindex ADR 0088 R-FEED-6, ADR 0244 item 1).
+/// `yes` (musicindex ADR 0215 R-FEED-6, ADR 0244 item 1).
 #[must_use]
 pub fn is_fee(recipient: &Recipient) -> bool {
     FeeReading::of(recipient.fee.as_deref()) == FeeReading::Fee
@@ -546,7 +546,7 @@ fn set_splits(block: &mut ValueBlock, positions: &[usize], splits: &[u64], old: 
 }
 
 /// Write `method="lnaddress"` on a block that an operation changed, when
-/// its method is none or `keysend` (ADR 0095 item 13).
+/// its method is none or `keysend` (ADR 0207 item 46).
 fn set_lnaddress_method(block: &mut ValueBlock) {
     if block
         .method
@@ -764,7 +764,7 @@ fn add_payee(
 
 /// Give each recipient of the wallet the new key and type. Then merge the
 /// recipients that have the new key and the same fee state into the first
-/// of them. The merge keeps the name of the first (ADR 0098 item 21).
+/// of them. The merge keeps the name of the first (ADR 0203 item 27).
 fn use_address_in_block(
     block: &mut ValueBlock,
     wallet: &Wallet,
@@ -899,7 +899,7 @@ fn set_text(field: &mut Option<String>, new: &str) -> bool {
     true
 }
 
-/// Correct one credit. A credit that has a role keeps it (ADR 0111
+/// Correct one credit. A credit that has a role keeps it (ADR 0203
 /// item 17). Gives true when the credit changed.
 fn correct_credit(
     credit: &mut Person,
@@ -1043,7 +1043,7 @@ pub fn has_node_recipient<'a>(
 }
 
 /// Replace each recipient of the wallet that is not an `lnaddress`
-/// recipient (ADR 0095 item 11).
+/// recipient (ADR 0207 item 44).
 fn use_lnaddress_in_block(block: &mut ValueBlock, wallet: &Wallet, address: &str) -> BlockResult {
     let to_change = |e: &Entry<Recipient>| {
         wallet.matches(&e.value) && !is_lnaddress_type(e.value.recipient_type.as_deref())
@@ -1069,7 +1069,7 @@ fn use_lnaddress_in_block(block: &mut ValueBlock, wallet: &Wallet, address: &str
 }
 
 /// Remove the recipient. The other non-fee splits scale to the non-fee
-/// total before the change (ADR 0091 item 14).
+/// total before the change (ADR 0207 item 21).
 fn remove_from_block(block: &mut ValueBlock, wallet: &Wallet) -> BlockResult {
     let mut total = 0_u64;
     let mut positions = Vec::new();
@@ -1100,7 +1100,7 @@ fn remove_from_block(block: &mut ValueBlock, wallet: &Wallet) -> BlockResult {
 }
 
 /// Add the recipient with `percent`. The other non-fee splits scale to
-/// `100 - percent` (ADR 0091 item 13).
+/// `100 - percent` (ADR 0207 item 20).
 fn add_to_block(block: &mut ValueBlock, added: Recipient, percent: u64) -> BlockResult {
     let mut positions = Vec::new();
     let mut splits = Vec::new();
@@ -1151,7 +1151,7 @@ fn pick_cause(causes: &[Cause], operation: &RecipientOperation) -> Cause {
 /// Apply `operation` to each value block of the channel, of each item and
 /// of each live item. The function does not change a value time split, and
 /// it does not change an attribute that the operation does not name
-/// (ADR 0091 items 5 to 10).
+/// (ADR 0207 items 12 to 17).
 ///
 /// When no block changes, the feed does not change.
 pub fn apply(feed: &mut Feed, wallet: &Wallet, operation: &RecipientOperation) -> Outcome {
@@ -1251,7 +1251,7 @@ pub struct ChangeSetFeed {
     pub written_at: Option<i64>,
 }
 
-/// A change set (ADR 0091 item 17).
+/// A change set (ADR 0207 item 24).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChangeSet {
     /// The ID.
@@ -1264,12 +1264,12 @@ pub struct ChangeSet {
     pub made_at: i64,
     /// The feeds, with their outcomes.
     pub feeds: Vec<ChangeSetFeed>,
-    /// The person of a person operation (ADR 0098 item 20).
+    /// The person of a person operation (ADR 0203 item 26).
     pub person: Option<PersonId>,
 }
 
 impl ChangeSet {
-    /// True while a changed feed has no write (ADR 0091 item 19).
+    /// True while a changed feed has no write (ADR 0207 item 26).
     #[must_use]
     pub fn is_open(&self) -> bool {
         self.feeds
@@ -1298,7 +1298,7 @@ fn remove_new_draft(collection: &Collection, id: FeedId) -> Result<(), PipelineE
 }
 
 /// Apply `operation` to the draft of each feed of `feeds`, and keep the
-/// draft of each feed from before the change (ADR 0091 items 17 to 19).
+/// draft of each feed from before the change (ADR 0207 items 24 to 26).
 ///
 /// `start` makes a draft for a feed that has none, so that the core needs
 /// no connector. A feed that `apply` does not change keeps its draft as it
@@ -1451,12 +1451,12 @@ pub fn cannot_move(reason: String) -> Outcome {
     Outcome::not_changed(Cause::CannotStart(reason))
 }
 
-/// Make the change set of a person operation (ADR 0098 item 20). The core
+/// Make the change set of a person operation (ADR 0203 item 26). The core
 /// makes the snapshot of the operation with [`person_operation`], keeps the
 /// person in the change set, and then works as [`make_change_set`].
 ///
 /// A Rename that changes a feed also sets the name of the person. Discard
-/// does not put the name back (ADR 0098 item 23).
+/// does not put the name back (ADR 0203 item 29).
 ///
 /// # Errors
 ///
@@ -1548,7 +1548,7 @@ fn lookup_map(collection: &Collection) -> Result<HashMap<String, Lookup>, Pipeli
         .collect())
 }
 
-/// The request of a user for a person operation (ADR 0098 item 20).
+/// The request of a user for a person operation (ADR 0203 item 26).
 /// [`person_operation`] makes the [`RecipientOperation`] from it.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -1593,7 +1593,7 @@ pub enum PersonOperation {
         /// one of its groups.
         group: String,
     },
-    /// Correct the feeds of a person (ADR 0111 item 16).
+    /// Correct the feeds of a person (ADR 0203 item 72).
     Correct {
         /// A key of the person. Each credit of the person gets it.
         #[serde(default)]
@@ -1780,7 +1780,7 @@ fn correct_snapshot(
 /// Make the snapshot of a person operation: the wallet of the person and
 /// the [`RecipientOperation`] with each value of the person. The change set
 /// keeps these values, so it does not change when the person changes
-/// (ADR 0098 item 20).
+/// (ADR 0203 item 26).
 ///
 /// The wallet has the members of each wallet of the person. Its key is the
 /// default address of the person, else an empty key.
@@ -1908,7 +1908,7 @@ fn build_change_set(
     )?;
     let changed = set.feeds.iter().any(|feed| feed.outcome.is_changed());
     // A Rename that changed a feed also renames the people with a wallet of
-    // the change set. Discard does not put the name back (ADR 0098 item 23).
+    // the change set. Discard does not put the name back (ADR 0203 item 29).
     if changed && let RecipientOperation::Rename { name } = operation {
         people::rename_with_wallets(collection, &wallet.members, name)?;
     }
@@ -1931,7 +1931,7 @@ fn record_change_set(
     feeds: &[FeedId],
     change: &mut dyn FnMut(FeedId, bool) -> Result<Outcome, PipelineError>,
 ) -> Result<ChangeSet, PipelineError> {
-    // A closed change set has no more work (ADR 0091 item 19).
+    // A closed change set has no more work (ADR 0207 item 26).
     collection.delete_closed_change_sets()?;
     let made_at = now();
     let id = collection.add_change_set(
@@ -2009,7 +2009,7 @@ fn set_person_name(collection: &Collection, id: PersonId, name: &str) -> Result<
     Ok(())
 }
 
-/// Refuse an operation that has no type or no address (ADR 0095 items 12
+/// Refuse an operation that has no type or no address (ADR 0207 item 45
 /// and 14), or that selects no part.
 ///
 /// # Errors
@@ -2154,7 +2154,7 @@ fn change_set(collection: &Collection, id: i64) -> Result<ChangeSet, PipelineErr
     })
 }
 
-/// The open change sets, the oldest first (ADR 0091 item 19).
+/// The open change sets, the oldest first (ADR 0207 item 26).
 ///
 /// # Errors
 ///
@@ -2173,7 +2173,7 @@ pub fn change_sets(collection: &Collection) -> Result<Vec<ChangeSet>, PipelineEr
 
 /// Put back the draft of each feed from before the change, byte for byte.
 /// A feed that had no draft then has no draft. A feed that Studio wrote
-/// after the change does not change. Then the change set goes (ADR 0091
+/// after the change does not change. Then the change set goes (ADR 0207
 /// items 19 and 20).
 ///
 /// # Errors
@@ -2221,7 +2221,7 @@ pub fn discard_change_set(collection: &Collection, id: i64) -> Result<(), Pipeli
 
 /// The feeds of a level: the publisher feed, each feed below it through
 /// `children` (all levels), and the releases of each of these feeds. Each
-/// feed is in the list one time (ADR 0091 item 9).
+/// feed is in the list one time (ADR 0207 item 16).
 ///
 /// `catalogs` gives the catalog of each feed, by feed ID.
 #[must_use]

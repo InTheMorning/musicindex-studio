@@ -308,12 +308,12 @@ where
     if let Some(url) = &options.hub {
         workspace = workspace.with_hub(url);
     }
-    // Keep the remote file records of each feed current (ADR 0038 item 3).
+    // Keep the remote file records of each feed current (ADR 0204 item 3).
     // The function does nothing when Studio has no library folder yet.
     workspace.record_all_remote_files();
-    // Continue each download that was not complete (ADR 0038 item 9).
+    // Continue each download that was not complete (ADR 0204 item 9).
     workspace.resume_downloads();
-    // Prepare the announcement queue (ADR 0052 item 18).
+    // Prepare the announcement queue (ADR 0205 item 32).
     workspace.resume_announcements();
     let port = listener
         .local_addr()

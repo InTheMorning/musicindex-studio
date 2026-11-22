@@ -1,4 +1,4 @@
-//! The task that locks idle vaults and closes idle users (ADR 0055 items 4
+//! The task that locks idle vaults and closes idle users (ADR 0204 item 26
 //! and 16).
 
 use std::time::Duration;

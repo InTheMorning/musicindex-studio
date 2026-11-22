@@ -59,7 +59,7 @@ pub enum FindingKind {
     /// A recipient address matches the other recipient type.
     WrongAddressType,
     /// A recipient has a `fee` value that is not known. Studio reads it as
-    /// not a fee (musicindex ADR 0088 R-FEED-6 item 3, ADR 0244 item 2).
+    /// not a fee (musicindex ADR 0215 R-FEED-6 item 3, ADR 0244 item 2).
     UnknownFee,
     /// An address field has text with no `https://`, and the text with
     /// `https://` in front is a web address (ADR 0245 item 1).

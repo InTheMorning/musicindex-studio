@@ -1,4 +1,4 @@
-//! The keysend lookup of a Lightning address (ADR 0095 items 1 to 5).
+//! The keysend lookup of a Lightning address (ADR 0207 items 34 to 38).
 //!
 //! A Lightning address of the type `lnaddress` can name the same wallet as
 //! a `node` recipient. The host of the address gives the node key and the

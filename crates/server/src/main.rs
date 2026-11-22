@@ -1,7 +1,7 @@
 //! Server shell of musicindex-studio.
 //!
 //! A host operator runs this binary to give a public service to web users
-//! (ADR 0001, ADR 0055).
+//! (ADR 0001, ADR 0204).
 //!
 //! Commands:
 //!
@@ -160,7 +160,7 @@ fn make_state(options: &ServeOptions, rules: PublicRules) -> Result<session::Sha
 
 async fn serve(options: ServeOptions) -> Result<(), String> {
     let state = make_state(&options, PublicRules::default())?;
-    // Open each user with work to do (ADR 0055 item 4).
+    // Open each user with work to do (ADR 0204 item 26).
     state.users.open_busy(&state.accounts.folders()?).await;
     let listener = tokio::net::TcpListener::bind(options.listen)
         .await
@@ -174,7 +174,7 @@ async fn serve(options: ServeOptions) -> Result<(), String> {
     println!("Public origin: {}", options.origin.text);
     idle::spawn(Arc::clone(&state));
     // The connection address gives the client address when the operator
-    // names no header (ADR 0055 item 23).
+    // names no header (ADR 0204 item 45).
     let service = auth::server_router(&state).into_make_service_with_connect_info::<SocketAddr>();
     axum::serve(listener, service)
         .await

@@ -16,7 +16,7 @@ use crate::xml::Document;
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case", tag = "reason", content = "feed_titles")]
 pub enum StayReason {
-    /// The file is a pointer file of a move. Studio keeps it (ADR 0038
+    /// The file is a pointer file of a move. Studio keeps it (ADR 0204
     /// item 20).
     PointerFile,
     /// A different feed uses the file. The value is the title of each feed.

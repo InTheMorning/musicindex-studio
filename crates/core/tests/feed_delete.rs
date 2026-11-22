@@ -366,7 +366,7 @@ fn a_pointer_file_of_the_feed_stays_and_the_feed_file_cannot_be_a_pointer_file()
     assert_eq!(
         draft.summary.stays[0].reason,
         StayReason::PointerFile,
-        "ADR 0038 item 20"
+        "ADR 0204 item 20"
     );
     write(&mut e, feed, &draft.diff.id).unwrap();
     assert!(exists(&e, "old.xml"), "Studio keeps a pointer file");

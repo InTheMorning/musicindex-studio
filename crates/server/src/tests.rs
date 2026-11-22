@@ -1445,7 +1445,7 @@ async fn a_folder_that_stays_after_a_deletion_is_recorded_and_removed_at_the_nex
     assert_eq!(
         app.state.accounts.leftover_folders().unwrap(),
         vec![folder.clone()],
-        "ADR 0055 item 9: a user folder that stays after an account deletion must be recorded in server.sqlite. Call add_leftover_folder when delete_folder fails."
+        "ADR 0204 item 31: a user folder that stays after an account deletion must be recorded in server.sqlite. Call add_leftover_folder when delete_folder fails."
     );
     assert_eq!(
         app.state

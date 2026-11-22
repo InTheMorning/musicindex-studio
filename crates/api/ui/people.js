@@ -1,4 +1,4 @@
-// The model of the People area (ADR 0098, ADR 0099, ADR 0042). The functions
+// The model of the People area (ADR 0203, ADR 0203, ADR 0042). The functions
 // have no Preact and no browser state. `peoplepages.js` shows the pages. The
 // functions give texts and states only. The core applies each feed rule and
 // gives each outcome (ADR 0065).
@@ -28,13 +28,13 @@ export function recipientAddressMenu(recipient) {
 const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const feedCount = (n) => plural(n, 'feed', 'feeds');
 
-// The text of the empty list of people (ADR 0099 item 2).
+// The text of the empty list of people (ADR 0203 item 37).
 export const PEOPLE_EMPTY = 'No people yet. Check a suggestion above, or add a person.';
 
 // The line at the top of the People page on a server (ADR 0108 item 3).
 export const PEOPLE_SERVER_NOTE = 'The operator of this server can read the people that you keep.';
 
-// The IDs of the sections of the People page, in the sequence of ADR 0099
+// The IDs of the sections of the People page, in the sequence of ADR 0203
 // item 2. A section with no data is left out, but `people` always shows,
 // because it gives the empty text. With no person, the suggestions come first.
 export function peopleSections({ people = [], suggestions = [], changes = [], payees = [], hidden = [], server = false } = {}) {
@@ -46,7 +46,7 @@ export function peopleSections({ people = [], suggestions = [], changes = [], pa
   ids.push('people');
   if (hasSuggestions && people.length > 0) ids.push('suggestions');
   if (payees.length > 0) ids.push('payees');
-  // The hidden suggestions are last, and only when one is hidden (ADR 0158 item 2).
+  // The hidden suggestions are last, and only when one is hidden (ADR 0203 item 37).
   if (hidden.length > 0) ids.push('hidden');
   return ids;
 }
@@ -58,7 +58,7 @@ const titleOf = (titles, id) => {
 };
 
 // The text of one address. An address with "@" is a Lightning address. The
-// other addresses are Lightning node keys (ADR 0099 item 15). This gives a
+// other addresses are Lightning node keys (ADR 0203 item 83). This gives a
 // display value only. `type` is the recipient type, when the caller has it.
 export function addressText(key, type = '') {
   const address = key.address || '';
@@ -73,7 +73,7 @@ const EVIDENCE = {
   same_wallet: 'The same wallet is in the value blocks',
 };
 
-// The row of a suggestion: the name, the counts and the evidence (ADR 0099
+// The row of a suggestion: the name, the counts and the evidence (ADR 0203
 // item 2). A count of 0 is left out.
 export function suggestionRow(suggestion) {
   const counts = [];
@@ -107,7 +107,7 @@ function feedsOf(person) {
   return ids.size;
 }
 
-// The row of a person: the title, the lines and the count (ADR 0099 item 2).
+// The row of a person: the title, the lines and the count (ADR 0203 item 37).
 // `feedTitles` maps the ID of a publisher feed to its title.
 export function personRow(person, feedTitles) {
   const lines = [];
@@ -180,10 +180,10 @@ export function findPersonPageModel(own, groups) {
   ];
 }
 
-// The start state of the sheet "Check: {name}" (ADR 0111 item 7). An item
+// The start state of the sheet "Check: {name}" (ADR 0203 item 40). An item
 // with a different name starts not selected. The sheet has `memberOf` as text.
 // `profiles` is the result of `profileMap`, or null before it is known. A key
-// whose profile name differs from the name starts not selected (ADR 0103
+// whose profile name differs from the name starts not selected (ADR 0203
 // item 18).
 export function makePersonStart(suggestion, profiles = null) {
   const npubs = [...new Set((suggestion.credits || []).map((c) => c.npub).filter(Boolean))];
@@ -216,7 +216,7 @@ export function makePersonBody(state) {
 }
 
 // The rows of the feeds in a sheet of an operation. Each row starts selected
-// (ADR 0099 items 5 and 7). `places` is the list `places` of a person.
+// (ADR 0203 items 64 and 74). `places` is the list `places` of a person.
 export function sheetFeeds(places, titles) {
   return (places || []).map((place) => {
     // Each line names the tracks, or the channel (ADR 0143).
@@ -235,7 +235,7 @@ export const checkedIds = (rows) => rows.filter((r) => r.checked).map((r) => r.i
 // A copy of the rows with the selection of one row turned over.
 export const toggledRow = (rows, id) => rows.map((r) => (r.id === id ? { ...r, checked: !r.checked } : r));
 
-// The text of the primary button of a sheet (ADR 0099 item 12).
+// The text of the primary button of a sheet (ADR 0203 item 79).
 export const reviewLabel = (n) => `Review in ${plural(n, 'Feed', 'Feeds')}`;
 
 // The `PersonOperation` for the route (task 064). The core checks each value.
@@ -269,7 +269,7 @@ const ALREADY = ['have it already', 'have both already', 'have all already'];
 const partsOf = (outcome) => outcome.parts || [];
 const causeName = (cause) => (typeof cause === 'string' ? cause : (cause && cause.cause) || '');
 
-// The result line of the sheet "Add to All Releases" (ADR 0099 item 10),
+// The result line of the sheet "Add to All Releases" (ADR 0203 item 77),
 // from the outcomes of the preview. A count of 0 is left out. The core gives
 // each outcome. This function only counts.
 export function addResultLine(outcomes) {
@@ -291,7 +291,7 @@ export function addResultLine(outcomes) {
   return pieces.join(' · ');
 }
 
-// ---- The People page (ADR 0099 items 1 to 3 and 12) ----
+// ---- The People page (ADR 0203 items 36, 38 and 79) ----
 
 const lower = (text) => String(text ?? '').toLowerCase();
 const matchesAny = (texts, query) => {
@@ -321,7 +321,7 @@ export function payeeMatches(payee, query) {
 export const filterPeople = (people, query) => (people || []).filter((p) => personMatches(p, query));
 export const filterPayees = (payees, query) => (payees || []).filter((p) => payeeMatches(p, query));
 
-// The wallets of `GET /recipients` that have no person (ADR 0099 item 2), by
+// The wallets of `GET /recipients` that have no person (ADR 0203 item 37), by
 // name. A wallet with no name comes after the names, by the address that its
 // row shows (musicindex ADR 0053 R-LIST-12).
 export function payeesWithNoPerson(recipients) {
@@ -358,7 +358,7 @@ export function peopleOrder(people, { sort, reversed } = {}) {
 export const openChanges = (sets) => (sets || []).filter((s) => s.open);
 
 // The title of the operation of a change set. The page "Review the changes"
-// and the list "Changes to write" use it (ADR 0099 items 2 and 12).
+// and the list "Changes to write" use it (ADR 0203 items 37 and 79).
 export function changeTitle(operation) {
   switch (operation && operation.kind) {
     case 'move_pages': {
@@ -417,7 +417,7 @@ export function changeSetView(set) {
 }
 
 // The view that opens after Discard: the page of the person of a person
-// change set, else the People page (ADR 0099 item 12).
+// change set, else the People page (ADR 0203 item 79).
 export function afterDiscard(set, feeds = []) {
   if (set && set.operation && set.operation.kind === 'move_releases') return { name: 'hosts' };
   if (set && set.operation && set.operation.kind === 'move_pages') {
@@ -434,7 +434,7 @@ export const afterMissing = (id, merged) => (merged.has(String(id)) ? { name: 'p
 
 // Each publisher feed, A to Z, as [value, label] pairs, for the menu "Artist
 // or label" of an operation. A feed with a role shows its first role, for
-// example "HeyCitizen · Artist" (ADR 0111 item 3).
+// example "HeyCitizen · Artist" (ADR 0203 item 46).
 export function memberChoices(feeds) {
   return (feeds || []).filter((f) => f.medium === 'publisher')
     .sort((a, b) => compareNames(a.title, b.title))
@@ -447,7 +447,7 @@ export function memberChoices(feeds) {
 // The first role of a feed, as the label of its type.
 const firstRole = (feed) => feedKind(feed).label.split(' · ')[0];
 
-// ---- The profiles of Nostr keys (ADR 0099 item 3, ADR 0103 items 17 and 18) ----
+// ---- The profiles of Nostr keys (ADR 0203 items 38, 57 and 58) ----
 
 export const NO_PROFILE = 'No Nostr profile found';
 export const NIP05_OK = 'NIP-05 checked';
@@ -467,7 +467,7 @@ const profileOf = (npub, profiles) => (profiles instanceof Map ? profiles.get(np
 // The profile name of a key, or '' with no profile name.
 export const profileName = (npub, profiles) => ((profileOf(npub, profiles) || {}).name || '').trim();
 
-// The warning of ADR 0103 item 18 for a key, or null. A key with no profile
+// The warning of ADR 0203 item 58 for a key, or null. A key with no profile
 // name has no warning, and a profile name that contains the name has none.
 export function keyWarning(npub, profiles, name) {
   const found = profileName(npub, profiles);
@@ -477,7 +477,7 @@ export function keyWarning(npub, profiles, name) {
 }
 
 // The row of a Nostr key: the profile name and the short key, or the short
-// key only while the profiles load or when they failed (ADR 0099 item 3).
+// key only while the profiles load or when they failed (ADR 0203 item 38).
 // `picture` is the address of the profile picture, or null. `short` is the
 // short key, which the row keeps on one line.
 export function keyRow(npub, profiles, name = '') {
@@ -501,7 +501,7 @@ export function profileAddressNote(npub, profiles) {
 
 // The row of a credit in the sheet "Check: {name}".
 // The release is the title, then one line for each role with its places, as a
-// credit row of "More from your feeds" has (ADR 0158 item 5, ADR 0156 item 7).
+// credit row of "More from your feeds" has (ADR 0203 item 43, ADR 0203 item 54).
 // `feeds` is the feed list of the shell.
 export function creditItemRow(item, titles, feeds = null) {
   const where = creditWhere(item, titles, feeds);
@@ -552,7 +552,7 @@ export const addPersonBody = (fields) => {
   };
 };
 
-// ---- The page of a person and its sheets (ADR 0099 items 4 to 12, task 065c) ----
+// ---- The page of a person and its sheets (ADR 0203 items 44, 64, 49, 74, 75, 76, 77, 78 and 79, task 065c) ----
 
 // The key of an address as the value of a select menu, and back.
 export const keyValue = (key) => JSON.stringify([key.address, key.custom_key || '', key.custom_value || '']);
@@ -565,7 +565,7 @@ export function keyFromValue(value) {
 // address when the member gives no type.
 const isLnaddress = (m) => (m.recipient_type ? m.recipient_type === 'lnaddress' : (m.address || '').includes('@'));
 
-// The parts of the line of one address (ADR 0099 item 15). `full` shows a
+// The parts of the line of one address (ADR 0203 item 83). `full` shows a
 // node key in full. A node of a shared provider names the provider.
 export function memberLine(member, full = true) {
   const account = member.custom_value || null;
@@ -577,7 +577,7 @@ export function memberLine(member, full = true) {
 
 // One line of text for an address, for a select menu.
 // A line of a payee with " · fee" when `GET /recipients` marks the member
-// as a fee in one or more feeds (the mockups of ADR 0099).
+// as a fee in one or more feeds (the mockups of ADR 0203).
 export const withFee = (text, member) => `${text}${member && member.fee ? ' · fee' : ''}`;
 
 export function memberText(member) {
@@ -589,7 +589,7 @@ const sameParts = (a, b) => a.address === b.address && (a.custom_key || '') === 
   && (a.custom_value || '') === (b.custom_value || '');
 
 // The wallets of a person, each with its addresses. A wallet gives its
-// `members` (ADR 0095 item 5). `recipients` is the list of `GET /recipients`.
+// `members` (ADR 0207 item 38). `recipients` is the list of `GET /recipients`.
 // It gives the provider and the feed count of an address. A wallet with no
 // `members` gives its own key as its one address.
 export function walletGroups(person, recipients) {
@@ -703,7 +703,7 @@ export function keyEvidenceText(evidence) {
   }
 }
 
-// The navigation row "Check your feeds" on the page of a person (ADR 0111
+// The navigation row "Check your feeds" on the page of a person (ADR 0203
 // item 12). `needs_correction` is the count from `GET /people/{id}`. A line
 // with `error` shows in the error color.
 export function checkRow(person) {
@@ -713,7 +713,7 @@ export function checkRow(person) {
   return {
     title: 'Check your feeds',
     // The row gives only the state of the check. The section "Where this
-    // person is" lists the feeds (ADR 0156 item 6).
+    // person is" lists the feeds (ADR 0203 item 63).
     lines: [
       bad > 0 ? { text: `${bad === 1 ? '1 feed needs' : `${bad} feeds need`} a correction`, error: true } : { text: 'Each feed is correct', error: false },
     ],
@@ -721,7 +721,7 @@ export function checkRow(person) {
   };
 }
 
-// ---- The section "Where this person is" (ADR 0156) ----
+// ---- The section "Where this person is" (ADR 0203) ----
 
 // The places of a list in words: "the album", "12 tracks", or both.
 function whereText(places, word) {
@@ -732,7 +732,7 @@ function whereText(places, word) {
 
 // The summary line of a feed: where it pays and where it credits the person,
 // for example "Paid on the album and 12 tracks · Credited as vocalist on 2
-// tracks" (ADR 0156 item 2).
+// tracks" (ADR 0203 item 60).
 export function whereSummary(places, word) {
   const list = places || [];
   const paid = list.filter((p) => p.pays);
@@ -754,7 +754,7 @@ function placeName(place, word) {
 }
 
 // The line of one place: its name, the split of the person and the roles of
-// the person there (ADR 0156 item 3).
+// the person there (ADR 0203 item 61).
 export function whereLine(place, word) {
   const split = place.pays ? (place.percent === null || place.percent === undefined ? 'Paid' : `${percentText(place.percent)} split`) : null;
   return { label: placeName(place, word), detail: [split, ...(place.roles || []).map(capital)].filter(Boolean).join(' · ') };
@@ -777,7 +777,7 @@ export function whereEntries(places, feeds) {
   });
 }
 
-// The rows of the feeds of a person: the type, then the places (ADR 0099
+// The rows of the feeds of a person: the type, then the places (ADR 0203
 // item 5). `feeds` is the feed list of the shell.
 export function feedRows(places, feeds) {
   const byId = new Map((feeds || []).map((f) => [f.id, f]));
@@ -793,7 +793,7 @@ export function feedRows(places, feeds) {
 export function levelRows(ids, feeds) {
   const byId = new Map((feeds || []).map((f) => [f.id, f]));
   // Add to All Releases acts on the releases of the level, not on its
-  // artist or label feeds (ADR 0098 item 20).
+  // artist or label feeds (ADR 0203 item 26).
   return (ids || []).filter((id) => !(byId.has(id) && isPublisher(byId.get(id)))).map((id) => {
     const feed = byId.get(id);
     return { id, title: feed ? feed.title || 'Untitled feed' : `Feed ${id}`, lines: feed ? [feedKind(feed).label] : [], checked: true };
@@ -839,7 +839,7 @@ export function sheetBody(kind, fields) {
 }
 
 // True when the primary button of a sheet works: one feed is selected, and
-// the sheet has one part (ADR 0099 item 7). The core checks each value.
+// the sheet has one part (ADR 0203 item 74). The core checks each value.
 export function sheetReady(kind, fields, ids) {
   if (ids.length === 0) return false;
   switch (kind) {
@@ -856,7 +856,7 @@ export const supportChoices = (person) => (person.support_links || []).map((l) =
 // The text of the primary button while the request runs.
 export const BUSY_REVIEW = 'Making the Changes…';
 
-// The forms that add a link to a person (ADR 0099 item 4). `fields` gives
+// The forms that add a link to a person (ADR 0203 item 44). `fields` gives
 // the id, the label, the kind and the start value of each field.
 export const LINK_FORMS = {
   wallets: {
@@ -1193,7 +1193,7 @@ export function leaveText(name, keys) {
 // The line of the usual role of a person, and the publisher feeds of which
 // the person is a member, as `{ role, members: [{ id, title, dot, role }] }`.
 // `feeds` is the feed list of the shell. A member with a feed in the list
-// also gets the dot class and the first role of the feed (ADR 0111 item 1).
+// also gets the dot class and the first role of the feed (ADR 0203 item 44).
 export function profileLine(person, titles, feeds = []) {
   const byId = new Map((feeds || []).map((f) => [f.id, f]));
   return {
@@ -1494,7 +1494,7 @@ export function detailList(field, current, detail, profiles, titles, feeds = [],
   return { state, heading: DETAIL_HEADINGS[field], collapsedLine: detailCollapsedLine(rows.length), rows };
 }
 
-// ---- The page "Check your feeds" (ADR 0111 items 9 to 13) ----
+// ---- The page "Check your feeds" (ADR 0203 items 64, 65, 66, 63 and 70) ----
 
 export const CHECK_GROUPS = [
   ['needs_correction', 'Needs a correction'],
@@ -1505,7 +1505,7 @@ export const CHECK_GROUPS = [
 // The intro of the page.
 export const checkIntro = (name) => `Studio compares each feed with ${name}: the Nostr key and the picture of each credit, and the address of each payment.`;
 
-// The groups of the check, in the sequence of ADR 0111 item 11. A group with
+// The groups of the check, in the sequence of ADR 0203 item 66. A group with
 // no feed is left out.
 export function checkGroups(check) {
   const feeds = (check && check.feeds) || [];
@@ -1549,14 +1549,14 @@ export function checkFeedLines(entry, placeLines, name, profiles = null) {
 export const checkKeys = (check) => [...new Set(((check && check.feeds) || [])
   .flatMap((f) => f.findings || []).filter((f) => f.kind === 'credit_key' && f.npub).map((f) => f.npub))];
 
-// ---- The entries of the check (ADR 0120, task 084b) ----
+// ---- The entries of the check (ADR 0203, task 084b) ----
 
 export const CHECK_TITLE = 'Check your feeds';
 
 const capital = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 
 // The word for the type of a feed in the check: "album", "playlist", "artist
-// page" or "label page" (ADR 0120 item 4). A feed with no known type is an
+// page" or "label page" (ADR 0203 item 69). A feed with no known type is an
 // album.
 export function releaseWord(feed) {
   if (feedKind(feed || {}).label === 'Playlist') return 'playlist';
@@ -1564,14 +1564,14 @@ export function releaseWord(feed) {
   return (feed.publisher_roles || []).includes('label') ? 'label page' : 'artist page';
 }
 
-// The label of the button that opens the feed in the editor (ADR 0120 item 3).
+// The label of the button that opens the feed in the editor (ADR 0203 item 69).
 export const openLabel = (feed) => `Open the ${titleCase(releaseWord(feed))}`;
 
-// The label of the button that corrects one feed (ADR 0120 item 3).
+// The label of the button that corrects one feed (ADR 0203 item 69).
 export const useValuesLabel = (name) => `Use ${name}'s Values`;
 
 // The type and the count of an entry of the check, for example "Album · 2
-// credits differ" (ADR 0120 item 1). The count uses the findings of the core.
+// credits differ" (ADR 0203 item 67). The count uses the findings of the core.
 export function checkSummary(entry, feed) {
   const findings = (entry && entry.findings) || [];
   const credits = findings.filter((f) => f.kind.startsWith('credit_')).length;
@@ -1584,7 +1584,7 @@ export function checkSummary(entry, feed) {
 }
 
 // The position of a credit: "Channel", or the title of each item. More than three
-// places give the first two and "and N more" (ADR 0120 item 2).
+// places give the first two and "and N more" (ADR 0203 item 68).
 export function placeText(places) {
   const names = (places || []).map((p) => (p.kind === 'channel' ? 'Channel' : (p.title || '').trim() || 'Untitled item'));
   if (names.length <= 3) return names.join(', ');
@@ -1597,7 +1597,7 @@ const orNone = (text) => (String(text ?? '').trim() === '' ? 'None' : String(tex
 // The name of a Nostr key: the name of its profile, or the short key.
 const keyName = (npub, profiles) => profileName(npub, profiles) || shortKey(npub);
 
-// The blocks of the differences of one entry of the check (ADR 0120 item 2).
+// The blocks of the differences of one entry of the check (ADR 0203 item 68).
 // A credit with a picture and an information address that both differ gives
 // one block for each. `person` gives the keys and the usual role of the person.
 // The core gives each value. The function only chooses the text.
@@ -1656,7 +1656,7 @@ export function differenceBlocks(entry, name, feed, profiles = null, person = {}
   return blocks;
 }
 
-// The lines of the sections "Change your feeds" (ADR 0111 item 4).
+// The lines of the sections "Change your feeds" (ADR 0203 item 49).
 export const CHANGE_ROWS = [
   ['use_address', 'Pay a different address of this person in your feeds.'],
   ['rename', 'Change the name of this person in the payments and the credits.'],
@@ -1668,7 +1668,7 @@ export const CHANGE_NOTE = 'Each operation shows the feeds and a review before S
 const joinList = (items) => (items.length < 2 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`);
 
 // The line under the title of the review of a change set of a person
-// (ADR 0099 item 12, task 065 item 6). `set` is a change set with a
+// (ADR 0203 item 79, task 065 item 6). `set` is a change set with a
 // `person_id`, and `name` is the name of the person now.
 export function changeLine(set, name) {
   const op = set.operation || {};
@@ -1706,7 +1706,7 @@ export function changeLine(set, name) {
   }
 }
 
-// ---- The page "Check your feeds": the correction (ADR 0111 items 14 to 17, task 075c) ----
+// ---- The page "Check your feeds": the correction (ADR 0203 items 71, 71, 72 and 73, task 075c) ----
 
 // The number of feeds that "Correct N Feeds" names: each feed that is not
 // correct. The preview of the core leaves out a feed with no change.
@@ -1741,7 +1741,7 @@ export function correctStart(person) {
 }
 
 // The key of the change "Nostr key" when the profiles are known: the first
-// key with no warning of ADR 0103 item 18. When each key has the warning, the
+// key with no warning of ADR 0203 item 58. When each key has the warning, the
 // change starts not selected, so that Studio writes no key of a different
 // account by default. `fields` is the state before the profiles came.
 export function correctKeyStart(person, fields, profiles) {
@@ -1803,13 +1803,13 @@ export const correctAnySelected = (fields) => !!(fields.key || fields.payment ||
 
 // The feeds of the preview that the core changes, as the rows of the sheet.
 // A feed with the cause `no_credit`, `no_recipient` or `has_new_address` is
-// "Not changed", and the sheet leaves it out (ADR 0111 item 16). Any other
+// "Not changed", and the sheet leaves it out (ADR 0203 item 72). Any other
 // feed that the core does not change is also left out, and `omitted` counts
 // them. `placeRows` maps the ID of a feed to its row with `title` and
 // `lines`. `before` is the list of the rows now, so that a selection stays
 // after a new preview.
 // The change of the sheet "Correct the Feeds" that corrects each kind of
-// finding of the check (ADR 0111 items 9 and 15).
+// finding of the check (ADR 0203 items 64 and 71).
 const CORRECTED_BY = {
   credit_key: 'key', credit_details: 'details', credit_role: 'role', not_default: 'payment', other_wallet: 'other_payees',
 };
@@ -1848,13 +1848,13 @@ export function correctRows(preview, titles, placeRows, before = [], check = nul
   return { rows, omitted };
 }
 
-// ---- The recipient picker (ADR 0099 item 19, task 066a) ----
+// ---- The recipient picker (ADR 0203 item 86, task 066a) ----
 
 const sameKey = (a, b) => a.address === b.address && (a.custom_key || null) === (b.custom_key || null)
   && (a.custom_value || null) === (b.custom_value || null);
 
 // The identity of a recipient in a list: its address, its custom key and its
-// custom value (ADR 0027 item 3).
+// custom value (ADR 0207 item 3).
 export const recipientIdentity = (r) => `${r.address || ''}\u0000${r.custom_key || ''}\u0000${r.custom_value || ''}`;
 
 // The new recipient from a person: the name of the person and the values of
@@ -1894,7 +1894,7 @@ export function recipientPickRows(people, recipients) {
   return { people: rows, payees };
 }
 
-// ---- The pickers of the credits and the support links (ADR 0099 items 20 and 21) ----
+// ---- The pickers of the credits and the support links (ADR 0203 items 87 and 88) ----
 
 const lowerName = (name) => String(name ?? '').trim().toLowerCase();
 const firstKey = (person) => ((person.keys || []).find((k) => k.npub) || {}).npub || null;
@@ -2066,7 +2066,7 @@ export function personKeys(recipients) {
   return keys;
 }
 
-// ---- Add to a person, more from your feeds and merge (ADR 0103 items 8 to 16, task 067e) ----
+// ---- Add to a person, more from your feeds and merge (ADR 0203 items 38, 39, 30, 53, 54, 55, 50, 31 and 32, task 067e) ----
 
 // The choices of a select menu of people, A to Z. `exceptId` leaves out one
 // person, such as the person that keeps the merge.
@@ -2079,9 +2079,9 @@ export function personChoices(people, exceptId = null) {
 }
 
 // The title of the sheet that adds a payee with no person to a person
-// (ADR 0111 item 8).
+// (ADR 0203 item 80).
 export const addToTitle = (name) => `Add to a Person: ${name}`;
-// The hint under a person of the sheet "Check: {name}" (ADR 0103 item 9).
+// The hint under a person of the sheet "Check: {name}" (ADR 0203 item 39).
 export const ADD_TO_HINT = 'Studio adds the selected items to the person. Studio changes no feed.';
 export const addItemsLabel = (n) => addPickLabel(n, 'Item', 'Items');
 
@@ -2140,7 +2140,7 @@ export function addItemsBody(state, person) {
   };
 }
 
-// ---- The sheet "Check: {name}" (ADR 0111 items 5 to 7, task 075c) ----
+// ---- The sheet "Check: {name}" (ADR 0203 items 38 to 40, task 075c) ----
 
 // The value of the menu entry "A new person".
 export const NEW_PERSON = 'new';
@@ -2150,7 +2150,7 @@ export const SELECT_PERSON = '';
 export const checkSheetTitle = (name) => `Check: ${name}`;
 
 // The hint of the menu "Person" when it shows the person with the name of
-// the suggestion (ADR 0111 item 6).
+// the suggestion (ADR 0203 item 39).
 export const MATCH_HINT = 'You have a person with this name. Studio adds the selected items to it.';
 
 // The hint under the menu of the link of a new person (ADR 0132 item 10).
@@ -2187,7 +2187,7 @@ export const checkSheetLabel = (state, person) => (person ? addItemsLabel(addSel
 export const checkSheetReady = (state, person) => (person ? addSelectedCount(state, person) > 0
   : state.personId === SELECT_PERSON ? false : trimmed(state.name) !== '');
 
-// ---- The sheet "Add to a Person: {name}" of a payee (ADR 0111 item 8) ----
+// ---- The sheet "Add to a Person: {name}" of a payee (ADR 0203 item 80) ----
 
 export const WALLET_TO_PERSON_HINT = 'Studio keeps this wallet with the person. Studio changes no feed.';
 
@@ -2212,10 +2212,10 @@ export const causeText = (cause) => CAUSES[cause] || '';
 
 // The rows of the section "More from your feeds" from `GET /people/{id}/more`.
 // `key` is the stable key of the row, and `body` is the body of the Add. A
-// credit with a Nostr key shows the profile of the key (ADR 0103 item 17),
+// credit with a Nostr key shows the profile of the key (ADR 0203 item 57),
 // with the warning of item 18 for the name `name` of the person.
 // The places of a role in words: "the album", or "track 3 "Night Song"". More
-// than three places give the first two and "and N more" (ADR 0120 item 2).
+// than three places give the first two and "and N more" (ADR 0203 item 68).
 function rolePlaceText(places, word) {
   const names = (places || []).map((p) => (p.kind === 'channel'
     ? `the ${word}`
@@ -2224,7 +2224,7 @@ function rolePlaceText(places, word) {
   return `${names[0]}, ${names[1]} and ${names.length - 2} more`;
 }
 
-// The title and the role lines of a credit of "More from your feeds" (ADR 0156
+// The title and the role lines of a credit of "More from your feeds" (ADR 0203
 // item 7). One release is the title. Many releases give the title "N
 // releases", and each line starts with its release.
 function creditWhere(item, titles, feeds) {
@@ -2395,7 +2395,7 @@ const NO_RECIPIENT_NAME = 'The feed gives no name for this recipient.';
 const WALLET_WORDS = { lnaddress: 'LNURL address', node: 'Node address' };
 const KEYSEND_WORDS = { found: 'Checked with keysend', no_data: 'No keysend data', failed: 'The keysend check failed' };
 
-// A value of another person has the name of that person (ADR 0098 item 6).
+// A value of another person has the name of that person (ADR 0203 item 9).
 const otherName = (state) => (state && typeof state === 'object' && state.other_person ? state.other_person.name : null);
 const isWebAddress = (value) => typeof value === 'string' && /^https?:\/\//i.test(value);
 

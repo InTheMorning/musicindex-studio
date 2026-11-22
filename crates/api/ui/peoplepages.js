@@ -1,4 +1,4 @@
-// The screens of the People area (ADR 0099, task 065). The components show
+// The screens of the People area (ADR 0203, task 065). The components show
 // the pages and call the API. The functions of `people.js` give each text
 // and each state, and the core applies each rule (ADR 0042, ADR 0065).
 import { html, useState, useEffect, useRef } from './vendor/htm-preact-standalone.module.js';
@@ -159,7 +159,7 @@ async function downloadPeople() {
   URL.revokeObjectURL(url);
 }
 
-// The People page (ADR 0099 item 2). `sort` and `reversed` give the order of
+// The People page (ADR 0203 item 37). `sort` and `reversed` give the order of
 // the People list (ADR 0153).
 export function PeoplePage({ feeds, go, sort, reversed, onOrder }) {
   const [data, setData] = useState(null);
@@ -241,7 +241,7 @@ export function PeoplePage({ feeds, go, sort, reversed, onOrder }) {
       : html`<section class="page-section"><h2>People</h2>
         ${data.people.length === 0 && html`<p class="empty">${PEOPLE_EMPTY}</p>`}
         ${data.people.length > 0 && html`<p class="empty">No person matches the search.</p>`}</section>`),
-    // "Show Again" removes the dismissal, and the suggestion comes back (ADR 0158 item 3).
+    // "Show Again" removes the dismissal, and the suggestion comes back (ADR 0203 item 21).
     hidden: () => html`<${PickFold} id="people-hidden" title="Hidden suggestions" startOpen=${false}
       selector=":scope > .link-row.static > button.button" rows=${data.hidden.map((suggestion) => {
       const row = suggestionRow(suggestion);
@@ -307,7 +307,7 @@ function LinkedPageReview({ people, onClose, onDone }) {
 
 const Fragment = ({ children }) => children;
 
-// The sheet "Check: {name}" (ADR 0111 items 5 to 7). The menu "Person" picks
+// The sheet "Check: {name}" (ADR 0203 items 38 to 40). The menu "Person" picks
 // a new person or a person that exists. The sheet changes no feed. The core
 // makes the person or adds the items, and a 409 gives its message here.
 function CheckSuggestionSheet({ suggestion, people, feeds, titles, go, onClose, onDismissed }) {
@@ -439,7 +439,7 @@ function AddPersonForm({ fields, setFields, view, pendingLink, setPendingLink, o
       onClose=${() => setFinding(false)} />`;
 }
 
-// ---- The page of a person (ADR 0099 items 4 to 12) ----
+// ---- The page of a person (ADR 0203 items 44, 64, 49, 74, 75, 76, 77, 78 and 79) ----
 
 // A row that adds something: a plus sign and a title.
 const AddRow = ({ title, onClick }) => html`<button class="link-row add" type="button" onClick=${onClick}>
@@ -533,7 +533,7 @@ const LINK_FINDS = {
   'support-links': { choices: fundingChoices, empty: 'This feed has no website.', summary: 'Fill the address from the website of a feed.' },
 };
 
-// The sheet that adds a link to a person (ADR 0099 item 4).
+// The sheet that adds a link to a person (ADR 0203 item 44).
 function LinkSheet({ kind, personId, edit = null, onClose, onAdded }) {
   const ref = useSheet(kind !== null);
   return html`<dialog ref=${ref} class=${kind === 'wallets' ? 'sheet' : 'sheet small'} aria-labelledby="link-title" onClose=${onClose}>
@@ -599,7 +599,7 @@ function LinkForm({ kind, personId, edit = null, onCancel, onAdded }) {
     <footer><button class="button primary" type="submit" form="link-form" disabled=${busy || !linkReady(kind, values) || !!addressIssue}>${editing ? (busy ? 'Saving…' : form.editButton) : (busy ? 'Adding…' : form.button)}</button></footer>`;
 }
 
-// The sheet of one operation of a person (ADR 0099 items 7 to 12). The
+// The sheet of one operation of a person (ADR 0203 items 74 to 79). The
 // sheet sends `POST /people/{id}/changes` and opens the review. The core
 // makes each change and gives each outcome.
 function OperationSheet({ kind, person, groups, rows, feeds, go, onClose }) {
@@ -614,7 +614,7 @@ function OperationSheet({ kind, person, groups, rows, feeds, go, onClose }) {
 }
 
 // The feeds of a sheet with a check box for each. The sheets of a person and
-// of a wallet use it (ADR 0099 item 7).
+// of a wallet use it (ADR 0203 item 74).
 // With `separate`, each line of a row shows on its own line.
 function FeedChecks({ rows, setRows, empty, separate = false }) {
   if (!rows) return null;
@@ -874,7 +874,7 @@ function FillRow({ row, checked, onToggle }) {
   return html`<label class="link-row use-row"><input type="checkbox" checked=${checked} onChange=${onToggle} />${lead}${text}</label>`;
 }
 
-// The page of a person (ADR 0099 item 4). The sections come from
+// The page of a person (ADR 0203 item 44). The sections come from
 // `pageSequence('person')`.
 export function PersonPage({ id, feeds, go, view, tab: requestedTab }) {
   const { data, error, run, reload } = usePerson(id);
@@ -1111,7 +1111,7 @@ export function PersonPage({ id, feeds, go, view, tab: requestedTab }) {
   const removeButton = (kind, linkId, label) => html`<button class="button destructive" type="button" aria-label=${label}
     onClick=${() => remove(kind, linkId)}>Remove</button>`;
   const open = (kind) => withLeave(() => setSheet(kind));
-  // The delete changes no feed (ADR 0102). Then the People page opens.
+  // The delete changes no feed (ADR 0203). Then the People page opens.
   const deletePerson = () => run(async () => {
     if (!await askConfirm(CONFIRMS.deletePerson(person.name))) return;
     const result = await api(`/people/${id}`, { method: 'DELETE' });
@@ -1129,7 +1129,7 @@ export function PersonPage({ id, feeds, go, view, tab: requestedTab }) {
           <${CopyButton} text=${k.npub} label="the Nostr key" /></p>`)}
       </div></header>
       ${!findButton.inRoleLine && html`<div class="actions"><button class="button action" type="button" onClick=${() => setFinding(person.name)}>${findButton.label}</button></div>`}<//>`,
-    // One entry for each feed, and one open at a time (ADR 0156, ADR 0028).
+    // One entry for each feed, and one open at a time (ADR 0203, ADR 0028).
     where: () => where.length > 0 && html`<section class="page-section"><h2>Where this person is</h2>
       <div class="group">${where.map((entry, index) => {
         const currentIndex = Math.min(whereCurrent, Math.max(0, where.length - 1));
@@ -1183,7 +1183,7 @@ export function PersonPage({ id, feeds, go, view, tab: requestedTab }) {
           await loadSuggestions();
         })}>Add to Wallet</button>
         <button class="button" type="button" onClick=${() => act(async () => {
-          // "Dismiss" hides the address for this person for good (ADR 0098 item 18).
+          // "Dismiss" hides the address for this person for good (ADR 0203 item 24).
           await api(`/people/${id}/profile-addresses/dismiss`, { method: 'POST', body: { address: s.address } });
           await loadSuggestions();
         })}>Dismiss</button></div></div>`)}
@@ -1398,7 +1398,7 @@ function CreditRemoveForm({ person, feedId, position, onMade, close }) {
     </footer>`;
 }
 
-// The sheet "Merge with {name}" (ADR 0103 items 14 to 16). The core moves the
+// The sheet "Merge with {name}" (ADR 0203 items 50, 31 and 32). The core moves the
 // links and deletes the other person. No feed changes.
 function MergeSheet({ open, person, onClose, onMerged }) {
   const ref = useSheet(open);
@@ -1452,7 +1452,7 @@ function MergeForm({ person, onCancel, onMerged }) {
 }
 
 // One feed of the check with a difference. The entry opens in the list and
-// shows each difference, then the buttons (ADR 0120 items 1 to 3).
+// shows each difference, then the buttons (ADR 0203 items 67 to 69).
 function CheckEntry({ entry, feed, title, person, profiles, open, onToggle, onCorrect, go }) {
   return html`<details class="disclosure" open=${open} onToggle=${(e) => onToggle(e.currentTarget.open)}>
     <summary class="link-row"><span class="text"><span class="label">${title}</span>
@@ -1477,9 +1477,9 @@ function DifferenceBlock({ block }) {
   </div>`;
 }
 
-// The page "Check your feeds" (ADR 0111 items 9 to 13, ADR 0120). The core
+// The page "Check your feeds" (ADR 0203 items 64, 65, 66, 63 and 70, ADR 0203). The core
 // compares each feed with the person. A feed with a difference opens in the list.
-// The button "Correct N Feeds" opens the sheet of the correction (ADR 0111
+// The button "Correct N Feeds" opens the sheet of the correction (ADR 0203
 // item 14). A feed that is correct opens the feed in the editor.
 export function CheckPage({ id, feeds, go }) {
   const [person, setPerson] = useState(null);
@@ -1529,10 +1529,10 @@ export function CheckPage({ id, feeds, go }) {
     titles=${titles} placeRows=${rows} go=${go} onClose=${() => setCorrecting(null)} /></div>`;
 }
 
-// The sheet "Correct the Feeds: {name}" (ADR 0111 items 14 to 17). The
+// The sheet "Correct the Feeds: {name}" (ADR 0203 items 71, 71, 72 and 73). The
 // preview of the core lists the feeds that the selected corrections change.
 // The primary button makes the change set, and the review follows. With
-// `feedIds`, the sheet covers only those feeds (ADR 0120 item 3).
+// `feedIds`, the sheet covers only those feeds (ADR 0203 item 69).
 function CorrectSheet({ open, person, check, titles, placeRows, go, onClose, feedIds = null, onApplied = null }) {
   const ref = useSheet(open);
   return html`<dialog ref=${ref} class="sheet" aria-labelledby="correct-title" onClose=${onClose}>
@@ -1550,7 +1550,7 @@ function CorrectForm({ person, check, titles, placeRows, go, onCancel, onlyIds =
   // The feeds of the sheet: the one feed of an entry, or each feed that is not correct.
   const feedIds = onlyIds || correctFeedIds(check);
   // When the profiles come, the key menu takes a key with no warning, until
-  // the user changes a selection (ADR 0103 item 18).
+  // the user changes a selection (ADR 0203 item 58).
   const touched = useRef(false);
   const set = (patch) => { touched.current = true; setFields({ ...fields, ...patch }); };
   useEffect(() => {
@@ -1708,7 +1708,7 @@ export function ReviewCorrectSheet({ target, feeds, onApplied, onClose }) {
       check=${loaded && loaded.check} titles=${titles} placeRows=${rows} go=${() => {}} onClose=${onClose} onApplied=${onApplied} /><//>`;
 }
 
-// ---- The page of a wallet with no person (ADR 0099 items 7 and 10, task 065d) ----
+// ---- The page of a wallet with no person (ADR 0203 items 74 and 77, task 065d) ----
 
 // The sheet of one operation of a wallet. The sheet lists the feeds of the
 // wallet with a check box for each, and sends `POST /change-sets`.
@@ -1816,7 +1816,7 @@ function WalletForm({ kind, recipient, uses, feeds, go }) {
     </footer>`;
 }
 
-// The page of a wallet with no person (ADR 0099 item 7, ADR 0111 item 8). It
+// The page of a wallet with no person (ADR 0203 item 74, ADR 0203 item 80). It
 // has the row "Add to a Person", the operations and no list of feeds: each
 // sheet lists the feeds.
 export function WalletPage({ recipient, feeds, go }) {
@@ -1848,7 +1848,7 @@ export function WalletPage({ recipient, feeds, go }) {
   </section></div>`;
 }
 
-// The sheet "Add to a Person: {name}" of a payee with no person (ADR 0111
+// The sheet "Add to a Person: {name}" of a payee with no person (ADR 0203
 // item 8). The menu "Person" picks a new person or a person that exists. The
 // sheet changes no feed. A new person is made first, then the wallet is added.
 function WalletPersonSheet({ open, recipient, go, onClose }) {

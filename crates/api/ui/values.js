@@ -66,7 +66,7 @@ const TYPES = WALLET_TYPES.map(([value, label]) => ({ value, label,
 
 // One load of `GET /recipients` for the page. Each `Recipients` shares it. The
 // map goes from the lowercase address to its keysend lookup. A failed load
-// gives an empty map, and the editor makes no lookup (ADR 0095).
+// gives an empty map, and the editor makes no lookup (ADR 0207).
 let recipientsPromise = null;
 function loadRecipients() {
   if (!recipientsPromise) recipientsPromise = api('/recipients').catch(() => []);
@@ -128,7 +128,7 @@ function RecipientAddressActions({ recipient, onChange }) {
 // Recipients returns its rows with no wrapper div, so that each recipient
 // and the add row sit as direct rows of the group, each with the group's
 // own inset separator (review of task 014c, defect 3). The rows form two
-// groups: "Recipients", then "Fees" (ADR 0039 item 12). A recipient with
+// groups: "Recipients", then "Fees" (ADR 0206 item 15). A recipient with
 // a fee (`isFee`) is in "Fees". The screen sorts each group by split (ADR 0144).
 function Recipients({ id, recipients, defaultType, onChange, openAdd = false, onAddOpened, onEmptyClose, wrongAddresses = new Set() }) {
   const percent = percentages(recipients).map((value, i) => (shares(recipients[i]) === null ? null : value));
@@ -352,7 +352,7 @@ function RecipientForm({ recipient, recipients, onSave, onCopy, onCancel }) {
       onPick=${(route) => setFields((current) => ({ ...current, ...recipientFields(route) }))} onClose=${() => setFinding(false)} />`;
 }
 
-// ---- Save a recipient (task 013c, ADR 0027 item 5) ----
+// ---- Save a recipient (task 013c, ADR 0207 item 5) ----
 
 // The button of an open recipient that saves it to the user's list. It
 // shows "Saved" for 2 seconds after the save.
@@ -391,13 +391,13 @@ function SaveRecipientButton({ recipient }) {
     </div>`;
 }
 
-// ---- The recipient picker (task 013c, ADR 0027) ----
+// ---- The recipient picker (task 013c, ADR 0207) ----
 // The picker adds recipients from the user's list and from musicindex. It
 // only adds a recipient. It does not remove or replace a recipient of the
-// editor (ADR 0027 invariant).
+// editor (ADR 0207 invariant).
 
 // The identity of a recipient: its address, its custom key and its custom
-// value (ADR 0027 item 3). Two rows with the same identity are the same
+// value (ADR 0207 item 3). Two rows with the same identity are the same
 // recipient, even with a different name.
 const identityOf = recipientIdentity;
 
@@ -428,7 +428,7 @@ function copyRows(recipients, taken, selected, toggle, from) {
 
 const COPY_NOTE = 'A percent is the share in this source. A new recipient gets no split, and you give it in the editor.';
 
-// The sheet that copies many recipients of a feed on musicindex (ADR 0027
+// The sheet that copies many recipients of a feed on musicindex (ADR 0207
 // items 5 to 7, ADR 0030, ADR 0145 items 9 to 13).
 function PickerSheet({ open, recipients, onAdd, onClose }) {
   const ref = useSheet(open);

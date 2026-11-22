@@ -344,7 +344,7 @@ impl Library {
 /// The stamp of a file: its size and its modification time in
 /// nanoseconds, as `{size}-{mtime_ns}`. The local folder connector, the
 /// import, the download and the folder scan all use this one function, so
-/// that a stamp from one equals a stamp from another (ADR 0038 item 13).
+/// that a stamp from one equals a stamp from another (ADR 0204 item 13).
 #[must_use]
 pub fn stamp_of(meta: &fs::Metadata) -> String {
     let modified = meta
@@ -548,7 +548,7 @@ pub fn move_release_folder(
 }
 
 /// Give a published feed its release folder, with its feed XML
-/// (ADR 0038 item 4, ADR 0035 item 5).
+/// (ADR 0204 item 4, ADR 0035 item 5).
 ///
 /// The function names the folder from the feed address, or from the feed
 /// path when the feed has no address, with [`release_folder_name`]. It

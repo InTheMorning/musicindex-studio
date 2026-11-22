@@ -79,10 +79,10 @@ pub struct Feed {
     pub link: Option<String>,
     /// `language`.
     pub language: Option<String>,
-    /// `managingEditor`, as the source wrote it (ADR 0064).
+    /// `managingEditor`, as the source wrote it (ADR 0206).
     #[serde(default)]
     pub managing_editor: Option<String>,
-    /// `webMaster`, as the source wrote it (ADR 0064).
+    /// `webMaster`, as the source wrote it (ADR 0206).
     #[serde(default)]
     pub web_master: Option<String>,
     /// `lastBuildDate`, as the source wrote it (ADR 0127). Only the core sets
@@ -101,13 +101,13 @@ pub struct Feed {
     pub locked: Option<Locked>,
     /// `itunes:author`.
     pub author: Option<String>,
-    /// `itunes:explicit`, as the source wrote it (ADR 0064).
+    /// `itunes:explicit`, as the source wrote it (ADR 0206).
     #[serde(default)]
     pub explicit: Option<String>,
-    /// `itunes:owner` (ADR 0064).
+    /// `itunes:owner` (ADR 0206).
     #[serde(default)]
     pub owner: Option<Owner>,
-    /// `itunes:keywords`, as the source wrote it (ADR 0064).
+    /// `itunes:keywords`, as the source wrote it (ADR 0206).
     #[serde(default)]
     pub keywords: Option<String>,
     /// The `href` of `itunes:image`.
@@ -361,7 +361,7 @@ impl Feed {
 
     /// Set the `href` of the first `atom:link` with `rel="self"`. Gives
     /// `false`, and changes nothing, when the feed has no such link
-    /// (ADR 0038 item 16).
+    /// (ADR 0204 item 16).
     pub fn set_self_url(&mut self, url: &str) -> bool {
         let Some(link) = self
             .atom_links
@@ -375,7 +375,7 @@ impl Feed {
     }
 
     /// Each `podcast:valueRecipient` of each value block of the channel, of
-    /// each item and of each live item (ADR 0027 item 4).
+    /// each item and of each live item (ADR 0207 item 4).
     ///
     /// The list does not have a recipient of a value time split. A
     /// recipient with no address, or with an address of only spaces, is not
@@ -416,8 +416,8 @@ impl Feed {
     }
 
     /// Each `podcast:person` of the channel, of each item and of each live
-    /// item, in that sequence, with the place of each credit (ADR 0098 item
-    /// 10, ADR 0120 item 2).
+    /// item, in that sequence, with the place of each credit (ADR 0203 item
+    /// 10, ADR 0203 item 68).
     ///
     /// A person with no name and no `npub` is not in the list. A name of
     /// only spaces is no name.
@@ -469,7 +469,7 @@ pub fn release_kind_shown(
     }
 }
 
-/// The place of a credit in a feed (ADR 0120 item 2).
+/// The place of a credit in a feed (ADR 0203 item 68).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum CreditPlace {
@@ -484,7 +484,7 @@ pub enum CreditPlace {
         /// The 1-based number of the item in the items of the feed. A live
         /// item has the number after the last item, in the sequence of the
         /// live items, so each number is one time in a feed. A place from
-        /// before ADR 0156 has no number.
+        /// before ADR 0203 has no number.
         #[serde(default)]
         number: Option<u32>,
     },
@@ -513,7 +513,7 @@ fn percentages(recipients: &[&Recipient]) -> Vec<Option<f64>> {
 }
 
 /// Add each recipient of `values` with its place and its split (ADR 0143,
-/// ADR 0156 item 4). The split counts each recipient of the block, also a
+/// ADR 0203 item 62). The split counts each recipient of the block, also a
 /// recipient with no address, as the editor does.
 fn push_placed_recipients<'a>(
     found: &mut Vec<(RecipientPlace, &'a Recipient)>,
@@ -677,10 +677,10 @@ pub struct Item {
     /// value at the draft save.
     #[serde(default)]
     pub duration_seconds: Option<u64>,
-    /// `itunes:explicit`, as the source wrote it (ADR 0064).
+    /// `itunes:explicit`, as the source wrote it (ADR 0206).
     #[serde(default)]
     pub explicit: Option<String>,
-    /// `podcast:season` (ADR 0064).
+    /// `podcast:season` (ADR 0206).
     #[serde(default)]
     pub season: Option<Season>,
     /// The text of `podcast:episode`: the track number of an album track.
@@ -1050,7 +1050,7 @@ mod tests {
                 CreditPlace::Item { number, .. } => number,
             })
             .collect();
-        // ADR 0156: a live item has the number after the last item.
+        // ADR 0203: a live item has the number after the last item.
         assert_eq!(numbers, [None, Some(1), Some(2), Some(3)]);
     }
 
@@ -1076,7 +1076,7 @@ mod tests {
         assert_eq!(
             percent,
             [Some(37.5), Some(12.5), Some(50.0), None, None],
-            "ADR 0156 item 4"
+            "ADR 0203 item 62"
         );
     }
 }

@@ -84,7 +84,7 @@ export function kindGlow(kind) {
   return `var(--c-${['playlist', ...ROLES].includes(dot) ? dot : 'feed'})`;
 }
 
-// Is this feed a publisher feed (ADR 0041 item 1)?
+// Is this feed a publisher feed (ADR 0205 item 1)?
 export function isPublisher(feed) {
   return (feed.medium || '').toLowerCase() === 'publisher';
 }
@@ -95,7 +95,7 @@ export function isPlaylist(feed) {
 }
 
 // Is this feed an album, a publisher feed or a playlist that the editor can
-// open? A feed with no connector opens too (ADR 0029 item 4, ADR 0041 item 3,
+// open? A feed with no connector opens too (ADR 0029 item 4, ADR 0205 item 3,
 // ADR 0053 item 1, ADR 0067 item 1).
 export function isEditable(feed) {
   return mediumKind(feed.medium).label === 'Album' || isPublisher(feed) || isPlaylist(feed);
@@ -120,7 +120,7 @@ export function isReadOnly(feed) {
 }
 
 // The second line of the feed move row: what the address from before gets
-// (ADR 0038 items 16 to 18).
+// (ADR 0204 items 16 to 18).
 export function moveNote(method) {
   if (method === 'none') return 'Studio writes nothing at the address before the move.';
   return method === 'redirect'
@@ -169,9 +169,9 @@ function isCurrentPage(view, page, track) {
 // The entries of the outline of an open feed (ADR 0239 item 1). The head of
 // the outline opens the first page of the feed, so no entry is for that page
 // (ADR 0069). At narrow width there is no "Releases" entry, because Back
-// opens Releases (ADR 0039 item 11a).
+// opens Releases (ADR 0206 item 14).
 function outlineItems(feed, view, model, narrow, feeds) {
-  // A feed opened from a level goes back to that level (ADR 0088 item 6).
+  // A feed opened from a level goes back to that level (ADR 0215 item 6).
   const from = view.from;
   const items = narrow ? [] : [from
     ? { id: 'releases', label: titleOf(feeds, from.group), target: upView([...from.trail, from.group], feed.id) }
@@ -272,7 +272,7 @@ export function isFeedView(view) {
   return view.name === 'feed' || view.name === 'outline';
 }
 
-// The views of the People area. People is current on each of them (ADR 0099
+// The views of the People area. People is current on each of them (ADR 0203
 // item 1), except a change set of a move, which has the area `hosts` (ADR 0148
 // item 17).
 export const PEOPLE_VIEWS = ['people', 'person', 'check', 'wallet', 'change-set'];
@@ -288,17 +288,17 @@ export function isTabChange(current, target) {
 const inHosts = (view) => view.name === 'hosts' || (view.name === 'change-set' && view.area === 'hosts');
 const inReleases = (view) => view.name === 'change-set' && view.area === 'releases';
 
-// The left panel (ADR 0039 items 1, 5 and 6). With no open feed it gives the
+// The left panel (ADR 0206 items 1, 6 and 7). With no open feed it gives the
 // destinations. With an open feed, or the outline view, it gives the outline
 // of that feed. `model` is the typed model of the draft of the open feed, or
 // null before it loads. `narrow` is true at 760 px or less. `vaultLocked` is
 // true on a server with a locked vault: the row "Unlock Studio" then takes
-// the place of "Lock Studio" (ADR 0039 item 1).
+// the place of "Lock Studio" (ADR 0206 item 1).
 export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, narrow = false, collection = null,
   serverMode = false, collectionCount = 0 }) {
   const bottom = [
     // The People destination holds the page of a person, the page of a
-    // wallet and the review of a change set (ADR 0099 items 1 and 12).
+    // wallet and the review of a change set (ADR 0203 items 36 and 79).
     {
       id: 'people', label: 'People', icon: 'users',
       current: PEOPLE_VIEWS.includes(view.name) && !inHosts(view) && !inReleases(view),
@@ -362,7 +362,7 @@ export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, 
   };
 }
 
-// ---- The levels of the hierarchy (ADR 0088) ----
+// ---- The levels of the hierarchy (ADR 0215) ----
 
 // The role headings of the levels, in their sequence (ADR 0215 item 4):
 // Hosting, Labels and Artists, then each other role in the sequence of
@@ -431,7 +431,7 @@ export function levelFeedSet(feeds, id) {
 
 // The view that "‹" opens from a level, or from a feed opened from a level.
 // `trail` is the list of the levels above, from the top. With no trail it
-// is Releases (ADR 0088 item 6).
+// is Releases (ADR 0215 item 6).
 function upView(trail, marked) {
   if (!trail || trail.length === 0) return { name: 'releases', marked };
   return { name: 'releases', group: trail[trail.length - 1], trail: trail.slice(0, -1), marked };
@@ -486,7 +486,7 @@ function pageGroups(owner, feeds) {
   };
 }
 
-// The left panel of a level (ADR 0088 item 5): "‹" to the level above, the
+// The left panel of a level (ADR 0215 item 5): "‹" to the level above, the
 // head of the feed, the feeds directly below it under their role headings,
 // then its releases in feed order. The groups follow ADR 0240 item 5.
 function feedLevel(owner, view, feeds) {
@@ -553,7 +553,7 @@ export function newFeedView(id, from) {
   return { name: 'feed', id, ...(from ? { from } : {}) };
 }
 
-// The destinations below Releases (ADR 0085 items 1 and 3, ADR 0088 item
+// The destinations below Releases (ADR 0085 items 1 and 3, ADR 0215 item
 // 3): each top feed, with no feed above it, under its role heading, then
 // "Not linked" when a release has no link. `count` is the number of
 // releases of the destination. The first row of a heading has `heading`.
@@ -597,7 +597,7 @@ export function otherFeeds(feeds) {
 }
 
 // The IDs of each feed above and below `owner`, from the levels that the
-// core gives (ADR 0088 item 8).
+// core gives (ADR 0215 item 8).
 function relatedLevels(feeds, owner) {
   const byId = new Map(feeds.map((feed) => [feed.id, feed]));
   const found = new Set();
@@ -635,7 +635,7 @@ export function feedCover(feed) {
   return coverOf({ image: feed.image ?? null, rss_image: rssImage }) || null;
 }
 
-// The label of each draft state in the Releases list (ADR 0039 item 2).
+// The label of each draft state in the Releases list (ADR 0206 item 2).
 const DRAFT_LABELS = {
   new: 'New, not written',
   changed: 'Saved, not written',
@@ -685,7 +685,7 @@ function compareAz(a, b) {
     || Number(a.id) - Number(b.id);
 }
 
-// The first letter of each group of rows, in sequence (ADR 0039 item 2a).
+// The first letter of each group of rows, in sequence (ADR 0206 item 3).
 // Each row has a `title` and an `id`.
 export function letterGroups(rows) {
   const groups = [];
@@ -698,12 +698,12 @@ export function letterGroups(rows) {
   return groups;
 }
 
-// The sorts of each list (ADR 0039 item 2a, ADR 0085 item 4). The first
+// The sorts of each list (ADR 0206 item 3, ADR 0085 item 4). The first
 // sort is the default.
 const ALL_SORTS = ['newest', 'az'];
 const GROUP_SORTS = ['order', 'newest', 'az'];
 
-// The names of each sort (ADR 0039 item 2a, ADR 0085 item 4). A reversed list
+// The names of each sort (ADR 0206 item 3, ADR 0085 item 4). A reversed list
 // names its reversed order (musicindex ADR 0043 R-LIST-7 item 5).
 const SORT_LABELS = { order: 'Page Order', newest: 'Newest', az: 'A to Z' };
 const REVERSED_SORT_LABELS = { order: 'Page Order, Reversed', newest: 'Oldest', az: 'Z to A' };
@@ -730,12 +730,12 @@ export function segmentKey(index, count, key) {
 }
 
 // The entries of a sort menu: each sort, then its reversed direction, as
-// words (musicindex ADR 0054 R-LIST-13 item 2, ADR 0155).
+// words (musicindex ADR 0205 R-LIST-13 item 2, ADR 0155).
 export function sortEntries(sorts) {
   return sorts.flatMap((sort) => [false, true].map((reversed) => ({ sort, reversed, label: sortLabel(sort, reversed) })));
 }
 
-// The Releases list (ADR 0039 items 2 and 2a). `marked` is the ID of the feed
+// The Releases list (ADR 0206 items 2 and 3). `marked` is the ID of the feed
 // that the last Back selection left marked. With no `group` it gives each
 // album and playlist (ADR 0085 item 6). With the ID of a feed with roles as
 // `group`, it gives the releases of that feed, and `head` gives the feed. The
@@ -788,7 +788,7 @@ export function releasesList({ feeds, connectors, sort, view, reversed, marked, 
   };
   // A release of two feeds names the other feeds (ADR 0085 item 5). A feed
   // above or below the owner is in the tree already, so the note leaves it
-  // out (ADR 0088 item 8).
+  // out (ADR 0215 item 8).
   const related = owner ? relatedLevels(list, owner) : new Set();
   const noteOf = (feed) => {
     if (!owner) return null;
@@ -944,9 +944,9 @@ export function narrowStack(view) {
   switch (view.name) {
     case 'root': return [root];
     // A destination below Releases is a page of the root (ADR 0085 item 7).
-    // Each level above a level is a page below it (ADR 0088 item 7).
+    // Each level above a level is a page below it (ADR 0215 item 7).
     case 'releases': return view.group === undefined ? [root, releases] : [root, ...levelPages(view.trail), view];
-    // The People area (ADR 0099 items 1 and 5).
+    // The People area (ADR 0203 items 36 and 64).
     case 'person':
     case 'wallet':
     case 'change-set': return inHosts(view) ? [root, { name: 'hosts' }, view]
@@ -965,7 +965,7 @@ export function narrowStack(view) {
   }
 }
 
-// The level pages of a trail, from the top (ADR 0088 item 7).
+// The level pages of a trail, from the top (ADR 0215 item 7).
 function levelPages(trail) {
   const list = Array.isArray(trail) ? trail : [];
   return list.map((group, i) => ({ name: 'releases', group, trail: list.slice(0, i) }));

@@ -203,7 +203,7 @@ export function parentCard(feeds, publisherId) {
   };
 }
 
-// The start value of "Feed file" (ADR 0073 item 8). It is an edit aid, not a
+// The start value of "Feed file" (ADR 0212 item 10). It is an edit aid, not a
 // feed rule (ADR 0065): the core checks the path. The title goes to lower case
 // with no accents. Each run of other characters becomes one hyphen, with no
 // hyphen at the two ends. An empty result gives an empty path.

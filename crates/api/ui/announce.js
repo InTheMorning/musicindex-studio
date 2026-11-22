@@ -1,4 +1,4 @@
-// The announcement models (ADR 0052 items 5, 6, 11 and 20, ADR 0042). This
+// The announcement models (ADR 0205 items 19, 20, 25 and 34, ADR 0042). This
 // module has no Preact and no browser state. The Node tests in
 // `ui-tests/announce.test.mjs` examine it.
 

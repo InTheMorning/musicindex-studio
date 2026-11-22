@@ -1,4 +1,4 @@
-//! Show grants (ADR 0054 items 11 to 17).
+//! Show grants (ADR 0205 items 46 to 52).
 //!
 //! A show grant lets each connected app change the status and the
 //! `podcast:liveValue` of one live item of one feed. The approved write of a
@@ -14,11 +14,11 @@ use crate::feed::{Feed, LiveItem};
 use crate::live::LiveStatus;
 
 /// The time in seconds that a grant stays active after the `end` of its
-/// live item (ADR 0054 item 14). A live item with no `end` uses its
+/// live item (ADR 0205 item 49). A live item with no `end` uses its
 /// `start`.
 pub const GRANT_MARGIN: i64 = 24 * 60 * 60;
 
-/// A change that a show grant covers (ADR 0054 item 13).
+/// A change that a show grant covers (ADR 0205 item 48).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GrantChange {
     /// The status changes from `pending` to `live`.
@@ -74,7 +74,7 @@ pub struct ShowGrant {
 /// The cause that a refused granted write records (ADR 0110 item 43).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Refusal {
-    /// The feed has a draft with changes (ADR 0054 item 16).
+    /// The feed has a draft with changes (ADR 0205 item 51).
     DraftWithChanges,
     /// The grant ended, or it is not active.
     GrantEnded,
@@ -103,7 +103,7 @@ impl Refusal {
     }
 }
 
-/// One granted write (ADR 0054 item 17) or one refused granted write (ADR
+/// One granted write (ADR 0205 item 52) or one refused granted write (ADR
 /// 0110 item 43).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct GrantWrite {
@@ -241,7 +241,7 @@ pub fn end(collection: &Collection, id: i64, now: i64) -> Result<(), CollectionE
     Ok(())
 }
 
-/// Record a granted write (ADR 0054 item 17).
+/// Record a granted write (ADR 0205 item 52).
 ///
 /// # Errors
 ///
@@ -315,7 +315,7 @@ pub fn live_item<'a>(feed: &'a Feed, item_guid: &str) -> Option<&'a LiveItem> {
 }
 
 /// True when `feed` has a live item with this `guid` and the status
-/// `pending`. Only such an item can get a grant in the draft (ADR 0054
+/// `pending`. Only such an item can get a grant in the draft (ADR 0205
 /// item 11).
 #[must_use]
 pub fn is_pending_live_item(feed: &Feed, item_guid: &str) -> bool {
@@ -325,7 +325,7 @@ pub fn is_pending_live_item(feed: &Feed, item_guid: &str) -> bool {
 }
 
 /// The grant of a live item when it is active at `now`, in seconds since
-/// the Unix epoch (ADR 0054 item 14). `hosted` is the feed that the host
+/// the Unix epoch (ADR 0205 item 49). `hosted` is the feed that the host
 /// gives now.
 ///
 /// A grant is active when all of these conditions are true:
@@ -383,7 +383,7 @@ pub fn grant_limit(live: &LiveItem) -> Option<i64> {
 
 /// True when the only differences between `before` and `after` are the
 /// status and the `podcast:liveValue` of the live item with this `guid`
-/// (ADR 0054 item 13). A status change must also be `pending` to `live`
+/// (ADR 0205 item 48). A status change must also be `pending` to `live`
 /// or `live` to `ended`.
 ///
 /// The function compares the two typed models. In copies of the two

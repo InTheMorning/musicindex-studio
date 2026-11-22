@@ -1,4 +1,4 @@
-// The Welcome page of a new user and its first steps (ADR 0119, task 083).
+// The Welcome page of a new user and its first steps (ADR 0221, task 083).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
@@ -139,7 +139,7 @@ test('nextStep gives null for an artist with a release, and for a feed that is n
   assert.equal(nextStep(null), null);
 });
 
-test('the texts of ADR 0119 items 2, 5, 6 and 8 are as decided', () => {
+test('the texts of ADR 0221 items 2, 5, 6 and 8 are as decided', () => {
   assert.equal(WELCOME.intro, 'Studio publishes your music so that every music app can play it. What do you want to start with?');
   assert.equal(WELCOME.rows.music.title, 'I make music');
   assert.equal(WELCOME.rows.music.line, 'Start with your artist page. Your albums go on it.');
@@ -164,7 +164,7 @@ test('the texts of the Welcome page, the host rows and the steps do not use the 
   }
 });
 
-test('a first-step row gives the start values of its form (ADR 0119 item 8)', () => {
+test('a first-step row gives the start values of its form (ADR 0221 item 8)', () => {
   assert.deepEqual(firstStart('album', 'album', { title: 'HeyCitizen' }, 8), { author: 'HeyCitizen', publisher_id: 8 },
     'ADR 0213 item 7: the artist first step must pass its publisher ID. Fix firstStart in crates/api/ui/welcome.js.');
   assert.deepEqual(firstStart('label', 'publisher', { title: 'Night Signals Records' }), { role: 'artist' });

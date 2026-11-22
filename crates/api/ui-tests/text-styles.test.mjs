@@ -1,4 +1,4 @@
-// The text styles (musicindex ADR 0068 R-SCALE-4 and R-TYPE-1). Each
+// The text styles (musicindex ADR 0206 R-SCALE-4 and R-TYPE-1). Each
 // text size is a text token. A token has the macOS size of
 // tokens.json by default and the touch size with a coarse pointer. On
 // 2026-11-01 styles.css had 58 free sizes and no iOS sizes with Touch.
@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 
 const css = readFileSync(new URL('../ui/styles.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
 const tokens = JSON.parse(readFileSync(new URL('../ui/assets/tokens.json', import.meta.url), 'utf8'));
-const owner = 'musicindex ADR 0068 R-SCALE-4';
+const owner = 'musicindex ADR 0206 R-SCALE-4';
 const coarse = css.slice(css.search(/@media\s*\(pointer:\s*coarse\)/));
 
 // Each value of a custom property in a CSS text.

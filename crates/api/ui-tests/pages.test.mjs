@@ -19,7 +19,7 @@ test('ChannelFields in editor.js has no field Language', () => {
   assert.ok(start > 0 && end > start);
   assert.ok(
     !text.slice(start, end).includes('Language'),
-    'ADR 0068 item 4: the field Language belongs to the page Feed settings. Remove it from ChannelFields in crates/api/ui/editor.js.',
+    'ADR 0206 item 33: the field Language belongs to the page Feed settings. Remove it from ChannelFields in crates/api/ui/editor.js.',
   );
 });
 

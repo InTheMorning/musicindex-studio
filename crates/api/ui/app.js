@@ -93,7 +93,7 @@ class ApiError extends Error {
   }
 }
 
-// ---- The mode of the server (ADR 0055 items 12 and 14 to 17) ----
+// ---- The mode of the server (ADR 0204 items 34, 36 and 39) ----
 // `GET /auth/v1/session` tells the UI which shell serves it. On a server,
 // `api()` sends the CSRF token of the session in `X-Studio-CSRF` and sends no
 // `Authorization` header. The CSRF token stays in memory only.
@@ -384,14 +384,14 @@ export function ImageThumb({ url, glow = 'var(--c-feed)', className, always = fa
   return html`<button type="button" class="cover-button" aria-label=${label} title="Change the artwork" onClick=${onOpen}>${box}</button>`;
 }
 
-// Art with its type dot on the bottom right corner (musicindex ADR 0038
+// Art with its type dot on the bottom right corner (musicindex ADR 0204
 // R-DOT-3 and R-DOT-4). The art is the child.
 function ArtWithDot({ dot, children }) {
   return html`<span class="art-dot">${children}<span class=${`dot ${dot}`} aria-hidden="true"></span></span>`;
 }
 
 // The art of a publisher feed in the left panel (musicindex ADR 0021 R-ART-3
-// item 2, musicindex ADR 0038 R-DOT-3). One image shows as it is. More
+// item 2, musicindex ADR 0204 R-DOT-3). One image shows as it is. More
 // images show as a mosaic in the logo shape. No image shows the logo shape
 // in `glow`. `dot` puts the type dot on the bottom right corner.
 function FeedArt({ art, glow, dot, className = 'panel-art' }) {
@@ -499,7 +499,7 @@ function title(error) {
     case 'not_found': return 'Studio did not find the file.';
     case 'invalid_feed': return 'That file is not a feed that Studio can read.';
     case 'offline': return 'No connection to Studio.';
-    // The title of the crate for a field error (musicindex ADR 0052 R-QUERY-8).
+    // The title of the crate for a field error (musicindex ADR 0205 R-QUERY-8).
     case 'query_field': return 'This search cannot run.';
     case 'index_answer': return 'Music Index gave a bad answer.';
     case 'stream_not_live': return 'Go Live refused.';
@@ -1415,8 +1415,8 @@ export function RoleMenu({ id, label = 'Role', role, group, hint, status, pendin
 }
 
 // The first choice is the type of the host. The form below it follows the
-// type (ADR 0045 item 4). A server has no folder host (ADR 0055).
-// `start` is the type that the form opens with (ADR 0119 item 6). `showType`
+// type (ADR 0045 item 4). A server has no folder host (ADR 0204).
+// `start` is the type that the form opens with (ADR 0221 item 6). `showType`
 // hides the choice when the sheet shows the rows of step 2 (ADR 0122 item 2).
 // `startRoot` and `submitLabel` go to the folder form (ADR 0122 item 3).
 function AddHostForm({ feeds, connectors = [], onAdded, start, showType = true, startRoot = '', submitLabel = null, busyLabel = null }) {
@@ -1606,9 +1606,9 @@ function AddFindSheet({ open, type, role, parent, connectors, onPick, onAdded, o
 }
 
 // One form makes each new page or release, as a draft with no file on the host
-// yet (ADR 0073 items 5 to 9, ADR 0032 items 6 to 9, ADR 0041 item 2, ADR 0053
+// yet (ADR 0212 items 6, 7, 9, 10 and 12, ADR 0032 items 6 to 9, ADR 0205 item 2, ADR 0053
 // item 2). "Feed file" starts from the title until the user types in it.
-// `start` gives `title`, `author`, `role` and `publisher_id` (ADR 0119 item 8, ADR 0213 item 7,
+// `start` gives `title`, `author`, `role` and `publisher_id` (ADR 0221 item 8, ADR 0213 item 7,
 // ADR 0218 item 6). A release shows the parent card first, and the row "Find on
 // Music Index" fills the form from a release (ADR 0230 items 9 to 15).
 // `onKind` gets the type, the role and the name of the parent, for the title of the sheet.
@@ -2105,18 +2105,18 @@ function useNarrow() {
   return useMedia('(max-width: 760px)');
 }
 
-// The back and forward state of the shell, for each Bar (ADR 0039 item 9).
+// The back and forward state of the shell, for each Bar (ADR 0206 item 10).
 export const NavContext = createContext(null);
 
 // The toolbar of a screen. Each screen gives its own content, such as a
 // title or a breadcrumb, after the back control. The root page has no back
-// control (ADR 0039 item 11), so `back` is false there. The kind of pointer
+// control (ADR 0206 item 13), so `back` is false there. The kind of pointer
 // sets the back control: `‹ ›` with a mouse, and one circular `‹` named
 // "Back" by touch (musicindex ADR 0080 R-NAV-2 and R-NAV-3,
 // R-PROFILE-1).
 // A chevron icon of the back control and of the forward control, with the
 // path of the Lucide icons "chevron-left" and "chevron-right" (musicindex
-// ADR 0022). Its size is the line height of its text (musicindex ADR 0068 R-ICON-1).
+// ADR 0022). Its size is the line height of its text (musicindex ADR 0206 R-ICON-1).
 function Chevron({ direction }) {
   return html`<svg class="chevron" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor"
     stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -2761,7 +2761,7 @@ function NostrPanel({ draft, draftState, changed, causes }) {
   </div></section>`;
 }
 
-// The connected apps (ADR 0054 items 7 to 10, ADR 0110 items 5 to 11). The
+// The connected apps (ADR 0205 items 42 to 45, ADR 0110 items 5 to 11). The
 // user gives a name. Studio then shows the pairing text one time, and the
 // app pairs with its own key. The pairing text stays in the state of this
 // panel only. It goes out of the state when the app pairs, when the user
@@ -3306,9 +3306,9 @@ function AddFeedSheet({ open, title, connectors, feeds, found, setFound, start, 
   </dialog>`;
 }
 
-// ---- Wallets and change sets (ADR 0091, ADR 0099) ----
+// ---- Wallets and change sets (ADR 0207, ADR 0203) ----
 
-// A checkbox row of a feed, with its title and its places (ADR 0091 item 3).
+// A checkbox row of a feed, with its title and its places (ADR 0207 item 10).
 export function FeedCheckRow({ title, text, lines, checked, onChange }) {
   const shown = lines || (text ? [text] : []);
   return html`<label class="link-row use-row"><input type="checkbox" checked=${checked} onChange=${onChange} />
@@ -3316,7 +3316,7 @@ export function FeedCheckRow({ title, text, lines, checked, onChange }) {
 }
 
 // Write one feed of a change set: the diff, the signer, then the write
-// (ADR 0091 item 23, task 054c item 8). A plan that expired gets one new try.
+// (ADR 0207 item 30, task 054c item 8). A plan that expired gets one new try.
 async function writeChangeSetFeed(feedId) {
   for (let attempt = 0; ; attempt++) {
     const diff = await api(`/feeds/${feedId}/diff`);
@@ -3338,7 +3338,7 @@ function writeFailText(e) {
   return signErrorText(e.code) || e.message || 'Studio did not write this feed.';
 }
 
-// The review of a change set and its write (ADR 0091 items 21 to 24).
+// The review of a change set and its write (ADR 0207 items 28 to 31).
 // The event after an unlock. A page that keeps a state from a locked vault
 // reads it again.
 const UNLOCKED = 'studio-unlocked';
@@ -3483,12 +3483,12 @@ function ChangeSetPage({ id, go, onChanged, feeds }) {
   </section></div>`;
 }
 
-// The left panel (ADR 0039 items 1, 5 and 6). It shows the destinations, or
+// The left panel (ADR 0206 items 1, 6 and 7). It shows the destinations, or
 // the outline of the open feed, and Hosts, Settings and Lock Studio at the
 // bottom. `panel` is the value of `leftPanel()`. Only the scroll area scrolls,
 // so that the brand and the footer stay in view (visual check of task 022).
 // At 760 px or less the left panel is not shown: its content is the root
-// page and the outline page of the stack (ADR 0039 item 11, musicindex ADR
+// page and the outline page of the stack (ADR 0206 item 13, musicindex ADR
 // 0030 R-SHELL-2).
 function LeftPanel({ panel, draft, changedFeeds, go, showReleases, onAdding, onImporting, onAddFeedRow, onMove, onLock, collections }) {
   if (panel.kind === 'level') {
@@ -3569,7 +3569,7 @@ function LevelRow({ item, set, label, count, attrs, onOpen, onMove }) {
     onSelect=${() => onMove(item.id)} /></div>` : row;
 }
 
-// One level of the hierarchy (ADR 0088 item 5): "‹" to the level above when
+// One level of the hierarchy (ADR 0215 item 5): "‹" to the level above when
 // `back` is true, the head of the feed, the feeds directly below it under
 // their role headings, then its releases. The head opens the feed page, and
 // a release opens its outline at narrow width.
@@ -3631,7 +3631,7 @@ function Level({ panel, go, back, onAddFeedRow = () => {}, onMove = () => {} }) 
     </div>`}</div>`;
 }
 
-// A level as a page of a narrow window (ADR 0088 item 7). Back opens the
+// A level as a page of a narrow window (ADR 0215 item 7). Back opens the
 // page below it in the stack.
 function LevelPage({ panel, go, onAddFeedRow, onMove }) {
   return html`<div class="panel-page">
@@ -3640,7 +3640,7 @@ function LevelPage({ panel, go, onAddFeedRow, onMove }) {
   </div>`;
 }
 
-// The outline of an open feed (ADR 0039 item 6): the cover, the title and the
+// The outline of an open feed (ADR 0206 item 7): the cover, the title and the
 // type label, then one row for each item. The left panel shows it at a wide
 // width, and the outline page shows it at a narrow width. `showReleases` is
 // given at a wide width only, where the item "Releases" is in the panel.
@@ -3670,7 +3670,7 @@ function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImp
   });
   let childIndex = feedIndex + 1;
   const hasBadAddress = (number) => draft.bad.some((b) => b.field.startsWith(`items/${number - 1}/`));
-  // A feed opened from a level goes back to that level (ADR 0088 item 6).
+  // A feed opened from a level goes back to that level (ADR 0215 item 6).
   const up = () => (releases.target ? go(releases.target) : showReleases(feed.id));
   return html`<div role="tree" aria-label=${feed.label} onKeyDown=${(event) => onTreeKey(event, currentIndex, setCurrent)}>
     ${releases && html`<button class="row" type="button" ...${rowAttrs(0, null)} onClick=${up}><${Chevron} direction="back" />${releases.label}</button>`}
@@ -3805,7 +3805,7 @@ function RootPage({ panel, go, onLock, collections }) {
   </div>`;
 }
 
-// The outline page of a narrow window (ADR 0039 item 11a). Its bar has the
+// The outline page of a narrow window (ADR 0206 item 14). Its bar has the
 // back control, the title of the feed and the draft toolbar of the feed.
 function OutlinePage({ feed, panel, draft, changedFeeds, feeds, go, onAdding, onImporting, onAddFeedRow, onMove, onChanged, onListChanged, connectors }) {
   // A host operation can change the draft XML. After it, the shell saves the
@@ -3827,7 +3827,7 @@ function OutlinePage({ feed, panel, draft, changedFeeds, feeds, go, onAdding, on
 
 // The sort menu of a list (musicindex ADR 0080 R-LIST-1, ADR 0043 R-LIST-6).
 // Each sort has two entries: its usual direction, then its reversed direction
-// (musicindex ADR 0054 R-LIST-13, ADR 0155). `onSort` gets the sort and direction.
+// (musicindex ADR 0205 R-LIST-13, ADR 0155). `onSort` gets the sort and direction.
 export function SortMenu({ sorts, sort, reversed, onSort }) {
   const items = sortEntries(sorts).map((entry) => ({
     ...entry,
@@ -3851,7 +3851,7 @@ export function LetterBar({ letters, idOf }) {
   </nav>`;
 }
 
-// The Releases page, the start page (ADR 0039 items 2, 2a and 3, musicindex
+// The Releases page, the start page (ADR 0206 items 2 to 4, musicindex
 // ADR 0080 R-LIST-1). `list` is the sort and the view from the address.
 // `marked` is the feed that the last Back selection left marked. With a
 // `group`, the page shows the releases of one destination below Releases,
@@ -3894,7 +3894,7 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
   const viewButton = (name, label, icon) => html`<button class="button quiet icon-button view-button" type="button"
     aria-label=${label} title=${label} aria-pressed=${list.view === name ? 'true' : 'false'}
     onClick=${() => onQuery({ view: name })}>${icon}</button>`;
-  // A collection with no feed starts at the Welcome page (ADR 0119 item 1).
+  // A collection with no feed starts at the Welcome page (ADR 0221 item 1).
   if (!inGroup && showWelcome(feeds)) return html`<${WelcomePage} connectors=${connectors} feeds=${feeds} onAdded=${onAddedFeed} />`;
   return html`<div>
     <${Bar}><span class="bar-title">${title}</span><${DeleteUndoBar} /><//>
@@ -3980,12 +3980,12 @@ function LevelFeedTile({ tile, view, outside, onOpen }) {
   </button></li></ul>`;
 }
 
-// The Welcome page of a collection with no feed (ADR 0119 items 1 to 3). Each
+// The Welcome page of a collection with no feed (ADR 0221 items 1 to 3). Each
 // row opens a sheet. The page writes nothing.
 function WelcomePage({ connectors, feeds, onAdded }) {
   const [sheet, setSheet] = useState(null);
   const [importing, setImporting] = useState(false);
-  // The import is offered where the shell permits it (ADR 0119 item 3).
+  // The import is offered where the shell permits it (ADR 0221 item 3).
   const canImport = !assetMode().server;
   return html`<div>
     <${Bar}><span class="bar-title">Welcome</span><//>
@@ -4024,7 +4024,7 @@ function WelcomeRow({ row, primary = false, selected = null, onClick }) {
   </button>`;
 }
 
-// The sheet of a musician, a label or a host (ADR 0240 item 3, ADR 0119 items 4 to 7, ADR 0122 item 2).
+// The sheet of a musician, a label or a host (ADR 0240 item 3, ADR 0221 items 4 to 7, ADR 0122 item 2).
 // Step 1 asks the name. Step 2 always shows. It has the select menu of the
 // connected file hosts, when one exists, and the rows of the file host types.
 // Then the draft of the publisher feed is made. Studio writes nothing (ADR 0007).
@@ -4120,7 +4120,7 @@ export function AddFeedRowSheet({ open, connectors, feeds, start, onAdded, onCon
     onClose=${() => { setFound(null); onClose(); }} />`;
 }
 
-// The navigation state of the session (ADR 0039 item 8). A reload keeps it
+// The navigation state of the session (ADR 0206 item 9). A reload keeps it
 // in session storage. If the read fails, or the state is not valid, Studio
 // starts again at Releases.
 const NAV_KEY = 'studio-nav';
@@ -4200,7 +4200,7 @@ function Shell({ vault, onLock, version }) {
   const goNow = (target, { replace = false } = {}) => {
     const base = withScroll();
     // A page of the same feed keeps the level that the feed came from
-    // (ADR 0088 item 6).
+    // (ADR 0215 item 6).
     const current = base.entries[base.index];
     const next = isFeedView(target) && current && isFeedView(current) && current.id === target.id
       && current.from && !target.from ? { ...target, from: current.from } : target;
@@ -4313,7 +4313,7 @@ function Shell({ vault, onLock, version }) {
     addEventListener('popstate', onPop);
     return () => removeEventListener('popstate', onPop);
   }, []);
-  // A change of width makes the state of the new width (ADR 0039 item 11a).
+  // A change of width makes the state of the new width (ADR 0206 item 14).
   // The current view stays. A state that already fits the width is kept.
   useEffect(() => {
     const current = navRef.current;
@@ -4384,7 +4384,7 @@ function Shell({ vault, onLock, version }) {
     };
   }, [load]);
 
-  // The differences between the library folder and the records (ADR 0038
+  // The differences between the library folder and the records (ADR 0204
   // items 13 to 15). One scan runs after the feeds load. The Files page
   // runs it again on request and after each action.
   const [differences, setDifferences] = useState([]);
@@ -4511,7 +4511,7 @@ function Shell({ vault, onLock, version }) {
     main = html`<${LevelPage} panel=${panel} go=${go} onAddFeedRow=${openAddFeedRow}
       onMove=${setMoveId} />`;
   } else {
-    // A release of a level goes back to that level (ADR 0088 item 6).
+    // A release of a level goes back to that level (ADR 0215 item 6).
     const from = view.name === 'releases' && typeof view.group === 'number'
       ? { group: view.group, trail: view.trail || [] } : undefined;
     main = html`<${ReleasesPage} feeds=${feeds} connectors=${connectors} marked=${view.marked} list=${list}
@@ -4567,7 +4567,7 @@ function Shell({ vault, onLock, version }) {
   </div><//><//>`;
 }
 
-// ---- Sign-in and sign-up on a server (ADR 0055, ADR 0056) ----
+// ---- Sign-in and sign-up on a server (ADR 0204, ADR 0056) ----
 
 // The text of a failed auth request. Studio shows its own text for each
 // code of the auth routes.
@@ -5139,7 +5139,7 @@ function PasskeyList() {
   </form>`;
 }
 
-// The Account panel of the Settings page, on a server only (ADR 0055 item 9).
+// The Account panel of the Settings page, on a server only (ADR 0204 item 31).
 function AccountPanel() {
   const { session, reload } = useContext(SessionContext);
   const [deleting, setDeleting] = useState(false);
@@ -6003,7 +6003,7 @@ function Studio({ epoch }) {
   if (library.root === null) {
     return html`<${LibrarySheet} defaultRoot=${library.default_root} onDone=${load} />`;
   }
-  // A new user with no feed sees the Welcome page in the Shell (ADR 0119
+  // A new user with no feed sees the Welcome page in the Shell (ADR 0221
   // item 11). The vault comes when the user first adds a secret (ADR 0020).
   return html`<${Shell} vault=${status.vault} onLock=${load} version=${status.version_line} />`;
 }

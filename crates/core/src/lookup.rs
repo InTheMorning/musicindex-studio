@@ -404,7 +404,7 @@ fn wallet_lookup(result: &LookupResult) -> WalletLookup {
 
 /// The key that a save links for a route. A Lightning address is linked as
 /// the address, as the wallet sheet links it. The keysend lookup that the
-/// save stores joins it to its node (ADR 0095).
+/// save stores joins it to its node (ADR 0207).
 pub(crate) fn save_key_of(recipient: &Recipient) -> Option<RecipientKey> {
     let address = recipient.address.as_deref()?.trim();
     if address.is_empty() {

@@ -1,5 +1,5 @@
 //! The two layers of the server: the outer layer for each request, and the
-//! `/api/` layer for the session (ADR 0055 items 10 to 13, 19 and 20).
+//! `/api/` layer for the session (ADR 0204 items 32, 35, 41 and 42).
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -19,7 +19,7 @@ use crate::limits::{self, Attempts};
 use crate::nip46_sessions::Nip46Sessions;
 use crate::users::Users;
 
-/// The name of the session cookie (ADR 0055 item 11).
+/// The name of the session cookie (ADR 0204 item 33).
 pub const COOKIE_NAME: &str = "__Host-studio-session";
 
 /// The server writes `last_seen` at most one time each period.
@@ -46,11 +46,11 @@ pub struct ServerState {
     pub session_idle: i64,
     /// A session ends after this many seconds in total.
     pub session_max: i64,
-    /// The permits of the Argon2id derivations (ADR 0055 item 22).
+    /// The permits of the Argon2id derivations (ADR 0204 item 44).
     pub argon2: Arc<Semaphore>,
     /// How long a request waits for a permit.
     pub argon2_wait: Duration,
-    /// The failed sign-ins (ADR 0055 item 23).
+    /// The failed sign-ins (ADR 0204 item 45).
     pub attempts: Attempts,
     /// The header that gives the client address, when the operator names one.
     pub client_header: Option<String>,
@@ -93,7 +93,7 @@ pub fn cleared_cookie() -> String {
     format!("{COOKIE_NAME}=; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=0")
 }
 
-/// The CSRF token of a session token (ADR 0055 item 12).
+/// The CSRF token of a session token (ADR 0204 item 34).
 #[must_use]
 pub fn csrf_of(token: &str) -> String {
     accounts::sha256_hex(&format!("studio-csrf:{token}"))
@@ -154,7 +154,7 @@ fn host_of(request: &Request) -> Option<String> {
         })
 }
 
-/// The outer layer: the `Host` check and the `Origin` check (ADR 0055
+/// The outer layer: the `Host` check and the `Origin` check (ADR 0204
 /// item 19).
 pub async fn outer(State(state): State<Shared>, request: Request, next: Next) -> Response {
     if host_of(&request).as_deref() != Some(state.origin.authority.as_str()) {
@@ -347,7 +347,7 @@ pub enum Resolved {
 
 /// Find the session of a request, and count the request. A session that
 /// is over goes out, and when it was the last session of the user, the
-/// vault locks (ADR 0055 item 16).
+/// vault locks (ADR 0204 item 38).
 ///
 /// # Errors
 ///
@@ -450,7 +450,7 @@ pub async fn active_session(state: &ServerState, headers: &HeaderMap) -> Result<
     }
 }
 
-/// Check the `X-Studio-CSRF` header against the session (ADR 0055 item 12).
+/// Check the `X-Studio-CSRF` header against the session (ADR 0204 item 34).
 ///
 /// # Errors
 ///
@@ -522,7 +522,7 @@ pub async fn media(State(state): State<Shared>, request: Request) -> Response {
 }
 
 /// The `/api/` layer: find the session, check the CSRF header, and send
-/// the request to the router of the user (ADR 0055 item 5).
+/// the request to the router of the user (ADR 0204 item 27).
 pub async fn api(State(state): State<Shared>, request: Request) -> Response {
     let session = match active_session(&state, request.headers()).await {
         Ok(session) => session,
@@ -539,7 +539,7 @@ pub async fn api(State(state): State<Shared>, request: Request) -> Response {
         Err(response) => return response,
     };
     // An unlock with a passphrase derives a key with Argon2id. The permit
-    // stays until the router has answered (ADR 0055 item 22).
+    // stays until the router has answered (ADR 0204 item 44).
     let _permit = if needs_derivation(&request) {
         match limits::derivation_permit(&state).await {
             Ok(permit) => Some(permit),
@@ -620,7 +620,7 @@ mod debug_tests {
         let text = format!("{session:?}");
         assert!(
             !text.contains("secret-token-value"),
-            "ADR 0055 item 9: the Debug output of Session must not show the token. Write a manual Debug that hides it."
+            "ADR 0204 item 31: the Debug output of Session must not show the token. Write a manual Debug that hides it."
         );
     }
 }

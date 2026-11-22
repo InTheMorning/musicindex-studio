@@ -1,4 +1,4 @@
-// The live item models (ADR 0054, ADR 0042).
+// The live item models (ADR 0205, ADR 0042).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {

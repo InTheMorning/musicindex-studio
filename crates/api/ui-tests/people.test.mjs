@@ -1,4 +1,4 @@
-// The model of the People area (ADR 0099, task 065a).
+// The model of the People area (ADR 0203, task 065a).
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
@@ -69,10 +69,10 @@ const SUGGESTION = {
   ],
 };
 
-test('the People page gives the sections of ADR 0099 item 2 in sequence', () => {
+test('the People page gives the sections of ADR 0203 item 37 in sequence', () => {
   const all = { people: [{}], suggestions: [{}], changes: [{}], payees: [{}] };
   assert.deepEqual(peopleSections(all), ['search', 'actions', 'changes', 'people', 'suggestions', 'payees'],
-    'ADR 0099 item 2: with a person, the suggestions come after the people. Fix peopleSections in crates/api/ui/people.js.');
+    'ADR 0203 item 37: with a person, the suggestions come after the people. Fix peopleSections in crates/api/ui/people.js.');
 });
 
 test('with no person, the suggestions come before the people', () => {
@@ -96,7 +96,7 @@ test('ADR 0108 item 3: the People page of a server starts with the line about th
 test('the page person has no feed list with check boxes', () => {
   const sections = pageSequence('person');
   assert.ok(!sections.some((s) => /feeds/.test(s.id)),
-    'ADR 0099 item 6: the page of a person has no feed list with check boxes. Remove the section from crates/api/ui/pages.js.');
+    'ADR 0203 item 49: the page of a person has no feed list with check boxes. Remove the section from crates/api/ui/pages.js.');
 });
 
 test('the row of a suggestion gives the counts and the evidence', () => {
@@ -157,7 +157,7 @@ test('the row of a person with two wallets and no role gives the wallet count', 
 test('Make a Person starts an item with a different name not selected', () => {
   const start = makePersonStart(SUGGESTION);
   assert.deepEqual(start.credits.map((r) => r.checked), [true, false],
-    'ADR 0099 item 3: an item with a different name starts not selected. Fix makePersonStart in crates/api/ui/people.js.');
+    'ADR 0203 item 38: an item with a different name starts not selected. Fix makePersonStart in crates/api/ui/people.js.');
   assert.deepEqual(start.recipients.map((r) => r.checked), [true, false]);
   assert.deepEqual(start.keys, [{ item: 'npub1a', checked: true }]);
   assert.equal(start.name, 'Mary Kate Ultra');
@@ -189,7 +189,7 @@ const PLACES = [
 test('the feeds of a sheet start selected, with their lines', () => {
   const rows = sheetFeeds(PLACES, { 1: 'Neon Diner', 2: 'Midnight Arcade', 3: 'Basement Tapes' });
   assert.deepEqual(rows.map((r) => r.checked), [true, true, true],
-    'ADR 0099 item 7: each check box starts selected. Fix sheetFeeds in crates/api/ui/people.js.');
+    'ADR 0203 item 74: each check box starts selected. Fix sheetFeeds in crates/api/ui/people.js.');
   assert.deepEqual(rows[0], { id: 1, title: 'Neon Diner', lines: ['Pays LNURL address mk@x.example', 'Credited as Vocals'], checked: true });
   assert.deepEqual(rows[1].lines, ['Credited']);
   assert.match(rows[2].lines[0], /^Pays Node address /);
@@ -421,7 +421,7 @@ test('a change row gives the operation, the subject and the feeds to write', () 
   assert.equal(changeTitle({ kind: 'add_to_releases' }), 'Add to All Releases');
 });
 
-test('Discard opens the person of a person change set, else People (ADR 0099 item 12)', () => {
+test('Discard opens the person of a person change set, else People (ADR 0203 item 79)', () => {
   assert.deepEqual(afterDiscard({ person_id: 7 }), { name: 'person', id: 7 });
   assert.deepEqual(afterDiscard({ person_id: null }), { name: 'people' });
 });
@@ -482,7 +482,7 @@ test('a key makes a menu value and back', () => {
   assert.deepEqual(keyFromValue(keyValue(KEY('a@x'))), KEY('a@x'));
 });
 
-test('the lines of an address follow ADR 0099 item 15', () => {
+test('the lines of an address follow ADR 0203 item 83', () => {
   assert.deepEqual(memberLine({ address: 'a@x.example', recipient_type: 'lnaddress' }),
     { label: 'LNURL address', address: 'a@x.example', account: null });
   assert.equal(memberText({ address: '02ab', recipient_type: 'node', provider: 'fountain.fm', custom_value: 'acct1' }), 'fountain.fm node · account acct1');
@@ -506,7 +506,7 @@ test('the evidence of a key and the row Check your feeds have their texts', () =
   assert.equal(keyEvidenceText('user'), '', 'ADR 0228 item 17: a key that the user added has no source text. Fix keyEvidenceText in people.js.');
   assert.equal(keyEvidenceText('nostr'), 'Found in a Nostr profile');
   const lines = (n) => checkRow({ ...MK, needs_correction: n }).lines;
-  // ADR 0156 item 6: the row gives only the state of the check.
+  // ADR 0203 item 63: the row gives only the state of the check.
   assert.deepEqual(lines(0), [{ text: 'Each feed is correct', error: false }]);
   assert.deepEqual(lines(1)[0], { text: '1 feed needs a correction', error: true });
   assert.deepEqual(lines(2)[0], { text: '2 feeds need a correction', error: true });
@@ -574,7 +574,7 @@ test('the leave sheet names each pending control (ADR 0116 item 8)', () => {
   assert.equal(leaveText('Mary Kate', ['name']), 'Mary Kate has 1 change that is not saved: the name.');
 });
 
-test('the lines of each finding and the group of each state (ADR 0111 items 9 to 11)', () => {
+test('the lines of each finding and the group of each state (ADR 0203 items 64 to 66)', () => {
   const profiles = new Map([['npub1abcdefghijklmnop', { npub: 'npub1abcdefghijklmnop', name: 'City Radio' }]]);
   assert.deepEqual(findingLine({ kind: 'credit_key', role: 'Host', npub: '' }, 'Ann'), { text: 'No Nostr key in the credit', error: true });
   assert.deepEqual(findingLine({ kind: 'credit_key', role: 'Host', npub: 'npub1abcdefghijklmnop' }, 'Ann', profiles),
@@ -601,7 +601,7 @@ test('the lines of each finding and the group of each state (ADR 0111 items 9 to
   assert.deepEqual(checkFeedLines(check.feeds[2], ['Album'], 'Ann', profiles).map((l) => l.error), [false, true, true]);
 });
 
-test('the operation menu labels each feed with its first role (ADR 0111 item 3)', () => {
+test('the operation menu labels each feed with its first role (ADR 0203 item 46)', () => {
   assert.deepEqual(memberChoices([{ id: 2, medium: 'publisher', title: 'HeyCitizen', publisher_roles: ['artist', 'label'] }]), [['2', 'HeyCitizen · Artist']]);
 });
 
@@ -613,7 +613,7 @@ test('the feed rows give the type first, each selected', () => {
   assert.ok(rows[0].checked);
   assert.equal(feedsHeading(rows), 'Feeds · 1 of 1 selected');
   assert.deepEqual(levelRows([2, 9], feeds).map((r) => [r.title, r.checked]), [['Neon Diner', true], ['Feed 9', true]]);
-  // The artist or label feed of the level is not a release (ADR 0098 item 20).
+  // The artist or label feed of the level is not a release (ADR 0203 item 26).
   const level = [...feeds, { id: 4, title: 'The Ultras', medium: 'publisher' }];
   assert.deepEqual(levelRows([4, 2], level).map((r) => r.title), ['Neon Diner']);
 });
@@ -709,7 +709,7 @@ test('the review line of a change set of a person names the operation', () => {
 
 import { readFileSync, readdirSync } from 'node:fs';
 
-test('no text of the People area shows an XML attribute or the words "change set" (ADR 0099 items 13 and 17)', () => {
+test('no text of the People area shows an XML attribute or the words "change set" (ADR 0203 items 81 and 85)', () => {
   for (const name of ['people.js', 'peoplepages.js', 'recipients.js']) {
     const source = readFileSync(new URL(`../ui/${name}`, import.meta.url), 'utf8')
       .replace(/\/\*[\s\S]*?\*\//g, '')
@@ -717,13 +717,13 @@ test('no text of the People area shows an XML attribute or the words "change set
       .filter((line) => !line.trim().startsWith('//'))
       .join('\n');
     assert.ok(!/method=/.test(source),
-      `ADR 0099 item 17: ${name} shows an XML attribute such as method="lnaddress". Name the type with "LNURL Address" instead.`);
+      `ADR 0203 item 85: ${name} shows an XML attribute such as method="lnaddress". Name the type with "LNURL Address" instead.`);
     assert.ok(!/change sets?/i.test(source),
-      `ADR 0099 item 13: ${name} has a text with the words "change set". Say "changes" instead.`);
+      `ADR 0203 item 81: ${name} has a text with the words "change set". Say "changes" instead.`);
   }
 });
 
-test('the words of an address line and a change title follow ADR 0099 items 15 and 18', () => {
+test('the words of an address line and a change title follow ADR 0203 items 83 and 26', () => {
   assert.equal(memberText({ address: 'a@b.c', recipient_type: 'lnaddress' }), 'LNURL address a@b.c');
   assert.equal(memberText({ address: '03aa', recipient_type: 'node', provider: 'fountain.fm', custom_value: 'x1' }), 'fountain.fm node · account x1');
   assert.equal(memberText({ address: '03aa', recipient_type: 'node', custom_value: 'x1' }), 'Node address 03aa · account x1');
@@ -759,7 +759,7 @@ test('recipientFromPerson gives the name and the values of the default address, 
     'ADR 0182 item 15: a new recipient uses the official name. Fix recipientFromPerson in crates/api/ui/people.js.');
 });
 
-test('the type menu of the value editor uses the words of ADR 0099 item 14', async () => {
+test('the type menu of the value editor uses the words of ADR 0203 item 82', async () => {
   const { readFileSync } = await import('node:fs');
   const source = readFileSync(new URL('../ui/values.js', import.meta.url), 'utf8');
   assert.match(source, /const TYPES = WALLET_TYPES\.map/);
@@ -871,7 +871,7 @@ test('a key with no profile says so and has no warning', () => {
   assert.equal(NO_PROFILE, 'No Nostr profile found');
 });
 
-test('the warning of ADR 0103 item 18 shows for a different profile name only', () => {
+test('the warning of ADR 0203 item 58 shows for a different profile name only', () => {
   assert.equal(keyWarning(NPUB, profilesOf({ name: 'Someone Else' }), 'Mary Kate'),
     'The profile name is not "Mary Kate". Check this key.');
   assert.equal(keyWarning(NPUB, profilesOf({ name: 'Mary Kate Ultra Official' }), 'mary  kate ultra'), null);
@@ -910,7 +910,7 @@ test('a wallet gives each member, and the menu offers each one', () => {
   assert.deepEqual(addressOptions(groups).map(([, text]) => text), ['LNURL address a@getalby.com', 'Alby node']);
 });
 
-test('ADR 0102: the person page ends with the delete, the confirmation and the sheet title', () => {
+test('ADR 0203: the person page ends with the delete, the confirmation and the sheet title', () => {
   const sections = pageSequence('person');
   assert.deepEqual(sections[sections.length - 1], { id: 'delete', tier: 'limits', tab: 'settings' });
   const confirm = CONFIRMS.deletePerson('Mary Kate');
@@ -977,11 +977,11 @@ test('the rows of More from your feeds give the item, its feeds and its cause', 
   // With no profile, a credit with a key shows the short key.
   assert.equal(rows[0].title, 'npub1k');
   assert.ok(rows[0].lines.includes('Nostr key in the credit vocals'));
-  // With a profile, it shows the profile name and the warning of ADR 0103 item 18.
+  // With a profile, it shows the profile name and the warning of ADR 0203 item 58.
   const named = moreRows(items, null, new Map([['npub1k', { npub: 'npub1k', name: 'City Radio' }]]), 'Hey')[0];
   assert.equal(named.title, 'City Radio');
   assert.equal(named.warning, 'The profile name is not "Hey". Check this key.');
-  // ADR 0156 item 7: a credit in two releases has the title "2 releases".
+  // ADR 0203 item 54: a credit in two releases has the title "2 releases".
   assert.equal(moreRows([{ ...items[0], npub: '' }])[0].title, '2 releases');
   assert.ok(rows[0].lines.includes('One, Two'));
   assert.ok(rows[0].lines.includes(causeText('same_npub')));
@@ -1147,14 +1147,14 @@ test('the sheet Add a Wallet has its form first, then the payees with no person'
   assert.equal(walletBodyOf({ address: 'a', addresses: [{ address: '02ab', recipient_type: 'node' }, { address: 'a@x.example', recipient_type: 'lnaddress' }] }).address, 'a@x.example');
 });
 
-test('a feed row of Correct the Feeds lists only the findings that the selected changes correct (ADR 0111 item 14)', () => {
+test('a feed row of Correct the Feeds lists only the findings that the selected changes correct (ADR 0203 item 71)', () => {
   const entry = { feed_id: 1, state: 'needs_correction', findings: [
     { kind: 'credit_key', role: 'audio engineer', npub: '' },
     { kind: 'credit_role' },
     { kind: 'other_wallet', key: { address: 'a@b.example' } },
   ] };
   assert.deepEqual(correctFindingLines(entry, { key: true, role: false, other_payees: false }, 'Ann'), ['No Nostr key in the credit'],
-    'ADR 0111 item 14: a row lists the findings of the selected changes only. Check CORRECTED_BY in people.js.');
+    'ADR 0203 item 71: a row lists the findings of the selected changes only. Check CORRECTED_BY in people.js.');
   assert.equal(correctFindingLines(entry, { key: true, role: true, other_payees: true }, 'Ann').length, 3);
   assert.deepEqual(correctFindingLines(undefined, { key: true }, 'Ann'), []);
 });
@@ -1191,7 +1191,7 @@ test('ADR 0113: the source lines name each source and join with a dot', async ()
     'From the Nostr profile Hey Citizen · the link of the artist feed HeyCitizen');
 });
 
-test('the change of the payees of the name says what it replaces, and with which address (ADR 0111 item 15)', () => {
+test('the change of the payees of the name says what it replaces, and with which address (ADR 0203 item 71)', () => {
   const key = { address: 'heycitizen@getalby.com' };
   assert.equal(otherPayeesLine('HeyCitizen', key, 2),
     '2 payments to the name "HeyCitizen" go to an address that is not in this person. Studio replaces them with heycitizen@getalby.com. Select this only when that address is yours too.');
@@ -1202,12 +1202,12 @@ test('the change of the payees of the name says what it replaces, and with which
   assert.equal(otherWalletCount(null), 0);
 });
 
-test('the key of Correct the Feeds is never a key with the warning by default (ADR 0103 item 18)', () => {
+test('the key of Correct the Feeds is never a key with the warning by default (ADR 0203 item 58)', () => {
   const person = { ...CORRECT_PERSON, keys: [{ npub: 'npub1radio' }, { npub: 'npub1mine' }] };
   const profiles = new Map([['npub1radio', { name: 'City Radio' }], ['npub1mine', { name: 'Sir HeyCitizen' }]]);
   const start = correctStart(person);
   assert.equal(correctKeyStart(person, start, profiles).npub, 'npub1mine',
-    'ADR 0103 item 18: the sheet must start on a key with no warning. Check correctKeyStart.');
+    'ADR 0203 item 58: the sheet must start on a key with no warning. Check correctKeyStart.');
   const only = { ...CORRECT_PERSON, keys: [{ npub: 'npub1radio' }] };
   const fields = correctKeyStart(only, correctStart(only), profiles);
   assert.equal(fields.key, false, 'A person with only keys of other accounts must not write a key by default.');
@@ -1445,12 +1445,12 @@ test('feedWord and memberRowLine give the words of the members list', () => {
   assert.equal(memberRowLine({ usual_role: 'Vocals', in_credits: false }), 'Vocals · Only in Studio');
 });
 
-// ---- Task 084b: the entries of the check (ADR 0120) ----
+// ---- Task 084b: the entries of the check (ADR 0203) ----
 import {
   releaseWord, checkSummary, placeText, differenceBlocks, openLabel, useValuesLabel,
 } from '../ui/people.js';
 
-test('the word of a release and the summary of an entry (ADR 0120 items 1 and 4)', () => {
+test('the word of a release and the summary of an entry (ADR 0203 items 67 and 69)', () => {
   assert.equal(releaseWord({ medium: 'music' }), 'album');
   assert.equal(releaseWord({ medium: 'musicl' }), 'playlist');
   assert.equal(releaseWord({ medium: 'publisher', publisher_roles: ['artist'] }), 'artist page');
@@ -1467,7 +1467,7 @@ test('the word of a release and the summary of an entry (ADR 0120 items 1 and 4)
   assert.equal(useValuesLabel('DuhLaurien'), "Use DuhLaurien's Values");
 });
 
-test('the position of a credit: the channel, two items, five items (ADR 0120 item 2)', () => {
+test('the position of a credit: the channel, two items, five items (ADR 0203 item 68)', () => {
   assert.equal(placeText([{ kind: 'channel' }]), 'Channel');
   const item = (title) => ({ kind: 'item', guid: title, title });
   assert.equal(placeText([item('Neon Diner'), item('Night Bus')]), 'Neon Diner, Night Bus');
@@ -1476,7 +1476,7 @@ test('the position of a credit: the channel, two items, five items (ADR 0120 ite
   assert.equal(placeText([{ kind: 'item', guid: '', title: '' }]), 'Untitled item');
 });
 
-test('the blocks of a credit with a picture and an information address (ADR 0120 item 2)', () => {
+test('the blocks of a credit with a picture and an information address (ADR 0203 item 68)', () => {
   const entry = { findings: [{
     kind: 'credit_details', role: 'vocals', img: false, href: true, feed_img: '', feed_href: '', person_img: '',
     person_href: 'https://duhlaurien.example', places: [{ kind: 'item', guid: 'g3', title: 'Neon Diner' }],
@@ -1497,7 +1497,7 @@ test('the blocks of a credit with a picture and an information address (ADR 0120
   assert.equal(two[0].lines[0].value, 'https://old.example/a.jpg');
 });
 
-test('the blocks of a credit key and a credit role, with None for a missing value (ADR 0120 item 2)', () => {
+test('the blocks of a credit key and a credit role, with None for a missing value (ADR 0203 item 68)', () => {
   const profiles = profilesOf({ name: 'City Radio' });
   const entry = { findings: [
     { kind: 'credit_key', role: 'host', group: 'person', npub: '', places: [{ kind: 'channel' }] },
@@ -1519,7 +1519,7 @@ test('the blocks of a credit key and a credit role, with None for a missing valu
   assert.equal(role.what, 'Credit · No role');
 });
 
-test('the blocks of a payment: the address of the feed and the default address (ADR 0120 item 2)', () => {
+test('the blocks of a payment: the address of the feed and the default address (ADR 0203 item 68)', () => {
   const key = KEY('mk@x.example');
   const blocks = differenceBlocks({ findings: [{ kind: 'other_wallet', key }] }, 'Ann', { medium: 'music' }, null, { default_address: null });
   assert.deepEqual(blocks, [{
@@ -1868,7 +1868,7 @@ test('showFindEmpty waits for the search of the current text, with the list clos
   assert.equal(showFindEmpty({ rows: [], error: null, searched: true, query: 'Hale', searchedFor: 'Hale', listOpen: true }), false);
 });
 
-// ADR 0156 items 2 and 3: the summary line and the lines of a feed of the
+// ADR 0203 items 60 and 61: the summary line and the lines of a feed of the
 // section "Where this person is".
 test('where this person is: the summary in words and one line for each place', () => {
   const places = [
@@ -1890,7 +1890,7 @@ test('where this person is: the summary in words and one line for each place', (
   assert.equal(whereEntries([{ feed_id: 9, places: [] }], feeds)[0].title, 'Feed 9');
 });
 
-// ADR 0156 item 7: a credit row names its release, then each role with its tracks.
+// ADR 0203 item 54: a credit row names its release, then each role with its tracks.
 test('a credit of More from your feeds names the release and each role with its tracks', () => {
   const item = {
     kind: 'credit', name: 'MaryKateUltra', href: '', npub: '', roles: ['host', 'vocalist'], feeds: [7], cause: 'same_name',
@@ -1909,7 +1909,7 @@ test('a credit of More from your feeds names the release and each role with its 
   assert.ok(two.lines.includes('Two: Host · the album'));
 });
 
-// ADR 0158 item 2: the fold of hidden suggestions is last, and only when one
+// ADR 0203 item 37: the fold of hidden suggestions is last, and only when one
 // is hidden.
 test('the hidden suggestions come at the end of the People page', () => {
   const base = { people: [{ id: 1 }], suggestions: [], changes: [], payees: [] };
@@ -1917,15 +1917,15 @@ test('the hidden suggestions come at the end of the People page', () => {
   assert.equal(peopleSections({ ...base, hidden: [{ identity: 'name:ann' }] }).at(-1), 'hidden');
 });
 
-// ADR 0158 item 1: the button names what it does.
+// ADR 0203 item 21: the button names what it does.
 test('the suggestion sheet has "Hide This Suggestion" and no "Not This Person"', () => {
   const source = readFileSync(new URL('../ui/peoplepages.js', import.meta.url), 'utf8');
-  assert.equal(source.includes('Not This Person'), false, 'ADR 0158 item 1: rename the button in crates/api/ui/peoplepages.js.');
+  assert.equal(source.includes('Not This Person'), false, 'ADR 0203 item 21: rename the button in crates/api/ui/peoplepages.js.');
   assert.ok(source.includes('Hide This Suggestion'));
 });
 
-// ADR 0158 item 5: a credit row of the suggestion sheets has the form of
-// ADR 0156 item 7.
+// ADR 0203 item 43: a credit row of the suggestion sheets has the form of
+// ADR 0203 item 54.
 test('a credit row of a suggestion sheet names its release, then each role with its tracks', () => {
   const item = {
     name: 'Ann Bell', roles: ['producer', 'vocalist'], feeds: [7], same_name: true,

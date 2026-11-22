@@ -1,5 +1,5 @@
 //! The records of remote files: the library files whose bytes are not in
-//! the library (ADR 0038 items 1 to 3).
+//! the library (ADR 0204 items 1 to 3).
 //!
 //! A published feed has only its feed XML in its release folder. Each
 //! audio file and image of the feed is on a host. This module gives each
@@ -36,7 +36,7 @@ struct Facts {
 }
 
 /// Keep one library file for each address of a feed with a release folder
-/// (ADR 0038 items 1 to 3).
+/// (ADR 0204 items 1 to 3).
 ///
 /// The function skips an address that is the `source_url` of a row of the
 /// feed. It also skips an address that is the planned address of a local
@@ -258,7 +258,7 @@ fn facts_of(feed: &Feed, address: &str) -> Facts {
 
 /// The last segment of the path of an address, with the percent encoding
 /// decoded. Gives `None` when the segment is empty, is not valid text, or
-/// is not a plain file name (ADR 0038 item 2).
+/// is not a plain file name (ADR 0204 item 2).
 fn last_segment(address: &str) -> Option<String> {
     let rest = address.split_once("://").map_or(address, |(_, rest)| rest);
     let path = rest.split(['?', '#']).next().unwrap_or("");
@@ -319,7 +319,7 @@ pub fn media_type_of_name(name: &str) -> Option<String> {
 }
 
 /// The name `file`, with the extension of a media type when Studio knows
-/// one (ADR 0038 item 2).
+/// one (ADR 0204 item 2).
 fn default_name(media_type: &str) -> String {
     let extension = match media_type {
         "audio/mpeg" => "mp3",
@@ -337,7 +337,7 @@ fn default_name(media_type: &str) -> String {
 }
 
 /// `name`, or `name` with ` 2`, ` 3` and so on before the extension, so
-/// that the result is not in `taken` (ADR 0038 item 2).
+/// that the result is not in `taken` (ADR 0204 item 2).
 fn free_path(name: &str, taken: &HashSet<String>) -> String {
     if !taken.contains(name) {
         return name.to_owned();

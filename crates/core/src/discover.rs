@@ -157,7 +157,7 @@ pub struct Found {
     #[serde(skip)]
     pub version: Version,
     /// The bytes of the feed file that Studio read. The library keeps them
-    /// as the feed XML when the user adds the feed (ADR 0038 item 4).
+    /// as the feed XML when the user adds the feed (ADR 0204 item 4).
     #[serde(skip)]
     pub bytes: Vec<u8>,
 }
@@ -261,7 +261,7 @@ pub struct PublicFeed {
     /// The address where Studio read the feed, after each redirect
     /// (ADR 0021 source 1).
     pub url: String,
-    /// The bytes of the feed file that Studio read (ADR 0038 item 4).
+    /// The bytes of the feed file that Studio read (ADR 0204 item 4).
     pub bytes: Vec<u8>,
 }
 

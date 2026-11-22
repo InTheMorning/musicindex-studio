@@ -121,7 +121,7 @@ pub fn ui_router() -> Router {
 }
 
 /// The routes of local mode that need no token: the session route
-/// (ADR 0055 item 20).
+/// (ADR 0204 item 42).
 fn local_session(collections: bool) -> axum::Json<serde_json::Value> {
     axum::Json(serde_json::json!({ "mode": "local", "collections": collections }))
 }
@@ -212,7 +212,7 @@ pub fn local_router_with_drops_and_picker(
 
 /// The routes of one workspace: `/api/v1` and `/app/v1`, with the workers
 /// attached. The router has no access layer and no UI routes. The caller
-/// adds its own access rules (ADR 0055 item 4).
+/// adds its own access rules (ADR 0204 item 26).
 pub fn workspace_router(workspace: Workspace) -> (Router, WorkspaceHandle) {
     let (router, handle, _) = workspace_router_with_shared(workspace);
     (router, handle)
@@ -223,9 +223,9 @@ fn workspace_router_with_shared(workspace: Workspace) -> (Router, WorkspaceHandl
     let queue = Arc::clone(&workspace.downloads);
     let announcer = Arc::clone(&workspace.announcer);
     let shared: routes::Shared = Arc::new(Mutex::new(workspace));
-    // The workers lock the workspace for short steps (ADR 0038 item 7).
+    // The workers lock the workspace for short steps (ADR 0204 item 7).
     queue.attach(&shared);
-    // The announcement worker also locks it for short steps (ADR 0052).
+    // The announcement worker also locks it for short steps (ADR 0205).
     announcer.attach(&shared);
     // The clean step removes the uploads that expired (ADR 0059 item 4).
     uploads::spawn_cleaner(&shared);
@@ -577,7 +577,7 @@ fn workspace_router_with_shared(workspace: Workspace) -> (Router, WorkspaceHandl
             get(routes::get_app).delete(routes::remove_app),
         )
         .with_state(Arc::clone(&shared));
-    // The routes for connected apps (ADR 0054 items 8 and 15). The outer layer
+    // The routes for connected apps (ADR 0205 items 43 and 50). The outer layer
     // checks the loopback `Host` only. The app layer checks the app token.
     let app_api = Router::new()
         .route("/pair", post(routes::pair_app))

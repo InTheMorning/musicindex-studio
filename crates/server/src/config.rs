@@ -1,4 +1,4 @@
-//! The command line of the server (ADR 0055 items 7, 18 and 19).
+//! The command line of the server (ADR 0204 items 29, 40 and 41).
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -9,7 +9,7 @@ const DAY: i64 = 86_400;
 /// The bytes in a GiB.
 const GIB: u64 = 1024 * 1024 * 1024;
 
-/// How a new user can sign up (ADR 0055 item 7).
+/// How a new user can sign up (ADR 0204 item 29).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Signup {
     /// Each person can sign up.
@@ -40,7 +40,7 @@ pub struct Origin {
 
 impl Origin {
     /// Read a public origin. The scheme must be `https`. A loopback host
-    /// can use `http` (ADR 0055 item 18).
+    /// can use `http` (ADR 0204 item 40).
     ///
     /// # Errors
     ///
@@ -89,25 +89,25 @@ pub struct ServeOptions {
     /// The sign-up mode.
     pub signup: Signup,
     /// The header that gives the client address behind a reverse proxy.
-    /// The limit of failed sign-ins uses it (ADR 0055 item 23).
+    /// The limit of failed sign-ins uses it (ADR 0204 item 45).
     pub client_address_header: Option<String>,
-    /// A session ends after this many seconds with no request (ADR 0055
+    /// A session ends after this many seconds with no request (ADR 0204
     /// item 13).
     pub session_idle: i64,
     /// A session ends after this many seconds in total.
     pub session_max: i64,
     /// The vault of a user locks after this time with no use of a secret
-    /// (ADR 0055 item 16).
+    /// (ADR 0204 item 38).
     pub vault_idle: Duration,
     /// The longest time that a user can select (ADR 0142 item 3).
     pub vault_idle_max: Duration,
-    /// The most bytes in the folder of a user (ADR 0055 item 21).
+    /// The most bytes in the folder of a user (ADR 0204 item 43).
     pub storage_limit: u64,
     /// False for `--hold-assets off`, the default: the server keeps an
     /// audio file or an image only until the write that sends it (ADR 0105
     /// item 1).
     pub hold_assets: bool,
-    /// The most Argon2id derivations at the same time (ADR 0055 item 22).
+    /// The most Argon2id derivations at the same time (ADR 0204 item 44).
     pub argon2_concurrency: usize,
     /// How long a request waits for a derivation before it gets 503.
     pub argon2_wait: Duration,

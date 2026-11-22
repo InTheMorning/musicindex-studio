@@ -1,4 +1,4 @@
-// The model of the artwork list (ADR 0064 items 10 to 12, ADR 0042). The
+// The model of the artwork list (ADR 0206 items 25 to 27, ADR 0042). The
 // functions have no Preact and no browser state. `editor.js` shows the list
 // and loads the image.
 
@@ -15,7 +15,7 @@ export function purposeTokens(text) {
 
 // The new `purpose` value after the user sets or clears one token. A new
 // token goes at the end. Each other token keeps its position, also a token
-// that `PURPOSES` does not list (ADR 0064 item 12). An empty result is
+// that `PURPOSES` does not list (ADR 0206 item 27). An empty result is
 // `null`.
 export function withPurpose(text, token, on) {
   const tokens = purposeTokens(text);

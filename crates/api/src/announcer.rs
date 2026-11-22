@@ -1,4 +1,4 @@
-//! The announcement worker (ADR 0052 items 6, 14 and 15).
+//! The announcement worker (ADR 0205 items 20, 28 and 29).
 //!
 //! One thread sends each due announcement to the hub. The thread locks the
 //! workspace only to take a due announcement and to record the result. It

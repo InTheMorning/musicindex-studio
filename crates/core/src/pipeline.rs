@@ -69,7 +69,7 @@ pub enum PipelineErrorKind {
     /// does not have the same text in a key field (ADR 0074 item 5).
     BadKey,
     /// A live item has no start, no stream, a stream type that is blank or
-    /// does not agree with the stream address, or a bad status (ADR 0054
+    /// does not agree with the stream address, or a bad status (ADR 0205
     /// item 4, ADR 0161).
     BadLiveItem,
     /// A live value has a long address or protocol, or a control character
@@ -86,7 +86,7 @@ pub enum PipelineErrorKind {
     /// The collection database failed.
     Collection,
     /// The connector gives no public address for the path of a feed that
-    /// moves (ADR 0038).
+    /// moves (ADR 0204).
     NoPublicAddress,
     /// A file already exists at the path of a new feed (ADR 0032 item 8),
     /// at the path of a pending file (ADR 0026 item 7), or at the name of
@@ -101,7 +101,7 @@ pub enum PipelineErrorKind {
     /// item 15).
     NotReachable,
     /// A host operation of the draft waits for the download of a remote
-    /// library file (ADR 0038 item 12).
+    /// library file (ADR 0204 item 12).
     WaitingForDownload,
     /// The draft refers to a pending file that Studio removed from the
     /// server at the end of its 7 days (ADR 0105 item 10).
@@ -118,21 +118,21 @@ pub enum PipelineErrorKind {
     /// The signing plan of the feed is missing, or it expired. The user
     /// must review the diff again (ADR 0050 item 12).
     PlanExpired,
-    /// The live item has no show grant, or its grant ended (ADR 0054
+    /// The live item has no show grant, or its grant ended (ADR 0205
     /// item 14).
     GrantNotActive,
     /// The feed has a draft with a change that the user can approve, so a
-    /// granted write cannot occur (ADR 0054 item 16).
+    /// granted write cannot occur (ADR 0205 item 51).
     DraftOpen,
     /// The granted change makes a change that the grant does not cover
-    /// (ADR 0054 item 13).
+    /// (ADR 0205 item 48).
     NotCovered,
     /// A change set operation is not valid: no part, no type, no address,
-    /// or a value that the person does not have (ADR 0091, ADR 0098 item
+    /// or a value that the person does not have (ADR 0207, ADR 0203 item
     /// 20).
     InvalidOperation,
     /// The status of the live item cannot change to the requested status
-    /// (ADR 0054 item 5).
+    /// (ADR 0205 item 40).
     BadStatus,
     /// The stream of a live item is not live, so a change to `live` is
     /// refused (ADR 0162 items 6 and 7).
@@ -416,10 +416,10 @@ pub struct Diff {
     /// file (ADR 0036 item 13).
     pub blocked: Vec<BlockedDelete>,
     /// The move of the feed XML to a different host, when the draft has
-    /// one (ADR 0038 item 18).
+    /// one (ADR 0204 item 18).
     pub feed_move: Option<FeedMove>,
     /// Each announcement that the write puts into the queue
-    /// (ADR 0052 items 7 to 9).
+    /// (ADR 0205 items 21 to 23).
     pub announcements: Vec<PlannedAnnouncement>,
     /// The reason why `announcements` is empty, or `None` when it is not
     /// empty.
@@ -429,7 +429,7 @@ pub struct Diff {
     pub events: Vec<DiffEvent>,
     /// The `guid` of each live item that the write gives a show grant: each
     /// grant of the draft for a `pending` live item of the draft
-    /// (ADR 0054 item 11).
+    /// (ADR 0205 item 46).
     pub grants: Vec<String>,
     /// The field changes of the draft, in groups (ADR 0114 item 1).
     pub fields: Vec<crate::review::FieldGroup>,
@@ -444,7 +444,7 @@ pub struct Diff {
 }
 
 /// How the host from before points to the new address of the feed XML
-/// (ADR 0038 item 18).
+/// (ADR 0204 item 18).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FeedMoveMethod {
@@ -470,7 +470,7 @@ impl FeedMoveMethod {
     }
 }
 
-/// The move of the feed XML to a different host (ADR 0038 items 16
+/// The move of the feed XML to a different host (ADR 0204 item 16
 /// to 19).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct FeedMove {
@@ -561,7 +561,7 @@ pub struct HostOperation {
     pub operation_id: Option<i64>,
     /// True when the library file is remote: its bytes are not in the
     /// library yet, and the write refuses the draft until the download is
-    /// complete (ADR 0038 item 12).
+    /// complete (ADR 0204 item 12).
     pub waiting: bool,
     /// True for the deletion of the feed file of a delete draft
     /// (ADR 0131 item 12). The review sheet shows a note for this row.
@@ -582,7 +582,7 @@ pub struct BlockedDelete {
     /// The draft operation of the deletion, so that the user can remove it.
     pub operation_id: i64,
     /// True when the file is a pointer file of Studio. Studio keeps it:
-    /// it tells the apps the new address of the feed (ADR 0038 item 20).
+    /// it tells the apps the new address of the feed (ADR 0204 item 20).
     pub pointer: bool,
 }
 
@@ -1058,7 +1058,7 @@ fn kept(value: Option<&str>) -> Option<String> {
 /// text of that address (ADR 0174 item 11). The core gives the real GUID
 /// when the feed gets a public address (ADR 0122 item 8). The draft sets
 /// `podcast:medium` to `medium` and `language` to `en`. The caller gives `music` for an album feed
-/// and `publisher` for a publisher feed (ADR 0041 item 2). The user sets each other field in the editor,
+/// and `publisher` for a publisher feed (ADR 0205 item 2). The user sets each other field in the editor,
 /// examines the diff, and writes it. The write puts the file only when no
 /// file exists at the path (ADR 0007).
 ///
@@ -1969,7 +1969,7 @@ fn keep_cover_form(current: &Feed, sent: &mut Feed) {
     }
 }
 
-/// Keep the form of each `itunes:explicit` text (ADR 0064 item 4). The UI
+/// Keep the form of each `itunes:explicit` text (ADR 0206 item 19). The UI
 /// sends `true` or `false`. A sent value that differs from the draft value
 /// becomes `yes` or `no` when the draft value is `yes` or `no` in any letter
 /// case, after a trim. A capital first letter of the draft value stays a
@@ -2242,7 +2242,7 @@ pub fn host_file_matches(
 /// the `url` of the channel `image`, or the `href` of `itunes:image` of the
 /// channel or of an item (ADR 0032 item 10, ADR 0033 item 7, ADR 0036
 /// item 7 and item 10, ADR 0060). The recording of
-/// a live item is a file of the feed, as the audio of a track is (ADR 0054
+/// a live item is a file of the feed, as the audio of a track is (ADR 0205
 /// item 6).
 #[must_use]
 pub fn feed_addresses(feed: &Feed) -> Vec<Cow<'_, str>> {
@@ -2817,7 +2817,7 @@ fn planned_write(path: &str, bytes: &[u8]) -> PlannedWrite {
 
 /// The move of the feed XML in the draft of a feed, with its new address
 /// and its method. Gives `None` when the draft has no move, or the move
-/// names the host of the feed (ADR 0038 items 16 and 18).
+/// names the host of the feed (ADR 0204 items 16 and 18).
 ///
 /// # Errors
 ///
@@ -2912,7 +2912,7 @@ fn feed_move_bytes(feed_move: Option<&FeedMove>) -> Vec<u8> {
 }
 
 /// The addresses that a write announces, before the first change on a host
-/// (ADR 0052 items 7 and 8). Without a feed move, it is the public address
+/// (ADR 0205 items 21 and 22). Without a feed move, it is the public address
 /// of the feed file. With a feed move, it is the address from before, or the
 /// new address when the old address is not known.
 ///
@@ -2942,7 +2942,7 @@ fn announce_addresses(
 }
 
 /// The announcements of a write. [`diff_at`] and [`write_draft_signed`]
-/// both call this function, so that they give the same plan (ADR 0052
+/// both call this function, so that they give the same plan (ADR 0205
 /// item 10).
 ///
 /// # Errors
@@ -3006,7 +3006,7 @@ fn announce_bytes(planned: &[PlannedAnnouncement], skip: Option<AnnounceSkip>) -
 
 /// The `guid` of each live item of `feed` that gets a show grant at the
 /// write: each grant of the draft for a `pending` live item of `feed`, in
-/// the sequence of the live items (ADR 0054 item 11). [`diff_at`] and
+/// the sequence of the live items (ADR 0205 item 46). [`diff_at`] and
 /// [`write_draft_signed`] both call this function.
 ///
 /// # Errors
@@ -3081,7 +3081,7 @@ fn ensure_grant_apps_active(
 
 /// The bytes that [`diff_id`] adds for the show grants, in the form of
 /// [`announce_bytes`]. A change of a grant of the draft, or of its app, after
-/// the diff changes the ID (ADR 0054 item 11, ADR 0110 item 19).
+/// the diff changes the ID (ADR 0205 item 46, ADR 0110 item 19).
 fn grant_bytes(grants: &[(String, Option<i64>)]) -> Vec<u8> {
     let mut bytes = Vec::new();
     bytes.push(0);
@@ -3099,7 +3099,7 @@ fn grant_bytes(grants: &[(String, Option<i64>)]) -> Vec<u8> {
 
 /// Put the move of the feed XML to `target` into the draft, and set the
 /// `self` link of the draft to the new address, when the draft has a
-/// `self` link (ADR 0038 item 16). The path stays the path from before.
+/// `self` link (ADR 0204 item 16). The path stays the path from before.
 ///
 /// The host of the feed gives no move. The function then removes the move,
 /// and puts the `self` link and the tag back to those of the live file.
@@ -3535,7 +3535,7 @@ fn host_has_file(
 /// The host operation of a draft copy. Gives `None` when the copy has no
 /// library file, or the host has the file at the path already.
 ///
-/// A copy of a remote file waits for its download (ADR 0038 item 12).
+/// A copy of a remote file waits for its download (ADR 0204 item 12).
 ///
 /// # Errors
 ///
@@ -3696,7 +3696,7 @@ fn host_operations(
                     && op.path == planned.path
             });
             // A remote file has no bytes in the library, so it is never an
-            // upload (ADR 0038 item 1).
+            // upload (ADR 0204 item 1).
             if planned_in_use && !planned.on_host && file.sha256.is_some() && !already {
                 operations.push(HostOperation {
                     kind: OperationKind::Upload,
@@ -4171,7 +4171,7 @@ pub fn library_file_in_use(
 /// check of each new address, then each deletion. With a feed move, the
 /// feed file goes to the new host, then the redirect or the pointer file
 /// goes to the host from before, and then the feed gets its new location
-/// (ADR 0038 item 19). After the write, the
+/// (ADR 0204 item 19). After the write, the
 /// draft and its host operations go out. Studio then scans each host that
 /// the write touched.
 ///
@@ -4775,7 +4775,7 @@ fn write_draft_signed_inner(
             ),
         ));
     }
-    // ADR 0038 item 12: no file changes while a download is not complete.
+    // ADR 0204 item 12: no file changes while a download is not complete.
     if let Some(waiting) = operations.iter().find(|operation| operation.waiting) {
         return Err(PipelineError::new(
             PipelineErrorKind::WaitingForDownload,
@@ -4825,7 +4825,7 @@ fn write_draft_signed_inner(
             ));
         }
     }
-    // ADR 0054 item 4, ADR 0161 item 5: a live item with a refusal stops
+    // ADR 0205 item 39, ADR 0161 item 5: a live item with a refusal stops
     // the write before any change on a host. A warning does not stop it.
     let live_refusals: Vec<_> = crate::live::problems(&feed)
         .into_iter()
@@ -4932,7 +4932,7 @@ fn write_draft_signed_inner(
     put_uploads_and_copies(collection, hosts, library, &row, &operations, &mut touched)?;
 
     // Step 2: the feed file. With a feed move, it goes to the new host,
-    // and then the host from before points to it (ADR 0038 item 19). The
+    // and then the host from before points to it (ADR 0204 item 19). The
     // release folder then keeps the same bytes as the hosted file
     // (ADR 0036 item 3).
     // Each move runs stage 2 of ADR 0126 on the new file, before the
@@ -5106,15 +5106,15 @@ fn write_draft_signed_inner(
     collection.remove_signing_plan(id)?;
     collection.delete_draft(id)?;
 
-    // The write records the grants of the diff (ADR 0054 item 12). It ends
+    // The write records the grants of the diff (ADR 0205 item 47). It ends
     // each grant whose live item is not in the written feed, or has the
-    // status `ended` (ADR 0054 item 14). This occurs before the scans, so
+    // status `ended` (ADR 0205 item 49). This occurs before the scans, so
     // that a failed scan does not lose the record.
     record_grants(collection, id, &feed, &grant_apps, now)?;
 
     // Step 6: the feed is written, and each step on a host passed. The
     // announcements go into the queue before the scans, so that a failed
-    // scan does not lose them (ADR 0052 item 13).
+    // scan does not lose them (ADR 0205 item 27).
     if let Some(moved) = &feed_move {
         collection.record_written_feed_move(
             id,
@@ -5136,7 +5136,7 @@ fn write_draft_signed_inner(
     announce::queue(collection, id, &announcements, &Timing::DEFAULT, now)?;
 
     // The feed is written, so each open change set row of the feed is done.
-    // A change set with no more work goes (ADR 0091 item 19).
+    // A change set with no more work goes (ADR 0207 item 26).
     collection.mark_change_set_written(id, i64::try_from(now).unwrap_or(i64::MAX))?;
     collection.delete_closed_change_sets()?;
 
@@ -5176,7 +5176,7 @@ fn remove_sent_assets(
 }
 
 /// Write one change that a show grant covers, with no diff that the user
-/// examines (ADR 0054 items 15 and 16). `now` is the time in seconds since
+/// examines (ADR 0205 items 50 and 51). `now` is the time in seconds since
 /// the Unix epoch.
 ///
 /// The steps are:
@@ -5260,7 +5260,7 @@ pub fn write_granted(
     let grant = grant::grant_for(collection, feed_id, item_guid)?.ok_or_else(|| {
         PipelineError::new(PipelineErrorKind::GrantNotActive, "the grant is not there")
     })?;
-    // Step 6: the record of the granted write (ADR 0054 item 17).
+    // Step 6: the record of the granted write (ADR 0205 item 52).
     grant::add_write(collection, grant.id, app_name, change, written_at)?;
     if *change == GrantChange::End {
         grant::end(collection, grant.id, written_at)?;
@@ -5562,7 +5562,7 @@ fn user_draft_has_change(
 
 /// The state of a feed whose active show grant a draft with changes blocks
 /// (ADR 0110 item 42). The UI shows a notice with these values and keeps no
-/// copy of the rule of ADR 0054 item 16.
+/// copy of the rule of ADR 0205 item 51.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct GrantBlock {
     /// The state name in the feed state: always `grant_blocked_by_draft`.
@@ -5632,7 +5632,7 @@ pub fn grant_blocked_by_draft(
 }
 
 /// Record the grants of a write, and end each grant that the written feed
-/// ends (ADR 0054 items 12 and 14). Each grant names its app and keeps the
+/// ends (ADR 0205 items 47 and 49). Each grant names its app and keeps the
 /// live value origin of that app at the approval (ADR 0110 items 19 and
 /// 25). The write refused a grant whose app is not active before it ran.
 ///
@@ -5874,7 +5874,7 @@ fn put_feed_from_expired(
 
 /// Put the feed XML on the new host of a feed move, then make the host from
 /// before point to it: the second step of [`write_draft`] with a feed move
-/// (ADR 0038 items 19 and 20). Gives the version of the file on the new
+/// (ADR 0204 items 19 and 20). Gives the version of the file on the new
 /// host.
 ///
 /// The new host gets the file only when it has no file at the path. The
@@ -6078,7 +6078,7 @@ fn put_public_feed_file(
 }
 
 /// The bytes of a pointer file: the draft with `itunes:new-feed-url` set
-/// to `new_url` (ADR 0038 item 19).
+/// to `new_url` (ADR 0204 item 19).
 ///
 /// # Errors
 ///
@@ -6520,7 +6520,7 @@ fn delete_each_operation(
 
 /// Remove the host operations that the user started in the draft of a
 /// feed (ADR 0036 item 12), and the show grants that the draft asks for
-/// (ADR 0054 item 11).
+/// (ADR 0205 item 46).
 ///
 /// A route calls this before it discards a draft, before it puts a new
 /// draft from a snapshot, and before it deletes a feed. Task 021e removes
@@ -6548,7 +6548,7 @@ pub fn discard_draft(collection: &Collection, id: FeedId) -> Result<(), Pipeline
     }
     // The draft is gone, so each open change set row of the feed is closed
     // and a later Discard of the change set does not put back an old draft
-    // (ADR 0091 item 20).
+    // (ADR 0207 item 27).
     collection.mark_change_set_written(id, crate::collection::now())?;
     Ok(())
 }

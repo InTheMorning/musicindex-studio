@@ -1,5 +1,5 @@
 //! The database `server.sqlite`: accounts, sessions and invite codes
-//! (ADR 0055 item 6). It holds no feed data, no secret, no session token
+//! (ADR 0204 item 28). It holds no feed data, no secret, no session token
 //! and no invite code. It keeps the SHA-256 of each token and code.
 
 use std::fmt::Write as _;
@@ -985,7 +985,7 @@ impl Accounts {
     }
 
     /// Remove an account with its sessions and its email address in one
-    /// step (ADR 0055 item 9).
+    /// step (ADR 0204 item 31).
     ///
     /// # Errors
     ///

@@ -1,4 +1,4 @@
-//! The download queue (ADR 0038 items 6 to 12).
+//! The download queue (ADR 0204 items 6 to 12).
 //!
 //! Two worker threads download remote library files into the library. A
 //! worker locks the workspace only to read the source and the limits, and
@@ -16,7 +16,7 @@ use studio_core::download::{self, DownloadErrorKind};
 
 use crate::workspace::Workspace;
 
-/// The number of worker threads (ADR 0038 item 7).
+/// The number of worker threads (ADR 0204 item 7).
 const WORKERS: usize = 2;
 
 /// How long an idle worker waits before it examines the workspace again.
@@ -236,7 +236,7 @@ impl DownloadQueue {
     }
 
     /// Remove the partial file, and record the same code as the upload
-    /// route gives (ADR 0055 item 21).
+    /// route gives (ADR 0204 item 43).
     fn fail_storage_full(
         &self,
         workspace: &Arc<Mutex<Workspace>>,
@@ -287,7 +287,7 @@ impl DownloadQueue {
                     .map_err(|e| e.to_string())?;
                 let max = download::max_file_bytes(&w.collection).map_err(|e| e.to_string())?;
                 let part = download::part_path(&library, &folder, &row.path);
-                // The storage limit of the server (ADR 0055 item 21).
+                // The storage limit of the server (ADR 0204 item 43).
                 let rules = w.rules.clone();
                 if let Some(rules) = &rules {
                     rules.check_storage().map_err(|e| e.coded())?;
@@ -318,7 +318,7 @@ impl DownloadQueue {
 
         // Step 2: with no lock, transfer the bytes. On the server, the
         // transfer stops when the user folder reaches its limit. The folder is
-        // counted after each 8 MiB (ADR 0055 item 21).
+        // counted after each 8 MiB (ADR 0204 item 43).
         let full = AtomicBool::new(false);
         let mut counted = 0_u64;
         let result = download::fetch(

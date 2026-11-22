@@ -1,4 +1,4 @@
-// The credits of a track (ADR 0064 item 8).
+// The credits of a track (ADR 0206 item 23).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { usesAlbumCredits, withTrackCredits, withAlbumCredits, creditNameChange } from '../ui/credits.js';

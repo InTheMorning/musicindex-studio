@@ -89,11 +89,11 @@ test('a destructive confirmation shows the destructive button first and focuses 
     const buttons = confirmButtons(entry);
     const focused = buttons.find((button) => button.focus);
     if (entry.role === 'destructive') {
-      assert.equal(buttons[0].kind, 'action', 'musicindex ADR 0064 R-ACT-8: a destructive button is not first. Put it first in the row.');
-      assert.equal(buttons.at(-1).kind, 'cancel', 'musicindex ADR 0064 R-ACT-9: the safe button is not last. Put it last and give it focus.');
-      assert.equal(focused, buttons.at(-1), 'musicindex ADR 0064 R-ACT-9: the safe button has no first focus. Focus the safe button.');
+      assert.equal(buttons[0].kind, 'action', 'musicindex ADR 0206 R-ACT-8: a destructive button is not first. Put it first in the row.');
+      assert.equal(buttons.at(-1).kind, 'cancel', 'musicindex ADR 0206 R-ACT-9: the safe button is not last. Put it last and give it focus.');
+      assert.equal(focused, buttons.at(-1), 'musicindex ADR 0206 R-ACT-9: the safe button has no first focus. Focus the safe button.');
     } else {
-      assert.equal(focused.kind, 'cancel', 'musicindex ADR 0064 R-ACT-9: the safe button has no first focus. Focus the safe button.');
+      assert.equal(focused.kind, 'cancel', 'musicindex ADR 0206 R-ACT-9: the safe button has no first focus. Focus the safe button.');
     }
   }
 });
@@ -107,7 +107,7 @@ test('no destructive button is a submit button', () => {
   for (const name of readdirSync(uiDir).filter((file) => file.endsWith('.js'))) {
     const text = readFileSync(new URL(name, uiDir), 'utf8');
     assert.ok(!/<button(?=[^>]*class=["'][^"']*destructive)(?=[^>]*type=["']submit)[^>]*>/s.test(text),
-      `musicindex ADR 0064 R-ACT-9: ${name} has a destructive submit button. Use type="button" and an onClick handler.`);
+      `musicindex ADR 0206 R-ACT-9: ${name} has a destructive submit button. Use type="button" and an onClick handler.`);
   }
 });
 
@@ -125,7 +125,7 @@ test('no button comes before a destructive button in its row', () => {
       if (!starts.length) continue;
       const rowStart = starts.at(-1).index;
       if (text.slice(rowStart, match.index).includes('<button')) {
-        assert.fail(`musicindex ADR 0064 R-ACT-8: a button comes before a destructive button in ${name}, at ${match[0].replace(/\s+/g, ' ').slice(0, 90)}. Put the destructive button first and the safe action last.`);
+        assert.fail(`musicindex ADR 0206 R-ACT-8: a button comes before a destructive button in ${name}, at ${match[0].replace(/\s+/g, ' ').slice(0, 90)}. Put the destructive button first and the safe action last.`);
       }
     }
   }
@@ -144,7 +144,7 @@ test('no row has only destructive buttons', () => {
       const end = after.search(rowEnd);
       const rest = [...after.slice(0, end < 0 ? after.length : end).matchAll(/<button\b[^>]*>/gs)];
       if (rest.length > 0 && rest.every((button) => /destructive|discard/.test(button[0]))) {
-        assert.fail(`musicindex ADR 0064 R-ACT-10: a row in ${name} has only destructive buttons, at ${match[0].replace(/\s+/g, ' ').slice(0, 90)}. Show one "Remove…" button that opens a menu with the destructive items.`);
+        assert.fail(`musicindex ADR 0206 R-ACT-10: a row in ${name} has only destructive buttons, at ${match[0].replace(/\s+/g, ' ').slice(0, 90)}. Show one "Remove…" button that opens a menu with the destructive items.`);
       }
     }
   }

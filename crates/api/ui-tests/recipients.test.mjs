@@ -1,4 +1,4 @@
-// The model of the Recipients pages (ADR 0091, task 054c).
+// The model of the Recipients pages (ADR 0207, task 054c).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -111,7 +111,7 @@ test('the count of a saved recipient that no feed uses says so', () => {
   assert.deepEqual(row.lines, ['Node address 02ab12cd00…00005678'],
     'musicindex ADR 0076 R-ADDRESS-1: a node key with no provider shows its first 10 and its last 8 characters. Use shortKey.');
   assert.equal(recipientRow({ name: 'Dan', address: '03cd', feeds: 0, saved_id: null }).count, '0 feeds',
-    'ADR 0091 item 2: only a saved recipient shows "Saved, not used". Give the number of feeds for each other recipient.');
+    'ADR 0207 item 9: only a saved recipient shows "Saved, not used". Give the number of feeds for each other recipient.');
 });
 
 test('the places text of a feed with the channel and 12 tracks', () => {
@@ -156,7 +156,7 @@ const set = {
 
 test('only a changed feed that is not blocked needs a write', () => {
   assert.deepEqual(writableIds(set), [1, 2]);
-  // A button label uses title case (musicindex ADR 0085 R-CASE-1, ADR 0099 item 12).
+  // A button label uses title case (musicindex ADR 0085 R-CASE-1, ADR 0203 item 79).
   assert.equal(writeLabel(2), 'Write 2 Feeds');
   assert.equal(writeLabel(1), 'Write 1 Feed');
 });
@@ -193,7 +193,7 @@ test('a wallet of two addresses gives its title, row and lines', () => {
   assert.deepEqual(addressLines(wallet), [
     { label: 'LNURL address', address: 'tj@getalby.com', account: null },
     { label: 'Node address', address: '02ab12cd34ef5678', account: '01abc' }],
-  'ADR 0095 item 8: the header shows the full key and the account.');
+  'ADR 0207 item 41: the header shows the full key and the account.');
   assert.equal(lnaddressOf(wallet), 'tj@getalby.com');
   assert.equal(nodeOf(wallet), '02ab12cd34ef5678');
   const row = recipientRow({ ...wallet, name: 'TJ Doerfel' });
@@ -202,9 +202,9 @@ test('a wallet of two addresses gives its title, row and lines', () => {
     'musicindex ADR 0076 R-ADDRESS-1 item 2: a text of 20 characters or fewer shows in full.');
   const keyFirst = { ...wallet, addresses: [wallet.addresses[1], wallet.addresses[0]] };
   assert.equal(recipientRow(keyFirst).lines[0], 'LNURL address tj@getalby.com',
-    'ADR 0095 item 7: the LNURL address is first in the row.');
+    'ADR 0207 item 40: the LNURL address is first in the row.');
   assert.equal(addressLines(keyFirst)[0].label, 'LNURL address',
-    'ADR 0095 item 8: the header has the lines of item 7, the LNURL address first.');
+    'ADR 0207 item 41: the header has the lines of item 7, the LNURL address first.');
 });
 
 const keyA = '03d55f4d0000000000000000000000000000000000000000000000000000aa67';
@@ -214,14 +214,14 @@ test('rowLines gives a provider node with its domain and its account', () => {
     { address: keyA, recipient_type: 'node', provider: 'fountain.fm', custom_value: '01IMQkt4BFzAiSynxcQQqd' },
     { address: 'boostbot@fountain.fm', recipient_type: 'lnaddress' }] };
   assert.deepEqual(rowLines(entry), ['LNURL address boostbot@fountain.fm', 'fountain.fm node · account 01IMQkt4BFzAiSynxcQQqd'],
-    'ADR 0095 item 7: a provider node shows its domain and no key.');
+    'ADR 0207 item 40: a provider node shows its domain and no key.');
   assert.deepEqual(addressLines(entry)[1], { label: 'fountain.fm node', address: keyA, account: '01IMQkt4BFzAiSynxcQQqd' },
-    'ADR 0095 item 8: the header shows the full key of a provider node, after the LNURL address.');
+    'ADR 0207 item 41: the header shows the full key of a provider node, after the LNURL address.');
 });
 
 test('rowLines gives a node with no provider and no account', () => {
   assert.deepEqual(rowLines({ address: keyA, recipient_type: 'node' }), ['Node address 03d55f4d00…0000aa67'],
-    'ADR 0095 item 7 and musicindex ADR 0076 R-ADDRESS-1: a node with no provider shows its short key. Use shortKey.');
+    'ADR 0207 item 40 and musicindex ADR 0076 R-ADDRESS-1: a node with no provider shows its short key. Use shortKey.');
 });
 
 test('rowLines gives a node with no provider and an account', () => {
@@ -238,7 +238,7 @@ test('the operation form starts at the member of the wallet with the type of the
   const looked = { name: null, address: '03cd', recipient_type: 'lnaddress', custom_key: '906608', custom_value: '01xyz', feeds: 1,
     addresses: [{ address: 'm@fountain.fm', recipient_type: 'lnaddress', name: null, custom_key: null, custom_value: null, lookup: 'found' }] };
   assert.equal(startType(looked, 'change_address'), 'lnaddress',
-    'ADR 0095 item 14: the start values come from the members of the wallet, not from its key.');
+    'ADR 0207 item 47: the start values come from the members of the wallet, not from its key.');
   assert.deepEqual(memberStart(looked, 'lnaddress'), { address: 'm@fountain.fm', custom_key: '', custom_value: '' });
   assert.deepEqual(memberStart(looked, 'node'), { address: '', custom_key: '', custom_value: '' });
 });
@@ -251,7 +251,7 @@ test('an entry with no addresses gives one line', () => {
   assert.equal(nodeOf(entry), null);
 });
 
-test('the lookup hint has the text of ADR 0099 item 16', () => {
+test('the lookup hint has the text of ADR 0203 item 84', () => {
   assert.equal(lookupHint('chadf@getalby.com'),
     'Studio found no payment details for this address at getalby.com. Some apps cannot pay it.');
 });
@@ -290,7 +290,7 @@ test('the new operation and the new cause have texts', () => {
   assert.equal(causeText({ cause: 'no_node_recipient' }), 'Each value block has the LNURL address already.');
 });
 
-test('the address lines of a row and of a header are one function (ADR 0099 item 15)', () => {
+test('the address lines of a row and of a header are one function (ADR 0203 item 83)', () => {
   const entry = { address: keyA, addresses: [
     { address: keyA, recipient_type: 'node', provider: 'fountain.fm', custom_value: '01ab' },
     { address: 'bot@fountain.fm', recipient_type: 'lnaddress' }] };
@@ -298,12 +298,12 @@ test('the address lines of a row and of a header are one function (ADR 0099 item
   assert.deepEqual(addressLines(entry).map((l) => l.label), ['LNURL address', 'fountain.fm node']);
 });
 
-test('the type menu of a wallet sheet gives Node Address and LNURL Address (ADR 0099 item 14)', () => {
+test('the type menu of a wallet sheet gives Node Address and LNURL Address (ADR 0203 item 82)', () => {
   assert.deepEqual(WALLET_TYPES, [['lnaddress', 'LNURL Address'], ['node', 'Node Address']]);
   assert.equal(CUSTOM_KEY_HINT, 'Most wallets do not need it. Copy it from your wallet when it gives one.');
 });
 
-test('the page of a wallet has the five operations, the last one destructive (ADR 0099 item 7)', () => {
+test('the page of a wallet has the five operations, the last one destructive (ADR 0203 item 74)', () => {
   const actions = walletActions(wallet);
   assert.deepEqual(actions.map((a) => [a.kind, a.label, a.role]), [
     ['change_address', 'Change Address', 'action'],
@@ -312,10 +312,10 @@ test('the page of a wallet has the five operations, the last one destructive (AD
     ['add', 'Add to All Releases', 'action'],
     ['remove', 'Remove from Feeds', 'destructive']]);
   assert.ok(!walletActions({ address: 'a@b.c', recipient_type: 'lnaddress' }).some((a) => a.kind === 'use_lnaddress'),
-    'ADR 0095: a wallet with no node key has nothing to replace.');
+    'ADR 0207: a wallet with no node key has nothing to replace.');
 });
 
-test('each sheet of a wallet lists the feeds, each selected, and counts them in its button (ADR 0099 item 7)', () => {
+test('each sheet of a wallet lists the feeds, each selected, and counts them in its button (ADR 0203 item 74)', () => {
   const uses = [
     { feed_id: 1, title: 'One', channel: true, items: 2, live_items: 0, writable: true, node: true },
     { feed_id: 2, title: '', channel: false, items: 0, live_items: 1, writable: false, node: true }];
@@ -401,7 +401,7 @@ test('the correction of a type moves the text to the field of the other type (AD
     { recipient_type: 'node', address_lnaddress: '', address_node: '03ab' });
 });
 
-test('a fee is true, 1 or yes, as FeeReading in the core reads it (musicindex ADR 0088 R-FEED-6, ADR 0244 item 1)', () => {
+test('a fee is true, 1 or yes, as FeeReading in the core reads it (musicindex ADR 0215 R-FEED-6, ADR 0244 item 1)', () => {
   for (const fee of ['true', ' TRUE ', '1', 'Yes']) assert.equal(isFee({ fee }), true, `ADR 0244 item 1: "${fee}" is a fee. Fix isFee in crates/api/ui/recipients.js`);
   for (const fee of ['false', '0', 'no', '', '  ', 'maybe', null, undefined]) assert.equal(isFee({ fee }), false, `ADR 0244 item 1: "${fee}" is not a fee. Fix isFee in crates/api/ui/recipients.js`);
 });

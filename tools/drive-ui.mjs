@@ -45,7 +45,7 @@
 // attribute data-fit-allow-break (R-FIT-3 item 3).
 // A step {"save": "name.json"} writes the value of window.__walkChecks to that
 // file in the out dir.
-// A step {"sheet": "name"} runs the sheet check of musicindex ADR 0077
+// A step {"sheet": "name"} runs the sheet check of musicindex ADR 0230
 // R-SHEET-2 on the open sheet, dialog or popover at 390 px and at 761 px. It
 // runs the five helpers and sheetFits. The overflow and overlap helpers
 // examine only the controls in the sheet. sheetFits finds a sheet that is
@@ -64,7 +64,7 @@
 // A finding of the sheet check is a fit finding.
 // $fieldText() gives each visible text field and select with text smaller
 // than 16 px. iOS Safari zooms the page when such a field gets the focus
-// (musicindex ADR 0068 R-TYPE-1, Body on Touch). Use it with "touch": true.
+// (musicindex ADR 0206 R-TYPE-1, Body on Touch). Use it with "touch": true.
 // The script prints each result and each console error. It exits with status 1
 // when the fit check has a finding, after the last step and its screenshot.
 // DRIVE_UI_PORT sets the DevTools port. The default is 9333.
@@ -137,10 +137,10 @@ const helpers = `
   window.$fieldText = () => [...document.querySelectorAll('input, select, textarea')].filter((e) => !['checkbox', 'radio', 'range', 'file', 'hidden', 'color'].includes(e.type) && (e.checkVisibility ? e.checkVisibility() : e.offsetParent) && parseFloat(getComputedStyle(e).fontSize) < 16).map((e) => getComputedStyle(e).fontSize + ' ' + e.outerHTML.slice(0, 70));
   window.$small = () => [...document.querySelectorAll('button, input, select, a')].filter((e) => !e.classList.contains('visually-hidden') && (e.checkVisibility ? e.checkVisibility() : e.offsetParent) && e.getBoundingClientRect().height < 44 && !(e.closest('label') && e.closest('label').getBoundingClientRect().height >= 44)).map((e) => e.outerHTML.slice(0, 70));
 `;
-// The sheet check of musicindex ADR 0077 R-SHEET-1 and R-SHEET-2 item 3. It
+// The sheet check of musicindex ADR 0230 R-SHEET-1 and R-SHEET-2 item 3. It
 // runs in the page and uses no name from outside its body. A sheet is an open
 // dialog, an open popover or an open menu of `menu.js`. The window margin is
-// that of musicindex ADR 0068 R-SPACE-1 item 2: 16 px up to the narrow width
+// that of musicindex ADR 0206 R-SPACE-1 item 2: 16 px up to the narrow width
 // of Studio (760 px) and 20 px above it. In a narrow window, a dialog that
 // touches the two sides and the bottom edge is a bottom sheet. It passes at
 // the window width, and its content must not go into the inner padding.
@@ -220,15 +220,15 @@ function sheetFits({ panels = 'dialog[open], .sort-menu', narrow = 760, narrowMa
   return found;
 }
 
-// The failure message of musicindex ADR 0077 R-SHEET-2 item 5.
+// The failure message of musicindex ADR 0230 R-SHEET-2 item 5.
 function sheetMessage(finding, name, width) {
-  const head = `musicindex ADR 0077 R-SHEET-1: at ${width} px the sheet "${name}"`;
+  const head = `musicindex ADR 0230 R-SHEET-1: at ${width} px the sheet "${name}"`;
   switch (finding.fault) {
     case 'sheet-width':
       return `${head} is ${finding.detail.width} px wide (${finding.detail.left} px from the left edge and ${finding.detail.right} px from the right edge), and the window allows ${finding.detail.allowed} px.\n`
         + 'Give the sheet the width min(design width, 100vw - 2 × margin), and let each child shrink (min-width: 0).';
     case 'sheet-padding':
-      return `musicindex ADR 0077 R-SHEET-1: at ${width} px the content "${finding.text}" of the bottom sheet "${name}" goes ${finding.detail.into} px into the ${finding.detail.margin} px inner padding.\n`
+      return `musicindex ADR 0230 R-SHEET-1: at ${width} px the content "${finding.text}" of the bottom sheet "${name}" goes ${finding.detail.into} px into the ${finding.detail.margin} px inner padding.\n`
         + 'Give the content the window margin as its padding, and let each child shrink (min-width: 0).';
     case 'sheet-content':
       return `${head} has content "${finding.text}" that goes ${finding.detail} past an edge of the sheet.\n`
@@ -287,7 +287,7 @@ const fit = async (sheet = null, widths = fitWidths, panel = 'dialog[open], .sor
 };
 let authenticatorId;
 const steps = JSON.parse(process.argv[4] || '[]');
-// Open each sheet of a list (musicindex ADR 0077 R-SHEET-2). The walk opens
+// Open each sheet of a list (musicindex ADR 0230 R-SHEET-2). The walk opens
 // each entry again for each width from the start address, so that the state
 // of one entry does not change the next entry, and a menu that closes when the
 // window changes is open at each width.

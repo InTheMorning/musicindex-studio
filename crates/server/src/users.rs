@@ -1,4 +1,4 @@
-//! The open users: one workspace for each account (ADR 0055 items 1 to 5).
+//! The open users: one workspace for each account (ADR 0204 items 23 to 27).
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -37,7 +37,7 @@ pub struct UserSettings {
     /// The rules of the policy `Public`. A test build adds the address of
     /// a local test server.
     pub rules: PublicRules,
-    /// The most bytes in the folder of a user (ADR 0055 item 21).
+    /// The most bytes in the folder of a user (ADR 0204 item 43).
     pub storage_limit: u64,
     /// False for `--hold-assets off` (ADR 0105 item 1).
     pub hold_assets: bool,
@@ -83,7 +83,7 @@ impl Users {
         }
     }
 
-    /// The most bytes in the folder of a user (ADR 0055 item 21). The import
+    /// The most bytes in the folder of a user (ADR 0204 item 43). The import
     /// uses it as the limit of the archive (ADR 0107 item 15).
     #[must_use]
     pub fn storage_limit(&self) -> u64 {
@@ -97,7 +97,7 @@ impl Users {
     }
 
     /// The open user of an account. The first call opens the workspace
-    /// (ADR 0055 item 4).
+    /// (ADR 0204 item 26).
     ///
     /// # Errors
     ///
@@ -152,7 +152,7 @@ impl Users {
     }
 
     /// True when the folder has a waiting announcement or a queued
-    /// download (ADR 0055 item 4).
+    /// download (ADR 0204 item 26).
     pub async fn is_busy_folder(&self, folder: &str) -> bool {
         let path = self.folder_path(folder);
         tokio::task::spawn_blocking(move || is_busy(&path))
@@ -166,7 +166,7 @@ impl Users {
     }
 
     /// Open each user whose collection has a waiting announcement or a
-    /// queued download (ADR 0055 item 4). The workers of the user then run.
+    /// queued download (ADR 0204 item 26). The workers of the user then run.
     pub async fn open_busy(&self, accounts: &[(i64, String)]) {
         for (id, folder) in accounts {
             let path = self.folder_path(folder);

@@ -243,7 +243,7 @@ test('the texts of the page follow items 19 to 21', () => {
 test('a show grant is active until it ends', () => {
   const live = [{ item: { guid: 'live-1' }, start: '2026-11-10T10:00:00Z', end: '2026-11-10T11:00:00Z' }];
   const now = Date.parse('2026-11-10T12:00:00Z') / 1000;
-  const owner = 'ADR 0054 item 14: check hasShowGrant in feedcheck.js.';
+  const owner = 'ADR 0205 item 49: check hasShowGrant in feedcheck.js.';
   assert.equal(hasShowGrant([{ item_guid: 'live-1', ended_at: null }], live, now), true, owner);
   assert.equal(hasShowGrant([{ item_guid: 'live-1', ended_at: 5 }], live, now), false, owner);
   assert.equal(hasShowGrant([{ item_guid: 'live-1', ended_at: null }], live, now + 3 * 86400), false, owner);

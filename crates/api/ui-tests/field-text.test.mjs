@@ -1,4 +1,4 @@
-// The text size of a field with Touch (musicindex ADR 0068 R-TYPE-1, Body on
+// The text size of a field with Touch (musicindex ADR 0206 R-TYPE-1, Body on
 // Touch). iOS Safari zooms the page when a field with text under 16 px gets
 // the focus, and the page stays zoomed. On 2026-10-31 the sheets of the
 // Recipients page had fields of 15 px on a phone (task 062).
@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const css = readFileSync(new URL('../ui/styles.css', import.meta.url), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
-const owner = 'musicindex ADR 0068 R-TYPE-1 (task 062)';
+const owner = 'musicindex ADR 0206 R-TYPE-1 (task 062)';
 const last = ':root :is(input, select, textarea)';
 
 // Each innermost rule: its selector text and its declarations, in file order.

@@ -1,4 +1,4 @@
-// The display value of the explicit switch (ADR 0064 item 4).
+// The display value of the explicit switch (ADR 0206 item 19).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { isExplicit } from '../ui/explicit.js';

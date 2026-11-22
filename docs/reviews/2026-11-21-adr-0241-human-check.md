@@ -8,6 +8,11 @@ The operator ran the release binary of `0f2880b` on the desktop data. This file 
 2. Make the collection "TJ" with **New Collection…** and **Make and Open**. Pass: Studio opens TJ on its Welcome page. The footer has "Collection: TJ" and "Switch Collection…".
 3. Open HeyCitizen from the sheet "Switch Collection". KeePassXC asks for its connection. This is correct: the vault key of HeyCitizen is in the keyring (ADR 0235). TJ has no vault, so the switch to TJ reads no keyring.
 
+4. Start the release binary of `b219352` (ADR 0242). Pass: the footer has one collection row. A click opens the sheet with HeyCitizen and TJ, and "Manage Collections…" is at the left of **Cancel**.
+5. Delete TJ with **Manage Collections…** and **Delete…**. Pass: only HeyCitizen stays. The footer row is "Switch Collection…" in the usual color, and its sheet has only "HeyCitizen — Open now".
+
+The desktop checks are complete. The server checks (the temporary area in the File Hosts form, and Sign Out on the iPhone) wait for the deploy.
+
 ## Findings
 
 1. The footer has two rows for one subject. The row "Collection: {name}" opens Settings, and the row "Switch Collection…" opens the sheet. The operator wants one row. [ADR 0242](../adr/0242-the-collection-row-of-the-footer-opens-switch-collection.md) gives the change, and task 228 builds it.

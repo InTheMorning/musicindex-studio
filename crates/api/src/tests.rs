@@ -4870,7 +4870,7 @@ async fn a_bad_address_is_listed_with_the_draft_and_stops_the_write() {
     .await;
     assert_eq!(
         draft["bad_addresses"],
-        json!([{ "field": "link", "value": "www.example.com" }])
+        json!([{ "field": "link", "place": "Website", "value": "www.example.com" }])
     );
     let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
     let (status, body) = call(
@@ -4882,8 +4882,96 @@ async fn a_bad_address_is_listed_with_the_draft_and_stops_the_write() {
     .await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(body["error"]["code"], "bad_address");
-    assert!(body["error"]["message"].as_str().unwrap().contains("link"));
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("Website")
+    );
     assert_eq!(live(&app), FEED);
+}
+
+#[tokio::test]
+async fn a_short_credit_address_has_a_finding_and_a_repair_and_then_the_write_works() {
+    let owner = "ADR 0245 items 1 to 4: fix the check route, the repair route or the refusal";
+    let app = app();
+    let id = set_up(&app).await;
+    let draft_path = format!("/api/v1/feeds/{id}/draft");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    model["persons"] = json!([{ "name": "The Doerfels", "href": "www.doerfelverse.com" }]);
+    let (status, _) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{owner}");
+    let place = "Credit \u{b7} The Doerfels \u{b7} Information address";
+    // The refusal of the write gives the place, and the details give the path.
+    let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{owner}");
+    assert_eq!(body["error"]["code"], "bad_address", "{owner}");
+    let message = body["error"]["message"].as_str().unwrap();
+    assert!(message.contains(place), "{owner}: {message}");
+    assert!(!message.contains("persons/0/href"), "{owner}: {message}");
+    assert_eq!(
+        body["error"]["details"]["fields"],
+        json!(["persons/0/href"]),
+        "{owner}: {body}"
+    );
+    // The check route gives the finding.
+    let (status, check) = call(&app, "GET", &format!("/api/v1/feeds/{id}/check"), None).await;
+    assert_eq!(status, StatusCode::OK, "{check}");
+    let finding = check["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["kind"] == "short_address")
+        .unwrap_or_else(|| panic!("{owner}: {check}"))
+        .clone();
+    assert_eq!(finding["level"], "stop", "{owner}");
+    assert_eq!(finding["repair"], "add_https", "{owner}");
+    assert_eq!(finding["place"], place, "{owner}");
+    assert_eq!(finding["field"], "persons/0/href", "{owner}");
+    // The repair route applies it.
+    let (status, repaired) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/check/repair"),
+        Some(json!({
+            "kind": "short_address",
+            "url": finding["url"],
+            "field": finding["field"],
+            "revision": check["revision"],
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{owner}: {repaired}");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    assert_eq!(draft["bad_addresses"], json!([]), "{owner}");
+    assert_eq!(
+        draft["model"]["persons"][0]["href"], "https://www.doerfelverse.com",
+        "{owner}"
+    );
+    // The write then works.
+    let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{owner}: {body}");
 }
 
 #[tokio::test]
@@ -10032,7 +10120,11 @@ async fn a_stream_address_with_a_space_before_it_is_marked_and_stops_the_write()
     let (base, _, draft) = draft_with_stream(&app, " https://example.com/up.mp3").await;
     assert_eq!(
         draft["bad_addresses"],
-        json!([{ "field": "live_items/0/item/enclosure/url", "value": " https://example.com/up.mp3" }])
+        json!([{
+            "field": "live_items/0/item/enclosure/url",
+            "place": "Live item \u{b7} Show \u{b7} Stream address",
+            "value": " https://example.com/up.mp3"
+        }])
     );
     let (_, diff) = call(&app, "GET", &format!("{base}/diff"), None).await;
     let (status, body) = call(

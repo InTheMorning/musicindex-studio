@@ -61,6 +61,9 @@ pub enum FindingKind {
     /// A recipient has a `fee` value that is not known. Studio reads it as
     /// not a fee (musicindex ADR 0088 R-FEED-6 item 3, ADR 0244 item 2).
     UnknownFee,
+    /// An address field has text with no `https://`, and the text with
+    /// `https://` in front is a web address (ADR 0245 item 1).
+    ShortAddress,
 }
 
 /// How a finding asks for action (ADR 0174 item 3, ADR 0175 item 6).
@@ -105,6 +108,8 @@ pub enum RepairKind {
     UseLnurlAddress,
     /// **Use Node Address**.
     UseNodeAddress,
+    /// **Add https://** (ADR 0245 item 1).
+    AddHttps,
 }
 
 /// The reason why a feed cannot be written under ADR 0213 item 21.
@@ -182,6 +187,11 @@ pub struct Finding {
     /// The address that the finding names, when it names one. A repair
     /// changes only this address.
     pub url: Option<String>,
+    /// The model path of the address field that the finding is about
+    /// (ADR 0245 item 2). It is none for the other findings.
+    pub field: Option<String>,
+    /// The place of that field in words for the user (ADR 0245 item 3).
+    pub place: Option<String>,
 }
 
 impl Finding {
@@ -244,6 +254,8 @@ pub fn check(feed: &Feed, facts: &Facts) -> Vec<Finding> {
             entry: None,
             repair: Some(RepairKind::LinkAPage),
             url: None,
+            field: None,
+            place: None,
         });
     }
     check_links(feed, facts, &mut found);
@@ -254,6 +266,7 @@ pub fn check(feed: &Feed, facts: &Facts) -> Vec<Finding> {
     }
     check_recipient_types(feed, &mut found);
     check_fee_values(feed, &mut found);
+    check_short_addresses(feed, &mut found);
     check_images(feed, facts, &mut found);
     index::check_index(facts, &mut found);
     if feed.language.as_deref().is_none_or(|l| l.trim().is_empty()) {
@@ -265,6 +278,8 @@ pub fn check(feed: &Feed, facts: &Facts) -> Vec<Finding> {
             entry: None,
             repair: Some(RepairKind::SelectALanguage),
             url: None,
+            field: None,
+            place: None,
         });
     }
     found
@@ -285,6 +300,8 @@ fn notice(
         entry,
         repair,
         url: None,
+        field: None,
+        place: None,
     }
 }
 
@@ -379,6 +396,29 @@ fn check_fee_values(feed: &Feed, found: &mut Vec<Finding>) {
             entry: None,
             repair: None,
             url: None,
+            field: None,
+            place: None,
+        });
+    }
+}
+
+/// One finding for each address field that lacks `https://` and that the
+/// repair can complete (ADR 0245 items 1 and 2).
+fn check_short_addresses(feed: &Feed, found: &mut Vec<Finding>) {
+    for bad in feed.bad_addresses() {
+        if crate::feed::short_address_repair(&bad.value).is_none() {
+            continue;
+        }
+        found.push(Finding {
+            kind: FindingKind::ShortAddress,
+            level: FindingLevel::Stop,
+            title: format!("{} has an address that is not full", bad.place),
+            reason: format!("{} has no https://. Studio cannot write it.", bad.value),
+            entry: None,
+            repair: Some(RepairKind::AddHttps),
+            url: Some(bad.value),
+            field: Some(bad.field),
+            place: Some(bad.place),
         });
     }
 }

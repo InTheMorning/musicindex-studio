@@ -2,7 +2,14 @@
 
 Decision: [ADR 0245](../adr/0245-review-repairs-short-addresses-and-offers-the-people-values.md) items 1 to 4 and 8. Findings 10 and 11 of [the tutorial findings](../reviews/2026-11-22-tj-tutorial-findings.md).
 
-Status: Open.
+Status: Done 2026-11-22. The gate passed (2056 Rust tests, 979 Node tests). The main session checked the Issues tab of "Bloodshot Lies - The Album" in the tutorial data with screenshots. Each finding shows "Stops the write" and **Add https://**. After the repair of Track 1, its finding goes and the count changes from 22 to 21.
+
+Operator choices of the main session:
+
+- `short_address_repair` also needs a dot in the host, so that a word such as `none` gives no repair.
+- The repair route finds the finding by its `field`, because one feed can have many `short_address` findings with the same address.
+- The JSON of `bad_addresses` also gives `place`.
+- The place labels come from `editor.js`, for example "Track image address", "Lyrics file address" and "Untitled track".
 
 ## Problem
 

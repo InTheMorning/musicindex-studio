@@ -106,6 +106,8 @@ pub(super) fn check_index(facts: &Facts, found: &mut Vec<Finding>) {
             entry: None,
             repair: None,
             url: Some(held.to_owned()),
+            field: None,
+            place: None,
         });
     }
     for copy in index
@@ -124,6 +126,8 @@ pub(super) fn check_index(facts: &Facts, found: &mut Vec<Finding>) {
             entry: None,
             repair: None,
             url: Some(copy.url.clone()),
+            field: None,
+            place: None,
         });
     }
 }

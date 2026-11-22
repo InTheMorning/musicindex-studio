@@ -51,6 +51,7 @@ const REPAIRS = {
   add_the_link: 'Add the Link',
   use_the_public_address: 'Use the Public Address',
   use_the_https_address: 'Use the https Address',
+  add_https: 'Add https://',
   read_the_size: 'Read the Size',
   open_the_track: 'Open the Track',
   select_a_language: 'Select a Language',
@@ -68,6 +69,7 @@ const ACTIONS = {
   add_the_link: 'repair',
   use_the_public_address: 'repair',
   use_the_https_address: 'repair',
+  add_https: 'repair',
   read_the_size: 'repair',
   open_the_track: 'open-track',
   select_a_language: 'open-language',
@@ -158,9 +160,9 @@ export function repairLabel(repair) {
 }
 
 // The key of a finding. The repair route finds the finding by its kind, its
-// entry and its address.
+// entry, its address and its field path (ADR 0245 item 2).
 export function findingKey(finding) {
-  return [finding.kind, finding.entry ?? '', finding.url ?? ''].join('|');
+  return [finding.kind, finding.entry ?? '', finding.url ?? '', finding.field ?? ''].join('|');
 }
 
 // The rows of the findings. A row has no button when the feed is read-only
@@ -202,7 +204,7 @@ export function checkRows(check) {
       action: usable ? action : null,
       track: usable && action === 'open-track' ? finding.entry : null,
       body: usable && action === 'repair'
-        ? { kind: finding.kind, entry: finding.entry ?? null, url: finding.url ?? null }
+        ? { kind: finding.kind, entry: finding.entry ?? null, url: finding.url ?? null, ...(finding.field ? { field: finding.field } : {}) }
         : null,
     };
   });

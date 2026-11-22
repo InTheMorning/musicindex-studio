@@ -186,6 +186,10 @@ pub(crate) struct SentRepair {
     entry: Option<String>,
     #[serde(default)]
     url: Option<String>,
+    /// The model path of the address field (ADR 0245 item 2). Two fields
+    /// can have the same text, so the path names the finding.
+    #[serde(default)]
+    field: Option<String>,
     revision: String,
 }
 
@@ -230,7 +234,12 @@ pub(crate) async fn repair(
         let finding = result
             .findings
             .into_iter()
-            .find(|f| f.kind == body.kind && f.entry == body.entry && f.url == body.url)
+            .find(|f| {
+                f.kind == body.kind
+                    && f.entry == body.entry
+                    && f.url == body.url
+                    && f.field == body.field
+            })
             .ok_or_else(|| {
                 ApiError::new(
                     StatusCode::CONFLICT,

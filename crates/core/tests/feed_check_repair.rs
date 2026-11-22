@@ -4,7 +4,7 @@
 
 use studio_core::collection::{Collection, FeedId};
 use studio_core::connector::{Connector, Expected, LocalFolder};
-use studio_core::feed_check::{Finding, FindingKind, RepairKind};
+use studio_core::feed_check::{Finding, FindingKind, FindingLevel, RepairKind};
 use studio_core::feed_reads::{CheckResult, NetworkFacts, ScriptedFileReads, check_with};
 use studio_core::inventory::Hosts;
 use studio_core::move_link::ScriptedReader;
@@ -331,4 +331,59 @@ fn a_stale_revision_and_a_wrong_proof_change_nothing() {
         assert_eq!(error.kind(), PipelineErrorKind::InvalidOperation);
     }
     assert_eq!(e.text(), before);
+}
+
+#[test]
+fn add_https_completes_one_short_credit_address_and_leaves_the_other_credit() {
+    let owner = "ADR 0245 items 1 and 2: fix check_short_addresses or the AddHttps plan";
+    let xml = feed_xml(Some(URL), None).replace(
+        "<podcast:medium>",
+        "<podcast:person href=\"www.doerfelverse.com\">The Doerfels</podcast:person><podcast:person href=\"https://other.example/a\">Other</podcast:person><podcast:medium>",
+    );
+    let e = env(&xml);
+    let found: Vec<Finding> = e
+        .result(&none())
+        .0
+        .findings
+        .into_iter()
+        .filter(|f| f.kind == FindingKind::ShortAddress)
+        .collect();
+    assert_eq!(found.len(), 1, "{owner}");
+    let finding = &found[0];
+    assert_eq!(finding.level, FindingLevel::Stop, "{owner}");
+    assert_eq!(finding.repair, Some(RepairKind::AddHttps), "{owner}");
+    assert_eq!(
+        finding.place.as_deref(),
+        Some("Credit \u{b7} The Doerfels \u{b7} Information address"),
+        "{owner}"
+    );
+    e.repair(
+        &none(),
+        finding,
+        &ScriptedReader::empty(),
+        &ScriptedFileReads::empty(),
+    )
+    .unwrap();
+    let text = e.text();
+    assert!(
+        text.contains("href=\"https://www.doerfelverse.com\""),
+        "{owner}: {text}"
+    );
+    assert!(text.contains("href=\"https://other.example/a\""), "{owner}");
+    let draft = e.collection.draft(e.feed).unwrap().unwrap();
+    let feed = studio_core::feed::Feed::read(
+        &studio_core::xml::Document::parse_bytes(&draft.draft_xml).unwrap(),
+    )
+    .unwrap();
+    assert!(feed.bad_addresses().is_empty(), "{owner}");
+    // The finding goes, and a second repair of it is refused.
+    let error = e
+        .repair(
+            &none(),
+            finding,
+            &ScriptedReader::empty(),
+            &ScriptedFileReads::empty(),
+        )
+        .unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::InvalidOperation, "{owner}");
 }

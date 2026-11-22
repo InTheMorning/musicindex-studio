@@ -100,6 +100,17 @@ test('the new finding buttons use their required actions', () => {
   ]);
 });
 
+test('the short address finding has the button Add https:// with the repair action', () => {
+  const owner = 'ADR 0245 item 1: check REPAIRS and ACTIONS in feedcheck.js.';
+  const rows = checkRows(check([
+    finding('short_address', 'add_https', { level: 'stop', url: 'www.a.com', field: 'persons/0/href' }),
+  ]));
+  assert.equal(rows[0].button, 'Add https://', owner);
+  assert.equal(rows[0].action, 'repair', owner);
+  assert.equal(rows[0].stop, true, owner);
+  assert.deepEqual(rows[0].body, { kind: 'short_address', entry: null, url: 'www.a.com', field: 'persons/0/href' }, owner);
+});
+
 test('a read-only feed gives rows with no button', () => {
   const owner = 'ADR 0174 item 20: check checkRows in feedcheck.js.';
   const rows = checkRows(check([finding('no_self_link', null), finding('no_language', null, { level: 'question' })], { read_only: true }));

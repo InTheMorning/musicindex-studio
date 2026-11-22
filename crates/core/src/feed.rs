@@ -24,7 +24,7 @@ pub use elements::{
 };
 pub use enclosures::{AlternateEnclosure, lossless_pair};
 pub use keys::BadKey;
-pub use links::{BadAddress, is_web_address};
+pub use links::{BadAddress, UnknownAddressField, is_web_address, short_address_repair};
 use sync::{Children, Modeled, Names, adopt_list, adopt_one, read_list, read_one, read_text};
 pub use sync::{Entry, KeyError};
 pub use value::{FeeReading, RecipientPlace, ValueBlock, ValueTimeSplit};

@@ -207,6 +207,16 @@ impl From<PipelineError> for ApiError {
             return Self::new(StatusCode::CONFLICT, "file_exists", error.to_string())
                 .with_details(details);
         }
+        // ADR 0245 item 4: the message gives the places in words, and the
+        // details give each model path.
+        if error.kind() == PipelineErrorKind::BadAddress {
+            return Self::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "bad_address",
+                error.to_string(),
+            )
+            .with_details(serde_json::json!({ "fields": error.bad_fields() }));
+        }
         let (status, code) = match error.kind() {
             PipelineErrorKind::ReadOnly => (StatusCode::CONFLICT, "read_only"),
             PipelineErrorKind::NotFound => (StatusCode::NOT_FOUND, "not_found"),

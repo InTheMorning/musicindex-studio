@@ -127,7 +127,8 @@ pub fn repair_step(inputs: &CheckInputs, finding: &Finding) -> Result<Step, Pipe
         Some(
             RepairKind::UseTheHttpsAddress
             | RepairKind::UseLnurlAddress
-            | RepairKind::UseNodeAddress,
+            | RepairKind::UseNodeAddress
+            | RepairKind::AddHttps,
         ) => Ok(Step::Nothing),
         Some(RepairKind::ReadTheSize) => {
             let url = item_of(&links.feed, finding.entry.as_deref())
@@ -238,6 +239,9 @@ enum Plan {
         address: String,
         recipient_type: &'static str,
     },
+    /// Set an address field to its text with `https://` in front (ADR 0245
+    /// item 2).
+    FullAddress { field: String, address: String },
 }
 
 impl Plan {
@@ -282,6 +286,10 @@ impl Plan {
                 {
                     enclosure.length = Some(length.to_string());
                 }
+            }
+            Self::FullAddress { field, address } => {
+                // The plan found the field, so the setter cannot fail.
+                let _ = feed.set_address(field, address);
             }
             Self::RecipientType {
                 address,
@@ -393,8 +401,26 @@ fn plan_of(
         Some(RepairKind::UseLnurlAddress | RepairKind::UseNodeAddress) => {
             recipient_type_plan(feed, finding)
         }
+        Some(RepairKind::AddHttps) => full_address_plan(feed, finding),
         _ => Err(invalid("this finding has no repair that changes the draft")),
     }
+}
+
+/// The plan of the repair `AddHttps`. It refuses when the field of the draft
+/// does not have the text of the finding any more (ADR 0245 item 2).
+fn full_address_plan(feed: &Feed, finding: &Finding) -> Result<Plan, PipelineError> {
+    let (Some(field), Some(named)) = (finding.field.clone(), finding.url.as_deref()) else {
+        return Err(invalid("the finding names no address field"));
+    };
+    let current = feed
+        .bad_addresses()
+        .into_iter()
+        .find(|bad| bad.field == field)
+        .filter(|bad| bad.value == named)
+        .ok_or_else(|| invalid("the field does not have this address any more"))?;
+    let address = crate::feed::short_address_repair(&current.value)
+        .ok_or_else(|| invalid("Studio cannot complete this address"))?;
+    Ok(Plan::FullAddress { field, address })
 }
 
 fn recipient_type_plan(feed: &Feed, finding: &Finding) -> Result<Plan, PipelineError> {

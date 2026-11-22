@@ -154,7 +154,14 @@ pub struct PipelineError {
     bad_move_link: Option<Box<BadMoveLink>>,
     existing_file: Option<Box<ExistingFile>>,
     conflict_times: Option<(Option<i64>, Option<i64>)>,
+    /// Boxed so that the error stays small.
+    bad_fields: Option<Box<BadFields>>,
 }
+
+/// The model paths of a [`PipelineErrorKind::BadAddress`] error (ADR 0245
+/// item 4).
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct BadFields(Vec<String>);
 
 /// The file that a [`PipelineErrorKind::FileExists`] refusal of a feed move
 /// names (ADR 0178 item 4).
@@ -182,6 +189,7 @@ impl PipelineError {
             bad_move_link: None,
             existing_file: None,
             conflict_times: None,
+            bad_fields: None,
         }
     }
 
@@ -216,6 +224,7 @@ impl PipelineError {
             bad_move_link: Some(Box::new(refusal)),
             existing_file: None,
             conflict_times: None,
+            bad_fields: None,
         }
     }
 
@@ -237,6 +246,13 @@ impl PipelineError {
     #[must_use]
     pub fn existing_file(&self) -> Option<&ExistingFile> {
         self.existing_file.as_deref()
+    }
+
+    /// The model paths of the fields of a [`PipelineErrorKind::BadAddress`]
+    /// error (ADR 0245 item 4).
+    #[must_use]
+    pub fn bad_fields(&self) -> &[String] {
+        self.bad_fields.as_deref().map_or(&[], |b| b.0.as_slice())
     }
 
     /// The draft start time and hosted file change time, in Unix seconds.
@@ -4771,17 +4787,23 @@ fn write_draft_signed_inner(
     }
     let bad = feed.bad_addresses();
     if !bad.is_empty() {
-        let fields: Vec<String> = bad
+        // ADR 0245 item 4: the message gives the places in words. The
+        // model paths go in the details of the error.
+        let places: Vec<String> = bad
             .iter()
-            .map(|b| format!("{} ({:?})", b.field, b.value))
+            .map(|b| format!("{} ({:?})", b.place, b.value))
             .collect();
-        return Err(PipelineError::new(
+        let mut error = PipelineError::new(
             PipelineErrorKind::BadAddress,
             format!(
                 "these address fields are not full http or https addresses: {}",
-                fields.join(", ")
+                places.join(", ")
             ),
-        ));
+        );
+        error.bad_fields = Some(Box::new(BadFields(
+            bad.iter().map(|b| b.field.clone()).collect(),
+        )));
+        return Err(error);
     }
     // ADR 0074 item 5: a new bad key stops the write. A bad key text that
     // the hosted feed has does not stop it.

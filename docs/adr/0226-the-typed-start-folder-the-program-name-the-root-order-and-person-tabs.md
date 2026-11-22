@@ -11,6 +11,7 @@
 - Changes: [ADR 0223](0223-a-split-in-shares-or-percent-a-release-search-and-one-tap-on-a-phone.md) item 7. The fixed rows People, File hosts and Settings are at the bottom in both layouts (items 7 and 8).
 - Uses: [ADR 0182](0182-the-page-of-a-person-starts-with-its-links-and-has-a-nickname.md) item 10 (the section sequence of the person page). The tabs divide that sequence and do not change it.
 - Uses: [ADR 0166](0166-settings-has-tabs-and-one-save-bar.md) items 1 to 5, 9 and 10 (the tabs of Settings, the select menu in a narrow window, the tier order in each tab, the mark of a tab with a change that is not saved, and no leave question on a tab change), for the person tabs (items 9 to 12).
+- Changed by: [ADR 0241](0241-sign-out-and-switch-collection-are-rows-of-the-panel-footer.md). Item 7: the root page of a narrow window ends with the collection rows, the lock row, then "Sign Out".
 
 ## Context
 

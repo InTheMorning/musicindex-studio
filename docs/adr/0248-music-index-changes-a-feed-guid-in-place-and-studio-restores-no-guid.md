@@ -4,6 +4,7 @@
 - Date: 2026-11-22
 - Owner: operator
 - Accepted: 2026-11-22 by the orchestrator session, for the operator. The orchestrator approved the deletion of the items below after the deploy of stophammer 0.22.0-rc.1 started.
+- Confirmed: 2026-11-22 by the operator. Music Index permits a GUID change, but a user must not change a feed GUID if possible. Each change makes the value blocks of other music podcasts stale.
 - Changes: [ADR 0247](0247-studio-restores-a-changed-feed-guid-and-corrects-a-link-with-an-old-guid.md) items 1 to 6, 10 and 11. This record deletes them. Items 7 to 9 stay current.
 - Changes: [ADR 0175](0175-the-check-shows-what-music-index-holds.md), the fact of its Context on the decision of a GUID change and its invariant on a GUID change. Items 4 and 11 of ADR 0175 apply again with no change.
 - Uses: [ADR 0008](0008-feed-types-and-feed-identity.md) item 2, [ADR 0122](0122-a-new-user-starts-with-a-default-file-host.md) item 8, [ADR 0131](0131-a-feed-can-be-retired-from-the-index.md) item 6. Stophammer ADR 0106 §3 and §4 own the behavior of the index. This record cites them and does not restate them as rules of Studio.
@@ -32,7 +33,7 @@ These facts of the code on 2026-11-22 apply:
 ## Decision
 
 1. Items 1 to 6, 10 and 11 of ADR 0247 are deleted. Studio has no finding `guid_changed` and no finding `release_guids_changed`. Studio sends no request to `GET /v1/feeds/by-url` for these findings.
-2. Studio changes a feed GUID at one time only: a placeholder GUID gets the real GUID (ADR 0122 item 8). Studio has no repair that puts back an earlier GUID of a feed.
+2. Studio changes a feed GUID at one time only: a placeholder GUID gets the real GUID (ADR 0122 item 8). Studio has no repair that puts back an earlier GUID of a feed. A restore is a second GUID change. Each value block of a different feed that names the current GUID then becomes stale, because `superseded_by` never selects a payment route (Stophammer ADR 0106, Invariants).
 3. Items 7 to 9 of ADR 0247 stay current. A link with an old GUID gets the finding `link_guid_old`, and the move corrects the link.
 4. ADR 0175 items 4 and 11 apply again as their text gives. A feed that the index does not hold gives the line "Music Index does not hold this feed yet."
 5. Studio does not change a GUID in the index. Under Stophammer ADR 0106, the index changes a GUID in place when the feed declares a new GUID at the same URL.
@@ -46,6 +47,7 @@ These facts of the code on 2026-11-22 apply:
 ## Alternatives Considered
 
 - Keep ADR 0247 items 1 to 6 for a future index that keeps a pending change. Rejected, because no reader of the code remains, and dead decisions are deleted.
+- A deliberate restore action with a warning, for a publisher that wants the original GUID. Ruled out by the operator: Music Index permits the change, but each GUID change makes the value blocks of other music podcasts stale.
 - Follow `superseded_by` in each read now. Not chosen, because no stored old GUID is known.
 
 ## Checks

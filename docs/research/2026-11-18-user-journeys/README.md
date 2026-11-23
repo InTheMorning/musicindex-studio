@@ -17,6 +17,7 @@ so you can compare the step counts.
 - It also covers the collections, the account, the feed editor, live shows, People, the confirmations
   and the errors.
 - The record does not cover the other apps of the suite.
+- `hosting-publisher.md` adds a second type of user: a publisher who hosts other artists. It uses a subsequent commit.
 
 ## Method
 
@@ -66,6 +67,7 @@ The method is the same as in the previous study.
 | `step-counts.md` | The step counts of the main journeys, with a comparison to the previous study. | STE |
 | `observations.md` | The observed facts and defects for the analysis. | STE |
 | `analysis.md` | The ranked themes of two journeys for a new independent artist. | STE |
+| `hosting-publisher.md` | The journeys of a publisher who hosts other artists, from the tutorial of 2026-11-22, at commit `66a1a64`. | STE |
 | `evaluations/` | The cognitive walkthrough and the heuristic evaluation that `analysis.md` uses. | Tool output |
 | `inventory/A-shell-and-settings.md` | Run A: first run, sign-in, vault, navigation, file hosts, Settings, collections, apps, live shows, notices, errors, surfaces and unused controls. | Tool output |
 | `inventory/B-feed-editor.md` | Run B: each journey in the feed editor, Review, the write, versions, conflicts, files, moves and deletion. | Tool output |

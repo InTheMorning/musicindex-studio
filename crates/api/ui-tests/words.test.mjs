@@ -71,6 +71,10 @@ function textSegments(source, isHtml) {
 function isInterfaceText(text, at) {
   const end = at + 'publisher'.length;
   if (text === 'publisher') return false;
+  // ADR 0250 item 5 gives this exact label to the medium repair menu.
+  const repairLabel = 'Artist or label page (';
+  if (text.slice(Math.max(0, at - repairLabel.length), at) === repairLabel && text[end] === ')') return false;
+  if (/value=["']$/.test(text.slice(Math.max(0, at - 7), at))) return false;
   if (/[\w$.-]/.test(text[at - 1] ?? '') || /[\w$-]/.test(text[end] ?? '')) return false;
   if (text.slice(at - 'podcast:'.length, at) === 'podcast:') return false;
   if (/medium=["']$/.test(text.slice(Math.max(0, at - 8), at))) return false;
@@ -90,6 +94,8 @@ test('no interface text in the UI uses the word publisher', () => {
     }
   }
   assert.deepEqual(found, [], `${MESSAGE}\nFound: ${found.join(', ')}`);
+  assert.match(readFileSync(new URL('app.js', uiDir), 'utf8'), /Artist or label page \(publisher\)/,
+    'ADR 0250 item 5: name the value in mediumProblemView of crates/api/ui/shell.js.');
 });
 
 test('a publisher feed lists each role, or shows Feed with a hollow dot', () => {

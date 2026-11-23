@@ -716,7 +716,10 @@ async fn the_host_lists_its_feed_files_and_marks_the_ones_in_the_collection() {
     let app = app();
     std::fs::write(
         app.feeds.path().join("single.xml"),
-        FEED.replace("Album", "Single"),
+        FEED.replace("Album", "Single").replace(
+            "<podcast:medium>music</podcast:medium>",
+            "<podcast:meduim>music</podcast:meduim>",
+        ),
     )
     .unwrap();
     std::fs::write(app.feeds.path().join("notes.txt"), "not a feed").unwrap();
@@ -732,8 +735,91 @@ async fn the_host_lists_its_feed_files_and_marks_the_ones_in_the_collection() {
     assert_eq!(feeds[0]["in_collection"], true);
     assert_eq!(feeds[1]["path"], "single.xml");
     assert_eq!(feeds[1]["title"], "Single");
-    assert_eq!(feeds[1]["medium"], "music");
+    assert_eq!(feeds[1]["medium"], Value::Null);
+    assert_eq!(feeds[1]["medium_problem"]["kind"], "misspelled_tag");
     assert_eq!(feeds[1]["in_collection"], false);
+}
+
+#[tokio::test]
+async fn a_feed_with_a_bad_medium_shows_a_cause_and_the_draft_repair() {
+    let app = app();
+    let id = set_up(&app).await;
+    let (status, draft) = call(&app, "GET", &format!("/api/v1/feeds/{id}/draft"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/medium"),
+        Some(json!({ "revision": draft["revision"], "medium": "music" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    let typo = FEED.replace(
+        "<podcast:medium>music</podcast:medium>",
+        "<podcast:meduim>music</podcast:meduim>",
+    );
+    std::fs::write(app.feeds.path().join("album.xml"), typo).unwrap();
+    let (status, _) = call(&app, "POST", &format!("/api/v1/feeds/{id}/refresh"), None).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (status, _) = call(&app, "GET", "/api/v1/feeds", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, problem) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{id}/medium-problem"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(problem["medium_problem"]["kind"], "misspelled_tag");
+    assert_eq!(problem["medium_problem"]["suggested"], "music");
+    let (status, draft) = call(&app, "GET", &format!("/api/v1/feeds/{id}/draft"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, repaired) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/medium"),
+        Some(json!({
+            "revision": draft["revision"], "medium": "music"
+        })),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "{repaired}; ADR 0250 item 7: correct_medium in crates/core/src/pipeline/check_repair.rs."
+    );
+    assert_eq!(repaired["model"]["medium"], "music");
+    let (status, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    let text = diff["lines"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|line| line["kind"] == "added")
+        .flat_map(|line| line["parts"].as_array().into_iter().flatten())
+        .filter_map(|part| part["text"].as_str())
+        .collect::<String>();
+    assert!(
+        text.contains("<podcast:medium>music</podcast:medium>"),
+        "{diff}"
+    );
+    assert!(!text.contains("<podcast:meduim>"));
+    let (status, rows) = call(&app, "GET", "/api/v1/feeds", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(rows[0]["medium"], "music");
+    let (status, refused) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/medium"),
+        Some(json!({
+            "revision": repaired["revision"], "medium": "music"
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(refused["error"]["code"], "invalid_change_set");
 }
 
 #[tokio::test]
@@ -3987,6 +4073,14 @@ fn web_feeds() -> studio_core::testing::TestServer {
 #[tokio::test]
 async fn discovery_follows_a_publisher_and_import_adds_read_only_feeds() {
     let server = web_feeds();
+    let misspelled = FEED
+        .replace("Album", "Album B")
+        .replace("g-1", "b-1")
+        .replace(
+            "<podcast:medium>music</podcast:medium>",
+            "<podcast:meduim>music</podcast:meduim>",
+        );
+    server.set("/b.xml", 200, misspelled.into_bytes());
     let app = app_with_index(&server.url(""));
     let (status, body) = call(
         &app,
@@ -4002,6 +4096,7 @@ async fn discovery_follows_a_publisher_and_import_adds_read_only_feeds() {
     assert_eq!(feeds[1]["via"], "release");
     assert_eq!(feeds[0]["host"], "127.0.0.1");
     assert_eq!(feeds[0]["service"], Value::Null);
+    assert_eq!(feeds[2]["medium_problem"]["kind"], "misspelled_tag");
     assert!(feeds.iter().all(|f| f["in_collection"] == false));
 
     let urls: Vec<&str> = feeds.iter().map(|f| f["url"].as_str().unwrap()).collect();

@@ -113,6 +113,28 @@ export function otherFeedText(feed) {
   return `This feed has ${medium}. Studio edits albums, playlists, and artist and label feeds, so it shows only the facts of this feed.`;
 }
 
+// The notice for a correctable medium problem (ADR 0250 items 4, 5 and 9).
+export function mediumProblemView(problem, hasHost) {
+  const title = 'Studio does not know the type of this feed';
+  let text;
+  if (problem.kind === 'no_tag') text = 'This feed has no <podcast:medium> tag.';
+  else text = problem.line == null
+    ? `This feed has ${problem.tag}. Studio reads only <podcast:medium>.`
+    : `Line ${problem.line} has ${problem.tag}. Studio reads only <podcast:medium>.`;
+  return {
+    title,
+    text,
+    menu: hasHost,
+    start: problem.suggested || '',
+    hostLine: hasHost ? null : 'Connect the folder that holds this file in File hosts to correct it.',
+  };
+}
+
+// The cause shown after a found feed type (ADR 0250 item 10).
+export function mediumProblemCause(problem) {
+  return problem.kind === 'no_tag' ? 'no medium tag' : `misspelled tag ${problem.tag}`;
+}
+
 // Is this feed read-only? A feed with no connector has no host that Studio
 // can write to (ADR 0067 item 1).
 export function isReadOnly(feed) {

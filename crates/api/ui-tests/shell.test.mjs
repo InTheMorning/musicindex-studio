@@ -6,7 +6,7 @@ import {
   pageTabs, tabsFit, mediumKind, feedKind, trackCountText, roleChoice, toggleRole, isEditable, isReadOnly, reviewHost, moveNote, isPublisher, isPlaylist, trackKey, isTrack,
   leftPanel, releasesList, listQuery, queryText, sortLabel, sortEntries, compareNames, byName, segmentKey, levelFeedSet,
   startNav, pushNav, backNav, forwardNav, canBack, canForward, setScroll, releasesView,
-  narrowStack, openFeedView, newFeedView, navAtWidth, widthNav, wideView, publisherArt, mosaicCells, otherFeedText,
+  narrowStack, openFeedView, newFeedView, navAtWidth, widthNav, wideView, publisherArt, mosaicCells, otherFeedText, mediumProblemView, mediumProblemCause,
 } from '../ui/shell.js';
 import { stateMark } from '../ui/outsidecheck.js';
 
@@ -164,6 +164,30 @@ test('a playlist and a publisher feed have no live shows', () => {
   for (const panel of [pub, list]) {
     assert.equal(labels(panel.items).includes('Live shows'), false);
   }
+});
+
+test('a medium problem view gives its repair text and menu state', () => {
+  const typo = { kind: 'misspelled_tag', tag: '<podcast:meduim>music</podcast:meduim>', line: 12, suggested: 'music' };
+  assert.deepEqual(mediumProblemView(typo, true), {
+    title: 'Studio does not know the type of this feed',
+    text: 'Line 12 has <podcast:meduim>music</podcast:meduim>. Studio reads only <podcast:medium>.',
+    menu: true, start: 'music', hostLine: null,
+  }, 'ADR 0250 items 4, 5 and 9: check mediumProblemView in shell.js.');
+  assert.equal(mediumProblemView({ ...typo, line: null, suggested: null }, false).text,
+    'This feed has <podcast:meduim>music</podcast:meduim>. Studio reads only <podcast:medium>.');
+  assert.equal(mediumProblemView({ kind: 'other_namespace', tag: '<medium>music</medium>', line: 3, suggested: 'musicL' }, true).start, 'musicL');
+  assert.equal(mediumProblemView({ kind: 'misspelled_value', tag: '<podcast:medium>msuic</podcast:medium>', line: 8, suggested: 'publisher' }, true).start, 'publisher');
+  assert.equal(mediumProblemView({ kind: 'no_tag', tag: null, line: null, suggested: null }, false).hostLine,
+    'Connect the folder that holds this file in File hosts to correct it.');
+  assert.equal(mediumProblemView({ kind: 'no_tag', tag: null, line: null, suggested: null }, true).text,
+    'This feed has no <podcast:medium> tag.');
+});
+
+test('a medium problem cause names each problem kind', () => {
+  assert.equal(mediumProblemCause({ kind: 'misspelled_tag', tag: '<podcast:meduim>music</podcast:meduim>' }), 'misspelled tag <podcast:meduim>music</podcast:meduim>');
+  assert.equal(mediumProblemCause({ kind: 'other_namespace', tag: '<medium>music</medium>' }), 'misspelled tag <medium>music</medium>');
+  assert.equal(mediumProblemCause({ kind: 'misspelled_value', tag: '<podcast:medium>msuic</podcast:medium>' }), 'misspelled tag <podcast:medium>msuic</podcast:medium>');
+  assert.equal(mediumProblemCause({ kind: 'no_tag', tag: null }), 'no medium tag', 'ADR 0250 item 10: check mediumProblemCause in shell.js.');
 });
 
 test('an open album before its draft loads gives the Releases link', () => {

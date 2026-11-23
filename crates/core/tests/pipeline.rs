@@ -144,6 +144,47 @@ fn setup_with(feed_xml: &str) -> Setup {
 }
 
 #[test]
+fn correct_medium_repairs_each_problem_through_the_draft() {
+    let cases = [
+        (FEED.replace("<podcast:medium>music</podcast:medium>", "<podcast:meduim>music</podcast:meduim>"), "musicL", "<podcast:meduim>"),
+        (FEED.replace("<podcast:medium>music</podcast:medium>", "<medium>music</medium>"), "publisher", "<medium>"),
+        (FEED.replace("<podcast:medium>music</podcast:medium>", "<podcast:medium>msuic</podcast:medium>"), "music", "msuic"),
+        (FEED.replace("    <podcast:medium>music</podcast:medium>\n", "").replace("<guid>track-1</guid>", "<guid>track-1</guid><enclosure url=\"https://music.example/track.mp3\" type=\"audio/mpeg\" length=\"1\" />"), "music", "<podcast:medium>"),
+    ];
+    for (source, medium, removed) in cases {
+        let setup = setup_with(&source);
+        pipeline::start_draft(&setup.collection, setup.connector.as_ref(), setup.feed).unwrap();
+        let draft = setup.collection.draft(setup.feed).unwrap().unwrap();
+        let result = pipeline::correct_medium(
+            &setup.collection,
+            setup.feed,
+            &pipeline::revision(&draft),
+            medium,
+        )
+        .unwrap();
+        let document = Document::parse_bytes(&result.draft_xml).unwrap();
+        let feed = Feed::read(&document).unwrap();
+        assert_eq!(
+            feed.medium.as_deref(),
+            Some(medium),
+            "ADR 0250 item 7: correct_medium repairs each condition."
+        );
+        let written = document.write();
+        assert_eq!(written.matches("<podcast:medium>").count(), 1);
+        if removed != "<podcast:medium>" || source.contains("<podcast:medium>") {
+            assert!(
+                !written.contains(removed),
+                "ADR 0250 item 7: the bad element is removed."
+            );
+        }
+        assert!(
+            written.contains("<title>Album</title>"),
+            "ADR 0250 item 7: other element bytes stay."
+        );
+    }
+}
+
+#[test]
 fn a_feed_guid_change_stops_until_the_title_is_confirmed() {
     let mut s = setup();
     pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();

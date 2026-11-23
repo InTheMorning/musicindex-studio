@@ -39,7 +39,8 @@ use crate::xml::{Document, Element, ParseError};
 
 mod check_repair;
 pub use check_repair::{
-    CheckInputs, Proof, Step, apply_check_repair, check_inputs, repair_step, run_step,
+    CheckInputs, Proof, Step, apply_check_repair, check_inputs, correct_medium, repair_step,
+    run_step,
 };
 
 /// The kind of a [`PipelineError`].

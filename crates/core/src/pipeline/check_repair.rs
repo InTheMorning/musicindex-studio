@@ -16,6 +16,85 @@ use crate::feed_reads::{FileReads, https_of};
 use crate::move_link::{FeedReader, OwnedDraftLinks};
 use crate::xml::Document;
 
+/// Correct a bad or missing medium through the draft (ADR 0250 item 7).
+///
+/// # Errors
+///
+/// Gives [`PipelineErrorKind::StaleRevision`] when the draft changed.
+/// Gives [`PipelineErrorKind::InvalidOperation`] for an unsupported medium
+/// or a draft without a medium problem (ADR 0250 item 7).
+pub fn correct_medium(
+    collection: &Collection,
+    id: FeedId,
+    sent_revision: &str,
+    medium: &str,
+) -> Result<DraftRow, PipelineError> {
+    if !["music", "musicL", "publisher"].contains(&medium) {
+        return Err(PipelineError::new(
+            PipelineErrorKind::InvalidOperation,
+            "ADR 0250 item 7: correct_medium accepts only music, musicL or publisher",
+        ));
+    }
+    let mut draft = checked_draft(collection, id, sent_revision)?;
+    let mut document = Document::parse_bytes(&draft.draft_xml)?;
+    let problem = crate::medium_problem::medium_problem(&document).ok_or_else(|| {
+        PipelineError::new(
+            PipelineErrorKind::InvalidOperation,
+            "ADR 0250 item 7: correct_medium needs a draft with a medium problem",
+        )
+    })?;
+    let channel = document
+        .root_mut()
+        .children_mut()
+        .iter_mut()
+        .find_map(|node| match node {
+            crate::xml::Node::Element(channel) if channel.is(crate::xml::Ns::None, "channel") => {
+                Some(channel)
+            }
+            _ => None,
+        })
+        .ok_or_else(|| {
+            PipelineError::new(
+                PipelineErrorKind::InvalidOperation,
+                "ADR 0250 item 7: correct_medium needs an RSS channel",
+            )
+        })?;
+    match problem.kind {
+        crate::medium_problem::MediumProblemKind::MisspelledTag
+        | crate::medium_problem::MediumProblemKind::OtherNamespace => {
+            crate::medium_problem::replace_bad_elements(channel, problem.kind, medium);
+        }
+        crate::medium_problem::MediumProblemKind::MisspelledValue => {
+            let element = channel
+                .children_mut()
+                .iter_mut()
+                .find_map(|node| match node {
+                    crate::xml::Node::Element(element)
+                        if element.is(crate::xml::Ns::Podcast, "medium") =>
+                    {
+                        Some(element)
+                    }
+                    _ => None,
+                })
+                .ok_or_else(|| {
+                    PipelineError::new(
+                        PipelineErrorKind::InvalidOperation,
+                        "ADR 0250 item 7: correct_medium could not find podcast:medium",
+                    )
+                })?;
+            element.set_text(medium);
+        }
+        crate::medium_problem::MediumProblemKind::NoTag => {
+            let mut feed = Feed::read(&document)?;
+            feed.medium = Some(medium.to_owned());
+            feed.write(&mut document)?;
+        }
+    }
+    draft.draft_xml = document.write().into_bytes();
+    save_repaired_draft(collection, id, &draft)?;
+    Ok(draft)
+}
+
 /// The facts of a draft for the check, with its revision.
 #[derive(Debug, Clone)]
 pub struct CheckInputs {
@@ -217,13 +296,7 @@ pub fn apply_check_repair(
     proof: &Proof,
 ) -> Result<DraftRow, PipelineError> {
     let row = collection.feed(id)?;
-    let draft = current_draft(collection, id)?;
-    if revision(&draft) != sent_revision {
-        return Err(PipelineError::new(
-            PipelineErrorKind::StaleRevision,
-            "the draft changed after this model was read; read the draft again",
-        ));
-    }
+    let draft = checked_draft(collection, id, sent_revision)?;
     if finding.repair == Some(RepairKind::KeepNewGuid) {
         let Some(guid) = row.podcast_guid.as_deref() else {
             return Err(invalid("this repair does not apply to the draft"));
@@ -249,8 +322,32 @@ pub fn apply_check_repair(
     let before_xml = draft.draft_xml.clone();
     let changed = changed_draft(draft, |feed| plan.apply(feed))?;
     let changed = dated_like_base(changed, &before_xml)?;
-    collection.save_draft(id, &changed)?;
+    save_repaired_draft(collection, id, &changed)?;
     Ok(changed)
+}
+
+fn checked_draft(
+    collection: &Collection,
+    id: FeedId,
+    sent_revision: &str,
+) -> Result<DraftRow, PipelineError> {
+    let draft = current_draft(collection, id)?;
+    if revision(&draft) != sent_revision {
+        return Err(PipelineError::new(
+            PipelineErrorKind::StaleRevision,
+            "the draft changed after this model was read; read the draft again",
+        ));
+    }
+    Ok(draft)
+}
+
+fn save_repaired_draft(
+    collection: &Collection,
+    id: FeedId,
+    draft: &DraftRow,
+) -> Result<(), PipelineError> {
+    collection.save_draft(id, draft)?;
+    Ok(())
 }
 
 /// The change of one repair, after its checks.

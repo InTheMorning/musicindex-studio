@@ -7,7 +7,7 @@ import { UI_SCALES, SCALE_KEY, normalizeScale, measureWindowUnits } from './uisc
 import { LOCK_HINT, START_HINT, lockChoiceText } from './vaultlock.js';
 import { serverFilesRows, sizeText, SERVER_FILES_NOTE } from './assets.js';
 import { failedLine } from './failures.js';
-import { OPEN_MERGE, OPEN_FEED_MOVE, MoveAllSheet, MoveSheet, GatherPagesSheet, AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, OUTSIDE_RECHECK, restoreDeletedFile, checkDeletedAgain, AnnounceChoice, UndoButtons, useUndoKeys, DeleteUndoBar, removeFeedFromCollection } from './editor.js';
+import { OPEN_REVIEW, OPEN_MERGE, OPEN_FEED_MOVE, MoveAllSheet, MoveSheet, GatherPagesSheet, AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, OUTSIDE_RECHECK, restoreDeletedFile, checkDeletedAgain, AnnounceChoice, UndoButtons, useUndoKeys, DeleteUndoBar, removeFeedFromCollection } from './editor.js';
 import {
   recipientKey,
   outcomeText, blockedText, operationLine, nameOf, writableIds, firstOpenId, initialStatuses, refreshedStatuses, startWrite,
@@ -53,7 +53,7 @@ import {
 } from './move.js';
 import {
   mediumKind, feedKind, FIRST_CLASS_ROLES, roleWord, kindGlow, isEditable, isReadOnly, isPublisher, trackKey, isTrack,
-  leftPanel, releasesList, listQuery, queryText, sortLabel, sortEntries, mosaicCells, otherFeedText, feedCover,
+  leftPanel, releasesList, listQuery, queryText, sortLabel, sortEntries, mosaicCells, otherFeedText, mediumProblemView, mediumProblemCause, feedCover,
   startNav, pushNav, backNav, forwardNav, releasesView, canBack, canForward, setScroll,
   isFeedView, openFeedView, newFeedView, navAtWidth, pageTabs, tabsFit, showsRootButtons, rootNav, segmentKey, levelFeedSet, isTabChange, movedReleaseView } from './shell.js';
 import {
@@ -510,15 +510,17 @@ function title(error) {
 // A labelled input. `error` is a line of red text below the field (ADR 0018).
 // The label and the input sit in one body div, so that a field in a group
 // can put the label at the left at a wide width (ADR 0029, task 014c).
-export function Field({ id, label, hint, error, children, rootProps, ...input }) {
+export function Field({ id, label, hint, error, children, rootProps, select = false, ...input }) {
   const described = [hint && `${id}-hint`, error && `${id}-error`].filter(Boolean).join(' ');
   return html`<div class="field" ...${rootProps}>
     <label for=${id}>${label}</label>
     <div class="field-body">
       ${hint && html`<span class="hint" id=${`${id}-hint`}>${hint}</span>`}
-      <input id=${id} aria-invalid=${error ? 'true' : undefined} aria-describedby=${described || undefined} ...${input} />
+      ${select
+        ? html`<select id=${id} aria-invalid=${error ? 'true' : undefined} aria-describedby=${described || undefined} ...${input}>${children}</select>`
+        : html`<input id=${id} aria-invalid=${error ? 'true' : undefined} aria-describedby=${described || undefined} ...${input} />`}
       ${error && html`<span class="field-error" id=${`${id}-error`}>${error}</span>`}
-      ${children}
+      ${!select && children}
     </div>
   </div>`;
 }
@@ -689,7 +691,7 @@ function AddressDifferences({ feed }) {
   return html`<div class="notice" role="status">
     <strong>Other sources give a different address.</strong>
     <ul class="address-list">
-      ${differences.map((d) => html`<li>${addressSource(d.source)}: <span class="mono">${d.url}</span></li>`)}
+      ${differences.map((d) => html`<li>${addressSource(d.source)}: <span class="mono" data-fit-allow-break>${d.url}</span></li>`)}
     </ul>
     Studio uses the public address above. Studio does not change the feed file.
   </div>`;
@@ -1926,7 +1928,7 @@ function FoundFeeds({ found, onAdded, onNothingToAdd }) {
             onChange=${() => toggle(f.url)} />
           <span class=${`dot ${kind.dot}`}></span>
           <span class="text"><span class="title">${f.title || f.url}</span>
-            <span class="sub">${kind.label}${f.in_collection ? ' · in your collection' : ''}</span>
+            <span class="sub">${kind.label}${f.medium_problem ? ` · ${mediumProblemCause(f.medium_problem)}` : ''}${f.in_collection ? ' · in your collection' : ''}</span>
             ${f.guid_notice && html`<span class="sub" role="status">${f.guid_notice}</span>`}</span></label>`;
       })}
     </fieldset>`)}
@@ -2282,8 +2284,11 @@ export function useLeaveGuard(active, guard) {
 
 // A feed that the editor cannot open yet: the full hero and the facts, as
 // before ADR 0029.
-function ReadOnlyFeed({ feed, onChanged, onRemoved }) {
+function ReadOnlyFeed({ feed, onChanged, onRemoved, onListChanged }) {
   const { busy, error, run } = useAction();
+  const [medium, setMedium] = useState('');
+  const [revision, setRevision] = useState(feed.revision || null);
+  const [mediumProblem, setMediumProblem] = useState(null);
   const deleteUndo = useDeleteUndo();
   const kind = feedKind(feed);
   const refresh = () => run(async () => onChanged(await api(`/feeds/${feed.id}/refresh`, { method: 'POST' })));
@@ -2291,6 +2296,31 @@ function ReadOnlyFeed({ feed, onChanged, onRemoved }) {
     run(() => removeFeedFromCollection(feed, deleteUndo, onRemoved));
   };
   const glow = kindGlow(kind);
+  useEffect(() => {
+    let active = true;
+    api(`/feeds/${feed.id}/medium-problem`).then((result) => {
+      if (!active) return;
+      setMediumProblem(result.medium_problem);
+      // The menu starts on the suggested type (ADR 0250 item 5).
+      setMedium(result.medium_problem?.suggested || '');
+    }, () => { if (active) setMediumProblem(null); });
+    return () => { active = false; };
+  }, [feed.id]);
+  const mediumView = mediumProblem ? mediumProblemView(mediumProblem, Boolean(feed.connector_id)) : null;
+  useEffect(() => {
+    if (mediumView?.menu && !revision) api(`/feeds/${feed.id}/draft`).then((draft) => setRevision(draft.revision), () => {});
+  }, [feed.id, mediumView?.menu, revision]);
+  const correctMedium = () => run(async () => {
+    await api(`/feeds/${feed.id}/medium`, { method: 'POST', body: { revision, medium } });
+    await onListChanged?.();
+    let attempts = 0;
+    let opened = false;
+    const openReview = () => {
+      window.dispatchEvent(new CustomEvent(OPEN_REVIEW, { detail: { feedId: feed.id, opened: () => { opened = true; } } }));
+      if (!opened && attempts++ < 60) setTimeout(openReview, 50);
+    };
+    openReview();
+  });
   return html`<div>
     <${Bar}><span class="bar-title">${feed.title || 'Untitled feed'}</span><//>
     <section class="hero" style=${{ '--glow': glow }}>
@@ -2299,7 +2329,17 @@ function ReadOnlyFeed({ feed, onChanged, onRemoved }) {
         <span class="eyebrow"><span class=${`dot ${kind.dot}`}></span>${kind.label}${feed.connector_id ? '' : ' · read-only'}</span>
         <h1>${feed.title || 'Untitled feed'}</h1>
         <p class="summary">${feed.public_url || 'This feed has no public address yet.'}</p>
-        <p class="hint">${otherFeedText(feed)}</p>
+        ${mediumView
+          ? html`<div class="notice" role="status"><strong>${mediumView.title}</strong><p>${mediumView.text}</p>
+            ${mediumView.menu
+              ? html`<${Field} id="medium-type" label="Type of this feed" select value=${medium} onChange=${(event) => setMedium(event.target.value)}>
+                  <option value="">Select a type</option><option value="music">Album (music)</option>
+                  <option value="musicL">Playlist (musicL)</option><option value="publisher">Artist or label page (publisher)</option>
+                <//>
+                <div class="actions"><button class="button primary" type="button" disabled=${busy || !medium || !revision} onClick=${correctMedium}>Review the Change</button></div>`
+              : html`<p>${mediumView.hostLine}</p>`}
+          </div>`
+          : html`<p class="hint">${otherFeedText(feed)}</p>`}
         <${OutsideNotices} feed=${feed} busy=${busy} refresh=${refresh} onChanged=${onChanged} />
         <div class="actions">
           <button class="button destructive" type="button" disabled=${busy} onClick=${remove}>Remove from Collection</button>
@@ -2316,7 +2356,7 @@ function ReadOnlyFeed({ feed, onChanged, onRemoved }) {
         <dt>Address source</dt><dd>${feed.public_url ? addressSource(feed.address_source) : '—'}</dd>
         <dt>Feed GUID</dt><dd class="mono">${feed.podcast_guid || '—'}</dd>
         <dt>File</dt><dd class="mono">${feed.path || 'Read-only. Connect the folder that holds this file in File hosts.'}</dd>
-        <dt>Version</dt><dd class="mono">${feed.last_version || 'Not read yet'}</dd>
+        <dt>Version</dt><dd class="mono" data-fit-allow-break>${feed.last_version || 'Not read yet'}</dd>
       </dl>
       ${feed.connector_id && html`<p class="hint">The editor for this feed type comes in a later phase.</p>`}
     </section>
@@ -2636,7 +2676,7 @@ function FeedDetail({ feed, feeds, draft, view, go, adding, onAdding, importing,
       onChanged=${onChanged} onListChanged=${onListChanged} onRemoved=${onRemoved} connectors=${connectors}
       differences=${differences} onRescan=${onRescan} />`;
   }
-  return html`<${ReadOnlyFeed} feed=${feed} onChanged=${onChanged} onRemoved=${onRemoved} />`;
+  return html`<${ReadOnlyFeed} feed=${feed} onChanged=${onChanged} onRemoved=${onRemoved} onListChanged=${onListChanged} />`;
 }
 
 // The feed files in a folder that are not in the collection. Studio shows
@@ -2682,7 +2722,7 @@ function FolderFeeds({ connector, onAdded, asked = false }) {
           <input type="checkbox" checked=${chosen.includes(f.path)} onChange=${() => toggle(f.path)} />
           <span class=${`dot ${kind.dot}`}></span>
           <span class="text"><span class="title">${f.title || f.path}</span>
-            <span class="sub">${kind.label}${f.blocked ? ' · blocked: directories do not show it' : ''} · <span class="mono">${f.path}</span></span></span>
+            <span class="sub">${kind.label}${f.medium_problem ? ` · ${mediumProblemCause(f.medium_problem)}` : ''}${f.blocked ? ' · blocked: directories do not show it' : ''} · <span class="mono">${f.path}</span></span></span>
         </label>`;
       })}
     </fieldset>

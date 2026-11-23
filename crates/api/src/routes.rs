@@ -1463,6 +1463,17 @@ pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
                 .and_then(|rss_image| rss_image.url.clone());
             let mut value =
                 serde_json::to_value(row).map_err(|e| ApiError::internal(e.to_string()))?;
+            if !matches!(
+                row.medium.as_deref(),
+                Some("music" | "musicL" | "publisher")
+            ) && let Some(feed) = feed.as_ref()
+                && matches!(
+                    feed.medium.as_deref(),
+                    Some("music" | "musicL" | "publisher")
+                )
+            {
+                value["medium"] = json!(feed.medium);
+            }
             value["draft_state"] = json!(state);
             let written = if row.last_version.is_some() {
                 pipeline::written_copy(&w.collection, library.as_ref(), row)
@@ -4362,6 +4373,76 @@ pub(crate) async fn get_draft(State(shared): State<Shared>, Path(id): Path<i64>)
 pub(crate) struct SentDraft {
     revision: String,
     model: Feed,
+}
+
+#[derive(Deserialize)]
+pub(crate) struct SentMedium {
+    revision: String,
+    medium: String,
+}
+
+/// Read the source bytes that define a feed's medium problem (ADR 0250 items 2 and 6).
+pub(crate) async fn feed_medium_problem(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+) -> ApiResult {
+    let id = FeedId(id);
+    let (bytes, public_url, web) = blocking(Arc::clone(&shared), move |w| {
+        let row = w.collection.feed(id)?;
+        if let Some(draft) = w.collection.draft(id)? {
+            return Ok((Some(draft.base_xml), None, w.web.clone()));
+        }
+        let bytes =
+            if let (Some(connector_id), Some(path)) = (row.connector_id, row.path.as_deref()) {
+                let connector_row = w.collection.connector(connector_id)?;
+                if connector_row.secret_ref.is_some() && w.vault.is_none() {
+                    return Err(ApiError::vault_locked());
+                }
+                w.connector_of(&connector_row)?
+                    .read(path)
+                    .ok()
+                    .flatten()
+                    .map(|file| file.bytes)
+            } else {
+                None
+            };
+        Ok((bytes, row.public_url, w.web.clone()))
+    })
+    .await?;
+    let bytes = match (bytes, public_url) {
+        (Some(bytes), _) => Some(bytes),
+        (None, Some(address)) => {
+            blocking_unlocked(move || Ok(studio_core::outside::read_hosted(&web, &address))).await?
+        }
+        (None, None) => None,
+    };
+    let problem = bytes
+        .as_deref()
+        .and_then(studio_core::medium_problem::medium_problem_in_bytes);
+    Ok(Json(json!({ "medium_problem": problem })))
+}
+
+/// Correct the medium in a draft (ADR 0250 items 6 and 7).
+pub(crate) async fn correct_medium(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(body): Json<SentMedium>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let id = FeedId(id);
+        let row = w.collection.feed(id)?;
+        if row.connector_id.is_none() {
+            return Err(ApiError::new(
+                StatusCode::CONFLICT,
+                "read_only",
+                "ADR 0250 item 6: correct_medium cannot repair this feed because it has no file host",
+            ));
+        }
+        ensure_draft(w, id)?;
+        pipeline::correct_medium(&w.collection, id, &body.revision, &body.medium)?;
+        draft_json(w, id)
+    })
+    .await
 }
 
 /// Replace the model of the draft (ADR 0022). The hosted file does not

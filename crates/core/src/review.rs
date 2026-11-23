@@ -1303,7 +1303,7 @@ fn mark_whole_lines(lines: &mut [DiffLine]) {
 // ---------------------------------------------------------------------
 
 /// The byte offset where each line of `text` starts.
-fn line_starts(text: &str) -> Vec<usize> {
+pub(crate) fn line_starts(text: &str) -> Vec<usize> {
     let mut starts = Vec::new();
     let mut offset = 0;
     for line in text.split_inclusive('\n') {

@@ -55,13 +55,15 @@ After the tag was correct on the server, **Read Again** made the feed a release 
 
 Recommendation: improvement. When a feed has no `podcast:medium` tag and has audio enclosures, tell the user that the tag is missing. When the feed has a `podcast:` tag with a name near `medium`, give that name and the line. Do not change the read-only rule without an ADR.
 
-Operator choice (2026-11-23): [ADR 0250](../adr/0250-studio-corrects-the-type-of-a-feed-with-a-bad-or-missing-medium-tag.md) owns findings 3 and 10. The page of the feed has the select menu "Type of this feed" for a bad tag and for a missing tag. The list of found feeds names the cause. Status: decided, not built.
+Operator choice (2026-11-23): [ADR 0250](../adr/0250-studio-corrects-the-type-of-a-feed-with-a-bad-or-missing-medium-tag.md) owns findings 3 and 10. The page of the feed has the select menu "Type of this feed" for a bad tag and for a missing tag. The list of found feeds names the cause. Status: built in task 241. A walk with a debug build showed the cause "misspelled tag" in the found list, the notice with line 18 and the menu on "Album (music)". **Review the Change** opened the feed in the editor, and Review showed "Medium: none → music". The write was not done, because the test host has no public address that Studio accepts.
 
 ## Finding 4: a 32-bit WAV file gets a general refusal
 
 **Add tracks** refused a WAV file with 32-bit integer samples: "Studio does not read this kind of file." (`crates/api/ui/editor.js` line 1206, code `unsupported_media`). WAV files with 16-bit and 24-bit samples worked.
 
 Recommendation: improvement. Tell the user that the WAV file has 32-bit samples, and give the formats that work. The cause in the decoder is not examined.
+
+Status: corrected. Each refusal of a sample format or a bit depth in `crates/core/src/media.rs` now ends with "Export the file with 16-bit or 24-bit integer samples." A refusal of the channel count ends with "Export the file with one or two channels." The sheet shows the message of the core. A walk with a debug build showed the new text for a 32-bit WAV file.
 
 ## Finding 5: the SFTP fingerprint breaks in a word
 
@@ -77,11 +79,15 @@ The tab is **Value Routes** (`crates/api/ui/shell.js` line 243). The breadcrumb 
 
 Recommendation: question for the operator. If tabs use title case and headings use sentence case by rule, this is correct. If not, use one form.
 
+Status: not a defect. musicindex ADR 0085 R-CASE-1 gives title case to a tab and sentence case to a heading and a breadcrumb. Thus "Value Routes" on the tab and "Value routes" on the page are both correct.
+
 ## Finding 7: Kind shows "(no tracks yet)" on a release that has tracks
 
 After **＋ Add 3 Tracks**, the release page showed **Kind** with "From the tracks (no tracks yet)". The label comes from `crates/api/ui/addfeeds.js` line 140. The cause is not examined. A stale value of the track count is possible.
 
 Recommendation: defect, if a test confirms it. The label must give the kind from the current tracks.
+
+Status: corrected. The cause was a stale feed list: `ReleaseKindField` in `crates/api/ui/editor.js` used the track count of the list, and the list did not load again after the tracks were added. The field now asks for the list again when the saved draft has a different track count. A walk with a debug build showed "From the tracks (Single)" after three tracks. The core rule gives Single for one to three tracks.
 
 ## Finding 8: two labels for one action
 
@@ -90,11 +96,15 @@ Recommendation: defect, if a test confirms it. The label must give the kind from
 
 Recommendation: question for the operator. A button and a menu row can have different case by rule. If the words differ ("Add release" and "Add a Release"), use one form.
 
+Status: decided by [ADR 0232](../adr/0232-each-group-below-an-open-feed-has-an-add-row.md) item 6. The add rows of the left panel are "Add release", "Add artist" and "Add label", and the add row "Add a Release" in the body of an artist page stays. The operator selected "Add a release" in a question that did not name ADR 0232. A change needs a new decision for the three add rows. The case of "Add tracks" and "Add Tracks" is correct by musicindex ADR 0085 R-CASE-1: a button is title case, and a sidebar row and a sheet title are sentence case.
+
 ## Finding 9: the link of an existing release needs two reviews
 
 An artist page adds an existing release in the section **Releases**. Review of the artist page shows only the artist page. The change to the album ("Artist or label: Added") is in the draft of the album, and the user must open the album and write it in a second review. For a new release, one review writes the release with its pages ([ADR 0234](../adr/0234-a-new-release-is-written-with-its-pages-and-a-one-sided-link-is-reported.md)).
 
 Recommendation: question for the operator. Show the album change as a row of the artist page review, as for a new release. This changes the scope of ADR 0234 and needs an ADR.
+
+Operator choice (2026-11-23): one review writes the artist page and the linked album, as for a new release. Status: open. The main session shows mockups first, and then writes the ADR that changes the scope of ADR 0234.
 
 ## Finding 10: Studio cannot correct a misspelled tag
 
@@ -108,4 +118,4 @@ What the code does:
 
 Recommendation: improvement. Studio offers a correction for a feed with no medium and with audio enclosures. The correction reads "This feed has `podcast:meduim`. Change it to `podcast:medium`?" The change goes through Review and a write, as each other correction does. It also makes the feed a release that Studio can edit. This changes which feeds Studio writes, so it needs an ADR.
 
-Operator choice (2026-11-23): [ADR 0250](../adr/0250-studio-corrects-the-type-of-a-feed-with-a-bad-or-missing-medium-tag.md) owns findings 3 and 10. The page of the feed has the select menu "Type of this feed" for a bad tag and for a missing tag. The list of found feeds names the cause. Status: decided, not built.
+Operator choice (2026-11-23): [ADR 0250](../adr/0250-studio-corrects-the-type-of-a-feed-with-a-bad-or-missing-medium-tag.md) owns findings 3 and 10. The page of the feed has the select menu "Type of this feed" for a bad tag and for a missing tag. The list of found feeds names the cause. Status: built in task 241. A walk with a debug build showed the cause "misspelled tag" in the found list, the notice with line 18 and the menu on "Album (music)". **Review the Change** opened the feed in the editor, and Review showed "Medium: none → music". The write was not done, because the test host has no public address that Studio accepts.

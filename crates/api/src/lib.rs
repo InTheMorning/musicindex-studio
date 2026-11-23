@@ -495,6 +495,11 @@ fn workspace_router_with_shared(workspace: Workspace) -> (Router, WorkspaceHandl
         .route("/feeds/{id}/check", get(feed_check::get_check))
         .route("/feeds/{id}/check/reads", post(feed_check::run_reads))
         .route("/feeds/{id}/check/repair", post(feed_check::repair))
+        .route(
+            "/feeds/{id}/medium-problem",
+            get(routes::feed_medium_problem),
+        )
+        .route("/feeds/{id}/medium", post(routes::correct_medium))
         .route("/feeds/{id}/retire/state", post(feed_retire::retire_state))
         .route("/feeds/{id}/return-wait", get(routes::return_wait_state))
         .route(

@@ -8,6 +8,7 @@ use crate::collection::{PublisherRole, inferred_roles};
 use crate::connector::{Connector, ConnectorError, Version};
 use crate::digest::content_version;
 use crate::feed::{Feed, RemoteItem};
+use crate::medium_problem::MediumProblem;
 use crate::musicindex::{IndexFeed, MusicIndex};
 use crate::web::{Web, WebErrorKind, host_of};
 use crate::xml::{Document, Ns};
@@ -24,6 +25,8 @@ pub struct Candidate {
     pub title: Option<String>,
     /// `podcast:medium`.
     pub medium: Option<String>,
+    /// A correctable bad or missing medium (ADR 0250 item 10).
+    pub medium_problem: Option<MediumProblem>,
     /// `podcast:guid`.
     pub podcast_guid: Option<String>,
     /// True when the feed asks each platform not to show it: an
@@ -83,6 +86,7 @@ pub fn feed_candidates(connector: &dyn Connector) -> Result<Candidates, Connecto
                 path: path.clone(),
                 title: feed.title,
                 medium: feed.medium,
+                medium_problem: crate::medium_problem::medium_problem_in_bytes(&file.bytes),
                 podcast_guid: feed.podcast_guid,
                 blocked: is_blocked(&doc),
             })
@@ -139,6 +143,8 @@ pub struct Found {
     pub title: Option<String>,
     /// `podcast:medium`.
     pub medium: Option<String>,
+    /// A correctable bad or missing medium (ADR 0250 item 10).
+    pub medium_problem: Option<MediumProblem>,
     /// The roles that the links of a publisher feed give. Studio infers
     /// them, so nothing confirms them (ADR 0082 item 4).
     pub publisher_roles: Vec<PublisherRole>,
@@ -461,12 +467,14 @@ pub fn from_sources(
         }
         queue.extend(links(&feed, via));
         let host = host_of(&url);
+        let medium_problem = crate::medium_problem::medium_problem_in_bytes(&bytes);
         result.feeds.push(Found {
             service: host.as_deref().and_then(known_service),
             host,
             url,
             title: feed.title.clone(),
             medium: feed.medium.clone(),
+            medium_problem,
             publisher_roles: if feed.medium.as_deref() == Some("publisher") {
                 inferred_roles(&feed)
             } else {
@@ -653,6 +661,13 @@ mod tests {
     fn a_found_feed_has_the_address_after_the_redirect() {
         let server = server();
         server.set("/old.xml", 301, server.url("/b.xml").into_bytes());
+        let typo = String::from_utf8(rss("music", "b", "Album B", ""))
+            .unwrap()
+            .replace(
+                "<podcast:medium>music</podcast:medium>",
+                "<podcast:meduim>music</podcast:meduim>",
+            );
+        server.set("/b.xml", 200, typo.into_bytes());
         let index = MusicIndex::new(Web::new(), &server.url(""));
         let found = from_sources(
             &Web::new(),
@@ -662,6 +677,10 @@ mod tests {
         );
         assert_eq!(found.feeds.len(), 1);
         assert_eq!(found.feeds[0].url, server.url("/b.xml"));
+        assert_eq!(
+            found.feeds[0].medium_problem.as_ref().unwrap().kind,
+            crate::medium_problem::MediumProblemKind::MisspelledTag
+        );
     }
 
     #[test]

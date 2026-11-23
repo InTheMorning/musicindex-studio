@@ -229,14 +229,17 @@ fn convert_wav(source: &Path, name: &str) -> Result<Imported, MediaError> {
     if spec.sample_format != hound::SampleFormat::Int {
         return Err(MediaError::new(
             MediaErrorKind::Unsupported,
-            format!("{name} has a float sample format, which Studio does not convert"),
+            format!(
+                "{name} has a float sample format, which Studio does not convert. {SAMPLE_HINT}"
+            ),
         ));
     }
     if spec.bits_per_sample != 16 && spec.bits_per_sample != 24 {
         return Err(MediaError::new(
             MediaErrorKind::Unsupported,
             format!(
-                "{name} has a {}-bit integer sample format, which Studio does not convert",
+                "{name} has a {}-bit integer sample format, which Studio does not convert. \
+                 {SAMPLE_HINT}",
                 spec.bits_per_sample
             ),
         ));
@@ -390,7 +393,7 @@ fn encode_mp3_from_flac(source: &Path, mp3_path: &Path, name: &str) -> Result<()
             MediaErrorKind::Unsupported,
             format!(
                 "{name} has a {bits_per_sample}-bit integer sample format, which Studio does \
-                 not encode"
+                 not encode. {SAMPLE_HINT}"
             ),
         ));
     }
@@ -514,7 +517,10 @@ fn check_channel_count(channels: u32, name: &str) -> Result<(), MediaError> {
     if channels > 2 {
         return Err(MediaError::new(
             MediaErrorKind::Unsupported,
-            format!("{name} has {channels} channels, which Studio does not encode to MP3"),
+            format!(
+                "{name} has {channels} channels, which Studio does not encode to MP3. Export \
+                 the file with one or two channels."
+            ),
         ));
     }
     Ok(())
@@ -643,6 +649,11 @@ fn file_size(path: &Path, name: &str) -> Result<u64, MediaError> {
         .map(|metadata| metadata.len())
         .map_err(|e| io_error(name, e))
 }
+
+/// The second sentence of a sample format refusal: the formats that
+/// Studio accepts (UI finding 4 of 2026-11-23). The UI shows the message of
+/// the refusal.
+const SAMPLE_HINT: &str = "Export the file with 16-bit or 24-bit integer samples.";
 
 /// A [`MediaErrorKind::Unsupported`] error that names `name`.
 fn unsupported(name: &str) -> MediaError {
@@ -954,6 +965,29 @@ mod tests {
 
         let error = convert_wav(&path, "float.wav").unwrap_err();
         assert_eq!(error.kind(), MediaErrorKind::Unsupported);
+    }
+
+    #[test]
+    fn a_wav_file_with_32_bit_integer_samples_names_the_accepted_formats() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("t32.wav");
+        let spec = hound::WavSpec {
+            channels: 1,
+            sample_rate: 8000,
+            bits_per_sample: 32,
+            sample_format: hound::SampleFormat::Int,
+        };
+        let mut writer = hound::WavWriter::create(&path, spec).expect("create wav");
+        writer.write_sample(0_i32).expect("write sample");
+        writer.finalize().expect("finalize wav");
+
+        let error = convert_wav(&path, "t32.wav").unwrap_err();
+        assert_eq!(error.kind(), MediaErrorKind::Unsupported);
+        assert!(
+            error.to_string().contains("32-bit") && error.to_string().contains(SAMPLE_HINT),
+            "UI finding 4 of 2026-11-23: the refusal of a 32-bit WAV file must name the \
+             bit depth and SAMPLE_HINT. Fix convert_wav in crates/core/src/media.rs. Got: {error}"
+        );
     }
 
     #[test]

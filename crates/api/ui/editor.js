@@ -1210,7 +1210,11 @@ const IMPORT_ERRORS = {
   invalid_name: 'This is not a file name that Studio can use.',
 };
 
+// A refusal of the media type shows the message of the core, because it
+// names the cause and the formats that Studio accepts (UI finding 4 of
+// 2026-11-23).
 function importErrorText(error) {
+  if (error.code === 'unsupported_media' && error.message) return /[.!?]$/.test(error.message) ? error.message : `${error.message}.`;
   return IMPORT_ERRORS[error.code] || error.message || 'Studio could not import this file.';
 }
 
@@ -2232,6 +2236,9 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
       setDiff(null);
       onOpsCleared();
       await draft.load();
+      // The list gives the medium of the draft (ADR 0250 item 8), so it
+      // loads again after a discard.
+      await onListChanged?.();
       // With no draft, Review has nothing to show, so the sheet closes.
       onClose();
     });
@@ -3118,6 +3125,18 @@ function ExplicitField({ id, model, update }) {
 // The change is one step of the history of the feed editor (ADR 0228 item 2).
 function ReleaseKindField({ feed, draft, onListChanged }) {
   const action = useAction();
+  // The core gives the kind of the tracks in the feed list (`kind_shown`).
+  // After a save that changes the count of the tracks, the list loads again,
+  // so that the first option names the current tracks (UI finding 7 of
+  // 2026-11-23). `asked` keeps one load for each count.
+  const draftCount = draft.model ? draft.model.items.length : null;
+  const asked = useRef(null);
+  useEffect(() => {
+    if (draft.status !== 'saved' || draftCount === null || draftCount === feed.track_count) return;
+    if (asked.current === draftCount) return;
+    asked.current = draftCount;
+    onListChanged();
+  }, [draft.status, draftCount, feed.track_count]);
   const save = (kind) => action.run(async () => {
     const before = feed.release_kind || null;
     const after = kind || null;

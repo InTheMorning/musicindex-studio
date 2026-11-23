@@ -4975,7 +4975,7 @@ fn diff_json_with_streams(
     let page_refusal = feed_page_refusal(w, id)?;
     let (index_at_address, index_unread) = index_at_draft_address(w, id)?;
     let guid_change = pipeline::guid_change_at(&w.collection, id, &index_at_address)?;
-    let also_write = also_write_pages(w, &library, id)?;
+    let also_write = linked_feeds_to_write(w, &library, id)?;
     // The app of each grant of the draft, for the review sheet (ADR 0110
     // item 19).
     let mut grant_apps = serde_json::Map::new();
@@ -5048,27 +5048,27 @@ fn index_at_draft_address(
     }
 }
 
-/// The publisher feeds that Review of a new release offers to write with
-/// it (ADR 0231 item 7). Each one has a draft with changes and a
-/// `podcast:remoteItem` that names the release. A feed with a first write
-/// gives an empty list.
-fn also_write_pages(w: &Workspace, library: &Library, id: FeedId) -> Result<Vec<Value>, ApiError> {
-    if w.collection.feed(id)?.last_version.is_some() {
-        return Ok(Vec::new());
+/// The feeds with a changed link for Review (ADR 0251 item 2).
+fn linked_feeds_to_write(
+    w: &Workspace,
+    library: &Library,
+    id: FeedId,
+) -> Result<Vec<Value>, ApiError> {
+    let mut linked = Vec::new();
+    for changed in publisher::changed_links(&w.collection, Some(library), id)? {
+        let row = w.collection.feed(changed.feed)?;
+        let (feed, _) = pipeline::draft_model(&w.collection, changed.feed)?;
+        let artist = row.medium.as_deref() == Some("publisher")
+            && row.publisher_roles.contains(&PublisherRole::Artist);
+        linked.push(json!({
+            "id": changed.feed.0,
+            "title": feed.title.or(row.title),
+            "side": changed.side,
+            "artist": artist,
+            "change": changed.change,
+        }));
     }
-    let mut pages = Vec::new();
-    for page_id in publisher::publishers_linking(&w.collection, library, id)? {
-        if w.collection.draft(page_id)?.is_none()
-            || !pipeline::draft_changed(&w.collection, page_id)?
-        {
-            continue;
-        }
-        let row = w.collection.feed(page_id)?;
-        let (feed, _) = pipeline::draft_model(&w.collection, page_id)?;
-        let artist = row.publisher_roles.contains(&PublisherRole::Artist);
-        pages.push(json!({ "id": page_id.0, "title": feed.title.or(row.title), "artist": artist }));
-    }
-    Ok(pages)
+    Ok(linked)
 }
 
 /// Give the page-rule refusal for a draft. A feed-file deletion, a feed

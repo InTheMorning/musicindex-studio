@@ -1703,7 +1703,8 @@ async fn the_diff_of_a_new_release_names_its_artist_page_and_two_writes_leave_no
     assert_eq!(status, StatusCode::OK, "{diff}");
     assert_eq!(
         diff["also_write"],
-        json!([{ "id": artist_id, "title": "Artist", "artist": true }])
+        json!([{ "id": artist_id, "title": "Artist", "side": "page", "artist": true, "change": "added" }]),
+        "ADR 0251 item 9: linked_feeds_to_write must include the page side"
     );
     let (_, lonely_diff) = call(
         &app,
@@ -1721,7 +1722,11 @@ async fn the_diff_of_a_new_release_names_its_artist_page_and_two_writes_leave_no
     )
     .await;
     assert_eq!(artist_diff["changed"], true, "{artist_diff}");
-    assert_eq!(artist_diff["also_write"], json!([]));
+    assert_eq!(
+        artist_diff["also_write"],
+        json!([{ "id": release_id, "title": "Release", "side": "release", "artist": false, "change": "added" }]),
+        "ADR 0251 item 9: linked_feeds_to_write must include the release side"
+    );
 
     // The two writes go one after the other, each with its own diff ID.
     // Review reads the diff of the artist page before the write of the
@@ -1747,6 +1752,84 @@ async fn the_diff_of_a_new_release_names_its_artist_page_and_two_writes_leave_no
     .await;
     assert_eq!(after["also_write"], json!([]));
     assert_eq!(after["changed"], false);
+}
+
+// ADR 0251 items 2 and 9: a link of two written feeds gives a row in the
+// review of each side. An unlink gives a removed row.
+#[tokio::test]
+async fn a_changed_link_of_two_written_feeds_gives_a_row_on_each_side() {
+    let (app, connector) = publisher_app().await;
+    let first = make_artist_page(&app, connector, "first.xml", "First").await;
+    let first_id = first["id"].as_i64().unwrap();
+    assert_eq!(write_with_own_diff(&app, first_id).await.0, StatusCode::OK);
+    let release = make_release(&app, connector, "release.xml", "Release", "First", first_id).await;
+    let release_id = release["id"].as_i64().unwrap();
+    assert_eq!(
+        write_with_own_diff(&app, release_id).await.0,
+        StatusCode::OK
+    );
+    assert_eq!(write_with_own_diff(&app, first_id).await.0, StatusCode::OK);
+    let second = make_artist_page(&app, connector, "second.xml", "Second").await;
+    let second_id = second["id"].as_i64().unwrap();
+    assert_eq!(write_with_own_diff(&app, second_id).await.0, StatusCode::OK);
+
+    let also = |diff: &Value| diff["also_write"].clone();
+    let diff_of = |id: i64| {
+        let app = &app;
+        async move {
+            call(app, "GET", &format!("/api/v1/feeds/{id}/diff"), None)
+                .await
+                .1
+        }
+    };
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{second_id}/links"),
+        Some(json!({ "release": release_id })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        also(&diff_of(second_id).await),
+        json!([{ "id": release_id, "title": "Release", "side": "release", "artist": false, "change": "added" }]),
+        "ADR 0251 item 2: Review of the page must offer the written release. Fix linked_feeds_to_write or changed_links."
+    );
+    assert_eq!(
+        also(&diff_of(release_id).await),
+        json!([{ "id": second_id, "title": "Second", "side": "page", "artist": true, "change": "added" }]),
+        "ADR 0251 item 2: Review of the release must offer the written page. Fix linked_feeds_to_write or changed_links."
+    );
+
+    assert_eq!(
+        write_with_own_diff(&app, release_id).await.0,
+        StatusCode::OK
+    );
+    assert_eq!(write_with_own_diff(&app, second_id).await.0, StatusCode::OK);
+    assert_eq!(
+        also(&diff_of(second_id).await),
+        json!([]),
+        "ADR 0251 item 3: a written link gives no row."
+    );
+    assert_eq!(
+        also(&diff_of(release_id).await),
+        json!([]),
+        "ADR 0251 item 3: a written link gives no row."
+    );
+
+    let (status, body) = call(
+        &app,
+        "DELETE",
+        &format!("/api/v1/feeds/{second_id}/links/{release_id}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        also(&diff_of(second_id).await),
+        json!([{ "id": release_id, "title": "Release", "side": "release", "artist": false, "change": "removed" }]),
+        "ADR 0251 item 3: an unlink must give a removed row. Fix changed_links."
+    );
 }
 
 #[tokio::test]

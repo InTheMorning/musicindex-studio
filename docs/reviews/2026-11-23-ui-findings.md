@@ -104,7 +104,9 @@ An artist page adds an existing release in the section **Releases**. Review of t
 
 Recommendation: question for the operator. Show the album change as a row of the artist page review, as for a new release. This changes the scope of ADR 0234 and needs an ADR.
 
-Operator choice (2026-11-23): one review writes the artist page and the linked album, as for a new release. [ADR 0251](../adr/0251-review-writes-the-two-sides-of-a-changed-link.md) owns finding 9. The check box of the linked feed is on and locked, and the rule applies from the page and from the release. Status: decided, not built.
+Operator choice (2026-11-23): one review writes the artist page and the linked album, as for a new release. [ADR 0251](../adr/0251-review-writes-the-two-sides-of-a-changed-link.md) owns finding 9. The check box of the linked feed is on and locked, and the rule applies from the page and from the release. Status: built in task 242.
+
+A walk with a debug build linked a written release to a second written artist page. Review of the page and Review of the release each showed the locked row, at 1100 px and at 390 px. One write from the page wrote the two feeds, and no feed had a pencil mark after it.
 
 ## Finding 10: Studio cannot correct a misspelled tag
 
@@ -119,3 +121,14 @@ What the code does:
 Recommendation: improvement. Studio offers a correction for a feed with no medium and with audio enclosures. The correction reads "This feed has `podcast:meduim`. Change it to `podcast:medium`?" The change goes through Review and a write, as each other correction does. It also makes the feed a release that Studio can edit. This changes which feeds Studio writes, so it needs an ADR.
 
 Operator choice (2026-11-23): [ADR 0250](../adr/0250-studio-corrects-the-type-of-a-feed-with-a-bad-or-missing-medium-tag.md) owns findings 3 and 10. The page of the feed has the select menu "Type of this feed" for a bad tag and for a missing tag. The list of found feeds names the cause. Status: built in task 241. A walk with a debug build showed the cause "misspelled tag" in the found list, the notice with line 18 and the menu on "Album (music)". **Review the Change** opened the feed in the editor, and Review showed "Medium: none → music". The write was not done, because the test host has no public address that Studio accepts.
+
+## Finding 11: the editor head of an artist page is too wide at 761 px
+
+The main session found this defect in the walk of task 242. At 761 px, the editor of the artist page "HeyCitizen" has two faults:
+
+- The title breaks inside the word, as "HeyCitiz" and "en". The fit check of `tools/drive-ui.mjs` gives musicindex ADR 0065 R-FIT-3 for the `h1`, which has a width of 90 px.
+- The top bar is wider than the main pane. The **Review** button is cut at the right edge, and the page scrolls to the side.
+
+The same page without Review and without a write gives the same finding. Task 242 does not change the head. Thus the defect is older than task 242 (inference, not examined on an older commit).
+
+Recommendation: defect. Let the buttons **Move To…** and **Read Again** go below the title when the pane is narrow, and let the top bar wrap. Status: open.

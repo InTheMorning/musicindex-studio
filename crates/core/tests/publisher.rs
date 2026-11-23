@@ -8,7 +8,7 @@ use studio_core::connector::{self, Connector, LocalFolder};
 use studio_core::feed::{Entry, Feed, Publisher, RemoteItem};
 use studio_core::library::Library;
 use studio_core::pipeline;
-use studio_core::publisher::{self, PublisherErrorKind};
+use studio_core::publisher::{self, LinkChange, LinkSide, PublisherErrorKind};
 
 struct Setup {
     _dir: tempfile::TempDir,
@@ -53,6 +53,109 @@ fn new_feed(s: &mut Setup, path: &str, title: &str, medium: &str) -> FeedId {
 
 fn model(s: &Setup, id: FeedId) -> Feed {
     pipeline::draft_model(&s.collection, id).unwrap().0
+}
+
+fn remember_written(s: &Setup, id: FeedId) {
+    let bytes = s.collection.draft(id).unwrap().unwrap().draft_xml;
+    s.collection.record_feed_write(id, 1, None).unwrap();
+    s.collection.record_written_xml(id, &bytes).unwrap();
+}
+
+#[test]
+fn changed_links_reports_added_removed_and_ignores_other_draft_changes() {
+    let mut s = setup();
+    let (page, release) = pair(&mut s);
+    s.collection
+        .set_publisher_roles(page, &[PublisherRole::Artist], true)
+        .unwrap();
+    remember_written(&s, release);
+    publisher::link(&s.collection, page, release).unwrap();
+
+    let from_page = publisher::changed_links(&s.collection, None, page).unwrap();
+    assert_eq!(
+        from_page.len(),
+        1,
+        "ADR 0251 item 2: changed_links must find an added release link"
+    );
+    assert_eq!(
+        from_page[0].feed, release,
+        "ADR 0251 item 2: changed_links must return the release feed"
+    );
+    assert_eq!(
+        from_page[0].side,
+        LinkSide::Release,
+        "ADR 0251 item 2: changed_links must mark the release side"
+    );
+    assert_eq!(
+        from_page[0].change,
+        LinkChange::Added,
+        "ADR 0251 item 3: changed_links must report an added link"
+    );
+
+    let from_release = publisher::changed_links(&s.collection, None, release).unwrap();
+    assert_eq!(
+        from_release.len(),
+        1,
+        "ADR 0251 item 2: changed_links must find the linked page"
+    );
+    assert_eq!(
+        from_release[0].feed, page,
+        "ADR 0251 item 2: changed_links must return the page feed"
+    );
+    assert_eq!(
+        from_release[0].side,
+        LinkSide::Page,
+        "ADR 0251 item 2: changed_links must mark the page side"
+    );
+    assert_eq!(
+        from_release[0].change,
+        LinkChange::Added,
+        "ADR 0251 item 3: changed_links must report an added link"
+    );
+
+    remember_written(&s, page);
+    remember_written(&s, release);
+    publisher::unlink(&s.collection, page, release).unwrap();
+    assert_eq!(
+        publisher::changed_links(&s.collection, None, release).unwrap()[0].change,
+        LinkChange::Removed,
+        "ADR 0251 item 3: changed_links must report an unlinked page"
+    );
+
+    publisher::link(&s.collection, page, release).unwrap();
+    remember_written(&s, page);
+    remember_written(&s, release);
+    pipeline::edit_draft(&s.collection, page, |feed| {
+        feed.title = Some("Renamed".into());
+    })
+    .unwrap();
+    assert!(
+        publisher::changed_links(&s.collection, None, release)
+            .unwrap()
+            .is_empty(),
+        "ADR 0251 item 3: changed_links must ignore an unrelated draft change"
+    );
+}
+
+#[test]
+fn changed_links_reports_a_link_to_a_release_that_was_never_written() {
+    let mut s = setup();
+    let (page, release) = pair(&mut s);
+    s.collection
+        .set_publisher_roles(page, &[PublisherRole::Artist], true)
+        .unwrap();
+    publisher::link(&s.collection, page, release).unwrap();
+    let changed = publisher::changed_links(&s.collection, None, page).unwrap();
+    assert_eq!(
+        changed.len(),
+        1,
+        "ADR 0251 item 2: changed_links must include a release with no written copy"
+    );
+    assert_eq!(
+        changed[0].change,
+        LinkChange::Added,
+        "ADR 0251 item 3: a release with no written copy must have no written link"
+    );
 }
 
 /// A publisher feed and a release, both with a draft.

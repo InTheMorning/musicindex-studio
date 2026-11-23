@@ -7,6 +7,7 @@
 //! drafts through [`pipeline::edit_draft`]. They never start a draft. The
 //! caller starts each draft before the call.
 
+use serde::Serialize;
 use std::fmt;
 
 use crate::collection::{
@@ -16,6 +17,112 @@ use crate::collection::{
 use crate::feed::{Entry, Feed, Publisher, RemoteItem};
 use crate::library::Library;
 use crate::pipeline::{self, PipelineError};
+
+/// The side of the linked feed (ADR 0251 item 2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LinkSide {
+    /// The linked feed is a page (ADR 0251 item 2).
+    Page,
+    /// The linked feed is a release (ADR 0251 item 2).
+    Release,
+}
+
+/// The change to a link (ADR 0251 item 2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LinkChange {
+    /// The draft adds the link (ADR 0251 item 3).
+    Added,
+    /// The draft removes the link (ADR 0251 item 3).
+    Removed,
+}
+
+/// A feed whose link changes when `feed` is written (ADR 0251 item 2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct ChangedLink {
+    /// The ID of the linked feed (ADR 0251 item 2).
+    pub feed: FeedId,
+    /// The side of the linked feed (ADR 0251 item 2).
+    pub side: LinkSide,
+    /// The change to the link (ADR 0251 item 3).
+    pub change: LinkChange,
+}
+
+/// Find drafted feeds whose link to `id` differs from the written copy.
+///
+/// # Errors
+///
+/// Gives a [`PublisherError`] when the collection or a draft cannot be read.
+pub fn changed_links(
+    collection: &Collection,
+    library: Option<&Library>,
+    id: FeedId,
+) -> Result<Vec<ChangedLink>, PublisherError> {
+    let target_row = collection.feed(id)?;
+    let Some(target_medium) = target_row.medium.as_deref() else {
+        return Ok(Vec::new());
+    };
+    let page_target = target_medium == "publisher";
+    if !page_target && !is_release(Some(target_medium)) {
+        return Ok(Vec::new());
+    }
+    let target = party(collection, &target_row)?;
+    let mut changed = Vec::new();
+    for row in collection.feeds()? {
+        if row.id == id || collection.draft(row.id)?.is_none() {
+            continue;
+        }
+        let is_page = row.medium.as_deref() == Some("publisher");
+        if page_target && !is_release(row.medium.as_deref()) {
+            continue;
+        }
+        if !page_target && !is_page {
+            continue;
+        }
+        let draft = pipeline::draft_model(collection, row.id)?.0;
+        let draft_has = if page_target {
+            draft
+                .publisher
+                .iter()
+                .flat_map(|publisher| &publisher.remote_items)
+                .any(|item| names(&item.value, &target))
+        } else {
+            draft
+                .remote_items
+                .iter()
+                .any(|item| names(&item.value, &target))
+        };
+        let written_has = pipeline::written_copy(collection, library, &row).is_some_and(|feed| {
+            if page_target {
+                feed.publisher
+                    .iter()
+                    .flat_map(|publisher| &publisher.remote_items)
+                    .any(|item| names(&item.value, &target))
+            } else {
+                feed.remote_items
+                    .iter()
+                    .any(|item| names(&item.value, &target))
+            }
+        });
+        if draft_has != written_has {
+            changed.push(ChangedLink {
+                feed: row.id,
+                side: if page_target {
+                    LinkSide::Release
+                } else {
+                    LinkSide::Page
+                },
+                change: if draft_has {
+                    LinkChange::Added
+                } else {
+                    LinkChange::Removed
+                },
+            });
+        }
+    }
+    Ok(changed)
+}
 
 /// The media of a release: an album and a playlist (ADR 0086 item 1).
 const RELEASE_MEDIA: [&str; 2] = ["music", "musicL"];

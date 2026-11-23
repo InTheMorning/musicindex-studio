@@ -52,7 +52,7 @@ import { MOVE_SCOPES, fileHostRows, planRows, stayRows, deleteLabel, deleteAllLa
 import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary, artworkPreview } from './artwork.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, addsAsTrackFile, refusedText, wrongKindText, replacedAddresses, selectedFacts, TRACK_FILES_ACCEPT } from './picker.js';
 import { deleteChoices, leftoverLine, deleteButtonEnabled, retireSteps, retireActions, retireBlockShown, domainLine, DELETE_POINTS, operationNote, refusedDelete } from './feeddelete.js';
-import { writeResult, alsoRows, rowsToWrite, pageWriteFailed, writeInOrder, reviewRemoveLabel, discardFailureTitle } from './writeresult.js';
+import { writeResult, alsoRows, rowsToWrite, pageWriteFailed, writeInOrder, reviewRemoveLabel, discardFailureTitle, ALSO_WRITE_HINT } from './writeresult.js';
 import { undoKey } from './undohistory.js';
 
 // A text where only each web address can break inside a word (musicindex ADR
@@ -2159,7 +2159,9 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
     }
   };
   const write = () => { setDiscarding(false); return run(async () => {
-    const pageRows = rowsToWrite(alsoShown);
+    const linkedRows = rowsToWrite(alsoShown);
+    const beforeRows = linkedRows.filter((row) => row.side === 'release');
+    const pageRows = linkedRows.filter((row) => row.side === 'page');
     const writeRelease = async () => {
       let feed;
       let signedEvents = [];
@@ -2189,7 +2191,8 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
     };
     // The release is written first. When it fails, no page is written. When
     // a page fails, the release stays written (ADR 0231 item 9).
-    const { feed, pageFeeds } = await writeInOrder({
+    const { feed, beforeFeeds, pageFeeds } = await writeInOrder({
+      before: beforeRows.map((row) => ({ title: row.title, run: () => writePage(row) })),
       release: writeRelease,
       pages: pageRows.map((row) => ({ title: row.title, run: () => writePage(row) })),
       onReleaseWritten: async (feed) => {
@@ -2201,11 +2204,11 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
         window.dispatchEvent(new Event(ANNOUNCE_RELOAD));
         window.dispatchEvent(new CustomEvent(OUTSIDE_RECHECK, { detail: { id: feed.id } }));
       },
+      onLinkedWritten: async (linkedFeed) => {
+        window.dispatchEvent(new CustomEvent(OUTSIDE_RECHECK, { detail: { id: linkedFeed.id } }));
+        await onListChanged?.();
+      },
     });
-    for (const pageFeed of pageFeeds) {
-      window.dispatchEvent(new CustomEvent(OUTSIDE_RECHECK, { detail: { id: pageFeed.id } }));
-    }
-    if (pageFeeds.length > 0) await onListChanged?.();
     if (deletion || diff.grants.length > 0) {
       ref.current.close();
     } else {
@@ -2213,7 +2216,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
       const writtenConnector = targets.find((item) => item.id === writtenConnectorId);
       if (writtenConnector) {
         setResultHostId(writtenConnectorId);
-        setResult(writeResult(feed, writtenConnector, linkedPage, pageFeeds.map((item) => item.id)));
+        setResult(writeResult(feed, writtenConnector, linkedPage, [...beforeFeeds, ...pageFeeds].map((item) => item.id)));
         setLinkedPage(null);
       }
       else ref.current.close();
@@ -2408,9 +2411,9 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
           <p class="hint">${row.note}</p>
           ${row.diff.changed && html`<${DiffView} diff=${row.diff} />`}
         </div>`)}
-        <p class="hint">A new release is written with its pages.</p>
+        <p class="hint">${ALSO_WRITE_HINT}</p>
       </div>`}
-      ${diff && html`<${ErrorNotice} error=${alsoError} action="Studio could not examine the artist page." />`}
+      ${diff && html`<${ErrorNotice} error=${alsoError} action="Studio could not examine the linked feeds." />`}
       ${diff && html`<${HostOperations} diff=${diff} connectors=${connectors} onRemove=${removeOperation} onUndoMove=${undoMove} busy=${busy} fromConnectorId=${feedConnectorId} />`}
       ${diff && (!guid || guid && diff.guid_change.kind !== 'replaced_file') && html`<${ReplaceWarning} move=${diff.feed_move} />`}
       ${diff && html`<${LinkNotices} report=${links} busy=${busy} onRepair=${repair} />`}

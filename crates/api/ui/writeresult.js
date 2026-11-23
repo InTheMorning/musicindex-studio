@@ -29,8 +29,26 @@ export function writeResult(feed, connector, changedPage = null, writtenIds = []
 // page to its diff. `off` is the set of IDs that the user turned off. A page
 // with no loaded diff has no row, because Studio cannot write it without that
 // diff.
-export function alsoRows(also, diffs, off, releaseTitle) {
-  const release = releaseTitle || 'this release';
+export const ALSO_WRITE_HINT = 'A link is written on its two feeds.';
+
+// The text under a row (ADR 0251 item 5). `side` is the side of the row.
+// A page row is in Review of a release, and a release row is in Review of a
+// page.
+function linkNote(page, title, reviewed) {
+  const added = page.change !== 'removed';
+  if (page.side === 'release') {
+    return added
+      ? `Adds ${reviewed} as the artist or label of ${title}.`
+      : `Removes ${reviewed} from the artist or label of ${title}.`;
+  }
+  const place = page.artist ? 'the artist page' : title;
+  return added
+    ? `Adds the link to ${reviewed} on ${place}.`
+    : `Removes the link to ${reviewed} from ${place}.`;
+}
+
+export function alsoRows(also, diffs, off, reviewTitle) {
+  const reviewed = reviewTitle || 'this feed';
   return (also || [])
     .filter((page) => diffs && diffs[page.id])
     .map((page) => {
@@ -38,14 +56,14 @@ export function alsoRows(also, diffs, off, releaseTitle) {
       return {
         id: page.id,
         title,
+        side: page.side,
+        artist: page.artist,
+        change: page.change,
         diff: diffs[page.id],
         checked: true,
         locked: true,
         label: `Also write ${title}`,
-        // A label or hosting page gets its own title in the note.
-        note: page.artist === false
-          ? `Adds the link to ${release} on ${title}.`
-          : `Adds the link to ${release} on the artist page.`,
+        note: linkNote(page, title, reviewed),
       };
     });
 }
@@ -79,18 +97,32 @@ export function pageWriteFailed(title) {
 // pages are not written. The error gets the field `pageTitle`, so that
 // Review can name the page. The function gives the written release and the
 // written pages.
-export async function writeInOrder({ release, pages, onReleaseWritten }) {
+export async function writeInOrder({ before = [], release, pages, onReleaseWritten, onLinkedWritten }) {
+  const beforeFeeds = [];
+  for (const item of before) {
+    try {
+      const feed = await item.run();
+      beforeFeeds.push(feed);
+      if (onLinkedWritten) await onLinkedWritten(feed);
+    } catch (e) {
+      const error = e && typeof e === 'object' ? e : new Error(String(e));
+      error.pageTitle = item.title;
+      throw error;
+    }
+  }
   const feed = await release();
   if (onReleaseWritten) await onReleaseWritten(feed);
   const pageFeeds = [];
   for (const page of pages) {
     try {
-      pageFeeds.push(await page.run());
+      const feed = await page.run();
+      pageFeeds.push(feed);
+      if (onLinkedWritten) await onLinkedWritten(feed);
     } catch (e) {
       const error = e && typeof e === 'object' ? e : new Error(String(e));
       error.pageTitle = page.title;
       throw error;
     }
   }
-  return { feed, pageFeeds };
+  return { feed, beforeFeeds, pageFeeds };
 }

@@ -4,6 +4,7 @@
 - Date: 2026-10-22
 - Owner: operator
 - Changed by: [ADR 0243](0243-a-move-is-a-change-set-and-a-level-gathers-its-pages.md) item 13, on 2026-11-22. Item 3: a depth of 6 folders and 5000 files.
+- Changed by: [ADR 0250](0250-studio-corrects-the-type-of-a-feed-with-a-bad-or-missing-medium-tag.md) item 10, on 2026-11-23. Item 5: a candidate with a bad or missing medium tag names the cause.
 
 ## Context
 

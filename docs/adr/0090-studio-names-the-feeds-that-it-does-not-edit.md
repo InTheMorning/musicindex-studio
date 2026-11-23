@@ -6,6 +6,7 @@
 - Accepted: 2026-10-30 by the operator.
 - Changes: [ADR 0085](0085-each-artist-and-label-is-a-destination.md) items 3 and 6.
 - Changes: [ADR 0088](../archive/adr/0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) item 4.
+- Changed by: [ADR 0250](0250-studio-corrects-the-type-of-a-feed-with-a-bad-or-missing-medium-tag.md) items 3 and 4, on 2026-11-23. Item 1: a feed with a bad or missing medium tag gets the notice and the menu of ADR 0250. Item 1 stays for a feed with a known type that Studio does not edit.
 - Uses: [ADR 0008](0008-feed-types-and-feed-identity.md) (the feed types), [ADR 0025](0025-studio-serves-cover-art.md) (the image limit of 10 MB).
 
 ## Context

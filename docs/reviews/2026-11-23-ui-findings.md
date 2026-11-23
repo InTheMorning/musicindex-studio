@@ -55,6 +55,8 @@ After the tag was correct on the server, **Read Again** made the feed a release 
 
 Recommendation: improvement. When a feed has no `podcast:medium` tag and has audio enclosures, tell the user that the tag is missing. When the feed has a `podcast:` tag with a name near `medium`, give that name and the line. Do not change the read-only rule without an ADR.
 
+Operator choice (2026-11-23): [ADR 0250](../adr/0250-studio-corrects-the-type-of-a-feed-with-a-bad-or-missing-medium-tag.md) owns findings 3 and 10. The page of the feed has the select menu "Type of this feed" for a bad tag and for a missing tag. The list of found feeds names the cause. Status: decided, not built.
+
 ## Finding 4: a 32-bit WAV file gets a general refusal
 
 **Add tracks** refused a WAV file with 32-bit integer samples: "Studio does not read this kind of file." (`crates/api/ui/editor.js` line 1206, code `unsupported_media`). WAV files with 16-bit and 24-bit samples worked.
@@ -105,3 +107,5 @@ What the code does:
 - The editor of a release has no field for an unknown tag. A tag that Studio does not know stays in the feed as it is.
 
 Recommendation: improvement. Studio offers a correction for a feed with no medium and with audio enclosures. The correction reads "This feed has `podcast:meduim`. Change it to `podcast:medium`?" The change goes through Review and a write, as each other correction does. It also makes the feed a release that Studio can edit. This changes which feeds Studio writes, so it needs an ADR.
+
+Operator choice (2026-11-23): [ADR 0250](../adr/0250-studio-corrects-the-type-of-a-feed-with-a-bad-or-missing-medium-tag.md) owns findings 3 and 10. The page of the feed has the select menu "Type of this feed" for a bad tag and for a missing tag. The list of found feeds names the cause. Status: decided, not built.

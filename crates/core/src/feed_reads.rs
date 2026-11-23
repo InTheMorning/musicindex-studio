@@ -176,7 +176,11 @@ pub fn https_of(url: &str) -> Option<String> {
 /// network facts `net` when a read ran. A fact about an address that the
 /// draft no longer names has no effect.
 #[must_use]
-pub fn facts_for(links: &OwnedDraftLinks, net: Option<&NetworkFacts>) -> Facts {
+pub fn facts_for(
+    links: &OwnedDraftLinks,
+    net: Option<&NetworkFacts>,
+    link_targets: &[feed_check::LinkTarget],
+) -> Facts {
     let mut refused_links = net.map(|n| n.refused_links.clone()).unwrap_or_default();
     // ADR 0126 condition 6 needs no read.
     if links.self_changed
@@ -187,6 +191,7 @@ pub fn facts_for(links: &OwnedDraftLinks, net: Option<&NetworkFacts>) -> Facts {
     }
     let tag = links.feed.new_feed_url.as_deref();
     Facts {
+        link_targets: link_targets.to_vec(),
         public_address: links.url.clone(),
         refused_links,
         self_changed: links.self_changed,
@@ -271,9 +276,13 @@ pub struct CheckResult {
 /// Check the draft in `links` with the last network facts `net`. The
 /// function sends no request.
 #[must_use]
-pub fn check_with(links: &OwnedDraftLinks, net: Option<&NetworkFacts>) -> CheckResult {
+pub fn check_with(
+    links: &OwnedDraftLinks,
+    net: Option<&NetworkFacts>,
+    link_targets: &[feed_check::LinkTarget],
+) -> CheckResult {
     CheckResult {
-        findings: feed_check::check(&links.feed, &facts_for(links, net)),
+        findings: feed_check::check(&links.feed, &facts_for(links, net, link_targets)),
         unreadable: net.map(|n| n.unreadable.clone()).unwrap_or_default(),
     }
 }
@@ -741,7 +750,7 @@ mod tests {
         let net = gather(&links(feed.clone()), &feeds, &ScriptedFileReads::empty());
         assert_eq!(net.move_chain, Some(vec![NEW.to_owned(), THIRD.to_owned()]));
         assert!(net.refused_links.is_empty() && net.unreadable.is_empty());
-        let found = feed_check::check(&feed, &facts_for(&links(feed.clone()), Some(&net)));
+        let found = feed_check::check(&feed, &facts_for(&links(feed.clone()), Some(&net), &[]));
         assert!(
             found
                 .iter()
@@ -761,7 +770,7 @@ mod tests {
         assert_eq!(net.move_chain, Some(vec![NEW.to_owned()]));
         // The tag changes: the chain is not a fact about the new tag.
         feed.new_feed_url = Some(THIRD.to_owned());
-        assert_eq!(facts_for(&links(feed), Some(&net)).move_chain, None);
+        assert_eq!(facts_for(&links(feed), Some(&net), &[]).move_chain, None);
     }
 
     #[test]
@@ -885,7 +894,7 @@ mod tests {
         assert_eq!(net.index, None);
         assert_eq!(net.unreadable, Vec::<String>::new());
         assert!(
-            check_with(&links(Feed::default()), Some(&net))
+            check_with(&links(Feed::default()), Some(&net), &[])
                 .findings
                 .iter()
                 .all(|f| !matches!(
@@ -910,7 +919,7 @@ mod tests {
         let feed = feed_with_track("https://files.example/a.mp3", None);
         gather_index(&links(feed.clone()), &reads, &mut net);
         assert_eq!(reads.reads().len(), 2);
-        let kinds: Vec<_> = check_with(&links(feed.clone()), Some(&net))
+        let kinds: Vec<_> = check_with(&links(feed.clone()), Some(&net), &[])
             .findings
             .iter()
             .map(|f| f.kind)

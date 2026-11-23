@@ -6,8 +6,8 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::collection::{PublisherRole, roles_from_rel};
-use crate::feed::Feed;
+use crate::collection::{Collection, PublisherRole, roles_from_rel};
+use crate::feed::{Feed, RemoteItem};
 
 mod index;
 
@@ -18,6 +18,8 @@ pub use index::{IndexFacts, IndexLine, copy_report, index_line, index_read};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FindingKind {
+    /// A link has an unknown GUID and names a collection feed by address (ADR 0247 item 8).
+    LinkGuidOld,
     /// The feed has a public address and no self link.
     NoSelfLink,
     /// The self link differs from the public address.
@@ -84,6 +86,8 @@ pub enum FindingLevel {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RepairKind {
+    /// **Use the GUID of the linked feed** (ADR 0247 item 8).
+    UseTheGuidOf,
     /// **Add the Link**.
     AddTheLink,
     /// **Use the Public Address**.
@@ -192,6 +196,136 @@ pub struct Finding {
     pub field: Option<String>,
     /// The place of that field in words for the user (ADR 0245 item 3).
     pub place: Option<String>,
+    /// The title of the link target, when the finding names one (ADR 0247 item 8).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target_title: Option<String>,
+}
+
+/// A collection feed that a remote item can name (ADR 0247 item 7).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkTarget {
+    /// The current GUID of the target feed (ADR 0247 item 7).
+    pub guid: String,
+    /// The public address of the target feed (ADR 0247 item 7).
+    pub url: String,
+    /// The current title of the target feed (ADR 0247 item 8).
+    pub title: Option<String>,
+}
+
+/// A remote item with an old GUID and its current target (ADR 0247 item 7).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OldLink {
+    /// The GUID that the remote item currently names (ADR 0247 item 7).
+    pub old_guid: String,
+    /// The collection feed that the remote item names by address (ADR 0247 item 7).
+    pub target: LinkTarget,
+}
+
+/// Read the link targets of the collection without a request (ADR 0247 item 7).
+///
+/// # Errors
+///
+/// Gives an error when the collection or a feed identity cannot be read (ADR 0247 item 7).
+pub fn link_targets(
+    collection: &Collection,
+) -> Result<Vec<LinkTarget>, crate::pipeline::PipelineError> {
+    collection
+        .feeds()?
+        .into_iter()
+        .try_fold(Vec::new(), |mut targets, row| {
+            let (guid, title) = crate::pipeline::feed_identity(collection, &row)?;
+            if let (Some(guid), Some(url)) = (guid, row.public_url) {
+                targets.push(LinkTarget { guid, url, title });
+            }
+            Ok(targets)
+        })
+}
+
+/// Give each old link in channel, podroll, and publisher order (ADR 0247 item 7).
+#[must_use]
+pub fn old_links(feed: &Feed, targets: &[LinkTarget]) -> Vec<OldLink> {
+    let mut found = Vec::new();
+    let links = feed
+        .remote_items
+        .iter()
+        .chain(
+            feed.podroll
+                .iter()
+                .flat_map(|podroll| &podroll.remote_items),
+        )
+        .chain(
+            feed.publisher
+                .iter()
+                .flat_map(|publisher| &publisher.remote_items),
+        );
+    for entry in links {
+        let item = &entry.value;
+        let Some(old_guid) = item.feed_guid.as_deref() else {
+            continue;
+        };
+        if targets.iter().any(|target| target.guid == old_guid) {
+            continue;
+        }
+        for target in targets {
+            let Some(url) = item.feed_url.as_deref() else {
+                continue;
+            };
+            if (url == target.url || same_but_spelling(url, &target.url))
+                && target.guid != old_guid
+                && !found.iter().any(|old: &OldLink| old.target == *target)
+            {
+                found.push(OldLink {
+                    old_guid: old_guid.to_owned(),
+                    target: target.clone(),
+                });
+                break;
+            }
+        }
+    }
+    found
+}
+
+/// Correct old links in the selected target set (ADR 0247 item 7).
+#[must_use]
+pub fn correct_old_links(
+    feed: &mut Feed,
+    targets: &[LinkTarget],
+    target_guid: Option<&str>,
+) -> usize {
+    let mut changed = 0;
+    let fix = |item: &mut RemoteItem, changed: &mut usize| {
+        let Some(guid) = item.feed_guid.as_deref() else {
+            return;
+        };
+        if targets.iter().any(|target| target.guid == guid) {
+            return;
+        }
+        let Some(url) = item.feed_url.as_deref() else {
+            return;
+        };
+        if let Some(target) = targets.iter().find(|target| {
+            target_guid.is_none_or(|guid| guid == target.guid)
+                && target.guid != guid
+                && (url == target.url || same_but_spelling(url, &target.url))
+        }) {
+            item.feed_guid = Some(target.guid.clone());
+            *changed += 1;
+        }
+    };
+    for entry in &mut feed.remote_items {
+        fix(&mut entry.value, &mut changed);
+    }
+    if let Some(podroll) = &mut feed.podroll {
+        for entry in &mut podroll.remote_items {
+            fix(&mut entry.value, &mut changed);
+        }
+    }
+    if let Some(publisher) = &mut feed.publisher {
+        for entry in &mut publisher.remote_items {
+            fix(&mut entry.value, &mut changed);
+        }
+    }
+    changed
 }
 
 impl Finding {
@@ -204,6 +338,8 @@ impl Finding {
 /// The facts that the caller gathers before the check (ADR 0174 item 4).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Facts {
+    /// The feeds that remote items can name (ADR 0247 item 8).
+    pub link_targets: Vec<LinkTarget>,
     /// The public address of the feed.
     pub public_address: Option<String>,
     /// The links that [`crate::move_link::check`] refuses. The check gives
@@ -256,8 +392,10 @@ pub fn check(feed: &Feed, facts: &Facts) -> Vec<Finding> {
             url: None,
             field: None,
             place: None,
+            target_title: None,
         });
     }
+    check_old_links(feed, facts, &mut found);
     check_links(feed, facts, &mut found);
     check_release(feed, &mut found);
     check_move(feed, facts, &mut found);
@@ -280,6 +418,7 @@ pub fn check(feed: &Feed, facts: &Facts) -> Vec<Finding> {
             url: None,
             field: None,
             place: None,
+            target_title: None,
         });
     }
     found
@@ -302,6 +441,33 @@ fn notice(
         url: None,
         field: None,
         place: None,
+        target_title: None,
+    }
+}
+
+fn check_old_links(feed: &Feed, facts: &Facts, found: &mut Vec<Finding>) {
+    for link in old_links(feed, &facts.link_targets) {
+        let name = link
+            .target
+            .title
+            .clone()
+            .unwrap_or_else(|| link.target.url.clone());
+        let finding = Finding {
+            kind: FindingKind::LinkGuidOld,
+            level: FindingLevel::Warning,
+            title: format!("A link to {name} has an old GUID"),
+            reason: format!(
+                "The link names the GUID {}. The feed {name} has the GUID {}.",
+                link.old_guid, link.target.guid
+            ),
+            entry: None,
+            repair: Some(RepairKind::UseTheGuidOf),
+            url: Some(link.target.url),
+            field: None,
+            place: None,
+            target_title: Some(name),
+        };
+        found.push(finding);
     }
 }
 
@@ -398,6 +564,7 @@ fn check_fee_values(feed: &Feed, found: &mut Vec<Finding>) {
             url: None,
             field: None,
             place: None,
+            target_title: None,
         });
     }
 }
@@ -419,6 +586,7 @@ fn check_short_addresses(feed: &Feed, found: &mut Vec<Finding>) {
             url: Some(bad.value),
             field: Some(bad.field),
             place: Some(bad.place),
+            target_title: None,
         });
     }
 }
@@ -744,6 +912,113 @@ mod tests {
             rel: Some(rel.to_owned()),
             ..RemoteItem::default()
         })
+    }
+
+    fn old_guid_link(guid: Option<&str>, url: Option<&str>) -> Entry<RemoteItem> {
+        Entry::new(RemoteItem {
+            feed_guid: guid.map(str::to_owned),
+            feed_url: url.map(str::to_owned),
+            title: Some("This Is It".to_owned()),
+            medium: Some("music".to_owned()),
+            rel: Some("artist".to_owned()),
+            ..RemoteItem::default()
+        })
+    }
+
+    fn old_link_facts() -> Facts {
+        Facts {
+            link_targets: vec![LinkTarget {
+                guid: "new-guid".to_owned(),
+                url: "https://host/a.xml".to_owned(),
+                title: Some("This Is It".to_owned()),
+            }],
+            ..Facts::default()
+        }
+    }
+
+    #[test]
+    fn old_channel_link_gives_one_warning_and_duplicate_links_give_one_finding() {
+        let mut feed = clean();
+        feed.remote_items
+            .push(old_guid_link(Some("old-guid"), Some("https://host/a.xml")));
+        feed.remote_items
+            .push(old_guid_link(Some("old-guid"), Some("https://host/a.xml")));
+        let found: Vec<_> = check(&feed, &old_link_facts())
+            .into_iter()
+            .filter(|finding| finding.kind == FindingKind::LinkGuidOld)
+            .collect();
+        assert_eq!(
+            found.len(),
+            1,
+            "ADR 0247 item 8: fix check_old_links to group links by target"
+        );
+        assert_eq!(
+            found[0].level,
+            FindingLevel::Warning,
+            "ADR 0247 item 8: fix check_old_links level"
+        );
+        assert_eq!(
+            found[0].title, "A link to This Is It has an old GUID",
+            "ADR 0247 item 8: fix check_old_links title"
+        );
+        assert_eq!(
+            found[0].reason,
+            "The link names the GUID old-guid. The feed This Is It has the GUID new-guid.",
+            "ADR 0247 item 8: fix check_old_links reason"
+        );
+        assert_eq!(
+            found[0].url.as_deref(),
+            Some("https://host/a.xml"),
+            "ADR 0247 item 8: fix check_old_links URL"
+        );
+        assert_eq!(
+            found[0].repair,
+            Some(RepairKind::UseTheGuidOf),
+            "ADR 0247 item 8: fix check_old_links repair"
+        );
+    }
+
+    #[test]
+    fn old_link_check_requires_an_unknown_guid_and_accepts_url_spelling() {
+        let facts = old_link_facts();
+        for (guid, url, expected) in [
+            (Some("new-guid"), Some("https://host/a.xml"), false),
+            (None, Some("https://host/a.xml"), false),
+            (Some("old-guid"), Some("HTTPS://Host:443/a.xml"), true),
+        ] {
+            let mut feed = clean();
+            feed.remote_items.push(old_guid_link(guid, url));
+            let found = check(&feed, &facts)
+                .iter()
+                .any(|finding| finding.kind == FindingKind::LinkGuidOld);
+            assert_eq!(
+                found, expected,
+                "ADR 0247 item 7: fix old_links GUID and spelling checks"
+            );
+        }
+    }
+
+    #[test]
+    fn old_link_check_reads_podroll_and_publisher_links() {
+        for publisher in [false, true] {
+            let link = old_guid_link(Some("old-guid"), Some("https://host/a.xml"));
+            let mut feed = clean();
+            if publisher {
+                feed.publisher = Some(Publisher {
+                    remote_items: vec![link],
+                });
+            } else {
+                feed.podroll = Some(crate::feed::Podroll {
+                    remote_items: vec![link],
+                });
+            }
+            assert!(
+                check(&feed, &old_link_facts())
+                    .iter()
+                    .any(|finding| finding.kind == FindingKind::LinkGuidOld),
+                "ADR 0247 item 7: fix old_links traversal"
+            );
+        }
     }
 
     #[test]

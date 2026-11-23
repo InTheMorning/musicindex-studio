@@ -26,6 +26,7 @@ use studio_core::connector::{
 use studio_core::discover::{FailKind, PublicFeed, ReadFailure};
 use studio_core::download;
 use studio_core::feed::{Entry, Feed, Recipient};
+use studio_core::feed_check;
 use studio_core::folder_scan;
 use studio_core::grant;
 use studio_core::inventory::{self, Hosts, planned_path_on};
@@ -3818,13 +3819,19 @@ pub(crate) async fn gather_pages(
         pages.sort_by_key(|page| page.0);
         pages.dedup();
         let rows = w.collection.feeds()?;
-        let catalog_feeds: Vec<_> = rows
+        let targets = feed_check::link_targets(&w.collection)?;
+        let mut catalog_feeds: Vec<_> = rows
             .into_iter()
             .map(|row| {
                 let model = files_feed(w, row.id).ok().flatten();
                 (row, model)
             })
             .collect();
+        for (_, model) in &mut catalog_feeds {
+            if let Some(model) = model {
+                let _ = feed_check::correct_old_links(model, &targets, None);
+            }
+        }
         let kept_before = w.collection.kept_levels()?;
         let catalogs = publisher::catalogs_with_kept(&catalog_feeds, &kept_before);
         let mut releases_by_page = Vec::new();
@@ -3876,6 +3883,9 @@ pub(crate) async fn gather_pages(
         let snapshot = page_move_snapshot(w, &touched)?;
         for feed in &touched {
             ensure_draft(w, *feed)?;
+        }
+        for feed in &touched {
+            pipeline::correct_draft_old_links(&w.collection, *feed, &targets)?;
         }
         for (page, releases) in &releases_by_page {
             if w.collection.feed(*page)?.publisher_roles.is_empty() {

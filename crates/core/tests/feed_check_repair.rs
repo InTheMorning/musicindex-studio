@@ -11,6 +11,7 @@ use studio_core::move_link::ScriptedReader;
 use studio_core::pipeline::{self, PipelineErrorKind, Proof};
 
 const GUID: &str = "917393e3-1b1e-5cef-ace4-edaa54e1f810";
+const TARGET_GUID: &str = "a17393e3-1b1e-5cef-ace4-edaa54e1f811";
 const URL: &str = "https://a.example/album.xml";
 const ONE: &str = "http://files.example/one.mp3";
 const TWO: &str = "http://files.example/two.mp3";
@@ -49,7 +50,7 @@ fn feed_xml(link: Option<&str>, tag: Option<&str>) -> String {
 }
 
 struct Env {
-    _dir: tempfile::TempDir,
+    dir: tempfile::TempDir,
     collection: Collection,
     hosts: Hosts,
     feed: FeedId,
@@ -73,7 +74,7 @@ fn env(xml: &str) -> Env {
     let mut hosts = Hosts::new();
     hosts.insert(a, Box::new(folder));
     Env {
-        _dir: dir,
+        dir,
         collection,
         hosts,
         feed,
@@ -87,7 +88,10 @@ impl Env {
 
     fn result(&self, net: &NetworkFacts) -> (CheckResult, String) {
         let inputs = pipeline::check_inputs(&self.collection, &self.hosts, self.feed).unwrap();
-        (check_with(&inputs.links, Some(net)), inputs.revision)
+        (
+            check_with(&inputs.links, Some(net), &inputs.link_targets),
+            inputs.revision,
+        )
     }
 
     fn finding(&self, net: &NetworkFacts, kind: FindingKind, entry: Option<&str>) -> Finding {
@@ -211,6 +215,128 @@ fn add_the_link_with_the_right_body_adds_the_link_with_the_exact_address() {
     // The finding is gone.
     let found = e.result(&none()).0.findings;
     assert!(found.iter().all(|f| f.kind != FindingKind::NoSelfLink));
+}
+
+#[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "ADR 0247 item 8: the repair test checks both link locations and discard behavior"
+)]
+fn use_the_guid_of_repairs_channel_and_podroll_links_only() {
+    let main = feed_xml(Some(URL), None).replace(
+        "</channel>",
+        "<podcast:remoteItem feedGuid=\"old-guid\" feedUrl=\"https://a.example/release.xml\" title=\"This Is It\" medium=\"music\" rel=\"artist\"/><podcast:podroll><podcast:remoteItem feedGuid=\"old-guid\" feedUrl=\"https://a.example/release.xml\" title=\"This Is It\" medium=\"music\" rel=\"artist\"/></podcast:podroll></channel>",
+    );
+    let mut e = env(&main);
+    let folder = LocalFolder::new(e.dir.path(), Some("https://a.example".into()));
+    folder
+        .write(
+            "release.xml",
+            feed_xml(Some("https://a.example/release.xml"), None)
+                .replace(GUID, TARGET_GUID)
+                .replace("<title>Album</title>", "<title>This Is It</title>")
+                .as_bytes(),
+            &Expected::Absent,
+        )
+        .unwrap();
+    let connector = e.collection.feed(e.feed).unwrap().connector_id.unwrap();
+    let target = e
+        .collection
+        .add_feed(
+            Some("https://a.example/release.xml"),
+            Some((connector, "release.xml")),
+        )
+        .unwrap();
+    pipeline::refresh(&mut e.collection, &folder, target).unwrap();
+    pipeline::start_draft(&e.collection, &folder, target).unwrap();
+    let target_before = e.collection.draft(target).unwrap().unwrap();
+    let before = studio_core::feed::Feed::read(
+        &studio_core::xml::Document::parse_bytes(e.text().as_bytes()).unwrap(),
+    )
+    .unwrap();
+    let finding = e.finding(&none(), FindingKind::LinkGuidOld, None);
+    assert_eq!(
+        finding.title, "A link to This Is It has an old GUID",
+        "ADR 0247 item 8: fix check_old_links"
+    );
+    e.repair(
+        &none(),
+        &finding,
+        &ScriptedReader::empty(),
+        &ScriptedFileReads::empty(),
+    )
+    .unwrap();
+    let after = studio_core::feed::Feed::read(
+        &studio_core::xml::Document::parse_bytes(e.text().as_bytes()).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        after.remote_items[0].value.feed_guid.as_deref(),
+        Some(TARGET_GUID),
+        "ADR 0247 item 8: fix Plan::apply"
+    );
+    assert_eq!(
+        after.remote_items[0].value.feed_url, before.remote_items[0].value.feed_url,
+        "ADR 0247 item 8: fix correct_old_links attribute scope"
+    );
+    assert_eq!(
+        after.remote_items[0].value.title, before.remote_items[0].value.title,
+        "ADR 0247 item 8: fix correct_old_links attribute scope"
+    );
+    assert_eq!(
+        after.remote_items[0].value.medium, before.remote_items[0].value.medium,
+        "ADR 0247 item 8: fix correct_old_links attribute scope"
+    );
+    assert_eq!(
+        after.remote_items[0].value.rel, before.remote_items[0].value.rel,
+        "ADR 0247 item 8: fix correct_old_links attribute scope"
+    );
+    let before_podroll = &before.podroll.as_ref().unwrap().remote_items[0].value;
+    let after_podroll = &after.podroll.as_ref().unwrap().remote_items[0].value;
+    assert_eq!(
+        after_podroll.feed_guid.as_deref(),
+        Some(TARGET_GUID),
+        "ADR 0247 item 8: fix Plan::apply for podroll"
+    );
+    assert_eq!(
+        (
+            &after_podroll.feed_url,
+            &after_podroll.title,
+            &after_podroll.medium,
+            &after_podroll.rel
+        ),
+        (
+            &before_podroll.feed_url,
+            &before_podroll.title,
+            &before_podroll.medium,
+            &before_podroll.rel
+        ),
+        "ADR 0247 item 8: fix correct_old_links attribute scope"
+    );
+    let error = e
+        .repair(
+            &none(),
+            &finding,
+            &ScriptedReader::empty(),
+            &ScriptedFileReads::empty(),
+        )
+        .unwrap_err();
+    assert_eq!(
+        error.kind(),
+        PipelineErrorKind::InvalidOperation,
+        "ADR 0247 item 8: fix plan_of repeat repair handling"
+    );
+    assert!(
+        error
+            .to_string()
+            .contains("this repair does not apply to the draft"),
+        "ADR 0247 item 8: fix plan_of repeat repair handling: {error}"
+    );
+    assert_eq!(
+        e.collection.draft(target).unwrap().unwrap(),
+        target_before,
+        "ADR 0247 item 8: apply_check_repair changed another draft"
+    );
 }
 
 #[test]

@@ -3026,6 +3026,134 @@ async fn gather_leaves_an_unchanged_page_out_of_the_change_set() {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "ADR 0247 item 9: the gather test checks correction, role linking, and discard"
+)]
+async fn gather_corrects_an_old_guid_before_linking_the_release_and_discard_restores_it() {
+    let owner = "ADR 0247 items 7 and 9: fix gather_pages and correct_old_links";
+    let (app, connector) = publisher_app().await;
+    let host = make_feed(
+        &app,
+        new_feed_body(
+            connector,
+            "host.xml",
+            "Host",
+            Some("publisher"),
+            Some("hosting"),
+        ),
+    )
+    .await["id"]
+        .as_i64()
+        .unwrap();
+    let page = make_artist_page(&app, connector, "artist.xml", "Artist").await["id"]
+        .as_i64()
+        .unwrap();
+    let release = make_feed(
+        &app,
+        new_feed_body(connector, "release.xml", "This Is It", None, None),
+    )
+    .await["id"]
+        .as_i64()
+        .unwrap();
+    let workspace = Workspace::open(app.data.path()).unwrap();
+    let release_row = workspace
+        .collection
+        .feed(studio_core::collection::FeedId(release))
+        .unwrap();
+    let (release_model, _) = studio_core::pipeline::draft_model(
+        &workspace.collection,
+        studio_core::collection::FeedId(release),
+    )
+    .unwrap();
+    let target_guid = release_model.podcast_guid.unwrap();
+    let target_url = release_row.public_url.unwrap();
+    drop(workspace);
+    {
+        let workspace = Workspace::open(app.data.path()).unwrap();
+        workspace
+            .collection
+            .set_publisher_roles(studio_core::collection::FeedId(page), &[], true)
+            .unwrap();
+        let mut draft = workspace
+            .collection
+            .draft(studio_core::collection::FeedId(page))
+            .unwrap()
+            .unwrap();
+        let xml = String::from_utf8(draft.draft_xml.clone()).unwrap();
+        let link = format!(
+            "<podcast:remoteItem feedGuid=\"old-guid\" feedUrl=\"{target_url}\" medium=\"music\" title=\"This Is It\"/>\n  "
+        );
+        draft.draft_xml = xml
+            .replace("</channel>", &format!("{link}</channel>"))
+            .into_bytes();
+        workspace
+            .collection
+            .save_draft(studio_core::collection::FeedId(page), &draft)
+            .unwrap();
+    }
+    let before = move_draft_rows(&app, &[page, release, host]);
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{host}/gather"),
+        Some(json!({ "role": "artist", "page_ids": [page] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{owner}: {body}");
+    let change_set_id = body["change_set_id"].as_i64().expect(owner);
+    let workspace = Workspace::open(app.data.path()).unwrap();
+    let (page_feed, _) = studio_core::pipeline::draft_model(
+        &workspace.collection,
+        studio_core::collection::FeedId(page),
+    )
+    .unwrap();
+    let link = &page_feed.remote_items[0].value;
+    assert_eq!(
+        link.feed_guid.as_deref(),
+        Some(target_guid.as_str()),
+        "{owner}"
+    );
+    assert_eq!(link.rel.as_deref(), Some("artist"), "{owner}");
+    let (release_feed, _) = studio_core::pipeline::draft_model(
+        &workspace.collection,
+        studio_core::collection::FeedId(release),
+    )
+    .unwrap();
+    let (host_feed, _) = studio_core::pipeline::draft_model(
+        &workspace.collection,
+        studio_core::collection::FeedId(host),
+    )
+    .unwrap();
+    let host_guid = host_feed.podcast_guid.as_deref();
+    assert!(
+        release_feed
+            .publisher
+            .as_ref()
+            .is_some_and(|publisher| publisher.remote_items.iter().any(|entry| entry
+                .value
+                .feed_guid
+                .as_deref()
+                == host_guid)),
+        "{owner}"
+    );
+    drop(workspace);
+    let (status, body) = call(
+        &app,
+        "DELETE",
+        &format!("/api/v1/change-sets/{change_set_id}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "{owner}: {body}");
+    let after = move_draft_rows(&app, &[page, release, host]);
+    assert_eq!(
+        after, before,
+        "{owner}: discard did not restore each old draft"
+    );
+}
+
+#[tokio::test]
 async fn gather_moves_two_pages_with_no_role_in_one_change_set() {
     let (app, connector) = publisher_app().await;
     let host = make_feed(

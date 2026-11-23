@@ -79,6 +79,7 @@ const ACTIONS = {
   add_a_recipient: 'open-recipient',
   use_lnurl_address: 'repair',
   use_node_address: 'repair',
+  use_the_guid_of: 'repair',
 };
 
 export const PAGE_FINDING_TEXT = {
@@ -272,7 +273,9 @@ export function checkRows(check) {
       warning: false, title: finding.title, reason: finding.reason,
       button: 'Show the Ways', action: 'show-ways', indexAddress: finding.url || '',
     };
-    const label = repairLabel(finding.repair);
+    const label = finding.repair === 'use_the_guid_of' && finding.target_title
+      ? `Use the GUID of ${finding.target_title}`
+      : repairLabel(finding.repair);
     const action = label ? ACTIONS[finding.repair] : null;
     const usable = action && !(action === 'open-track' && !finding.entry);
     return {

@@ -1,7 +1,7 @@
 // The lines of a review (ADR 0114 items 8 to 12).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { shownLines, localTime, localTimeNote, runs, commonIndent, moreLabel, stripIndent, normalizeView, showsExamine, streamProblemRows } from '../ui/review.js';
+import { shownLines, localTime, localTimeNote, runs, commonIndent, moreLabel, stripIndent, normalizeView, showsExamine, streamProblemRows, keyWord } from '../ui/review.js';
 import { setLiveStreamType } from '../ui/live.js';
 
 const part = (text, changed = false) => ({ text, changed });
@@ -389,4 +389,8 @@ test('ADR 0228 items 14 to 16: the Review sheet orders the diff, the file operat
   const footer = sheet.slice(sheet.indexOf('<footer>'));
   assert.ok(footer.indexOf('${writeError}') > 0 && footer.indexOf('${writeError}') < footer.indexOf('<${AnnounceFooterChoice}'), 'ADR 0228 item 16: the write error is in the footer above AnnounceFooterChoice. Fix: render writeError there.');
   assert.ok(!sheet.slice(0, sheet.indexOf('<footer>')).includes('${writeError}'), 'ADR 0228 item 16: the body has no write error. Fix: render writeError in the footer only.');
+});
+
+test('ADR 0247 item 8: Review names the GUID of a link', () => {
+  assert.equal(keyWord('feed_guid'), 'Feed GUID', 'ADR 0247 item 8: add feed_guid to KEY_WORDS in review.js');
 });

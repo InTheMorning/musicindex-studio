@@ -53,6 +53,18 @@ test('the payment page address mark uses wrong address findings', () => {
   ]))], ['name@example.com'], owner);
   assert.equal(wrongAddressSet(null).size, 0, owner);
 });
+
+test('an old link GUID uses the target title and the repair route', () => {
+  const owner = 'ADR 0247 item 8: fix checkRows in feedcheck.js.';
+  const row = checkRows(check([finding('link_guid_old', 'use_the_guid_of', {
+    level: 'warning', target_title: 'This Is It', entry: null, url: 'https://music.example/this-is-it.xml',
+  })]))[0];
+  assert.equal(row.button, 'Use the GUID of This Is It', owner);
+  assert.equal(row.action, 'repair', owner);
+  assert.deepEqual(row.body, {
+    kind: 'link_guid_old', entry: null, url: 'https://music.example/this-is-it.xml',
+  }, owner);
+});
 const check = (findings, extra = {}) => ({ revision: 'r1', read_only: false, read: true, unreadable: [], findings, ...extra });
 
 test('the tab label has the count, and no count for no finding', () => {

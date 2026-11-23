@@ -2427,6 +2427,33 @@ pub(crate) fn feed_identity(
     }
 }
 
+/// Correct old links in one draft and save the diff (ADR 0247 item 9).
+///
+/// # Errors
+///
+/// Gives an error when the draft, target identity, or feed XML cannot be read.
+pub fn correct_draft_old_links(
+    collection: &Collection,
+    id: FeedId,
+    targets: &[crate::feed_check::LinkTarget],
+) -> Result<usize, PipelineError> {
+    let draft = current_draft(collection, id)?;
+    let base_xml = draft.base_xml.clone();
+    let mut model = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
+    let count = crate::feed_check::correct_old_links(&mut model, targets, None);
+    if count == 0 {
+        return Ok(0);
+    }
+    let changed = dated_like_base(
+        changed_draft(draft, |feed| {
+            let _ = crate::feed_check::correct_old_links(feed, targets, None);
+        })?,
+        &base_xml,
+    )?;
+    collection.save_draft(id, &changed)?;
+    Ok(count)
+}
+
 /// Name linked feeds in the review (ADR 0246 item 5).
 fn name_review_links(
     collection: &Collection,

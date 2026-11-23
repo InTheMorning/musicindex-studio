@@ -29,6 +29,8 @@ pub struct CheckInputs {
     /// The `lastBuildDate` text of the base file, that is, of the feed that
     /// Studio last wrote (ADR 0175 item 10).
     pub base_build_date: Option<String>,
+    /// The feeds that remote items can name (ADR 0247 item 8).
+    pub link_targets: Vec<feed_check::LinkTarget>,
 }
 
 /// The inputs of the check for the draft of a feed. The function makes no
@@ -44,6 +46,7 @@ pub fn check_inputs(
     id: FeedId,
 ) -> Result<CheckInputs, PipelineError> {
     let draft = current_draft(collection, id)?;
+    let link_targets = feed_check::link_targets(collection)?;
     Ok(CheckInputs {
         links: super::link_inputs_for(collection, hosts, id)?,
         revision: revision(&draft),
@@ -52,6 +55,7 @@ pub fn check_inputs(
             .ok()
             .and_then(|doc| Feed::read(&doc).ok())
             .and_then(|base| base.last_build_date),
+        link_targets,
     })
 }
 
@@ -128,7 +132,8 @@ pub fn repair_step(inputs: &CheckInputs, finding: &Finding) -> Result<Step, Pipe
             RepairKind::UseTheHttpsAddress
             | RepairKind::UseLnurlAddress
             | RepairKind::UseNodeAddress
-            | RepairKind::AddHttps,
+            | RepairKind::AddHttps
+            | RepairKind::UseTheGuidOf,
         ) => Ok(Step::Nothing),
         Some(RepairKind::ReadTheSize) => {
             let url = item_of(&links.feed, finding.entry.as_deref())
@@ -213,7 +218,8 @@ pub fn apply_check_repair(
     let moved = feed_move(collection, hosts, &row)?;
     let url = draft_url(hosts, &row, moved.as_ref())?;
     let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
-    let plan = plan_of(&feed, finding, url.as_deref(), proof)?;
+    let targets = feed_check::link_targets(collection)?;
+    let plan = plan_of(&feed, finding, url.as_deref(), proof, &targets)?;
     let before_xml = draft.draft_xml.clone();
     let changed = changed_draft(draft, |feed| plan.apply(feed))?;
     let changed = dated_like_base(changed, &before_xml)?;
@@ -242,6 +248,11 @@ enum Plan {
     /// Set an address field to its text with `https://` in front (ADR 0245
     /// item 2).
     FullAddress { field: String, address: String },
+    /// Correct links that name this feed by address (ADR 0247 item 8).
+    LinkGuid {
+        url: String,
+        targets: Vec<feed_check::LinkTarget>,
+    },
 }
 
 impl Plan {
@@ -317,6 +328,11 @@ impl Plan {
                     }
                 }
             }
+            Self::LinkGuid { url, targets } => {
+                if let Some(target) = targets.iter().find(|target| target.url == *url) {
+                    let _ = feed_check::correct_old_links(feed, targets, Some(&target.guid));
+                }
+            }
         }
     }
 }
@@ -326,6 +342,7 @@ fn plan_of(
     finding: &Finding,
     url: Option<&str>,
     proof: &Proof,
+    targets: &[feed_check::LinkTarget],
 ) -> Result<Plan, PipelineError> {
     match finding.repair {
         Some(RepairKind::AddTheLink) => {
@@ -396,6 +413,26 @@ fn plan_of(
             Ok(Plan::Length {
                 guid,
                 length: *length,
+            })
+        }
+        Some(RepairKind::UseTheGuidOf) => {
+            let url = finding
+                .url
+                .clone()
+                .ok_or_else(|| invalid("the finding names no feed address"))?;
+            let target = targets
+                .iter()
+                .find(|target| target.url == url)
+                .ok_or_else(|| invalid("this repair does not apply to the draft"))?;
+            if feed_check::old_links(feed, targets)
+                .iter()
+                .all(|link| link.target != *target)
+            {
+                return Err(invalid("this repair does not apply to the draft"));
+            }
+            Ok(Plan::LinkGuid {
+                url,
+                targets: targets.to_vec(),
             })
         }
         Some(RepairKind::UseLnurlAddress | RepairKind::UseNodeAddress) => {

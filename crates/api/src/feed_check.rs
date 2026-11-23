@@ -87,7 +87,7 @@ fn check_json(w: &Workspace, id: FeedId) -> ApiResult {
     let hosts = w.hosts()?;
     let inputs = pipeline::check_inputs(&w.collection, &hosts, id)?;
     let net = stored(w, id, &inputs.base_key);
-    let mut result = feed_reads::check_with(&inputs.links, net);
+    let mut result = feed_reads::check_with(&inputs.links, net, &inputs.link_targets);
     let read_only = is_read_only(w, id)?;
     if read_only {
         for finding in &mut result.findings {
@@ -230,7 +230,11 @@ pub(crate) async fn repair(
                 "the draft changed after this model was read; read the draft again",
             ));
         }
-        let result = feed_reads::check_with(&inputs.links, stored(w, id, &inputs.base_key));
+        let result = feed_reads::check_with(
+            &inputs.links,
+            stored(w, id, &inputs.base_key),
+            &inputs.link_targets,
+        );
         let finding = result
             .findings
             .into_iter()

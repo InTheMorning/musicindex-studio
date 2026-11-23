@@ -8,6 +8,7 @@
 - Bar: crosses modules. It changes the core remove, the move route, the feed list, the check, the Review sheet and the level rows. Without this record, an agent can keep ADR 0231 item 10 and let a release go out with no link on its artist page.
 - Changes: [ADR 0231](0231-a-new-release-writes-its-artist-page-and-the-files-of-a-restored-release.md) item 10, the write of a new release without its pages (items 3 and 4).
 - Changes: [ADR 0233](0233-each-add-form-finds-on-music-index-and-copies-the-found-feed.md) item 15, the remove of a release that was never written (item 10).
+- Changed by: [ADR 0251](0251-review-writes-the-two-sides-of-a-changed-link.md) items 4 and 6, on 2026-11-23. Item 3: the check box is on and locked for each linked feed, and the text under the rows changes.
 - Uses: [ADR 0227](0227-undo-and-redo.md), the undo of a remove. [ADR 0230](0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 20 and 21, the media host of a move. [ADR 0007](0007-draft-diff-write-and-announce.md), the write of a draft.
 
 ## Context

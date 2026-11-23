@@ -104,7 +104,7 @@ An artist page adds an existing release in the section **Releases**. Review of t
 
 Recommendation: question for the operator. Show the album change as a row of the artist page review, as for a new release. This changes the scope of ADR 0234 and needs an ADR.
 
-Operator choice (2026-11-23): one review writes the artist page and the linked album, as for a new release. Status: open. The main session shows mockups first, and then writes the ADR that changes the scope of ADR 0234.
+Operator choice (2026-11-23): one review writes the artist page and the linked album, as for a new release. [ADR 0251](../adr/0251-review-writes-the-two-sides-of-a-changed-link.md) owns finding 9. The check box of the linked feed is on and locked, and the rule applies from the page and from the release. Status: decided, not built.
 
 ## Finding 10: Studio cannot correct a misspelled tag
 

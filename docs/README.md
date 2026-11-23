@@ -225,6 +225,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0248: Music Index changes a feed GUID in place, and Studio restores no GUID](adr/0248-music-index-changes-a-feed-guid-in-place-and-studio-restores-no-guid.md)
 - [ADR 0249: Studio strongly discourages a feed GUID change](adr/0249-studio-strongly-discourages-a-feed-guid-change.md)
 - [ADR 0250: Studio corrects the type of a feed with a bad or missing medium tag](adr/0250-studio-corrects-the-type-of-a-feed-with-a-bad-or-missing-medium-tag.md)
+- [ADR 0251: Review writes the two sides of a changed link](adr/0251-review-writes-the-two-sides-of-a-changed-link.md)
 
 ## Plans
 

@@ -1033,7 +1033,7 @@ function SftpHostForm({ onAdded, submitLabel = 'Accept and Add the Server', busy
   if (step === 2) {
     return html`<form class="form" onSubmit=${submit}>
       <p>Studio connected to ${hostName}. Make sure that this is the fingerprint of the server:</p>
-      <p class="mono" aria-label="Host key fingerprint">${fingerprint}</p>
+      <p class="mono" data-fit-allow-break aria-label="Host key fingerprint">${fingerprint}</p>
       ${notice}
       <div class="actions">
         <button class="button primary" type="submit" disabled=${busy}>${busy ? busyLabel : submitLabel}</button>
@@ -2641,8 +2641,11 @@ function FeedDetail({ feed, feeds, draft, view, go, adding, onAdding, importing,
 
 // The feed files in a folder that are not in the collection. Studio shows
 // them after a folder match, so that a feed that no index lists, such as a
-// blocked test feed, is not missed (ADR 0019).
-function FolderFeeds({ connector, onAdded }) {
+// blocked test feed, is not missed (ADR 0019). A host card also shows them
+// after "Find Other Feeds" (`asked`), so that the list is not lost after
+// Connect (UI finding 2 of 2026-11-23). Then the states "reading" and
+// "no other feeds" also show.
+function FolderFeeds({ connector, onAdded, asked = false }) {
   const [found, setFound] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [chosen, setChosen] = useState([]);
@@ -2658,7 +2661,8 @@ function FolderFeeds({ connector, onAdded }) {
   }, (e) => { setFound([]); setLoadError(e); });
   useEffect(() => { loadFeeds(); }, [connector.id]);
   if (loadError) return html`<${LoadErrorNotice} list="the feeds of this folder" onRetry=${loadFeeds} />`;
-  if (!found || found.length === 0) return null;
+  if (!found) return asked ? html`<div class="notice" role="status">Studio reads the ${connector.kind === 's3' ? 'bucket' : 'folder'}…</div>` : null;
+  if (found.length === 0) return asked ? html`<div class="notice" role="status">Each feed in this ${connector.kind === 's3' ? 'bucket' : 'folder'} is in Studio.</div>` : null;
   if (result) return html`<div class="notice" role="status">Studio added ${result} feed${result === 1 ? '' : 's'} from “${connector.name}”.</div>`;
   const toggle = (path) => setChosen(chosen.includes(path) ? chosen.filter((p) => p !== path) : [...chosen, path]);
   const add = () => run(async () => {
@@ -2958,6 +2962,9 @@ function HostCard({ connector, connectors, feeds, removeBusy, onRemove, onOpen, 
   // then offers to accept the new key.
   const check = useAction();
   const accept = useAction();
+  // Each click of "Find Other Feeds" mounts a new list, which reads the
+  // folder again.
+  const [find, setFind] = useState(0);
   const [newKey, setNewKey] = useState(null);
   const checkHost = () => {
     setNewKey(null);
@@ -3021,7 +3028,7 @@ function HostCard({ connector, connectors, feeds, removeBusy, onRemove, onOpen, 
                 ? html`<dt>Server</dt><dd class="mono">${`${config.user}@${config.host}:${config.port}`}</dd>
                   <dt>Folder</dt><dd class="mono" data-fit-allow-break>${config.root}</dd>
                   <dt>Login</dt><dd>${{ key: 'Private key', password: 'Password', agent: 'ssh-agent' }[config.login] || config.login}</dd>
-                  <dt>Host key</dt><dd class="mono">${config.host_key}</dd>`
+                  <dt>Host key</dt><dd class="mono" data-fit-allow-break>${config.host_key}</dd>`
                 : isNostr
                   ? html`<dt>Public key</dt><dd class="mono">${npubOf(config.public_key) || config.public_key}</dd>
                     ${isNsite && html`<dt>Site name</dt><dd class="mono">${config.d}</dd>
@@ -3057,14 +3064,16 @@ function HostCard({ connector, connectors, feeds, removeBusy, onRemove, onOpen, 
                   .map((r) => html`<li><span class="mono">${r.url}</span>: ${r.error || (r.id ? `older manifest ${r.id.slice(0, 8)}` : 'no manifest')}</li>`)}</ul>
               </div>`)}
           ${isNsite && html`<${ErrorNotice} error=${site.error} />`}
-          ${isSftp && html`<div class="actions">
-            <button class="button" type="button" disabled=${check.busy || accept.busy} onClick=${checkHost}>
-              ${check.busy ? 'Checking…' : 'Check the Connection'}</button>
+          ${!isTemporary && html`<div class="actions">
+            ${isSftp && html`<button class="button" type="button" disabled=${check.busy || accept.busy} onClick=${checkHost}>
+              ${check.busy ? 'Checking…' : 'Check the Connection'}</button>`}
+            ${!isTemporary && html`<button class="button" type="button" onClick=${() => setFind(find + 1)}>Find Other Feeds</button>`}
           </div>`}
+          ${find > 0 && html`<${FolderFeeds} key=${find} connector=${connector} onAdded=${onChanged} asked />`}
           ${isSftp && newKey && html`<div class="notice error" role="alert">
             <strong>The server gives a new host key.</strong>
             <p>Make sure that this is the fingerprint of the server before you accept it:</p>
-            <p class="mono">${newKey}</p>
+            <p class="mono" data-fit-allow-break>${newKey}</p>
             <div class="actions"><button class="button action" type="button" disabled=${accept.busy} onClick=${acceptKey}>
               ${accept.busy ? 'Accepting…' : 'Accept the New Key'}</button></div>
           </div>`}

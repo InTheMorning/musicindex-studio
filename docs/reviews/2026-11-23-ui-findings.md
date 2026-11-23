@@ -37,6 +37,10 @@ What the code does:
 
 Recommendation: defect. Show `FolderFeeds` on each SFTP host card and each folder host card. Show it when the folder has feeds that are not in the collection. `FolderFeeds` loads its list itself, so `linked` is not necessary.
 
+Operator choice (2026-11-23): each host card has the normal button **Find Other Feeds**. The temporary area does not have it. A click shows the list in the card. Studio reads the host only after the click, so File hosts does not read each host when it opens. The list also gives "Studio reads the folder…" and "Each feed in this folder is in Studio."
+
+Status: corrected. A walk with a debug build connected, opened Releases, and then opened File hosts again. **Find Other Feeds** showed the two feeds, added them, and then gave "Each feed in this folder is in Studio."
+
 ## Finding 3: a misspelled medium tag makes a music feed read-only, with no reason
 
 The test feed had `podcast:meduim` as its only medium tag. Studio put the album in **Other feeds** with "This feed has no type. Studio edits albums, playlists, and artist and label feeds, so it shows only the facts of this feed."
@@ -62,6 +66,8 @@ Recommendation: improvement. Tell the user that the WAV file has 32-bit samples,
 The fit check (musicindex ADR 0065 R-FIT-3) reported a break in a word in the fingerprint of the SFTP step at 390 px and at 761 px wide. The fingerprint is one long token (`crates/api/ui/app.js` line 1036, also near line 3066).
 
 Recommendation: defect of the markup. A fingerprint must break, as a URL or a GUID does. Add `data-fit-allow-break` to the two fingerprint elements, as `addressrow.js` does for an address.
+
+Status: corrected. The attribute is on the three host key elements: the Connect step, the **Host key** fact of the card, and the new key notice. The fit check of the same walk gave no finding at 390 px and at 761 px.
 
 ## Finding 6: "Value routes" and "Value Routes"
 

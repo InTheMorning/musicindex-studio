@@ -2615,6 +2615,8 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
       go({ name: 'feed', id: feed.id, page: 'recipients' });
     }
   };
+  // The header buttons wrap as one group (finding 11 of 2026-11-23).
+  const canMovePage = isPublisher(feed) && (feed.publisher_roles || []).some((role) => role === 'artist' || role === 'label');
   return html`<div>
     <${Bar}>
       <${Crumb} feed=${feed} view=${view} draft=${draft} />
@@ -2634,10 +2636,11 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
             : html`<p class="sub mono">This feed has no public address yet.</p>`}
           ${musicIndexLink && html`<a class="button link index-link" href=${musicIndexLink.href} target="_blank" rel="noopener">${musicIndexLink.text}</a>`}
         </div>
-        ${isPublisher(feed) && (feed.publisher_roles || []).some((role) => role === 'artist' || role === 'label')
-          && html`<button class="button" type="button" onClick=${() => onMove(feed.id)}>Move To…</button>`}
-        ${feed.last_version !== null && html`<button class="button" type="button" disabled=${busy} onClick=${refresh}>
-          ${busy ? 'Reading…' : 'Read Again'}</button>`}
+        ${(canMovePage || feed.last_version !== null) && html`<div class="head-actions">
+          ${canMovePage && html`<button class="button" type="button" onClick=${() => onMove(feed.id)}>Move To…</button>`}
+          ${feed.last_version !== null && html`<button class="button" type="button" disabled=${busy} onClick=${refresh}>
+            ${busy ? 'Reading…' : 'Read Again'}</button>`}
+        </div>`}
       </header>
       <${ErrorNotice} error=${error} />
       ${feed.temporary_expired

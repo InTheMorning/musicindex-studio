@@ -131,4 +131,8 @@ The main session found this defect in the walk of task 242. At 761 px, the edito
 
 The same page without Review and without a write gives the same finding. Task 242 does not change the head. Thus the defect is older than task 242 (inference, not examined on an older commit).
 
-Recommendation: defect. Let the buttons **Move To…** and **Read Again** go below the title when the pane is narrow, and let the top bar wrap. Status: open.
+Recommendation: defect. Let the buttons **Move To…** and **Read Again** go below the title when the pane is narrow, and let the top bar wrap. Status: corrected.
+
+The cause is in `crates/api/ui/styles.css`. The narrow rules use the width of the window, but at 761 px the main pane is only 466 px wide. The head keeps **Move To…** and **Read Again** together in one group. The group goes below the title when the title needs the width. The top bar wraps, and its buttons go to a second line at the right.
+
+A walk with a debug build showed the artist page at 761 px, 1100 px and 390 px. At 761 px the title is on one line, and the two buttons are below it. At 1100 px the buttons are adjacent to the title, as before. The fit check gave no finding at 390 px and at 761 px, and no page scrolled to the side.

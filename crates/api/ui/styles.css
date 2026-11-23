@@ -825,7 +825,13 @@ input[type="checkbox"]:disabled { opacity: .5; cursor: default; }
   -webkit-backdrop-filter: blur(20px) saturate(1.4);
   border-bottom: 1px solid var(--sep);
   font-weight: 600;
+  /* The main pane can be narrow in a wide window, because the side panel
+     takes its width. The draft toolbar then goes to a second row at the
+     right, and its buttons stay in the pane (finding 11 of 2026-11-23). */
+  flex-wrap: wrap;
+  row-gap: 6px;
 }
+.bar > .draft-toolbar { margin-left: auto; }
 .bar-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The feed title part of a breadcrumb title (review of task 014c, defect 5). */
 .bar-title .muted { color: var(--muted); font-weight: 400; }
@@ -1737,7 +1743,11 @@ select.position:focus { background: var(--fill); }
   font-size: var(--text-callout);
   overflow-wrap: anywhere;
 }
-.head .text { flex: 1; min-width: 0; }
+/* The text has a base width of 15em. When the buttons of the header do not
+   fit beside it, they go to their own row, and the title does not break
+   inside a word (finding 11 of 2026-11-23). */
+.head .text { flex: 1 1 15em; min-width: 0; }
+.head-actions { display: flex; flex-wrap: wrap; gap: 10px; }
 /* A title breaks inside a word only when the word is wider than the line. */
 .head h1 { font-size: var(--text-title-1); font-weight: 800; letter-spacing: -.03em; line-height: 1.1; overflow-wrap: break-word; }
 /* At narrow width the text takes the full row beside the cover, so that a

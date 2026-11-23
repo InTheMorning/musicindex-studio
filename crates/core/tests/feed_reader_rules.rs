@@ -1,6 +1,6 @@
 //! The rules of musicindex ADR 0215 R-FEED-6 item 3 for the Studio feed
-//! reader: the two namespace URIs of musicindex ADR 0086 R-FEED-3 with any
-//! prefix, and the `fee` values of musicindex ADR 0086 R-FEED-4 item 5.
+//! reader: the two namespace URIs of musicindex ADR 0093 R-FEED-3 with any
+//! prefix, and the `fee` values of musicindex ADR 0093 R-FEED-4 item 5.
 //! ADR 0244 records this work in Studio.
 
 use studio_core::feed::{FeeReading, Feed};
@@ -140,7 +140,7 @@ fn read_with(namespace: &str, prefix: &str) -> Feed {
 
 #[test]
 fn r_feed_6_the_reader_accepts_the_namespace_uri_with_another_prefix() {
-    let owner = "musicindex ADR 0215 R-FEED-6 item 3 and ADR 0086 R-FEED-3: fix PODCAST_NS_ALIASES in crates/core/src/xml.rs";
+    let owner = "musicindex ADR 0093 R-FEED-6 item 3 and R-FEED-3: fix PODCAST_NS_ALIASES in crates/core/src/xml.rs";
     let read = read_with("https://podcastindex.org/namespace/1.0", "pi");
     assert_eq!(
         read.podcast_guid.as_deref(),
@@ -157,7 +157,7 @@ fn r_feed_6_the_reader_accepts_the_namespace_uri_with_another_prefix() {
 
 #[test]
 fn r_feed_6_the_reader_accepts_the_specification_uri_with_another_prefix() {
-    let owner = "musicindex ADR 0215 R-FEED-6 item 3 and ADR 0086 R-FEED-3: fix PODCAST_NS_ALIASES in crates/core/src/xml.rs";
+    let owner = "musicindex ADR 0093 R-FEED-6 item 3 and R-FEED-3: fix PODCAST_NS_ALIASES in crates/core/src/xml.rs";
     let read = read_with(
         "https://github.com/Podcastindex-org/podcast-namespace/blob/main/docs/1.0.md",
         "ns",

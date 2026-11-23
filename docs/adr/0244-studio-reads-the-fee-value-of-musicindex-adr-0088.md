@@ -1,17 +1,17 @@
-# ADR 0244: Studio Reads The Fee Value Of musicindex ADR 0088
+# ADR 0244: Studio Reads The Fee Value Of musicindex ADR 0093
 
 - Status: Accepted
 - Date: 2026-11-22
 - Owner: operator
-- Accepted: 2026-11-22. The operator decided that Studio keeps its own feed reader (musicindex ADR 0088). The orchestrator session relayed the decision and the task. The task let the Studio session select where the warning shows.
+- Accepted: 2026-11-22. The operator decided that Studio keeps its own feed reader (musicindex ADR 0093). The orchestrator session relayed the decision and the task. The task let the Studio session select where the warning shows.
 - Technical choices: the main session selected a finding of the feed check for the warning (item 2), its level and its texts.
-- Bar: crosses repositories. musicindex ADR 0088 R-FEED-6 gives the rule, and this record gives the location of each part in Studio. Without this record, an agent can put the warning only in the log, where a desktop user does not see it.
+- Bar: crosses repositories. musicindex ADR 0093 R-FEED-6 gives the rule, and this record gives the location of each part in Studio. Without this record, an agent can put the warning only in the log, where a desktop user does not see it.
 - Changes: [ADR 0219](0219-a-release-checklist-and-a-check-of-the-address-type.md) item 1. The feed check gets the finding kind `unknown_fee`, with the level Warning.
-- Uses: musicindex ADR 0088 R-FEED-6 item 3, musicindex ADR 0086 R-FEED-3 and R-FEED-4 item 5, musicindex ADR 0087 R-WORD-12. [ADR 0174](0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md) for the levels and the Check tab.
+- Uses: musicindex ADR 0093 R-FEED-6 item 3, musicindex ADR 0093 R-FEED-3 and R-FEED-4 item 5, musicindex ADR 0087 R-WORD-12. [ADR 0174](0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md) for the levels and the Check tab.
 
 ## Context
 
-musicindex ADR 0088 R-FEED-6 lets Studio keep its own feed reader, because Studio edits the document and saves it. The reader must accept the two namespace URIs of musicindex ADR 0086 R-FEED-3 with each prefix. It must read `fee` as musicindex ADR 0086 R-FEED-4 item 5 gives.
+musicindex ADR 0093 R-FEED-6 lets Studio keep its own feed reader, because Studio edits the document and saves it. The reader must accept the two namespace URIs of musicindex ADR 0093 R-FEED-3 with each prefix. It must read `fee` as musicindex ADR 0093 R-FEED-4 item 5 gives.
 
 At commit `84b9970`, `is_fee` in `crates/core/src/change_set.rs` and `isFee` in the UI accepted only `true`. It gave no warning for a value that is not known.
 

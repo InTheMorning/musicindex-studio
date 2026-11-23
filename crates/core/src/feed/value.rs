@@ -53,7 +53,7 @@ impl Modeled for ValueBlock {
 }
 
 /// The meaning of the `fee` text of a recipient (musicindex ADR 0215 R-FEED-6
-/// item 3, musicindex ADR 0086 R-FEED-4 item 5).
+/// item 3, musicindex ADR 0093 R-FEED-4 item 5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FeeReading {
     /// `true`, `1` or `yes`.

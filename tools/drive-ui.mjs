@@ -18,7 +18,8 @@
 // a secure context, such as `http://localhost:PORT`. An IP address is not a
 // relying party ID.
 // A step {"file": [selector, path]} sets the file of a file input (an absolute
-// path on this computer) through `DOM.setFileInputFiles`, and the input then
+// path on this computer, or a list of paths for a multiple input) through
+// `DOM.setFileInputFiles`, and the input then
 // fires its `change` event. Use a step for the click that opens the sheet
 // first, because the input must be in the page.
 // A step {"press": selector} clicks the center of the first element that the
@@ -30,7 +31,10 @@
 // A step {"manifest": true} sends `Page.getAppManifest`. It prints the
 // manifest `url`, the `errors` and the parsed `name` and `display`. An empty
 // `errors` list means that Chromium found no manifest error.
-// The page has these helpers: $set(selector, value), $click(text),
+// The page has these helpers: $set(selector, value), $fill(id, value)
+// (the value setter of the element type, then `input` and `change`, so a
+// Preact field keeps the value), $pick(optionText) (the first visible select
+// with that option), $click(text),
 // $text() and $small() (the controls lower than 44 px, except a control in
 // a label of 44 px or more, and a control that is hidden on purpose).
 // $edges(), $overflow(), $overlaps(), $wordBreaks() and $unsized() are edgeCuts,
@@ -121,6 +125,8 @@ const shot = async (name) => {
 // Page helpers.
 const helpers = `
   window.$set = (sel, v) => { const e = document.querySelector(sel); e.value = v; e.dispatchEvent(new Event('input', { bubbles: true })); };
+  window.$fill = (id, v) => { const e = document.getElementById(id); if (!e) throw new Error('no ' + id); Object.getOwnPropertyDescriptor(Object.getPrototypeOf(e), 'value').set.call(e, v); e.dispatchEvent(new Event('input', { bubbles: true })); e.dispatchEvent(new Event('change', { bubbles: true })); return id; };
+  window.$pick = (t) => { const s = [...document.querySelectorAll('select')].filter((e) => (e.checkVisibility ? e.checkVisibility() : e.offsetParent)).find((e) => [...e.options].some((o) => o.textContent.trim() === t)); if (!s) throw new Error('no select with ' + t); s.value = [...s.options].find((o) => o.textContent.trim() === t).value; s.dispatchEvent(new Event('change', { bubbles: true })); return s.id + '=' + t; };
   window.$click = (text) => { const e = [...document.querySelectorAll('button, label')].find((b) => b.textContent.trim().startsWith(text)); if (!e) throw new Error('no ' + text); e.click(); };
   window.$text = () => document.body.innerText;
   window.$go = (t, root) => { const v = (e) => (e.checkVisibility ? e.checkVisibility() : e.offsetParent); const n = (e) => e.textContent.trim().replace(/\\s+/g, ' ');
@@ -341,7 +347,7 @@ async function runStep(step) {
     const { root } = (await send('DOM.getDocument', { depth: 0 })).result;
     const found = await send('DOM.querySelector', { nodeId: root.nodeId, selector });
     if (!found.result?.nodeId) throw new Error('no input ' + selector);
-    await send('DOM.setFileInputFiles', { nodeId: found.result.nodeId, files: [path] });
+    await send('DOM.setFileInputFiles', { nodeId: found.result.nodeId, files: Array.isArray(path) ? path : [path] });
     console.log('file =>', path);
   }
   if (step.press) {

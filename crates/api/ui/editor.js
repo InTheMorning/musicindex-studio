@@ -2379,9 +2379,10 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
         <div class="actions"><button class="button action" type="button" disabled=${busy || pageRefusal.linkDisabled}
           onClick=${pageRefusal.menu ? linkAndContinue : () => { ref.current.close(); onMakeArtist(); }}>${pageRefusal.button}</button></div>
       </div>`}
-      ${guid && html`<div class="notice error" role="alert"><strong>${guid.title}</strong><p class="mono">${guid.guids}</p>
+      ${diff && diff.index_unread && html`<p class="notice" role="status">Studio could not ask Music Index about this address.</p>`}
+      ${guid && html`<div class="notice error" role="alert"><strong>${guid.title}</strong>${guid.guids && html`<p class="mono">${guid.guids}</p>`}
         ${guid.lines.map((line) => html`<p>${line}</p>`)}
-        <div class="actions"><button class="button" type="button" disabled=${busy} onClick=${keepKnownGuid}>${guid.keep}</button></div>
+        ${guid.keep && html`<div class="actions"><button class="button" type="button" disabled=${busy} onClick=${keepKnownGuid}>${guid.keep}</button></div>`}
         <div class="field"><label for="guid-confirm">${guid.prompt}</label><input id="guid-confirm" value=${guidText} onInput=${(e) => setGuidText(e.target.value)} /></div>
       </div>`}
       ${streamRows.map((problem) => problem.blocksWrite
@@ -2404,7 +2405,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
       </div>`}
       ${diff && html`<${ErrorNotice} error=${alsoError} action="Studio could not examine the artist page." />`}
       ${diff && html`<${HostOperations} diff=${diff} connectors=${connectors} onRemove=${removeOperation} onUndoMove=${undoMove} busy=${busy} fromConnectorId=${feedConnectorId} />`}
-      ${diff && html`<${ReplaceWarning} move=${diff.feed_move} />`}
+      ${diff && (!guid || guid && diff.guid_change.kind !== 'replaced_file') && html`<${ReplaceWarning} move=${diff.feed_move} />`}
       ${diff && html`<${LinkNotices} report=${links} busy=${busy} onRepair=${repair} />`}
       ${diff && html`<${BuildDateNotices} state=${diff.build_date} />`}
       ${sentCount > 0 && html`<div class="notice" role="status">${reviewNotice(sentCount)}</div>`}

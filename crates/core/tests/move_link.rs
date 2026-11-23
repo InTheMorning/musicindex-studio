@@ -17,7 +17,7 @@ use studio_core::move_link::{
     self, Condition, DraftLinks, FeedBody, FeedReader, Hop, HopResult, LinkNotice, Repair,
     ScriptedReader, WebFeedReader,
 };
-use studio_core::pipeline::{self, AddressCheck, PipelineError, PipelineErrorKind};
+use studio_core::pipeline::{self, AddressCheck, GuidChangeKind, PipelineError, PipelineErrorKind};
 use studio_core::xml::Document;
 
 const GUID: &str = "917393e3-1b1e-5cef-ace4-edaa54e1f810";
@@ -44,6 +44,18 @@ fn feed_xml(self_url: &str) -> String {
 }
 
 struct PassAll;
+
+struct StreamDown;
+
+impl studio_core::stream::StreamCheck for StreamDown {
+    fn check_stream(&self, _url: &str) -> studio_core::stream::StreamStatus {
+        studio_core::stream::StreamStatus {
+            live: false,
+            server_type: None,
+            cause: None,
+        }
+    }
+}
 
 impl AddressCheck for PassAll {
     fn check(&self, _url: &str) -> Result<(), String> {
@@ -151,6 +163,27 @@ impl Env {
             reader,
             self.feed,
             &diff.id,
+        )
+        .map(|_| ())
+    }
+
+    fn write_confirmed(&mut self, reader: &dyn FeedReader) -> Result<(), PipelineError> {
+        let diff = pipeline::diff(&self.collection, &self.hosts, &self.library, self.feed)?;
+        let change = pipeline::guid_change(&self.collection, self.feed)?;
+        let confirm = change.as_ref().and_then(|change| change.title.as_deref());
+        pipeline::write_draft_signed_checked_confirmed(
+            &mut self.collection,
+            &self.hosts,
+            &self.library,
+            &PassAll,
+            pipeline::LinkCheck::Check(reader),
+            &StreamDown,
+            self.feed,
+            &diff.id,
+            &[],
+            1_800_000_000,
+            None,
+            confirm,
         )
         .map(|_| ())
     }
@@ -557,6 +590,63 @@ fn refused_move() -> (Env, ScriptedReader, Vec<u8>) {
     assert_eq!(reader.reads(), [DEST; 4]);
     assert_eq!(reader.waits(), 2);
     (e, reader, draft)
+}
+
+#[test]
+fn a_replaced_file_with_another_guid_stops_without_confirmation() {
+    let mut e = env(URL);
+    put_other_feed(&e);
+    pipeline::set_feed_host_replacing(&e.collection, &e.hosts, None, e.feed, e.b, true).unwrap();
+    let (feed, _) = pipeline::draft_model(&e.collection, e.feed).unwrap();
+    e.collection
+        .set_known_guid(e.feed, feed.podcast_guid.as_deref().unwrap())
+        .unwrap();
+    let reader = ScriptedReader::empty().with_body(DEST, draft_body(&e, DEST));
+    let error = e.write(&reader).unwrap_err();
+    assert_eq!(
+        error.kind(),
+        PipelineErrorKind::GuidChangeUnconfirmed,
+        "ADR 0249 item 8: fix write_draft_signed_inner"
+    );
+    let change = pipeline::guid_change(&e.collection, e.feed)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        change.kind,
+        GuidChangeKind::ReplacedFile,
+        "ADR 0249 item 8: fix guid_change_of"
+    );
+    assert_eq!(
+        change.known, OTHER_GUID,
+        "ADR 0249 item 8: fix guid_change_of"
+    );
+    assert_eq!(change.new, GUID, "ADR 0249 item 8: fix guid_change_of");
+    let draft = e.collection.draft(e.feed).unwrap().unwrap().draft_xml;
+    let reader = ScriptedReader::empty().with_body(DEST, draft_body(&e, DEST));
+    e.write_confirmed(&reader)
+        .expect("ADR 0249 item 8: fix write_draft_signed_inner");
+    assert_eq!(
+        files(e.dir_b.path()).get("album.xml").unwrap(),
+        &draft,
+        "ADR 0249 item 8: fix write_draft_signed_inner"
+    );
+}
+
+#[test]
+fn a_replaced_file_with_the_same_guid_gives_no_change() {
+    let e = env(URL);
+    let other = put_other_feed(&e).replace(OTHER_GUID, GUID);
+    fs::write(e.dir_b.path().join("album.xml"), other).unwrap();
+    pipeline::set_feed_host_replacing(&e.collection, &e.hosts, None, e.feed, e.b, true).unwrap();
+    let (feed, _) = pipeline::draft_model(&e.collection, e.feed).unwrap();
+    e.collection
+        .set_known_guid(e.feed, feed.podcast_guid.as_deref().unwrap())
+        .unwrap();
+    assert_eq!(
+        pipeline::guid_change(&e.collection, e.feed).unwrap(),
+        None,
+        "ADR 0249 item 8: fix guid_change_of"
+    );
 }
 
 /// The state that every stage 2 refusal leaves (ADR 0126 item 18).
@@ -1574,7 +1664,7 @@ fn an_unrecorded_copy_of_the_same_feed_is_recorded_and_the_write_replaces_it() {
 
     let draft = e.collection.draft(e.feed).unwrap().unwrap().draft_xml;
     let reader = ScriptedReader::empty().with_body(DEST, draft_body(&e, DEST));
-    e.write(&reader).unwrap();
+    e.write_confirmed(&reader).unwrap();
     assert_eq!(files(e.dir_b.path()).get("album.xml").unwrap(), &draft);
     assert_eq!(e.collection.feed(e.feed).unwrap().connector_id, Some(e.b));
 }
@@ -1642,7 +1732,7 @@ fn a_marked_move_replaces_a_different_file_that_did_not_change() {
 
     let draft = e.collection.draft(e.feed).unwrap().unwrap().draft_xml;
     let reader = ScriptedReader::empty().with_body(DEST, draft_body(&e, DEST));
-    e.write(&reader).unwrap();
+    e.write_confirmed(&reader).unwrap();
     assert_eq!(files(e.dir_b.path()).get("album.xml").unwrap(), &draft);
 }
 
@@ -1654,7 +1744,7 @@ fn a_marked_move_gives_file_exists_when_the_file_changed_after_the_mark() {
     let changed = format!("{}\n", put_other_feed(&e));
     fs::write(e.dir_b.path().join("album.xml"), &changed).unwrap();
     let reader = ScriptedReader::empty().with_body(DEST, draft_body(&e, DEST));
-    let error = e.write(&reader).unwrap_err();
+    let error = e.write_confirmed(&reader).unwrap_err();
     assert_eq!(
         error.kind(),
         PipelineErrorKind::FileExists,

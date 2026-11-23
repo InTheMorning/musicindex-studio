@@ -54,6 +54,26 @@ test('the GUID panel asks for the feed title and accepts trimmed text', () => {
   assert.equal(guidChangeView(null), null, owner);
 });
 
+test('the other GUID panels have their own text and no keep button', () => {
+  const owner = 'ADR 0249 items 8 and 9: fix guidChangeView in feedcheck.js.';
+  const replaced = guidChangeView({ kind: 'replaced_file', known: 'old', new: 'new', title: 'Album' }, 'Album');
+  assert.equal(replaced.title, 'This move replaces a file with a different GUID', owner);
+  assert.deepEqual(replaced.lines, [
+    'The address served the GUID old. It then serves new.',
+    'Payments that name old stop.',
+  ], owner);
+  assert.equal(replaced.keep, undefined, owner);
+  assert.equal(replaced.confirmed, true, owner);
+  const atAddress = guidChangeView({ kind: 'index_address', known: 'old', new: 'new', title: 'Album' }, 'Album');
+  assert.equal(atAddress.title, 'Music Index has a different feed at this address', owner);
+  assert.deepEqual(atAddress.lines, [
+    'Music Index holds old at this address. This feed has new.',
+    'Payments that name old stop.',
+  ], owner);
+  assert.equal(atAddress.keep, undefined, owner);
+  assert.equal(atAddress.confirmed, true, owner);
+});
+
 test('an artist page finding adds a checklist row', () => {
   const checklist = releaseChecklist(check([finding('no_artist_page', 'link_a_page')]));
   assert.equal(checklist.title, 'This release needs 1 thing');

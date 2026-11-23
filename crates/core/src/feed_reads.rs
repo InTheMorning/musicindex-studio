@@ -227,15 +227,16 @@ pub fn index_line_of(
 
 /// Read what the index holds for the feed in `links` and add it to `net`
 /// (ADR 0175 items 1 and 2). A feed with no `podcast:guid` sends no
-/// request. A 404 on the feed gives facts with `held` false. A failed read
-/// gives its address in [`NetworkFacts::unreadable`]. When only the read of
-/// the copies fails, the facts keep the record of the feed and no copies.
+/// request. A plain 404 gives facts with `held` false. A 404 with
+/// `superseded_by` keeps the replacement GUID (ADR 0249 item 11). A failed
+/// read gives its address in [`NetworkFacts::unreadable`]. A failed read of
+/// copies keeps the feed record and gives no copies.
 pub fn gather_index(links: &OwnedDraftLinks, reads: &dyn IndexReads, net: &mut NetworkFacts) {
     net.index = None;
     let Some(guid) = links.feed.podcast_guid.as_deref().filter(|g| !g.is_empty()) else {
         return;
     };
-    let record = match reads.feed(guid) {
+    let record = match reads.feed_presence(guid) {
         Ok(record) => record,
         Err(address) => {
             net.unreadable.push(address);
@@ -243,8 +244,12 @@ pub fn gather_index(links: &OwnedDraftLinks, reads: &dyn IndexReads, net: &mut N
         }
     };
     let facts = match record {
-        None => IndexFacts::default(),
-        Some(record) => {
+        IndexPresence::Absent => IndexFacts::default(),
+        IndexPresence::Superseded(new_guid) => IndexFacts {
+            superseded_by: Some(new_guid),
+            ..IndexFacts::default()
+        },
+        IndexPresence::Held(record) => {
             let copies = match reads.copies(guid) {
                 Ok(copies) => copies.unwrap_or_default(),
                 Err(address) => {
@@ -254,6 +259,7 @@ pub fn gather_index(links: &OwnedDraftLinks, reads: &dyn IndexReads, net: &mut N
             };
             IndexFacts {
                 held: true,
+                superseded_by: None,
                 feed_url: record.url,
                 last_build_date: record.last_build_date,
                 copies,
@@ -643,6 +649,7 @@ impl FileReads for ScriptedFileReads {
 #[derive(Debug, Default)]
 pub struct ScriptedIndexReads {
     feed: Option<Result<Option<IndexFeed>, String>>,
+    presence: Option<Result<IndexPresence, String>>,
     copies: Option<Result<Option<Vec<IndexCopy>>, String>>,
     reads: Mutex<Vec<String>>,
 }
@@ -659,6 +666,13 @@ impl ScriptedIndexReads {
     #[must_use]
     pub fn with_feed(mut self, record: Result<Option<IndexFeed>, String>) -> Self {
         self.feed = Some(record);
+        self
+    }
+
+    /// Serve one feed-presence answer, including a superseded GUID (ADR 0249 item 11).
+    #[must_use]
+    pub fn with_presence(mut self, presence: Result<IndexPresence, String>) -> Self {
+        self.presence = Some(presence);
         self
     }
 
@@ -697,6 +711,17 @@ impl IndexReads for ScriptedIndexReads {
         self.feed
             .clone()
             .unwrap_or_else(|| Err("the test index has no feed script".to_owned()))
+    }
+
+    fn feed_presence(&self, guid: &str) -> Result<IndexPresence, String> {
+        self.record("feed", guid);
+        if let Some(presence) = &self.presence {
+            return presence.clone();
+        }
+        self.feed
+            .clone()
+            .unwrap_or_else(|| Err("the test index has no feed script".to_owned()))
+            .map(|record| record.map_or(IndexPresence::Absent, IndexPresence::Held))
     }
 
     fn copies(&self, guid: &str) -> Result<Option<Vec<IndexCopy>>, String> {
@@ -946,6 +971,35 @@ mod tests {
         );
         // Facts that another GUID read do not apply.
         assert_eq!(index_line_of(Some(&net), Some("other"), None, false), None);
+    }
+
+    #[test]
+    fn a_superseded_index_answer_gives_the_guid_change_finding() {
+        let feed = feed_with_track("https://files.example/a.mp3", None);
+        let reads = ScriptedIndexReads::empty()
+            .with_presence(Ok(IndexPresence::Superseded("g-new".to_owned())));
+        let mut net = NetworkFacts::default();
+        gather_index(&links(feed.clone()), &reads, &mut net);
+        let finding = check_with(&links(feed), Some(&net), &[], None, None)
+            .findings
+            .into_iter()
+            .find(|finding| finding.kind == feed_check::FindingKind::IndexGuidChanged)
+            .expect("ADR 0249 item 11: fix gather_index and check_index");
+        assert_eq!(
+            finding.level,
+            feed_check::FindingLevel::Warning,
+            "ADR 0249 item 11: fix check_index"
+        );
+        assert_eq!(
+            finding.title, "Music Index changed the GUID of this feed",
+            "ADR 0249 item 11: fix check_index"
+        );
+        assert_eq!(
+            finding.reason,
+            format!("Music Index now holds this feed as g-new. This draft has {GUID}."),
+            "ADR 0249 item 11: fix check_index"
+        );
+        assert_eq!(finding.repair, None, "ADR 0249 item 11: fix check_index");
     }
 
     #[test]

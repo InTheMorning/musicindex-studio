@@ -20,7 +20,8 @@ use studio_core::library::Library;
 use studio_core::move_link::ScriptedReader;
 use studio_core::nostr_events::Signing;
 use studio_core::pipeline::{
-    self, AddressCheck, DiffFile, DiffId, OperationKind, PipelineErrorKind,
+    self, AddressCheck, DiffFile, DiffId, GuidChangeKind, IndexAtAddress, OperationKind,
+    PipelineErrorKind,
 };
 use studio_core::testing::blossom::TestBlossom;
 use studio_core::testing::fake_s3::FakeS3;
@@ -201,6 +202,87 @@ fn a_feed_guid_change_stops_until_the_title_is_confirmed() {
         s.collection.feed(s.feed).unwrap().known_guid.as_deref(),
         Some("changed-guid")
     );
+}
+
+#[test]
+fn a_different_guid_at_the_draft_address_stops_the_write() {
+    let mut s = setup();
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    let address = "https://music.example/album.xml";
+    let index = IndexAtAddress::Read(vec![("index-guid".to_owned(), address.to_owned())]);
+    let change = pipeline::guid_change_at(&s.collection, s.feed, &index)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        change.kind,
+        GuidChangeKind::IndexAddress,
+        "ADR 0249 item 9: fix guid_change_at"
+    );
+    assert_eq!(
+        change.known, "index-guid",
+        "ADR 0249 item 9: fix guid_change_at"
+    );
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    let error = pipeline::write_draft_signed_checked_confirmed_at(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        pipeline::LinkCheck::Check(&ScriptedReader::empty()),
+        &StreamDown,
+        s.feed,
+        &diff.id,
+        &[],
+        1_800_000_000,
+        None,
+        None,
+        &index,
+    )
+    .unwrap_err();
+    assert_eq!(
+        error.kind(),
+        PipelineErrorKind::GuidChangeUnconfirmed,
+        "ADR 0249 item 9: fix write_draft_signed_inner"
+    );
+    pipeline::write_draft_signed_checked_confirmed_at(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        pipeline::LinkCheck::Check(&ScriptedReader::empty()),
+        &StreamDown,
+        s.feed,
+        &diff.id,
+        &[],
+        1_800_000_000,
+        None,
+        Some("Album"),
+        &index,
+    )
+    .expect("ADR 0249 item 9: fix write_draft_signed_inner");
+}
+
+#[test]
+fn an_unread_index_address_does_not_stop_the_write() {
+    let mut s = setup();
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    pipeline::write_draft_signed_checked_confirmed_at(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        pipeline::LinkCheck::Check(&ScriptedReader::empty()),
+        &StreamDown,
+        s.feed,
+        &diff.id,
+        &[],
+        1_800_000_000,
+        None,
+        None,
+        &IndexAtAddress::Unread,
+    )
+    .expect("ADR 0249 item 9: fix write_draft_signed_inner");
 }
 
 #[test]

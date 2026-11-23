@@ -1510,7 +1510,8 @@ function AddFindSheet({ open, type, role, parent, connectors, onPick, onAdded, o
   const addAddress = (url) => working(async () => {
     const result = await api('/feeds/import', { method: 'POST', body: { urls: [url] } });
     const added = result.added?.[0];
-    if (!added) throw new Error(result.failed?.[0]?.message || 'Studio could not add the feed at this address.');
+    // ADR 0249 item 10: an address of the collection with a different GUID gives its Notice.
+    if (!added) throw new Error(result.notices?.[0] || result.failed?.[0]?.message || 'Studio could not add the feed at this address.');
     onAdded(added, { type, copied: true });
     close();
   });
@@ -1925,7 +1926,8 @@ function FoundFeeds({ found, onAdded, onNothingToAdd }) {
             onChange=${() => toggle(f.url)} />
           <span class=${`dot ${kind.dot}`}></span>
           <span class="text"><span class="title">${f.title || f.url}</span>
-            <span class="sub">${kind.label}${f.in_collection ? ' · in your collection' : ''}</span></span></label>`;
+            <span class="sub">${kind.label}${f.in_collection ? ' · in your collection' : ''}</span>
+            ${f.guid_notice && html`<span class="sub" role="status">${f.guid_notice}</span>`}</span></label>`;
       })}
     </fieldset>`)}
     ${found.truncated && html`<p class="hint">Studio stopped at 100 feeds. Add the others in a second search.</p>`}
@@ -3480,14 +3482,15 @@ function ChangeSetPage({ id, go, onChanged, feeds }) {
           <div class="change-diff">
             ${!shown && html`<p class="hint" role="status">Loading the changes…</p>`}
             ${shown && shown.error && html`<${ErrorNotice} error=${shown.error} />`}
+            ${shown && shown.diff && shown.diff.index_unread && html`<p class="notice" role="status">Studio could not ask Music Index about this address.</p>`}
             ${shown && shown.diff && shown.diff.guid_change && (() => {
               const guid = guidChangeView(shown.diff.guid_change, guidTexts[feed.feed_id] || '');
-              return html`<div class="notice error" role="alert"><strong>${guid.title}</strong><p class="mono">${guid.guids}</p>
+              return html`<div class="notice error" role="alert"><strong>${guid.title}</strong>${guid.guids && html`<p class="mono">${guid.guids}</p>`}
                 ${guid.lines.map((line) => html`<p>${line}</p>`)}
-                <div class="actions"><button class="button" type="button" disabled=${writing || busy} onClick=${() => run(async () => {
+                ${guid.keep && html`<div class="actions"><button class="button" type="button" disabled=${writing || busy} onClick=${() => run(async () => {
                   await api(`/feeds/${feed.feed_id}/keep-known-guid`, { method: 'POST' });
                   await readAgain();
-                })}>${guid.keep}</button></div>
+                })}>${guid.keep}</button></div>`}
                 <div class="field"><label for=${`guid-confirm-${feed.feed_id}`}>${guid.prompt}</label>
                   <input id=${`guid-confirm-${feed.feed_id}`} value=${guidTexts[feed.feed_id] || ''} onInput=${(e) => setGuidTexts((before) => ({ ...before, [feed.feed_id]: e.target.value }))} /></div>
               </div>`;

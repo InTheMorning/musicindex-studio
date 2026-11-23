@@ -115,11 +115,26 @@ export function guidChangeView(change, typed = '') {
   if (!change) return null;
   const title = change.title || '';
   const expected = title.trim() ? title : 'CHANGE';
+  const copy = {
+    feed: {
+      title: 'This write changes the GUID',
+      lines: [`Payments from other music feeds that name ${change.known} stop.`, 'Apps can show the feed as a new show.'],
+      keep: 'Keep the Old GUID',
+    },
+    replaced_file: {
+      title: 'This move replaces a file with a different GUID',
+      lines: [`The address served the GUID ${change.known}. It then serves ${change.new}.`, `Payments that name ${change.known} stop.`],
+    },
+    index_address: {
+      title: 'Music Index has a different feed at this address',
+      lines: [`Music Index holds ${change.known} at this address. This feed has ${change.new}.`, `Payments that name ${change.known} stop.`],
+    },
+  }[change.kind || 'feed'];
   return {
-    title: 'This write changes the GUID',
-    guids: `Known: ${change.known} → New: ${change.new}`,
-    lines: [`Payments from other music feeds that name ${change.known} stop.`, 'Apps can show the feed as a new show.'],
-    keep: 'Keep the Old GUID',
+    title: copy.title,
+    ...(change.kind === 'feed' || !change.kind ? { guids: `Known: ${change.known} → New: ${change.new}` } : {}),
+    lines: copy.lines,
+    ...(copy.keep ? { keep: copy.keep } : {}),
     prompt: `Type ${expected} to change the GUID`,
     confirmed: String(typed).trim() === expected,
   };

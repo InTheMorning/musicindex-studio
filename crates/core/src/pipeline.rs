@@ -165,12 +165,38 @@ pub struct PipelineError {
 /// A change from the accepted feed GUID to the draft GUID (ADR 0249 item 3).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct GuidChange {
+    /// The path that found this GUID change (ADR 0249 items 3, 8 and 9).
+    pub kind: GuidChangeKind,
     /// The GUID that the user accepted before this draft (ADR 0249 item 3).
     pub known: String,
     /// The GUID in the draft (ADR 0249 item 3).
     pub new: String,
     /// The title in the draft, when it has one (ADR 0249 item 3).
     pub title: Option<String>,
+}
+
+/// The source of a feed GUID change in Review (ADR 0249 items 3, 8 and 9).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GuidChangeKind {
+    /// The draft differs from the known GUID (ADR 0249 item 3).
+    Feed,
+    /// A move replaces a file with another GUID (ADR 0249 item 8).
+    ReplacedFile,
+    /// Music Index holds another GUID at the address (ADR 0249 item 9).
+    IndexAddress,
+}
+
+/// The result of the Music Index address read (ADR 0249 item 9).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub enum IndexAtAddress {
+    /// No address read was needed (ADR 0249 item 9).
+    #[default]
+    NotAsked,
+    /// The read failed (ADR 0249 item 9).
+    Unread,
+    /// The index records found at the address (ADR 0249 item 9).
+    Read(Vec<(String, String)>),
 }
 
 /// The model paths of a [`PipelineErrorKind::BadAddress`] error (ADR 0245
@@ -1708,28 +1734,75 @@ pub fn guid_change(
     collection: &Collection,
     id: FeedId,
 ) -> Result<Option<GuidChange>, PipelineError> {
-    let row = collection.feed(id)?;
-    let Some(known) = row.known_guid else {
-        return Ok(None);
-    };
-    let draft = one_cover(current_draft(collection, id)?)?;
-    let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
-    Ok(guid_change_of(Some(&known), &feed))
+    guid_change_at(collection, id, &IndexAtAddress::NotAsked)
 }
 
-/// The GUID change of a draft against the known GUID. A placeholder GUID is
-/// not a change (ADR 0249 item 2).
-fn guid_change_of(known: Option<&str>, feed: &Feed) -> Option<GuidChange> {
-    let known = known?;
-    let new = feed
-        .podcast_guid
-        .as_deref()
-        .filter(|guid| !has_placeholder_guid(guid) && *guid != known)?;
-    Some(GuidChange {
-        known: known.to_owned(),
-        new: new.to_owned(),
-        title: feed.title.clone(),
-    })
+/// Find the first GUID change in the draft, move and address read (ADR 0249 items 3, 8 and 9).
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the feed has no readable draft.
+pub fn guid_change_at(
+    collection: &Collection,
+    id: FeedId,
+    index_at_address: &IndexAtAddress,
+) -> Result<Option<GuidChange>, PipelineError> {
+    let row = collection.feed(id)?;
+    let draft = one_cover(current_draft(collection, id)?)?;
+    let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
+    Ok(guid_change_of(
+        row.known_guid.as_deref(),
+        &feed,
+        collection
+            .draft_feed_move(id)?
+            .and_then(|movement| movement.replace),
+        index_at_address,
+    ))
+}
+
+/// Find the first GUID change in the draft, move and address read (ADR 0249 items 3, 8 and 9).
+fn guid_change_of(
+    known: Option<&str>,
+    feed: &Feed,
+    replaces_file: Option<FileMark>,
+    index_at_address: &IndexAtAddress,
+) -> Option<GuidChange> {
+    let new = feed.podcast_guid.as_deref()?;
+    if has_placeholder_guid(new) {
+        return None;
+    }
+    if let Some(known) = known
+        && new != known
+    {
+        return Some(GuidChange {
+            kind: GuidChangeKind::Feed,
+            known: known.to_owned(),
+            new: new.to_owned(),
+            title: feed.title.clone(),
+        });
+    }
+    if let Some(old) = replaces_file
+        .and_then(|mark| mark.guid)
+        .filter(|old| !has_placeholder_guid(old) && old != new)
+    {
+        return Some(GuidChange {
+            kind: GuidChangeKind::ReplacedFile,
+            known: old,
+            new: new.to_owned(),
+            title: feed.title.clone(),
+        });
+    }
+    if let IndexAtAddress::Read(records) = index_at_address
+        && let Some((old, _)) = records.iter().find(|(old, _)| old != new)
+    {
+        return Some(GuidChange {
+            kind: GuidChangeKind::IndexAddress,
+            known: old.clone(),
+            new: new.to_owned(),
+            title: feed.title.clone(),
+        });
+    }
+    None
 }
 
 /// Restore the accepted GUID in the draft (ADR 0249 item 4).
@@ -4783,7 +4856,19 @@ pub fn write_draft_signed(
     public: Option<&crate::web::Web>,
 ) -> Result<Version, PipelineError> {
     write_draft_signed_inner(
-        collection, hosts, library, addresses, links, id, approved, signed, now, public, None, None,
+        collection,
+        hosts,
+        library,
+        addresses,
+        links,
+        id,
+        approved,
+        signed,
+        now,
+        public,
+        None,
+        None,
+        &IndexAtAddress::NotAsked,
     )
 }
 
@@ -4823,6 +4908,7 @@ pub fn write_draft_signed_checked(
         public,
         Some(streams),
         None,
+        &IndexAtAddress::NotAsked,
     )
 }
 
@@ -4850,6 +4936,47 @@ pub fn write_draft_signed_checked_confirmed(
     public: Option<&crate::web::Web>,
     confirm: Option<&str>,
 ) -> Result<Version, PipelineError> {
+    write_draft_signed_checked_confirmed_at(
+        collection,
+        hosts,
+        library,
+        addresses,
+        links,
+        streams,
+        id,
+        approved,
+        signed,
+        now,
+        public,
+        confirm,
+        &IndexAtAddress::NotAsked,
+    )
+}
+
+/// Write after the API reads Music Index at the public address (ADR 0249 item 9).
+///
+/// # Errors
+///
+/// Gives the errors of [`write_draft_signed_checked_confirmed`].
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the checked write takes the established write inputs"
+)]
+pub fn write_draft_signed_checked_confirmed_at(
+    collection: &mut Collection,
+    hosts: &Hosts,
+    library: &Library,
+    addresses: &dyn AddressCheck,
+    links: LinkCheck<'_>,
+    streams: &dyn crate::stream::StreamCheck,
+    id: FeedId,
+    approved: &DiffId,
+    signed: &[nostr::prelude::Event],
+    now: u64,
+    public: Option<&crate::web::Web>,
+    confirm: Option<&str>,
+    index_at_address: &IndexAtAddress,
+) -> Result<Version, PipelineError> {
     write_draft_signed_inner(
         collection,
         hosts,
@@ -4863,6 +4990,7 @@ pub fn write_draft_signed_checked_confirmed(
         public,
         Some(streams),
         confirm,
+        index_at_address,
     )
 }
 
@@ -4887,6 +5015,7 @@ fn write_draft_signed_inner(
     public: Option<&crate::web::Web>,
     streams: Option<&dyn crate::stream::StreamCheck>,
     confirm: Option<&str>,
+    index_at_address: &IndexAtAddress,
 ) -> Result<Version, PipelineError> {
     let row = collection.feed(id)?;
     // A feed with no connector writes to the host of its draft feed move.
@@ -4919,7 +5048,14 @@ fn write_draft_signed_inner(
     let connector = hosts.get(connector_id)?;
     let draft = one_cover(current_draft(collection, id)?)?;
     let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
-    let guid_change = guid_change_of(row.known_guid.as_deref(), &feed);
+    let guid_change = guid_change_of(
+        row.known_guid.as_deref(),
+        &feed,
+        collection
+            .draft_feed_move(id)?
+            .and_then(|movement| movement.replace),
+        index_at_address,
+    );
     if let Some(change) = &guid_change {
         if matches!(links, LinkCheck::GrantedWrite) {
             return Err(PipelineError::new(
@@ -5764,6 +5900,7 @@ fn write_granted_with(
             None,
             streams,
             None,
+            &IndexAtAddress::NotAsked,
         )
     })();
     if result.is_err() {

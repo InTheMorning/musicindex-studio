@@ -2795,15 +2795,15 @@ pub(crate) async fn discover(
             ));
         }
         let keys = collection_keys(w)?;
-        let feeds: Vec<Value> = found
-            .feeds
-            .iter()
-            .map(|f| {
-                let mut value = serde_json::to_value(f).unwrap_or(Value::Null);
-                value["in_collection"] = Value::Bool(in_collection(f, &keys));
-                value
-            })
-            .collect();
+        let mut feeds: Vec<Value> = Vec::new();
+        for f in &found.feeds {
+            let mut value = serde_json::to_value(f).unwrap_or(Value::Null);
+            value["in_collection"] = Value::Bool(in_collection(f, &keys));
+            if let Some(notice) = collection_guid_notice(w, &f.url, f.podcast_guid.as_deref())? {
+                value["guid_notice"] = json!(notice);
+            }
+            feeds.push(value);
+        }
         w.discovered = found
             .feeds
             .into_iter()
@@ -3050,7 +3050,38 @@ fn is_known(read: &PublicFeed, keys: &(Vec<String>, Vec<String>)) -> bool {
         .podcast_guid
         .as_deref()
         .map(str::to_ascii_lowercase);
-    keys.0.contains(&read.url) || guid.is_some_and(|g| keys.1.contains(&g))
+    keys.0
+        .iter()
+        .any(|url| url == &read.url || studio_core::feed_check::same_but_spelling(url, &read.url))
+        || guid.is_some_and(|g| keys.1.contains(&g))
+}
+
+/// The Notice for an address of the collection whose feed has a different
+/// GUID (ADR 0249 item 10). The discovery list and the add both give it.
+fn collection_guid_notice(
+    w: &Workspace,
+    url: &str,
+    guid: Option<&str>,
+) -> Result<Option<String>, ApiError> {
+    let Some(guid) = guid else {
+        return Ok(None);
+    };
+    for row in w.collection.feeds()? {
+        let Some(address) = row.public_url.as_deref() else {
+            continue;
+        };
+        if address != url && !studio_core::feed_check::same_but_spelling(address, url) {
+            continue;
+        }
+        let known = row.known_guid.as_deref().or(row.podcast_guid.as_deref());
+        if known.is_some_and(|known| known != guid) {
+            return Ok(Some(format!(
+                "{url} is in the collection already with a different GUID."
+            )));
+        }
+        return Ok(None);
+    }
+    Ok(None)
 }
 
 /// Add a read-only feed with the address where Studio read it (ADR 0021).
@@ -3089,6 +3120,7 @@ pub(crate) async fn import_feeds(
     blocking(shared, move |w| {
         let mut added = Vec::new();
         let mut failed = Vec::new();
+        let mut notices = Vec::new();
         for url in body.urls {
             let keys = collection_keys(w)?;
             let found = match w.discovered.get(&url) {
@@ -3106,6 +3138,11 @@ pub(crate) async fn import_feeds(
                     }
                 },
             };
+            if let Some(notice) =
+                collection_guid_notice(w, &found.url, found.feed.podcast_guid.as_deref())?
+            {
+                notices.push(notice);
+            }
             if is_known(&found, &keys) {
                 continue;
             }
@@ -3113,7 +3150,7 @@ pub(crate) async fn import_feeds(
         }
         Ok((
             StatusCode::CREATED,
-            Json(json!({ "added": added, "failed": failed })),
+            Json(json!({ "added": added, "failed": failed, "notices": notices })),
         ))
     })
     .await
@@ -4855,7 +4892,8 @@ fn diff_json_with_streams(
     let build_date = pipeline::set_build_date(&w.collection, id, checked)?;
     let diff = pipeline::diff_checked(&w.collection, &hosts, &library, streams, id)?;
     let page_refusal = feed_page_refusal(w, id)?;
-    let guid_change = pipeline::guid_change(&w.collection, id)?;
+    let (index_at_address, index_unread) = index_at_draft_address(w, id)?;
+    let guid_change = pipeline::guid_change_at(&w.collection, id, &index_at_address)?;
     let also_write = also_write_pages(w, &library, id)?;
     // The app of each grant of the draft, for the review sheet (ADR 0110
     // item 19).
@@ -4896,7 +4934,37 @@ fn diff_json_with_streams(
     if let Some(change) = guid_change {
         response["guid_change"] = json!(change);
     }
+    if index_unread {
+        response["index_unread"] = json!(true);
+    }
     Ok(Json(response))
+}
+
+fn index_at_draft_address(
+    w: &Workspace,
+    id: FeedId,
+) -> Result<(pipeline::IndexAtAddress, bool), ApiError> {
+    let row = w.collection.feed(id)?;
+    if row.last_version.is_some() || w.collection.feed_write(id)?.is_some() {
+        return Ok((pipeline::IndexAtAddress::NotAsked, false));
+    }
+    let Some(address) = draft_time_url(w, id) else {
+        return Ok((pipeline::IndexAtAddress::NotAsked, false));
+    };
+    match w.index.feeds_by_url(&address) {
+        Ok(rows) => Ok((
+            pipeline::IndexAtAddress::Read(
+                rows.into_iter()
+                    .filter(|(_, matched)| {
+                        matched == &address
+                            || studio_core::feed_check::same_but_spelling(matched, &address)
+                    })
+                    .collect(),
+            ),
+            false,
+        )),
+        Err(_) => Ok((pipeline::IndexAtAddress::Unread, true)),
+    }
 }
 
 /// The publisher feeds that Review of a new release offers to write with
@@ -4982,6 +5050,7 @@ pub(crate) async fn write_feed(
         // The write counts as work until it ends (ADR 0124 item 17).
         let _work = w.work().write();
         let id = FeedId(id);
+        let (index_at_address, _) = index_at_draft_address(w, id)?;
         let signed = body
             .signed_events
             .iter()
@@ -5045,7 +5114,7 @@ pub(crate) async fn write_feed(
         // network policy applies (ADR 0057, ADR 0067 item 7).
         let public = w.collection.feed(id)?.connector_id.is_none();
         let streams = w.stream_checker();
-        pipeline::write_draft_signed_checked_confirmed(
+        pipeline::write_draft_signed_checked_confirmed_at(
             &mut w.collection,
             &hosts,
             &library,
@@ -5058,6 +5127,7 @@ pub(crate) async fn write_feed(
             now,
             public.then_some(&w.web),
             body.confirm_guid_change.as_deref(),
+            &index_at_address,
         )?;
         if let Some((feed, _)) = written {
             w.record_remote_files(id, &feed);

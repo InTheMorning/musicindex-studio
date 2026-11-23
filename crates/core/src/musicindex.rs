@@ -460,6 +460,15 @@ struct FeedData {
     last_build_date: Option<i64>,
 }
 
+#[derive(Deserialize)]
+struct FeedByUrlData {
+    feed_guid: String,
+    matched_url: String,
+    /// `feed_url`, `copy` or `observed_url` (Stophammer ADR 0088 §3).
+    #[serde(rename = "match")]
+    match_kind: String,
+}
+
 /// The return wait that Music Index reports (ADR 0190 item 1).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReturnWait {
@@ -856,6 +865,32 @@ impl MusicIndex {
             }
             Err(e) => Err(e),
         }
+    }
+
+    /// Read feeds that Music Index associates with a public address (ADR 0249 item 9).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`WebError`] when the request fails or its answer is invalid.
+    pub fn feeds_by_url(&self, url: &str) -> Result<Vec<(String, String)>, WebError> {
+        let answer = match self.web.get_with_query(
+            &format!("{}/v1/feeds/by-url", self.base),
+            &[("url", url)],
+            MAX_RESPONSE_BYTES,
+        ) {
+            Ok(answer) => answer,
+            Err(error) if error.kind() == WebErrorKind::Status && error.status() == Some(404) => {
+                return Ok(Vec::new());
+            }
+            Err(error) => return Err(error),
+        };
+        let row = decode_search::<FeedByUrlData>(&answer.bytes)?;
+        // Only the address of a feed counts. A copy or an earlier address
+        // is not the feed at this address (ADR 0249 item 9).
+        if row.match_kind != "feed_url" {
+            return Ok(Vec::new());
+        }
+        Ok(vec![(row.feed_guid, row.matched_url)])
     }
 
     /// Read the return wait for a feed (ADR 0190 item 1).
@@ -1315,6 +1350,32 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0].feed_guid, "g1");
         assert_eq!(hits[0].artist.as_deref(), Some("Ann"));
+    }
+
+    #[test]
+    fn feeds_by_url_gives_the_matching_guid_and_address() {
+        let server = TestServer::start(vec![(
+            "/v1/feeds/by-url?url=https%3A%2F%2Fexample.com%2Fa.xml",
+            200,
+            br#"{"data":{"feed_guid":"g-1","href":"/v1/feeds/g-1","match":"feed_url","matched_url":"https://example.com/a.xml"}}"#.to_vec(),
+        ), (
+            "/v1/feeds/by-url?url=https%3A%2F%2Fexample.com%2Fb.xml",
+            200,
+            br#"{"data":{"feed_guid":"g-2","href":"/v1/feeds/g-2","match":"copy","matched_url":"https://example.com/b.xml"}}"#.to_vec(),
+        )]);
+        let index = MusicIndex::new(Web::new(), &server.url(""));
+        assert_eq!(
+            index.feeds_by_url("https://example.com/a.xml").unwrap(),
+            [("g-1".to_owned(), "https://example.com/a.xml".to_owned())],
+            "ADR 0249 item 9: fix MusicIndex::feeds_by_url"
+        );
+        assert!(
+            index
+                .feeds_by_url("https://example.com/b.xml")
+                .unwrap()
+                .is_empty(),
+            "ADR 0249 item 9: a copy match is not a feed at the address. Fix MusicIndex::feeds_by_url"
+        );
     }
 
     #[test]

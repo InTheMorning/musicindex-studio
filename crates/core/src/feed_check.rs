@@ -22,6 +22,8 @@ pub enum FindingKind {
     LinkGuidOld,
     /// The hosted feed GUID changed outside Studio (ADR 0249 item 6).
     GuidChangedOutside,
+    /// The requested GUID was replaced in Music Index (ADR 0249 item 11).
+    IndexGuidChanged,
     /// The feed has a public address and no self link.
     NoSelfLink,
     /// The self link differs from the public address.
@@ -442,7 +444,7 @@ pub fn check(feed: &Feed, facts: &Facts) -> Vec<Finding> {
     check_fee_values(feed, &mut found);
     check_short_addresses(feed, &mut found);
     check_images(feed, facts, &mut found);
-    index::check_index(facts, &mut found);
+    index::check_index(feed, facts, &mut found);
     if feed.language.as_deref().is_none_or(|l| l.trim().is_empty()) {
         found.push(Finding {
             kind: FindingKind::NoLanguage,

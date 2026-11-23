@@ -888,6 +888,74 @@ async fn a_new_release_is_made_as_a_draft_with_no_hosted_file_and_then_written()
 }
 
 #[tokio::test]
+async fn a_new_feed_at_a_musicindex_address_shows_and_enforces_the_other_guid() {
+    use studio_core::testing::TestServer;
+    let index = TestServer::start(vec![(
+        "/v1/feeds/by-url?url=https%3A%2F%2Fmusic.example%2Fmy-album.xml",
+        200,
+        br#"{"data":{"feed_guid":"index-guid","href":"/v1/feeds/index-guid","match":"feed_url","matched_url":"https://music.example/my-album.xml"}}"#.to_vec(),
+    )]);
+    let app = app_with_index(&index.url(""));
+    let root = app.feeds.path().to_str().unwrap();
+    let (_, connector) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({ "kind": "local", "name": "Home", "root": root, "base_url": "https://music.example" })),
+    )
+    .await;
+    set_library_root(&app);
+    let artist = make_artist_page(
+        &app,
+        connector["id"].as_i64().unwrap(),
+        "artist.xml",
+        "Artist",
+    )
+    .await;
+    let album = make_release(
+        &app,
+        connector["id"].as_i64().unwrap(),
+        "my-album.xml",
+        "My Album",
+        "Artist",
+        artist["id"].as_i64().unwrap(),
+    )
+    .await;
+    let (status, diff) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{}/diff", album["id"]),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        diff["guid_change"]["kind"], "index_address",
+        "ADR 0249 item 9: fix diff_json_with_streams"
+    );
+    assert_eq!(
+        diff["guid_change"]["known"], "index-guid",
+        "ADR 0249 item 9: fix diff_json_with_streams"
+    );
+    let (status, answer) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{}/write", album["id"]),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::CONFLICT,
+        "ADR 0249 item 9: fix write_feed"
+    );
+    assert_eq!(
+        answer["error"]["code"], "guid_change_unconfirmed",
+        "ADR 0249 item 9: fix write_feed"
+    );
+}
+
+#[tokio::test]
 async fn a_new_release_on_a_folder_with_no_public_address_gets_a_placeholder_guid_409_for_a_file_and_422_for_an_empty_field()
  {
     let app = app();
@@ -3980,6 +4048,52 @@ async fn discovery_follows_a_publisher_and_import_adds_read_only_feeds() {
     // The vault is not necessary for read-only feeds (ADR 0020).
     let (_, status_body) = call(&app, "GET", "/api/v1/status", None).await;
     assert_eq!(status_body["vault"], "absent");
+}
+
+#[tokio::test]
+async fn adding_an_address_with_another_collection_guid_gives_a_notice_and_adds_nothing() {
+    use studio_core::testing::TestServer;
+    let server = TestServer::start(Vec::new());
+    server.set("/same.xml", 200, FEED.as_bytes().to_vec());
+    let app = app_with_index(&server.url(""));
+    let address = server.url("/same.xml");
+    let (status, first) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds/import",
+        Some(json!({ "urls": [address] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(first["added"].as_array().unwrap().len(), 1);
+
+    let feed_id = studio_core::collection::FeedId(first["added"][0]["id"].as_i64().unwrap());
+    let collection =
+        studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+            .unwrap();
+    collection
+        .set_known_guid(feed_id, "another-feed-guid")
+        .unwrap();
+    let (status, answer) = call(
+        &app,
+        "POST",
+        "/api/v1/feeds/import",
+        Some(json!({ "urls": [address.clone()] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(
+        answer["added"],
+        json!([]),
+        "ADR 0249 item 10: fix import_feeds"
+    );
+    assert_eq!(
+        answer["notices"],
+        json!([format!(
+            "{address} is in the collection already with a different GUID."
+        )]),
+        "ADR 0249 item 10: fix collection_guid_notice"
+    );
 }
 
 #[tokio::test]

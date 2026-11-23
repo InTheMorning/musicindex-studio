@@ -3,6 +3,7 @@
 
 use super::{Facts, Finding, FindingKind, FindingLevel, same_but_spelling};
 use crate::datetime;
+use crate::feed::Feed;
 use crate::musicindex::IndexCopy;
 
 /// What the index holds for a feed (ADR 0175 item 2). The caller sets it
@@ -12,6 +13,8 @@ use crate::musicindex::IndexCopy;
 pub struct IndexFacts {
     /// False when the index has no record of the feed.
     pub held: bool,
+    /// The replacement GUID when the requested GUID was superseded (ADR 0249 item 11).
+    pub superseded_by: Option<String>,
     /// The address of the feed in the index.
     pub feed_url: Option<String>,
     /// The `lastBuildDate` that the index read, in Unix seconds.
@@ -90,10 +93,31 @@ pub fn copy_report(guid: Option<&str>, public_address: Option<&str>, copy_url: &
 }
 
 /// The findings `index_address_differs` and `copy_other_recipients`.
-pub(super) fn check_index(facts: &Facts, found: &mut Vec<Finding>) {
-    let Some(index) = facts.index.as_ref().filter(|i| i.held) else {
+pub(super) fn check_index(feed: &Feed, facts: &Facts, found: &mut Vec<Finding>) {
+    let Some(index) = facts.index.as_ref() else {
         return;
     };
+    if let Some(new) = index.superseded_by.as_deref() {
+        let guid = feed.podcast_guid.as_deref().unwrap_or("not known");
+        found.push(Finding {
+            kind: FindingKind::IndexGuidChanged,
+            level: FindingLevel::Warning,
+            title: "Music Index changed the GUID of this feed".to_owned(),
+            reason: format!("Music Index now holds this feed as {new}. This draft has {guid}."),
+            entry: None,
+            repair: None,
+            second_repair: None,
+            known_short: None,
+            url: None,
+            field: None,
+            place: None,
+            target_title: None,
+        });
+        return;
+    }
+    if !index.held {
+        return;
+    }
     if let (Some(public), Some(held)) = (facts.public_address.as_deref(), index.feed_url.as_deref())
         && held != public
         && !same_but_spelling(held, public)
@@ -169,8 +193,48 @@ mod tests {
             ..Facts::default()
         };
         let mut found = Vec::new();
-        check_index(&facts, &mut found);
+        check_index(&Feed::default(), &facts, &mut found);
         found
+    }
+
+    #[test]
+    fn a_superseded_guid_gives_the_index_guid_changed_warning() {
+        let feed = Feed {
+            podcast_guid: Some("g-1".to_owned()),
+            ..Feed::default()
+        };
+        let facts = Facts {
+            index: Some(IndexFacts {
+                superseded_by: Some("g-2".to_owned()),
+                ..IndexFacts::default()
+            }),
+            ..Facts::default()
+        };
+        let mut findings = Vec::new();
+        check_index(&feed, &facts, &mut findings);
+        assert_eq!(findings.len(), 1, "ADR 0249 item 11: fix check_index");
+        assert_eq!(
+            findings[0].kind,
+            FindingKind::IndexGuidChanged,
+            "ADR 0249 item 11: fix check_index"
+        );
+        assert_eq!(
+            findings[0].level,
+            FindingLevel::Warning,
+            "ADR 0249 item 11: fix check_index"
+        );
+        assert_eq!(
+            findings[0].title, "Music Index changed the GUID of this feed",
+            "ADR 0249 item 11: fix check_index"
+        );
+        assert_eq!(
+            findings[0].reason, "Music Index now holds this feed as g-2. This draft has g-1.",
+            "ADR 0249 item 11: fix check_index"
+        );
+        assert_eq!(
+            findings[0].repair, None,
+            "ADR 0249 item 11: fix check_index"
+        );
     }
 
     fn kinds(found: &[Finding]) -> Vec<FindingKind> {

@@ -17,7 +17,7 @@ import { roleSummary } from './roles.js';
 import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName, newFeedView, pageLevel, movedReleaseView } from './shell.js';
 import { isLiveItem, liveKey, liveDot, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner, OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning, hasBadAddress, problemGroup, setLiveStreamType, viewAfterLiveGone, withoutLive } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
-import { checkRows, unreadableRows, hasShowGrant, checkTexts, pageRefusalView, repairAddresses, wrongAddressSet, OPEN_ACTIONS, COPY_SHEET_TEXT, WAYS_SHEET_TEXT } from './feedcheck.js';
+import { checkRows, unreadableRows, hasShowGrant, checkTexts, pageRefusalView, guidChangeView, repairAddresses, wrongAddressSet, OPEN_ACTIONS, COPY_SHEET_TEXT, WAYS_SHEET_TEXT } from './feedcheck.js';
 import { addressParts } from './breaks.js';
 import { buildDateNotices } from './builddate.js';
 import { versionLabel, LOCK_HELP, hasSpace, spaceNotice, ROW_SPACE_NOTE, newFeedAddress, newFeedAddressLine, libraryFolderRow } from './feedfacts.js';
@@ -2019,6 +2019,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
   const [result, setResult] = useState(null);
   const [resultHostId, setResultHostId] = useState(null);
   const [selectedPage, setSelectedPage] = useState('');
+  const [guidText, setGuidText] = useState('');
   const [discarding, setDiscarding] = useState(false);
   const deleteUndo = useDeleteUndo();
   const resultTitle = useRef(null);
@@ -2161,7 +2162,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
       try {
         if (toSign.length > 0) setProgress({ done: 0, total: toSign.length });
         signedEvents = await signPlanned(toSign, choice, (done, total) => setProgress({ done, total }));
-        feed = await api(`/feeds/${feedId}/write`, { method: 'POST', body: { diff_id: diff.id, signed_events: signedEvents } });
+        feed = await api(`/feeds/${feedId}/write`, { method: 'POST', body: { diff_id: diff.id, signed_events: signedEvents, confirm_guid_change: guidText } });
       } catch (e) {
         // After a conflict, the diff is not against the hosted file. Hide it
         // and its write button.
@@ -2298,6 +2299,12 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
   // The pages of the menu "Link to an artist or label page" (ADR 0218 item 3).
   const pageCandidates = pageLinkCandidates(feeds, draft.model);
   const pageRefusal = diff && pageRefusalView(diff.page_refusal, Boolean(selectedPage), pageCandidates.length);
+  const guid = diff && guidChangeView(diff.guid_change, guidText);
+  const keepKnownGuid = () => run(async () => {
+    draft.show(await api(`/feeds/${feedId}/keep-known-guid`, { method: 'POST' }));
+    setGuidText('');
+    setDiff(await api(`/feeds/${feedId}/diff`));
+  });
   // The link of the section, then a new diff (ADR 0218 item 4).
   const linkAndContinue = () => run(async () => {
     if (!selectedPage || !(await draft.flush())) return;
@@ -2372,6 +2379,11 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
         <div class="actions"><button class="button action" type="button" disabled=${busy || pageRefusal.linkDisabled}
           onClick=${pageRefusal.menu ? linkAndContinue : () => { ref.current.close(); onMakeArtist(); }}>${pageRefusal.button}</button></div>
       </div>`}
+      ${guid && html`<div class="notice error" role="alert"><strong>${guid.title}</strong><p class="mono">${guid.guids}</p>
+        ${guid.lines.map((line) => html`<p>${line}</p>`)}
+        <div class="actions"><button class="button" type="button" disabled=${busy} onClick=${keepKnownGuid}>${guid.keep}</button></div>
+        <div class="field"><label for="guid-confirm">${guid.prompt}</label><input id="guid-confirm" value=${guidText} onInput=${(e) => setGuidText(e.target.value)} /></div>
+      </div>`}
       ${streamRows.map((problem) => problem.blocksWrite
         ? html`<div class="notice error" role="alert" key=${problem.guid + problem.text}>
             <strong>${problem.title}</strong> ${problem.text}
@@ -2441,7 +2453,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
         ${progress ? signProgressLabel(progress) : busy ? 'Writing…' : deletion.label}</button>`}
       <button class=${`button${deletion ? '' : ' destructive'}`} type="button" disabled=${busy || (!deletion && !draft.changed)} onClick=${discard}>${deletion && deletion.cancel ? deletion.cancel : reviewRemoveLabel((feeds.find((f) => f.id === feedId) || {}).draft_state)}</button>
       ${!deletion && diff && (pageRefusal || addressPanel) && html`<button class="button primary" type="button" disabled>${busy ? 'Writing…' : 'Write to the File Host'}</button>`}
-      ${!deletion && diff && hasWork && !addressesBlocked && !choosing && html`<button class="button primary" type="button" disabled=${busy || waiting || needsSigner || streamRefusal || alsoPending || blocksWrite(links)} onClick=${write}>
+      ${!deletion && diff && hasWork && !addressesBlocked && !choosing && html`<button class="button primary" type="button" disabled=${busy || waiting || needsSigner || streamRefusal || alsoPending || blocksWrite(links) || (guid && !guid.confirmed)} onClick=${write}>
         ${progress ? signProgressLabel(progress) : busy ? 'Writing…' : 'Write to the File Host'}</button>`}
       `}
       ${result && html`<button class="button primary" type="button" onClick=${() => ref.current.close()}>Close</button>`}

@@ -676,6 +676,42 @@ async fn connectors_and_feeds_are_added_listed_and_read() {
 }
 
 #[tokio::test]
+async fn an_external_guid_change_appears_in_diff_and_stops_an_unconfirmed_write() {
+    let app = app();
+    let id = set_up(&app).await;
+    let path = format!("/api/v1/feeds/{id}/refresh");
+    let (status, _) = call(&app, "POST", &path, None).await;
+    assert_eq!(status, StatusCode::OK);
+    let file = app.feeds.path().join("album.xml");
+    let bytes = std::fs::read_to_string(&file).unwrap();
+    std::fs::write(
+        &file,
+        bytes.replace("<podcast:guid>g-1", "<podcast:guid>g-2"),
+    )
+    .unwrap();
+    let (status, _) = call(&app, "POST", &path, None).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(diff["guid_change"]["known"], "g-1");
+    assert_eq!(diff["guid_change"]["new"], "g-2");
+    assert_eq!(diff["guid_change"]["title"], "Album");
+    let (status, error) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{id}/write"),
+        Some(json!({ "diff_id": diff["id"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(error["error"]["code"], "guid_change_unconfirmed");
+    assert_eq!(
+        error["error"]["message"],
+        "ADR 0249 item 4: this write changes the feed GUID. Type the feed title to confirm."
+    );
+}
+
+#[tokio::test]
 async fn the_host_lists_its_feed_files_and_marks_the_ones_in_the_collection() {
     let app = app();
     std::fs::write(

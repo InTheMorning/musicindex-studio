@@ -54,6 +54,10 @@ pub enum PipelineErrorKind {
     Network,
     /// The feed has no draft.
     NoDraft,
+    /// The user did not confirm a feed GUID change (ADR 0249 item 4).
+    GuidChangeUnconfirmed,
+    /// A connected app tried to change a feed GUID (ADR 0249 item 5).
+    GuidChangeRefused,
     /// The approved diff is not the current diff of the draft.
     DiffNotApproved,
     /// The sent model is from a revision of the draft that is not current
@@ -156,6 +160,17 @@ pub struct PipelineError {
     conflict_times: Option<(Option<i64>, Option<i64>)>,
     /// Boxed so that the error stays small.
     bad_fields: Option<Box<BadFields>>,
+}
+
+/// A change from the accepted feed GUID to the draft GUID (ADR 0249 item 3).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct GuidChange {
+    /// The GUID that the user accepted before this draft (ADR 0249 item 3).
+    pub known: String,
+    /// The GUID in the draft (ADR 0249 item 3).
+    pub new: String,
+    /// The title in the draft, when it has one (ADR 0249 item 3).
+    pub title: Option<String>,
 }
 
 /// The model paths of a [`PipelineErrorKind::BadAddress`] error (ADR 0245
@@ -1139,7 +1154,7 @@ pub fn new_feed_with(
     let mut feed = Feed {
         title: Some(title.to_owned()),
         author: Some(author.to_owned()),
-        podcast_guid: Some(guid),
+        podcast_guid: Some(guid.clone()),
         medium: Some(medium.to_owned()),
         language: Some("en".to_owned()),
         description: kept(values.description.as_deref()),
@@ -1212,6 +1227,9 @@ pub fn new_feed_with(
     let id = collection.add_feed(None, Some((connector_id, path)))?;
     collection.set_address(id, AddressSource::Folder, address.as_deref())?;
     collection.set_new_feed(id, title, medium)?;
+    if !has_placeholder_guid(&guid) {
+        collection.set_known_guid(id, &guid)?;
+    }
     collection.save_draft(
         id,
         &DraftRow {
@@ -1679,6 +1697,55 @@ fn changed_draft(
     feed.write_hosted(&mut doc, hosted.as_ref())?;
     draft.draft_xml = doc.write().into_bytes();
     Ok(draft)
+}
+
+/// Find a draft GUID that differs from the accepted GUID (ADR 0249 item 3).
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the feed has no readable draft.
+pub fn guid_change(
+    collection: &Collection,
+    id: FeedId,
+) -> Result<Option<GuidChange>, PipelineError> {
+    let row = collection.feed(id)?;
+    let Some(known) = row.known_guid else {
+        return Ok(None);
+    };
+    let draft = one_cover(current_draft(collection, id)?)?;
+    let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
+    Ok(guid_change_of(Some(&known), &feed))
+}
+
+/// The GUID change of a draft against the known GUID. A placeholder GUID is
+/// not a change (ADR 0249 item 2).
+fn guid_change_of(known: Option<&str>, feed: &Feed) -> Option<GuidChange> {
+    let known = known?;
+    let new = feed
+        .podcast_guid
+        .as_deref()
+        .filter(|guid| !has_placeholder_guid(guid) && *guid != known)?;
+    Some(GuidChange {
+        known: known.to_owned(),
+        new: new.to_owned(),
+        title: feed.title.clone(),
+    })
+}
+
+/// Restore the accepted GUID in the draft (ADR 0249 item 4).
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the feed has no draft or its XML is invalid.
+pub fn keep_known_guid(collection: &mut Collection, id: FeedId) -> Result<(), PipelineError> {
+    let row = collection.feed(id)?;
+    let Some(guid) = row.known_guid else {
+        return Ok(());
+    };
+    let draft = current_draft(collection, id)?;
+    let changed = changed_draft(draft, |feed| feed.podcast_guid = Some(guid))?;
+    collection.save_draft(id, &changed)?;
+    Ok(())
 }
 
 /// The revision of a draft: a hash of its bytes without `lastBuildDate`
@@ -4716,7 +4783,7 @@ pub fn write_draft_signed(
     public: Option<&crate::web::Web>,
 ) -> Result<Version, PipelineError> {
     write_draft_signed_inner(
-        collection, hosts, library, addresses, links, id, approved, signed, now, public, None,
+        collection, hosts, library, addresses, links, id, approved, signed, now, public, None, None,
     )
 }
 
@@ -4755,6 +4822,47 @@ pub fn write_draft_signed_checked(
         now,
         public,
         Some(streams),
+        None,
+    )
+}
+
+/// Write with the title that confirms a feed GUID change (ADR 0249 item 4).
+///
+/// # Errors
+///
+/// Gives the errors of [`write_draft_signed_checked`] and GUID errors from
+/// ADR 0249 item 4.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the checked write takes the established write inputs"
+)]
+pub fn write_draft_signed_checked_confirmed(
+    collection: &mut Collection,
+    hosts: &Hosts,
+    library: &Library,
+    addresses: &dyn AddressCheck,
+    links: LinkCheck<'_>,
+    streams: &dyn crate::stream::StreamCheck,
+    id: FeedId,
+    approved: &DiffId,
+    signed: &[nostr::prelude::Event],
+    now: u64,
+    public: Option<&crate::web::Web>,
+    confirm: Option<&str>,
+) -> Result<Version, PipelineError> {
+    write_draft_signed_inner(
+        collection,
+        hosts,
+        library,
+        addresses,
+        links,
+        id,
+        approved,
+        signed,
+        now,
+        public,
+        Some(streams),
+        confirm,
     )
 }
 
@@ -4778,6 +4886,7 @@ fn write_draft_signed_inner(
     now: u64,
     public: Option<&crate::web::Web>,
     streams: Option<&dyn crate::stream::StreamCheck>,
+    confirm: Option<&str>,
 ) -> Result<Version, PipelineError> {
     let row = collection.feed(id)?;
     // A feed with no connector writes to the host of its draft feed move.
@@ -4810,6 +4919,26 @@ fn write_draft_signed_inner(
     let connector = hosts.get(connector_id)?;
     let draft = one_cover(current_draft(collection, id)?)?;
     let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
+    let guid_change = guid_change_of(row.known_guid.as_deref(), &feed);
+    if let Some(change) = &guid_change {
+        if matches!(links, LinkCheck::GrantedWrite) {
+            return Err(PipelineError::new(
+                PipelineErrorKind::GuidChangeRefused,
+                "ADR 0249 item 5: a connected app cannot change the feed GUID",
+            ));
+        }
+        let expected = change
+            .title
+            .as_deref()
+            .filter(|title| !title.trim().is_empty())
+            .unwrap_or("CHANGE");
+        if confirm.map(str::trim) != Some(expected) {
+            return Err(PipelineError::new(
+                PipelineErrorKind::GuidChangeUnconfirmed,
+                "ADR 0249 item 4: this write changes the feed GUID. Type the feed title to confirm.",
+            ));
+        }
+    }
     let (operations, _blocked) = host_operations(collection, library, hosts, &row, &feed)?;
     let feed_move = feed_move(collection, hosts, &row)?;
     let deleting_feed = collection.has_draft_feed_delete(id)?;
@@ -5244,6 +5373,19 @@ fn write_draft_signed_inner(
     // write. The next start removes the bytes (ADR 0105 item 13).
     remove_sent_assets(collection, hosts, library, &operations);
 
+    if !deleting_feed {
+        if let Some(change) = &guid_change {
+            collection.set_known_guid(id, &change.new)?;
+        } else if row.known_guid.is_none()
+            && let Some(guid) = feed
+                .podcast_guid
+                .as_deref()
+                .filter(|guid| !has_placeholder_guid(guid))
+        {
+            collection.set_known_guid(id, guid)?;
+        }
+    }
+
     Ok(version)
 }
 
@@ -5621,6 +5763,7 @@ fn write_granted_with(
             now,
             None,
             streams,
+            None,
         )
     })();
     if result.is_err() {

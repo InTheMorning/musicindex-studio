@@ -1,6 +1,6 @@
 // Music Index Studio UI (ADR 0016). Preact and htm, with no build step.
 import { html, render, useState, useEffect, useLayoutEffect, useCallback, useRef, useContext, createContext } from './vendor/htm-preact-standalone.module.js';
-import { checkCount, releaseChecklist, repairAddresses } from './feedcheck.js';
+import { checkCount, releaseChecklist, repairAddresses, guidChangeView } from './feedcheck.js';
 import { pageSequence, settingsTabs } from './pages.js';
 import { useFieldList, RowList, PickerLayout, SearchResults } from './pickers.js';
 import { UI_SCALES, SCALE_KEY, normalizeScale, measureWindowUnits } from './uiscale.js';
@@ -3317,14 +3317,14 @@ export function FeedCheckRow({ title, text, lines, checked, onChange }) {
 
 // Write one feed of a change set: the diff, the signer, then the write
 // (ADR 0207 item 30, task 054c item 8). A plan that expired gets one new try.
-async function writeChangeSetFeed(feedId) {
+async function writeChangeSetFeed(feedId, confirmGuidChange) {
   for (let attempt = 0; ; attempt++) {
     const diff = await api(`/feeds/${feedId}/diff`);
     const toSign = eventsToSign(diff);
     const choice = await currentSignerChoice(toSign);
     const signedEvents = await signPlanned(toSign, choice, () => {});
     try {
-      await api(`/feeds/${feedId}/write`, { method: 'POST', body: { diff_id: diff.id, signed_events: signedEvents } });
+      await api(`/feeds/${feedId}/write`, { method: 'POST', body: { diff_id: diff.id, signed_events: signedEvents, confirm_guid_change: confirmGuidChange } });
       return;
     } catch (e) {
       if (e.code !== 'plan_expired' || attempt > 0) throw e;
@@ -3350,6 +3350,7 @@ function ChangeSetPage({ id, go, onChanged, feeds }) {
   const [statuses, setStatuses] = useState({});
   const [openId, setOpenId] = useState(null);
   const [diffs, setDiffs] = useState({});
+  const [guidTexts, setGuidTexts] = useState({});
   const [writing, setWriting] = useState(false);
   // The feeds that a write refused with `bad_address` (ADR 0245 item 8).
   const [badFeeds, setBadFeeds] = useState(() => new Set());
@@ -3361,6 +3362,8 @@ function ChangeSetPage({ id, go, onChanged, feeds }) {
       setStatuses(initialStatuses(loaded));
       setOpenId(firstOpenId(loaded));
       setKnown(await api('/recipients'));
+      // Each diff is read at the start, so that a GUID change shows before the write (ADR 0249 item 3).
+      writableIds(loaded).forEach((feedId) => loadDiff(feedId));
       if (loaded.person_id != null) {
         const person = await api(`/people/${loaded.person_id}`).catch(() => null);
         setPersonName(person ? person.name : '');
@@ -3398,7 +3401,7 @@ function ChangeSetPage({ id, go, onChanged, feeds }) {
   // diffs are read again (ADR 0245 items 6 and 12).
   const readAgain = async () => {
     setDiffs({});
-    if (openId !== null) loadDiff(openId);
+    order.forEach((feedId) => loadDiff(feedId));
     setReviewTick((n) => n + 1);
   };
   const repairShortAddresses = () => findings.act(async () => {
@@ -3415,7 +3418,7 @@ function ChangeSetPage({ id, go, onChanged, feeds }) {
       setStatuses(current);
       let failure = null;
       try {
-        await writeChangeSetFeed(feedId);
+        await writeChangeSetFeed(feedId, guidTexts[feedId] || '');
         window.dispatchEvent(new Event(ANNOUNCE_RELOAD));
       } catch (e) {
         failure = writeFailText(e);
@@ -3439,9 +3442,14 @@ function ChangeSetPage({ id, go, onChanged, feeds }) {
   const notFound = error && error.status === 404;
   const pendingWrite = set !== null && pending > 0;
   const addressBlocked = Boolean(findings.address);
+  const guidBlocked = order.some((feedId) => {
+    const shown = diffs[feedId];
+    // The core also refuses an unconfirmed GUID change (ADR 0249 item 4). Thus a diff that is not loaded does not block the button.
+    return Boolean(shown && shown.diff && shown.diff.guid_change && !guidChangeView(shown.diff.guid_change, guidTexts[feedId] || '').confirmed);
+  });
   return html`<div><${Bar}><span class="bar-title">Review the changes</span>
     ${set && html`<div class="draft-toolbar"><button class="button destructive" type="button" disabled=${writing || busy} onClick=${discard}>Discard</button>
-      ${pendingWrite && html`<button class="button primary" type="button" disabled=${writing || busy || addressBlocked} onClick=${writeAll}>
+      ${pendingWrite && html`<button class="button primary" type="button" disabled=${writing || busy || addressBlocked || guidBlocked} onClick=${writeAll}>
         ${writing ? 'Writing…' : writeLabel(pending)}</button>`}</div>`}<//><section class="section">
     ${notFound
       ? html`<div class="notice" role="status"><strong>Studio did not find these changes.</strong>It is written or discarded.
@@ -3472,6 +3480,18 @@ function ChangeSetPage({ id, go, onChanged, feeds }) {
           <div class="change-diff">
             ${!shown && html`<p class="hint" role="status">Loading the changes…</p>`}
             ${shown && shown.error && html`<${ErrorNotice} error=${shown.error} />`}
+            ${shown && shown.diff && shown.diff.guid_change && (() => {
+              const guid = guidChangeView(shown.diff.guid_change, guidTexts[feed.feed_id] || '');
+              return html`<div class="notice error" role="alert"><strong>${guid.title}</strong><p class="mono">${guid.guids}</p>
+                ${guid.lines.map((line) => html`<p>${line}</p>`)}
+                <div class="actions"><button class="button" type="button" disabled=${writing || busy} onClick=${() => run(async () => {
+                  await api(`/feeds/${feed.feed_id}/keep-known-guid`, { method: 'POST' });
+                  await readAgain();
+                })}>${guid.keep}</button></div>
+                <div class="field"><label for=${`guid-confirm-${feed.feed_id}`}>${guid.prompt}</label>
+                  <input id=${`guid-confirm-${feed.feed_id}`} value=${guidTexts[feed.feed_id] || ''} onInput=${(e) => setGuidTexts((before) => ({ ...before, [feed.feed_id]: e.target.value }))} /></div>
+              </div>`;
+            })()}
             ${shown && shown.diff && (shown.diff.changed
               ? html`<${DiffView} diff=${shown.diff} />`
               : html`<p class="hint">The draft is the same as the hosted file.</p>`)}

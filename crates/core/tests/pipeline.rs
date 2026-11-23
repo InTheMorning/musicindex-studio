@@ -142,6 +142,83 @@ fn setup_with(feed_xml: &str) -> Setup {
     }
 }
 
+#[test]
+fn a_feed_guid_change_stops_until_the_title_is_confirmed() {
+    let mut s = setup();
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    pipeline::edit_draft(&s.collection, s.feed, |feed| {
+        feed.podcast_guid = Some("changed-guid".to_owned());
+    })
+    .unwrap();
+    let change = pipeline::guid_change(&s.collection, s.feed)
+        .unwrap()
+        .unwrap();
+    assert_eq!(change.known, "917393e3-1b1e-5cef-ace4-edaa54e1f810");
+    assert_eq!(change.new, "changed-guid");
+
+    pipeline::keep_known_guid(&mut s.collection, s.feed).unwrap();
+    assert_eq!(pipeline::guid_change(&s.collection, s.feed).unwrap(), None);
+    pipeline::edit_draft(&s.collection, s.feed, |feed| {
+        feed.podcast_guid = Some("changed-guid".to_owned());
+    })
+    .unwrap();
+    let diff = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+    let streams = StreamDown;
+    for confirm in [None, Some("wrong title")] {
+        let error = pipeline::write_draft_signed_checked_confirmed(
+            &mut s.collection,
+            &s.hosts,
+            &s.library,
+            &PassAll,
+            pipeline::LinkCheck::Check(&ScriptedReader::empty()),
+            &streams,
+            s.feed,
+            &diff.id,
+            &[],
+            1_800_000_000,
+            None,
+            confirm,
+        )
+        .unwrap_err();
+        assert_eq!(error.kind(), PipelineErrorKind::GuidChangeUnconfirmed);
+    }
+    pipeline::write_draft_signed_checked_confirmed(
+        &mut s.collection,
+        &s.hosts,
+        &s.library,
+        &PassAll,
+        pipeline::LinkCheck::Check(&ScriptedReader::empty()),
+        &streams,
+        s.feed,
+        &diff.id,
+        &[],
+        1_800_000_000,
+        None,
+        Some(" Album "),
+    )
+    .unwrap();
+    assert_eq!(
+        s.collection.feed(s.feed).unwrap().known_guid.as_deref(),
+        Some("changed-guid")
+    );
+}
+
+#[test]
+fn a_restored_snapshot_with_another_feed_guid_is_reported() {
+    let s = setup();
+    let snapshot_xml = FEED.replace("917393e3-1b1e-5cef-ace4-edaa54e1f810", "restored-guid");
+    let snapshot = s
+        .collection
+        .add_snapshot(s.feed, &Version::new("snapshot"), snapshot_xml.as_bytes())
+        .unwrap();
+    pipeline::draft_from_snapshot(&s.collection, s.connector.as_ref(), s.feed, snapshot).unwrap();
+    let change = pipeline::guid_change(&s.collection, s.feed)
+        .unwrap()
+        .unwrap();
+    assert_eq!(change.known, "917393e3-1b1e-5cef-ace4-edaa54e1f810");
+    assert_eq!(change.new, "restored-guid");
+}
+
 fn live(s: &Setup) -> String {
     fs::read_to_string(s.dir.path().join("album.xml")).unwrap()
 }
@@ -3809,6 +3886,27 @@ fn granted(
         None,
         now,
     )
+}
+
+#[test]
+fn a_granted_write_refuses_a_hosted_feed_guid_change() {
+    let mut s = setup();
+    let guid = write_granted_show(&mut s);
+    let current = s.connector.read("album.xml").unwrap().unwrap();
+    let mut hosted = Feed::read(&Document::parse_bytes(&current.bytes).unwrap()).unwrap();
+    hosted.podcast_guid = Some("outside-guid".to_owned());
+    let mut doc = Document::parse_bytes(&current.bytes).unwrap();
+    hosted.write_hosted(&mut doc, None).unwrap();
+    let bytes = doc.write().into_bytes();
+    s.connector
+        .write("album.xml", &bytes, &Expected::Version(current.version))
+        .unwrap();
+    let error = granted(&mut s, &guid, &GrantChange::GoLive, during_show()).unwrap_err();
+    assert_eq!(error.kind(), PipelineErrorKind::GuidChangeRefused);
+    assert_eq!(
+        error.to_string(),
+        "ADR 0249 item 5: a connected app cannot change the feed GUID"
+    );
 }
 
 #[test]

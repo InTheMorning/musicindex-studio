@@ -535,6 +535,7 @@ fn workspace_router_with_shared(workspace: Workspace) -> (Router, WorkspaceHandl
             post(routes::end_feed_grant),
         )
         .route("/feeds/{id}/diff", get(routes::get_diff))
+        .route("/feeds/{id}/keep-known-guid", post(routes::keep_known_guid))
         .route("/feeds/{id}/write", post(routes::write_feed))
         .route("/feeds/{id}/snapshots", get(routes::list_snapshots))
         .route(

@@ -222,6 +222,10 @@ impl From<PipelineError> for ApiError {
             PipelineErrorKind::NotFound => (StatusCode::NOT_FOUND, "not_found"),
             PipelineErrorKind::Network => (StatusCode::BAD_GATEWAY, "network"),
             PipelineErrorKind::NoDraft => (StatusCode::CONFLICT, "no_draft"),
+            PipelineErrorKind::GuidChangeUnconfirmed => {
+                (StatusCode::CONFLICT, "guid_change_unconfirmed")
+            }
+            PipelineErrorKind::GuidChangeRefused => (StatusCode::CONFLICT, "guid_change_refused"),
             PipelineErrorKind::DiffNotApproved => (StatusCode::CONFLICT, "diff_not_approved"),
             PipelineErrorKind::StaleRevision => (StatusCode::CONFLICT, "stale_revision"),
             PipelineErrorKind::BadAddress => (StatusCode::UNPROCESSABLE_ENTITY, "bad_address"),

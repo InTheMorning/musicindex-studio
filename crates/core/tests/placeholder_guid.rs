@@ -324,6 +324,11 @@ fn a_new_public_address_gives_the_real_guid_to_a_written_feed_with_no_draft() {
     assert_eq!(changed, [album], "only the named feed changes");
     let expected = podcast_guid_for_url("https://private.example/album.xml");
     assert_eq!(draft_guid(&s, album).as_deref(), Some(expected.as_str()));
+    assert_eq!(
+        pipeline::guid_change(&s.collection, album).unwrap(),
+        None,
+        "ADR 0249 item 2: a placeholder that gets its real GUID is not a GUID change. Check guid_change_of in pipeline.rs."
+    );
     assert!(
         s.collection.draft(other).unwrap().is_none(),
         "a feed with no change gets no draft"

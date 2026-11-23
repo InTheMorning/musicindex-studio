@@ -106,6 +106,21 @@ export function pageRefusalView(reason, selected = false, candidates = 1) {
   };
 }
 
+// The GUID change panel model (ADR 0249 item 3).
+export function guidChangeView(change, typed = '') {
+  if (!change) return null;
+  const title = change.title || '';
+  const expected = title.trim() ? title : 'CHANGE';
+  return {
+    title: 'This write changes the GUID',
+    guids: `Known: ${change.known} → New: ${change.new}`,
+    lines: [`Payments from other music feeds that name ${change.known} stop.`, 'Apps can show the feed as a new show.'],
+    keep: 'Keep the Old GUID',
+    prompt: `Type ${expected} to change the GUID`,
+    confirmed: String(typed).trim() === expected,
+  };
+}
+
 // The write line of the address panel (ADR 0245 item 7).
 export const ADDRESS_WRITE_LINE = 'Repair these addresses first.';
 

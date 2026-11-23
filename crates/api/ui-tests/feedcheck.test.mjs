@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   tabLabel, checkCount, checkRows, unreadableRows, repairLabel, hasShowGrant, checkTexts,
-  PAGE_FINDING_TEXT, pageRefusalView,
+  PAGE_FINDING_TEXT, pageRefusalView, guidChangeView,
   addressPanelView, repairAddresses, peoplePanelView, ADDRESS_WRITE_LINE,
   releaseChecklist, wrongAddressSet,
   CHECK_LEAD, CHECK_NONE, CHECK_GRANT, CHECK_READ_ONLY, CHECK_UNREADABLE,
@@ -34,6 +34,24 @@ test('the release checklist uses the five finding kinds and their existing actio
     ['2 tracks have no audio file', 'cross', 'Open the Track'], ['Payment recipient', 'cross', 'Add a Recipient'], ['Artist page', 'check', null],
   ], owner);
   assert.equal(many.rows[2].open.track, 'track-1', owner);
+});
+
+test('the GUID panel asks for the feed title and accepts trimmed text', () => {
+  const owner = 'ADR 0249 item 3: check guidChangeView in feedcheck.js.';
+  const change = { known: 'old', new: 'new', title: 'This Is It' };
+  const view = guidChangeView(change, 'this is it');
+  assert.equal(view.title, 'This write changes the GUID', owner);
+  assert.equal(view.guids, 'Known: old → New: new', owner);
+  assert.deepEqual(view.lines, [
+    'Payments from other music feeds that name old stop.',
+    'Apps can show the feed as a new show.',
+  ], owner);
+  assert.equal(view.keep, 'Keep the Old GUID', owner);
+  assert.equal(view.prompt, 'Type This Is It to change the GUID', owner);
+  assert.equal(view.confirmed, false, owner);
+  assert.equal(guidChangeView(change, '  This Is It ').confirmed, true, owner);
+  assert.equal(guidChangeView({ ...change, title: null }).prompt, 'Type CHANGE to change the GUID', owner);
+  assert.equal(guidChangeView(null), null, owner);
 });
 
 test('an artist page finding adds a checklist row', () => {

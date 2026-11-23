@@ -4855,6 +4855,7 @@ fn diff_json_with_streams(
     let build_date = pipeline::set_build_date(&w.collection, id, checked)?;
     let diff = pipeline::diff_checked(&w.collection, &hosts, &library, streams, id)?;
     let page_refusal = feed_page_refusal(w, id)?;
+    let guid_change = pipeline::guid_change(&w.collection, id)?;
     let also_write = also_write_pages(w, &library, id)?;
     // The app of each grant of the draft, for the review sheet (ADR 0110
     // item 19).
@@ -4862,7 +4863,7 @@ fn diff_json_with_streams(
     for guid in &diff.grants {
         grant_apps.insert(guid.clone(), json!(w.collection.draft_grant_app(id, guid)?));
     }
-    Ok(Json(json!({
+    let mut response = json!({
         "id": diff.id.as_str(),
         "unified": diff.unified,
         "fields": diff.fields,
@@ -4891,7 +4892,11 @@ fn diff_json_with_streams(
                 "event": event.to_json(),
             }))
             .collect::<Vec<_>>(),
-    })))
+    });
+    if let Some(change) = guid_change {
+        response["guid_change"] = json!(change);
+    }
+    Ok(Json(response))
 }
 
 /// The publisher feeds that Review of a new release offers to write with
@@ -4942,10 +4947,23 @@ pub(crate) async fn get_diff(State(shared): State<Shared>, Path(id): Path<i64>) 
 #[derive(Deserialize)]
 pub(crate) struct Write {
     diff_id: String,
+    #[serde(default)]
+    confirm_guid_change: Option<String>,
     /// The events that the user signed for the planned events of the
     /// diff (ADR 0050 item 12).
     #[serde(default)]
     signed_events: Vec<Value>,
+}
+
+pub(crate) async fn keep_known_guid(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        pipeline::keep_known_guid(&mut w.collection, FeedId(id))?;
+        draft_json(w, FeedId(id))
+    })
+    .await
 }
 
 /// Write the draft with the ID of the diff that the user approved. The
@@ -5027,7 +5045,7 @@ pub(crate) async fn write_feed(
         // network policy applies (ADR 0057, ADR 0067 item 7).
         let public = w.collection.feed(id)?.connector_id.is_none();
         let streams = w.stream_checker();
-        pipeline::write_draft_signed_checked(
+        pipeline::write_draft_signed_checked_confirmed(
             &mut w.collection,
             &hosts,
             &library,
@@ -5039,6 +5057,7 @@ pub(crate) async fn write_feed(
             &signed,
             now,
             public.then_some(&w.web),
+            body.confirm_guid_change.as_deref(),
         )?;
         if let Some((feed, _)) = written {
             w.record_remote_files(id, &feed);

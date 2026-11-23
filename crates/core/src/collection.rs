@@ -729,6 +729,11 @@ CREATE TABLE change_set_kept_levels (
     PRIMARY KEY (change_set_id, upper_id, lower_id)
 );
 ",
+    r"
+ALTER TABLE feeds ADD COLUMN known_guid TEXT;
+UPDATE feeds SET known_guid = podcast_guid
+WHERE podcast_guid IS NOT NULL AND podcast_guid NOT LIKE 'pending-%';
+",
 ];
 
 /// `root` as a relative path under `data_dir`, when it is a folder inside
@@ -1140,6 +1145,8 @@ pub struct FeedRow {
     pub host_deleted: bool,
     /// `podcast:guid`, from the last read.
     pub podcast_guid: Option<String>,
+    /// The feed GUID that the user has accepted (ADR 0249 item 1).
+    pub known_guid: Option<String>,
     /// The title, from the last read.
     pub title: Option<String>,
     /// `podcast:medium`, from the last read.
@@ -1903,6 +1910,19 @@ impl Collection {
         Ok(())
     }
 
+    /// Store the feed GUID that the user has accepted (ADR 0249 item 1).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn set_known_guid(&self, id: FeedId, guid: &str) -> Result<(), CollectionError> {
+        self.db.execute(
+            "UPDATE feeds SET known_guid = ?2 WHERE id = ?1",
+            params![id.0, guid],
+        )?;
+        Ok(())
+    }
+
     /// Record the roles of a publisher feed, and whether they are confirmed
     /// (ADR 0082 items 2 and 5). An empty set removes the roles.
     ///
@@ -2185,6 +2205,16 @@ impl Collection {
                 now()
             ],
         )?;
+        if let Some(guid) = feed
+            .podcast_guid
+            .as_deref()
+            .filter(|guid| !guid.starts_with("pending-"))
+        {
+            tx.execute(
+                "UPDATE feeds SET known_guid = ?2 WHERE id = ?1 AND known_guid IS NULL",
+                params![id.0, guid],
+            )?;
+        }
         tx.execute("DELETE FROM feed_items WHERE feed_id = ?1", [id.0])?;
         for (position, item) in (0_i64..).zip(feed.items.iter()) {
             let Some(guid) = &item.guid else { continue };
@@ -4976,7 +5006,7 @@ fn non_empty(value: String) -> Option<String> {
     (!value.is_empty()).then_some(value)
 }
 
-const FEED_SELECT: &str = "SELECT id, public_url, connector_id, path, podcast_guid, title, medium, last_version, address_source, folder, files_connector_id, publisher_roles, roles_confirmed, created_at, release_kind FROM feeds";
+const FEED_SELECT: &str = "SELECT id, public_url, connector_id, path, podcast_guid, title, medium, last_version, address_source, folder, files_connector_id, publisher_roles, roles_confirmed, created_at, release_kind, known_guid FROM feeds";
 
 /// Keep or remove the address of one source. An empty address is no address.
 fn put_address(
@@ -5276,6 +5306,7 @@ fn feed_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<FeedRow> {
         title: r.get(5)?,
         medium: r.get(6)?,
         release_kind: r.get(14)?,
+        known_guid: r.get(15)?,
         last_version: r.get::<_, Option<String>>(7)?.map(Version::new),
         address_source: r
             .get::<_, Option<String>>(8)?
@@ -5419,6 +5450,52 @@ mod tests {
             )
             .unwrap();
         assert_eq!(fresh_count, 1);
+    }
+
+    #[test]
+    fn the_known_guid_migration_keeps_real_guids_and_skips_placeholders() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("previous.sqlite");
+        let db = Connection::open(&path).unwrap();
+        let previous = migration_index("ADD COLUMN known_guid");
+        for migration in &MIGRATIONS[..previous] {
+            db.execute_batch(migration).unwrap();
+        }
+        db.execute("INSERT INTO feeds (id, podcast_guid, created_at) VALUES (1, 'old-guid', 0), (2, 'pending-new', 0)", []).unwrap();
+        db.pragma_update(None, "user_version", i64::try_from(previous).unwrap())
+            .unwrap();
+        drop(db);
+        let collection = Collection::open(&path).unwrap();
+        assert_eq!(
+            collection.feed(FeedId(1)).unwrap().known_guid.as_deref(),
+            Some("old-guid")
+        );
+        assert_eq!(collection.feed(FeedId(2)).unwrap().known_guid, None);
+    }
+
+    #[test]
+    fn record_state_keeps_a_known_guid_and_sets_a_missing_one() {
+        let mut collection = Collection::open_in_memory().unwrap();
+        let known = collection.add_feed(None, None).unwrap();
+        collection.set_known_guid(known, "old-guid").unwrap();
+        let feed = Feed {
+            podcast_guid: Some("new-guid".to_owned()),
+            ..Feed::default()
+        };
+        collection
+            .record_state(known, &feed, &Version::new("v1"))
+            .unwrap();
+        let row = collection.feed(known).unwrap();
+        assert_eq!(row.podcast_guid.as_deref(), Some("new-guid"));
+        assert_eq!(row.known_guid.as_deref(), Some("old-guid"));
+        let unknown = collection.add_feed(None, None).unwrap();
+        collection
+            .record_state(unknown, &feed, &Version::new("v1"))
+            .unwrap();
+        assert_eq!(
+            collection.feed(unknown).unwrap().known_guid.as_deref(),
+            Some("new-guid")
+        );
     }
 
     #[test]

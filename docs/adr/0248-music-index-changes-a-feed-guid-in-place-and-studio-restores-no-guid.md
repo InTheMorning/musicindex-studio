@@ -5,6 +5,7 @@
 - Owner: operator
 - Accepted: 2026-11-22 by the orchestrator session, for the operator. The orchestrator approved the deletion of the items below after the deploy of stophammer 0.22.0-rc.1 started.
 - Confirmed: 2026-11-22 by the operator. Music Index permits a GUID change, but a user must not change a feed GUID if possible. Each change makes the value blocks of other music podcasts stale.
+- Changed by: [ADR 0249](0249-studio-strongly-discourages-a-feed-guid-change.md) item 6, on 2026-11-22. Item 2: Studio puts back an earlier GUID when the user selects **Put Back** for an outside change. Studio makes no restore on its own.
 - Changes: [ADR 0247](0247-studio-restores-a-changed-feed-guid-and-corrects-a-link-with-an-old-guid.md) items 1 to 6, 10 and 11. This record deletes them. Items 7 to 9 stay current.
 - Changes: [ADR 0175](0175-the-check-shows-what-music-index-holds.md), the fact of its Context on the decision of a GUID change and its invariant on a GUID change. Items 4 and 11 of ADR 0175 apply again with no change.
 - Uses: [ADR 0008](0008-feed-types-and-feed-identity.md) item 2, [ADR 0122](0122-a-new-user-starts-with-a-default-file-host.md) item 8, [ADR 0131](0131-a-feed-can-be-retired-from-the-index.md) item 6. Stophammer ADR 0106 §3 and §4 own the behavior of the index. This record cites them and does not restate them as rules of Studio.

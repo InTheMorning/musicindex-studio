@@ -12,6 +12,7 @@
 - Uses: [ADR 0007](0007-draft-diff-write-and-announce.md), [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md), [ADR 0045](0045-phase-9-crates-test-servers-and-host-forms.md), [ADR 0065](0065-the-core-applies-each-feed-rule.md), [ADR 0126](0126-studio-refuses-a-bad-move-link.md), [ADR 0127](0127-a-changed-feed-gets-a-new-build-date.md), [ADR 0174](0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md). Stophammer ADR 0052 and ADR 0058 own the rules of the index. This record cites them and does not restate them as rules of Studio.
 - Changed by: [ADR 0228](0228-undo-in-the-bar-a-notice-that-stays-and-the-rc28-check-findings.md) items 8 to 10, on 2026-11-20. Item 1: the notice after a write has **Dismiss**, stays until **Dismiss** and keeps its height.
 - Changed by: [ADR 0248](0248-music-index-changes-a-feed-guid-in-place-and-studio-restores-no-guid.md) item 5, on 2026-11-22. The fact of the Context on a GUID change and the invariant on a GUID change follow Stophammer ADR 0106. Items 4 and 11 apply with no change.
+- Changed by: [ADR 0249](0249-studio-strongly-discourages-a-feed-guid-change.md) item 11, on 2026-11-22. Item 4: an answer 404 with `superseded_by` gives the Warning `index_guid_changed`, not the line "Music Index does not hold this feed yet."
 
 ## Context
 

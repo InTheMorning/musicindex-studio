@@ -11,7 +11,7 @@
 - Source: [research request on a feed check with repairs](../plans/research-feed-check-request.md), item F3.
 - Uses: [ADR 0007](0007-draft-diff-write-and-announce.md), [ADR 0038](../archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md), [ADR 0045](0045-phase-9-crates-test-servers-and-host-forms.md), [ADR 0065](0065-the-core-applies-each-feed-rule.md), [ADR 0126](0126-studio-refuses-a-bad-move-link.md), [ADR 0127](0127-a-changed-feed-gets-a-new-build-date.md), [ADR 0174](0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md). Stophammer ADR 0052 and ADR 0058 own the rules of the index. This record cites them and does not restate them as rules of Studio.
 - Changed by: [ADR 0228](0228-undo-in-the-bar-a-notice-that-stays-and-the-rc28-check-findings.md) items 8 to 10, on 2026-11-20. Item 1: the notice after a write has **Dismiss**, stays until **Dismiss** and keeps its height.
-- Changed by: [ADR 0247](0247-studio-restores-a-changed-feed-guid-and-corrects-a-link-with-an-old-guid.md) items 1 to 6 and 10 to 11, on 2026-11-22. Items 4 and 11: a pending GUID change to the GUID of the draft gives the finding `guid_changed` with a repair, and no line "does not hold this feed yet".
+- Changed by: [ADR 0248](0248-music-index-changes-a-feed-guid-in-place-and-studio-restores-no-guid.md) item 5, on 2026-11-22. The fact of the Context on a GUID change and the invariant on a GUID change follow Stophammer ADR 0106. Items 4 and 11 apply with no change.
 
 ## Context
 
@@ -27,7 +27,7 @@ These facts of the Stophammer API on 2026-11-11 apply:
 
 - `GET /v1/feeds/{guid}` gives `feed_url` and `last_build_date`.
 - `GET /v1/feeds/{guid}/copies` gives each copy of a feed: a different URL that gives the same GUID (Stophammer ADR 0058). Each row has `url`, `open` and `differs_recipients`.
-- Only the operator of the index can resolve a copy or decide a GUID change. Studio cannot.
+- Only the operator of the index can resolve a copy. Studio cannot. Under Stophammer ADR 0106, the index changes a GUID in place when the feed declares a new GUID at the same URL. No operator decides a GUID change ([ADR 0248](0248-music-index-changes-a-feed-guid-in-place-and-studio-restores-no-guid.md)).
 
 ## Decision
 
@@ -75,7 +75,7 @@ These facts of the Stophammer API on 2026-11-11 apply:
 
 - Studio sends no request to the index outside the reads of ADR 0174 item 16.
 - No finding of this record stops a write.
-- Studio does not resolve a copy and does not decide a GUID change.
+- Studio does not resolve a copy and does not change a GUID in the index. Under Stophammer ADR 0106, the index changes a GUID in place when the feed declares a new GUID at the same URL.
 
 ## Acceptance Criteria
 

@@ -222,6 +222,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0245: Review repairs short addresses and offers the People values](adr/0245-review-repairs-short-addresses-and-offers-the-people-values.md)
 - [ADR 0246: A link with no medium, equal changes in review and the People button](adr/0246-a-link-with-no-medium-equal-changes-in-review-and-the-people-button.md)
 - [ADR 0247: Studio restores a changed feed GUID and corrects a link with an old GUID](adr/0247-studio-restores-a-changed-feed-guid-and-corrects-a-link-with-an-old-guid.md)
+- [ADR 0248: Music Index changes a feed GUID in place, and Studio restores no GUID](adr/0248-music-index-changes-a-feed-guid-in-place-and-studio-restores-no-guid.md)
 
 ## Plans
 

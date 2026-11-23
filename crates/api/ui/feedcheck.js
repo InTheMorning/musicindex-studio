@@ -61,6 +61,8 @@ const REPAIRS = {
   add_a_recipient: 'Add a Recipient',
   use_lnurl_address: 'Use LNURL Address',
   use_node_address: 'Use Node Address',
+  put_back_guid: 'Put Back',
+  keep_new_guid: 'Keep the New GUID',
 };
 
 // What a button does. A repair calls the repair route. The two other
@@ -80,6 +82,8 @@ const ACTIONS = {
   use_lnurl_address: 'repair',
   use_node_address: 'repair',
   use_the_guid_of: 'repair',
+  put_back_guid: 'repair',
+  keep_new_guid: 'repair',
 };
 
 export const PAGE_FINDING_TEXT = {
@@ -288,11 +292,16 @@ export function checkRows(check) {
       warning: false, title: finding.title, reason: finding.reason,
       button: 'Show the Ways', action: 'show-ways', indexAddress: finding.url || '',
     };
-    const label = finding.repair === 'use_the_guid_of' && finding.target_title
+    const label = finding.repair === 'put_back_guid'
+      ? `${REPAIRS.put_back_guid} ${finding.known_short || ''}`.trim()
+      : finding.repair === 'use_the_guid_of' && finding.target_title
       ? `Use the GUID of ${finding.target_title}`
       : repairLabel(finding.repair);
     const action = label ? ACTIONS[finding.repair] : null;
     const usable = action && !(action === 'open-track' && !finding.entry);
+    const secondLabel = finding.second_repair === 'put_back_guid'
+      ? `${REPAIRS.put_back_guid} ${finding.known_short || ''}`.trim()
+      : repairLabel(finding.second_repair);
     return {
       key: findingKey(finding),
       level: LEVELS[finding.level] || finding.level,
@@ -306,6 +315,9 @@ export function checkRows(check) {
       body: usable && action === 'repair'
         ? { kind: finding.kind, entry: finding.entry ?? null, url: finding.url ?? null, ...(finding.field ? { field: finding.field } : {}) }
         : null,
+      secondButton: secondLabel ? secondLabel : null,
+      secondAction: secondLabel ? ACTIONS[finding.second_repair] : null,
+      secondBody: secondLabel ? { kind: finding.kind, repair: finding.second_repair, entry: finding.entry ?? null, url: finding.url ?? null, ...(finding.field ? { field: finding.field } : {}) } : null,
     };
   });
 }

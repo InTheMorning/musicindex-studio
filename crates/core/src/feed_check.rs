@@ -20,6 +20,8 @@ pub use index::{IndexFacts, IndexLine, copy_report, index_line, index_read};
 pub enum FindingKind {
     /// A link has an unknown GUID and names a collection feed by address (ADR 0247 item 8).
     LinkGuidOld,
+    /// The hosted feed GUID changed outside Studio (ADR 0249 item 6).
+    GuidChangedOutside,
     /// The feed has a public address and no self link.
     NoSelfLink,
     /// The self link differs from the public address.
@@ -83,11 +85,15 @@ pub enum FindingLevel {
 }
 
 /// The repair that a finding offers (ADR 0174 item 7).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RepairKind {
     /// **Use the GUID of the linked feed** (ADR 0247 item 8).
     UseTheGuidOf,
+    /// **Put Back** the known feed GUID (ADR 0249 item 6).
+    PutBackGuid,
+    /// **Keep the New GUID** (ADR 0249 item 6).
+    KeepNewGuid,
     /// **Add the Link**.
     AddTheLink,
     /// **Use the Public Address**.
@@ -188,6 +194,12 @@ pub struct Finding {
     pub entry: Option<String>,
     /// The repair of the finding, when one exists.
     pub repair: Option<RepairKind>,
+    /// The second repair when one exists (ADR 0249 item 6).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub second_repair: Option<RepairKind>,
+    /// The first eight characters of the known GUID (ADR 0249 item 6).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub known_short: Option<String>,
     /// The address that the finding names, when it names one. A repair
     /// changes only this address.
     pub url: Option<String>,
@@ -362,6 +374,10 @@ pub struct Facts {
     /// no read ran, and always none for a feed with no `podcast:guid`,
     /// because the check sends no request for such a feed.
     pub index: Option<IndexFacts>,
+    /// The GUID that Studio keeps for this feed (ADR 0249 item 6).
+    pub known_guid: Option<String>,
+    /// The GUID of the last hosted read (ADR 0249 item 6).
+    pub read_guid: Option<String>,
 }
 
 /// Examine `feed` and give its findings. The function sends no request and
@@ -369,6 +385,24 @@ pub struct Facts {
 #[must_use]
 pub fn check(feed: &Feed, facts: &Facts) -> Vec<Finding> {
     let mut found = Vec::new();
+    if let (Some(known), Some(read)) = (&facts.known_guid, &facts.read_guid)
+        && !crate::pipeline::has_placeholder_guid(read)
+        && read != known
+        && feed.podcast_guid.as_deref() != Some(known.as_str())
+    {
+        let short: String = known.chars().take(8).collect();
+        found.push(Finding {
+            kind: FindingKind::GuidChangedOutside,
+            level: FindingLevel::Warning,
+            title: "The GUID changed outside Studio".to_owned(),
+            reason: format!("Studio knows this feed as {known}. The hosted file now has {read}. Payments from other music feeds that name {known} stop. A second change has the same effect for feeds that name {read}."),
+            entry: None,
+            repair: Some(RepairKind::PutBackGuid),
+            second_repair: Some(RepairKind::KeepNewGuid),
+            known_short: Some(short),
+            url: None, field: None, place: None, target_title: None,
+        });
+    }
     if let Some(refusal) = page_refusal(feed) {
         let (kind, title, reason) = match refusal {
             PageRefusal::NoArtistPage => (
@@ -389,6 +423,8 @@ pub fn check(feed: &Feed, facts: &Facts) -> Vec<Finding> {
             reason: reason.to_owned(),
             entry: None,
             repair: Some(RepairKind::LinkAPage),
+            second_repair: None,
+            known_short: None,
             url: None,
             field: None,
             place: None,
@@ -415,6 +451,8 @@ pub fn check(feed: &Feed, facts: &Facts) -> Vec<Finding> {
             reason: "Select the language of this feed.".to_owned(),
             entry: None,
             repair: Some(RepairKind::SelectALanguage),
+            second_repair: None,
+            known_short: None,
             url: None,
             field: None,
             place: None,
@@ -438,6 +476,8 @@ fn notice(
         reason,
         entry,
         repair,
+        second_repair: None,
+        known_short: None,
         url: None,
         field: None,
         place: None,
@@ -462,6 +502,8 @@ fn check_old_links(feed: &Feed, facts: &Facts, found: &mut Vec<Finding>) {
             ),
             entry: None,
             repair: Some(RepairKind::UseTheGuidOf),
+            second_repair: None,
+            known_short: None,
             url: Some(link.target.url),
             field: None,
             place: None,
@@ -561,6 +603,8 @@ fn check_fee_values(feed: &Feed, found: &mut Vec<Finding>) {
             ),
             entry: None,
             repair: None,
+            second_repair: None,
+            known_short: None,
             url: None,
             field: None,
             place: None,
@@ -583,6 +627,8 @@ fn check_short_addresses(feed: &Feed, found: &mut Vec<Finding>) {
             reason: format!("{} has no https://. Studio cannot write it.", bad.value),
             entry: None,
             repair: Some(RepairKind::AddHttps),
+            second_repair: None,
+            known_short: None,
             url: Some(bad.value),
             field: Some(bad.field),
             place: Some(bad.place),
@@ -886,6 +932,80 @@ mod tests {
             ..AtomLink::default()
         }));
         feed
+    }
+
+    #[test]
+    fn outside_guid_change_gives_two_repairs_only_when_the_draft_has_not_put_it_back() {
+        let mut feed = clean();
+        feed.podcast_guid = Some("B-83685084-new".to_owned());
+        let mut facts = facts();
+        facts.known_guid = Some("A-83685084-known".to_owned());
+        facts.read_guid = Some("B-83685084-new".to_owned());
+        let found = check(&feed, &facts);
+        let finding = found
+            .iter()
+            .find(|f| f.kind == FindingKind::GuidChangedOutside)
+            .expect("ADR 0249 item 6: fix check when changed GUID facts do not give a finding");
+        assert_eq!(
+            finding.level,
+            FindingLevel::Warning,
+            "ADR 0249 item 6: fix check level"
+        );
+        assert_eq!(
+            finding.title, "The GUID changed outside Studio",
+            "ADR 0249 item 6: fix check title"
+        );
+        assert_eq!(
+            finding.reason,
+            "Studio knows this feed as A-83685084-known. The hosted file now has B-83685084-new. Payments from other music feeds that name A-83685084-known stop. A second change has the same effect for feeds that name B-83685084-new.",
+            "ADR 0249 item 6: fix check reason"
+        );
+        assert_eq!(
+            finding.repair,
+            Some(RepairKind::PutBackGuid),
+            "ADR 0249 item 6: fix check first repair"
+        );
+        assert_eq!(
+            finding.second_repair,
+            Some(RepairKind::KeepNewGuid),
+            "ADR 0249 item 6: fix check second repair"
+        );
+        assert_eq!(
+            finding.known_short.as_deref(),
+            Some("A-836850"),
+            "ADR 0249 item 6: fix check short GUID"
+        );
+
+        feed.podcast_guid = facts.known_guid.clone();
+        assert!(
+            !check(&feed, &facts)
+                .iter()
+                .any(|f| f.kind == FindingKind::GuidChangedOutside),
+            "ADR 0249 item 6: fix check put-back condition"
+        );
+        feed.podcast_guid = facts.read_guid.clone();
+        facts.read_guid = facts.known_guid.clone();
+        assert!(
+            !check(&feed, &facts)
+                .iter()
+                .any(|f| f.kind == FindingKind::GuidChangedOutside),
+            "ADR 0249 item 6: fix check equal GUID condition"
+        );
+        facts.read_guid = Some("pending-outside".to_owned());
+        assert!(
+            !check(&feed, &facts)
+                .iter()
+                .any(|f| f.kind == FindingKind::GuidChangedOutside),
+            "ADR 0249 item 6: fix check placeholder condition"
+        );
+        facts.read_guid = Some("B-83685084-new".to_owned());
+        facts.known_guid = None;
+        assert!(
+            !check(&feed, &facts)
+                .iter()
+                .any(|f| f.kind == FindingKind::GuidChangedOutside),
+            "ADR 0249 item 6: fix check missing-known condition"
+        );
     }
 
     fn track(title: &str, length: Option<&str>, duration: Option<&str>) -> Entry<Item> {

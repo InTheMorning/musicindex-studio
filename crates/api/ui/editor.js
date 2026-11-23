@@ -5352,6 +5352,8 @@ function CheckPage({ feed, model, check, go, onOpenFinding }) {
           </span>
           ${row.button && html`<button class="button" type="button" disabled=${busy || actionBusy}
             onClick=${() => press(row)}>${check.repairing === row.key ? 'Working…' : row.button}</button>`}
+          ${row.secondButton && html`<button class="button" type="button" disabled=${busy || actionBusy}
+            onClick=${() => press({ ...row, button: row.secondButton, action: row.secondAction, body: row.secondBody })}>${row.secondButton}</button>`}
         </div>`)}
       </div>`}
       ${answer?.index_line && html`<p class="hint index-line">${answer.index_line}</p>`}

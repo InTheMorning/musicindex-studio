@@ -11,7 +11,7 @@ use axum::http::StatusCode;
 use serde::Deserialize;
 use serde_json::json;
 use studio_core::collection::FeedId;
-use studio_core::feed_check::{self, FindingKind};
+use studio_core::feed_check::{self, FindingKind, RepairKind};
 use studio_core::feed_reads::{self, NetworkFacts};
 use studio_core::pipeline::{self, PipelineError};
 
@@ -87,11 +87,18 @@ fn check_json(w: &Workspace, id: FeedId) -> ApiResult {
     let hosts = w.hosts()?;
     let inputs = pipeline::check_inputs(&w.collection, &hosts, id)?;
     let net = stored(w, id, &inputs.base_key);
-    let mut result = feed_reads::check_with(&inputs.links, net, &inputs.link_targets);
+    let mut result = feed_reads::check_with(
+        &inputs.links,
+        net,
+        &inputs.link_targets,
+        inputs.known_guid.clone(),
+        inputs.read_guid.clone(),
+    );
     let read_only = is_read_only(w, id)?;
     if read_only {
         for finding in &mut result.findings {
             finding.repair = None;
+            finding.second_repair = None;
         }
     }
     let guid = inputs.links.feed.podcast_guid.as_deref();
@@ -182,6 +189,9 @@ pub(crate) async fn run_reads(State(shared): State<Shared>, Path(id): Path<i64>)
 #[derive(Deserialize)]
 pub(crate) struct SentRepair {
     kind: FindingKind,
+    /// The repair of the button, when the finding has two (ADR 0249 item 6).
+    #[serde(default)]
+    repair: Option<RepairKind>,
     #[serde(default)]
     entry: Option<String>,
     #[serde(default)]
@@ -234,8 +244,10 @@ pub(crate) async fn repair(
             &inputs.links,
             stored(w, id, &inputs.base_key),
             &inputs.link_targets,
+            inputs.known_guid.clone(),
+            inputs.read_guid.clone(),
         );
-        let finding = result
+        let mut finding = result
             .findings
             .into_iter()
             .find(|f| {
@@ -243,6 +255,9 @@ pub(crate) async fn repair(
                     && f.entry == body.entry
                     && f.url == body.url
                     && f.field == body.field
+                    && body
+                        .repair
+                        .is_none_or(|r| f.repair == Some(r) || f.second_repair == Some(r))
             })
             .ok_or_else(|| {
                 ApiError::new(
@@ -251,6 +266,11 @@ pub(crate) async fn repair(
                     "the check has no such finding now; check again",
                 )
             })?;
+        // The second button of a finding gives its own repair (ADR 0249 item 6).
+        if let Some(repair) = body.repair {
+            finding.repair = Some(repair);
+            finding.second_repair = None;
+        }
         let step = pipeline::repair_step(&inputs, &finding).map_err(|e| refused(&e))?;
         Ok((finding, step, w.link_reader.clone(), w.file_reader.clone()))
     })

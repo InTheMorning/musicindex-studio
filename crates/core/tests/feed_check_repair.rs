@@ -3,7 +3,7 @@
 //! reads.
 
 use studio_core::collection::{Collection, FeedId};
-use studio_core::connector::{Connector, Expected, LocalFolder};
+use studio_core::connector::{Connector, Expected, LocalFolder, Version};
 use studio_core::feed_check::{Finding, FindingKind, FindingLevel, RepairKind};
 use studio_core::feed_reads::{CheckResult, NetworkFacts, ScriptedFileReads, check_with};
 use studio_core::inventory::Hosts;
@@ -89,7 +89,13 @@ impl Env {
     fn result(&self, net: &NetworkFacts) -> (CheckResult, String) {
         let inputs = pipeline::check_inputs(&self.collection, &self.hosts, self.feed).unwrap();
         (
-            check_with(&inputs.links, Some(net), &inputs.link_targets),
+            check_with(
+                &inputs.links,
+                Some(net),
+                &inputs.link_targets,
+                inputs.known_guid.clone(),
+                inputs.read_guid.clone(),
+            ),
             inputs.revision,
         )
     }
@@ -162,6 +168,115 @@ fn add_the_link_with_a_body_that_has_another_guid_changes_no_draft_and_gives_the
         .unwrap_err();
     assert!(error.to_string().contains("could not read"), "{error}");
     assert_eq!(e.text(), before);
+}
+
+fn guid_change_env() -> (Env, Finding, String) {
+    let mut e = env(&feed_xml(Some(URL), None));
+    e.collection.set_known_guid(e.feed, GUID).unwrap();
+    let mut hosted = studio_core::feed::Feed::read(
+        &studio_core::xml::Document::parse_bytes(
+            feed_xml(Some(URL), None)
+                .replace(GUID, "new-guid")
+                .as_bytes(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    hosted.podcast_guid = Some("new-guid".to_owned());
+    e.collection
+        .record_state(e.feed, &hosted, &Version::new("outside-read"))
+        .unwrap();
+    let mut draft = e.collection.draft(e.feed).unwrap().unwrap();
+    draft.draft_xml = feed_xml(Some(URL), None)
+        .replace(GUID, "new-guid")
+        .into_bytes();
+    e.collection.save_draft(e.feed, &draft).unwrap();
+    let inputs = pipeline::check_inputs(&e.collection, &e.hosts, e.feed).unwrap();
+    let result = studio_core::feed_reads::check_with(
+        &inputs.links,
+        None,
+        &inputs.link_targets,
+        inputs.known_guid.clone(),
+        inputs.read_guid.clone(),
+    );
+    let finding = result
+        .findings
+        .into_iter()
+        .find(|finding| finding.kind == FindingKind::GuidChangedOutside)
+        .unwrap();
+    (e, finding, inputs.revision)
+}
+
+#[test]
+fn put_back_guid_restores_the_known_guid_and_rejects_a_second_repair() {
+    let (e, finding, revision) = guid_change_env();
+    let inputs = pipeline::check_inputs(&e.collection, &e.hosts, e.feed).unwrap();
+    let step = pipeline::repair_step(&inputs, &finding).unwrap();
+    pipeline::apply_check_repair(
+        &e.collection,
+        &e.hosts,
+        e.feed,
+        &finding,
+        &revision,
+        &Proof::Nothing,
+    )
+    .unwrap();
+    assert!(
+        e.text()
+            .contains(&format!("<podcast:guid>{GUID}</podcast:guid>")),
+        "ADR 0249 item 6: fix Plan::apply for PutBackGuid"
+    );
+    assert_eq!(
+        pipeline::guid_change(&e.collection, e.feed).unwrap(),
+        None,
+        "ADR 0249 item 6: fix guid_change after PutBackGuid"
+    );
+    assert_eq!(step, pipeline::Step::Nothing);
+    let fresh = pipeline::check_inputs(&e.collection, &e.hosts, e.feed).unwrap();
+    let error = pipeline::apply_check_repair(
+        &e.collection,
+        &e.hosts,
+        e.feed,
+        &finding,
+        &fresh.revision,
+        &Proof::Nothing,
+    )
+    .unwrap_err();
+    assert!(
+        error.to_string().contains("repair does not apply"),
+        "ADR 0249 item 6: fix apply_check_repair second PutBack"
+    );
+}
+
+#[test]
+fn keep_new_guid_changes_the_known_guid_and_leaves_the_draft_unchanged() {
+    let (e, mut finding, revision) = guid_change_env();
+    let before = e.text();
+    finding.repair = Some(RepairKind::KeepNewGuid);
+    pipeline::apply_check_repair(
+        &e.collection,
+        &e.hosts,
+        e.feed,
+        &finding,
+        &revision,
+        &Proof::Nothing,
+    )
+    .unwrap();
+    assert_eq!(
+        e.text(),
+        before,
+        "ADR 0249 item 6: fix apply_check_repair for KeepNewGuid"
+    );
+    assert_eq!(
+        e.collection.feed(e.feed).unwrap().known_guid.as_deref(),
+        Some("new-guid"),
+        "ADR 0249 item 6: fix Collection::set_known_guid call"
+    );
+    assert_eq!(
+        pipeline::guid_change(&e.collection, e.feed).unwrap(),
+        None,
+        "ADR 0249 item 6: fix guid_change after KeepNewGuid"
+    );
 }
 
 #[test]

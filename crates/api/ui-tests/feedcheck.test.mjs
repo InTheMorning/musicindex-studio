@@ -83,6 +83,19 @@ test('an old link GUID uses the target title and the repair route', () => {
     kind: 'link_guid_old', entry: null, url: 'https://music.example/this-is-it.xml',
   }, owner);
 });
+
+test('an outside GUID finding gives both repair buttons', () => {
+  const owner = 'ADR 0249 item 6: fix checkRows in feedcheck.js.';
+  const row = checkRows(check([finding('guid_changed_outside', 'put_back_guid', {
+    level: 'warning', known_short: '83685084', second_repair: 'keep_new_guid',
+  })]))[0];
+  assert.equal(row.button, 'Put Back 83685084', owner);
+  assert.equal(row.action, 'repair', owner);
+  assert.deepEqual(row.body, { kind: 'guid_changed_outside', entry: null, url: null }, owner);
+  assert.equal(row.secondButton, 'Keep the New GUID', owner);
+  assert.equal(row.secondAction, 'repair', owner);
+  assert.deepEqual(row.secondBody, { kind: 'guid_changed_outside', repair: 'keep_new_guid', entry: null, url: null }, owner);
+});
 const check = (findings, extra = {}) => ({ revision: 'r1', read_only: false, read: true, unreadable: [], findings, ...extra });
 
 test('the tab label has the count, and no count for no finding', () => {

@@ -31,6 +31,10 @@ pub struct CheckInputs {
     pub base_build_date: Option<String>,
     /// The feeds that remote items can name (ADR 0247 item 8).
     pub link_targets: Vec<feed_check::LinkTarget>,
+    /// The GUID that Studio keeps for this feed (ADR 0249 item 6).
+    pub known_guid: Option<String>,
+    /// The GUID of the last hosted read (ADR 0249 item 6).
+    pub read_guid: Option<String>,
 }
 
 /// The inputs of the check for the draft of a feed. The function makes no
@@ -45,6 +49,7 @@ pub fn check_inputs(
     hosts: &Hosts,
     id: FeedId,
 ) -> Result<CheckInputs, PipelineError> {
+    let row = collection.feed(id)?;
     let draft = current_draft(collection, id)?;
     let link_targets = feed_check::link_targets(collection)?;
     Ok(CheckInputs {
@@ -56,6 +61,8 @@ pub fn check_inputs(
             .and_then(|doc| Feed::read(&doc).ok())
             .and_then(|base| base.last_build_date),
         link_targets,
+        known_guid: row.known_guid,
+        read_guid: row.podcast_guid,
     })
 }
 
@@ -133,7 +140,9 @@ pub fn repair_step(inputs: &CheckInputs, finding: &Finding) -> Result<Step, Pipe
             | RepairKind::UseLnurlAddress
             | RepairKind::UseNodeAddress
             | RepairKind::AddHttps
-            | RepairKind::UseTheGuidOf,
+            | RepairKind::UseTheGuidOf
+            | RepairKind::PutBackGuid
+            | RepairKind::KeepNewGuid,
         ) => Ok(Step::Nothing),
         Some(RepairKind::ReadTheSize) => {
             let url = item_of(&links.feed, finding.entry.as_deref())
@@ -215,11 +224,28 @@ pub fn apply_check_repair(
             "the draft changed after this model was read; read the draft again",
         ));
     }
+    if finding.repair == Some(RepairKind::KeepNewGuid) {
+        let Some(guid) = row.podcast_guid.as_deref() else {
+            return Err(invalid("this repair does not apply to the draft"));
+        };
+        if crate::pipeline::has_placeholder_guid(guid) || Some(guid) == row.known_guid.as_deref() {
+            return Err(invalid("this repair does not apply to the draft"));
+        }
+        collection.set_known_guid(id, guid)?;
+        return Ok(draft);
+    }
     let moved = feed_move(collection, hosts, &row)?;
     let url = draft_url(hosts, &row, moved.as_ref())?;
     let feed = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
     let targets = feed_check::link_targets(collection)?;
-    let plan = plan_of(&feed, finding, url.as_deref(), proof, &targets)?;
+    let plan = plan_of(
+        &feed,
+        finding,
+        url.as_deref(),
+        proof,
+        &targets,
+        row.known_guid.as_deref(),
+    )?;
     let before_xml = draft.draft_xml.clone();
     let changed = changed_draft(draft, |feed| plan.apply(feed))?;
     let changed = dated_like_base(changed, &before_xml)?;
@@ -253,6 +279,8 @@ enum Plan {
         url: String,
         targets: Vec<feed_check::LinkTarget>,
     },
+    /// Restore the GUID that Studio keeps (ADR 0249 item 6).
+    FeedGuid { guid: String },
 }
 
 impl Plan {
@@ -333,6 +361,7 @@ impl Plan {
                     let _ = feed_check::correct_old_links(feed, targets, Some(&target.guid));
                 }
             }
+            Self::FeedGuid { guid } => feed.podcast_guid = Some(guid.clone()),
         }
     }
 }
@@ -343,8 +372,10 @@ fn plan_of(
     url: Option<&str>,
     proof: &Proof,
     targets: &[feed_check::LinkTarget],
+    known_guid: Option<&str>,
 ) -> Result<Plan, PipelineError> {
     match finding.repair {
+        Some(RepairKind::PutBackGuid) => put_back_guid_plan(feed, known_guid),
         Some(RepairKind::AddTheLink) => {
             let address = confirmed(proof, url)?;
             if feed.self_url().is_some() {
@@ -445,6 +476,16 @@ fn plan_of(
 
 /// The plan of the repair `AddHttps`. It refuses when the field of the draft
 /// does not have the text of the finding any more (ADR 0245 item 2).
+fn put_back_guid_plan(feed: &Feed, known_guid: Option<&str>) -> Result<Plan, PipelineError> {
+    let guid = known_guid.ok_or_else(|| invalid("this repair does not apply to the draft"))?;
+    if feed.podcast_guid.as_deref() == Some(guid) {
+        return Err(invalid("this repair does not apply to the draft"));
+    }
+    Ok(Plan::FeedGuid {
+        guid: guid.to_owned(),
+    })
+}
+
 fn full_address_plan(feed: &Feed, finding: &Finding) -> Result<Plan, PipelineError> {
     let (Some(field), Some(named)) = (finding.field.clone(), finding.url.as_deref()) else {
         return Err(invalid("the finding names no address field"));

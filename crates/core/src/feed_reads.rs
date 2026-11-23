@@ -201,6 +201,8 @@ pub fn facts_for(
             .and_then(|n| n.move_chain.clone())
             .filter(|chain| chain.first().map(String::as_str) == tag),
         index: index_of(net, links.feed.podcast_guid.as_deref()).cloned(),
+        known_guid: None,
+        read_guid: None,
     }
 }
 
@@ -273,16 +275,22 @@ pub struct CheckResult {
     pub unreadable: Vec<String>,
 }
 
-/// Check the draft in `links` with the last network facts `net`. The
+/// Check the draft in `links` with the last network facts `net`, the
+/// known GUID and the GUID of the last read (ADR 0249 item 6). The
 /// function sends no request.
 #[must_use]
 pub fn check_with(
     links: &OwnedDraftLinks,
     net: Option<&NetworkFacts>,
     link_targets: &[feed_check::LinkTarget],
+    known_guid: Option<String>,
+    read_guid: Option<String>,
 ) -> CheckResult {
+    let mut facts = facts_for(links, net, link_targets);
+    facts.known_guid = known_guid;
+    facts.read_guid = read_guid;
     CheckResult {
-        findings: feed_check::check(&links.feed, &facts_for(links, net, link_targets)),
+        findings: feed_check::check(&links.feed, &facts),
         unreadable: net.map(|n| n.unreadable.clone()).unwrap_or_default(),
     }
 }
@@ -894,7 +902,7 @@ mod tests {
         assert_eq!(net.index, None);
         assert_eq!(net.unreadable, Vec::<String>::new());
         assert!(
-            check_with(&links(Feed::default()), Some(&net), &[])
+            check_with(&links(Feed::default()), Some(&net), &[], None, None)
                 .findings
                 .iter()
                 .all(|f| !matches!(
@@ -919,7 +927,7 @@ mod tests {
         let feed = feed_with_track("https://files.example/a.mp3", None);
         gather_index(&links(feed.clone()), &reads, &mut net);
         assert_eq!(reads.reads().len(), 2);
-        let kinds: Vec<_> = check_with(&links(feed.clone()), Some(&net), &[])
+        let kinds: Vec<_> = check_with(&links(feed.clone()), Some(&net), &[], None, None)
             .findings
             .iter()
             .map(|f| f.kind)

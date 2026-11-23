@@ -22,7 +22,7 @@ Recommendation:
 
 Items 2 and 3 change ADR 0234 item 1. The operator asked for a note only. A mockup and an ADR are open.
 
-## Findings 2 to 9: the White Triangles tutorial walk
+## Findings 2 to 10: the White Triangles tutorial walk
 
 These findings come from the walk of rc.32 for the White Triangles tutorial. The walk used a test SFTP server and test copies of the two feeds. The operator did not see these findings in use.
 
@@ -87,3 +87,15 @@ Recommendation: question for the operator. A button and a menu row can have diff
 An artist page adds an existing release in the section **Releases**. Review of the artist page shows only the artist page. The change to the album ("Artist or label: Added") is in the draft of the album, and the user must open the album and write it in a second review. For a new release, one review writes the release with its pages ([ADR 0234](../adr/0234-a-new-release-is-written-with-its-pages-and-a-one-sided-link-is-reported.md)).
 
 Recommendation: question for the operator. Show the album change as a row of the artist page review, as for a new release. This changes the scope of ADR 0234 and needs an ADR.
+
+## Finding 10: Studio cannot correct a misspelled tag
+
+Finding 3 is about the message. This finding is about the repair. With `podcast:meduim`, Studio cannot correct the tag. The user must edit the feed file on the server with a different tool, then select **Read Again**.
+
+What the code does:
+
+- A feed with no known medium goes to **Other feeds**, and Studio shows only its facts (`otherFeedText`, `crates/api/ui/shell.js` line 111). The page has no control that sets the medium.
+- `FindingKind` has no value for a missing medium or for an unknown `podcast:` tag (`crates/core/src/feed_check.rs`). Thus **Issues** has no correction to offer.
+- The editor of a release has no field for an unknown tag. A tag that Studio does not know stays in the feed as it is.
+
+Recommendation: improvement. Studio offers a correction for a feed with no medium and with audio enclosures. The correction reads "This feed has `podcast:meduim`. Change it to `podcast:medium`?" The change goes through Review and a write, as each other correction does. It also makes the feed a release that Studio can edit. This changes which feeds Studio writes, so it needs an ADR.

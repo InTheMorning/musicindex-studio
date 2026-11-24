@@ -344,7 +344,8 @@ A phase gets task files in `docs/tasks/` before work starts.
 - Step 2, the rule of a move (topics B, C and D of the brief): one **Move To…** entry point on each page row and page head, one destination menu, and a release list with check boxes. One **Add** sheet shows the pages of the collection first, then Music Index, then a new page. The row "Find an artist that is online" goes. Mockups come first. Then one ADR changes ADR 0240 items 3 and 12 to 25 and ADR 0243 items 7 to 12.
 - Step 3, a move that is not written (topic E and observation 19): a mark on a page with a changed place, a section "What moves" in Review, and a panel row for the open change set. Mockups, then an ADR.
 - Step 4, the hierarchy of the panel (topic A and observation 18): a tree of pages, a path above the main pane, and the pages below a hosting page or a label page in its main pane. Mockups, then an ADR that changes ADR 0215. At 760 px or less, the levels stay a stack.
-- Not in this work: drag and drop.
+- Before steps 2 to 4: the roles, the levels and the screen words ([note of 2026-11-24](../notes/2026-11-24-roles-levels-and-words.md)). The operator selected roles for each link, four level roles and the word "Publisher" for the role `hosting`. A musicindex record owns these rules, so the proposal goes to the orchestrator session. The Studio ADR for steps 2 to 4 follows that record.
+- The prototype also uses drag and drop, with Undo, as a quick path on the desktop. The operator has not decided it yet.
 
 ### Phase 13: Desktop Shell
 

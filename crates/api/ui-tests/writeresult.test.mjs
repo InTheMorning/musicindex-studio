@@ -118,6 +118,18 @@ test('ADR 0251 item 5: alsoRows gives each added and removed link text', () => {
   assert.ok(rows.every((row) => row.locked && row.checked));
 });
 
+test('ADR 0251 item 12: alsoRows names the release for a changed page link', () => {
+  const rows = alsoRows([
+    { id: 4, title: 'Release', side: 'release', artist: false, change: 'added', via: null },
+    { id: 5, title: 'New page', side: 'page', artist: true, change: 'added', via: 4 },
+  ], { 4: diffs[7], 5: diffs[7] }, new Set(), 'Artist');
+  assert.deepEqual(rows[1], {
+    id: 5, title: 'New page', side: 'page', artist: true, change: 'added', via: 4,
+    diff: diffs[7], checked: true, locked: true, label: 'Also write New page',
+    note: 'Adds the link to Release on New page.',
+  }, 'ADR 0251 item 12: the linked page row is locked and names its release. Fix alsoRows in writeresult.js.');
+});
+
 test('ADR 0251 item 7: writeInOrder writes release rows before the page', async () => {
   const calls = [];
   const step = (name) => async () => { calls.push(name); return { name }; };

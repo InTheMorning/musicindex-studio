@@ -17,7 +17,7 @@ import { roleSummary } from './roles.js';
 import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName, newFeedView, pageLevel, movedReleaseView } from './shell.js';
 import { isLiveItem, liveKey, liveDot, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner, OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning, hasBadAddress, problemGroup, setLiveStreamType, viewAfterLiveGone, withoutLive } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
-import { checkRows, unreadableRows, hasShowGrant, checkTexts, pageRefusalView, linkedRefusalView, guidChangeView, repairAddresses, wrongAddressSet, OPEN_ACTIONS, COPY_SHEET_TEXT, WAYS_SHEET_TEXT } from './feedcheck.js';
+import { checkRows, unreadableRows, hasShowGrant, checkTexts, pageRefusalView, linkedRefusalView, NEW_PAGE_CHOICE, guidChangeView, repairAddresses, wrongAddressSet, OPEN_ACTIONS, COPY_SHEET_TEXT, WAYS_SHEET_TEXT } from './feedcheck.js';
 import { addressParts } from './breaks.js';
 import { buildDateNotices } from './builddate.js';
 import { versionLabel, LOCK_HELP, hasSpace, spaceNotice, ROW_SPACE_NOTE, newFeedAddress, newFeedAddressLine, libraryFolderRow } from './feedfacts.js';
@@ -2148,7 +2148,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
   const linkedStops = alsoList.filter((row) => row.refusal);
   const linkedStopViews = linkedStops.map((row) => {
     const candidates = pageLinkCandidates(feeds, null).filter((page) => page.id !== feedId);
-    return { row, candidates, view: linkedRefusalView(row, candidates.length) };
+    return { row, candidates, view: linkedRefusalView(row) };
   }).filter((entry) => entry.view);
   const linkedStop = linkedStopViews.length > 0;
   const toggleAlso = (id, on) => setAlsoOff((prev) => {
@@ -2318,7 +2318,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
   const deletion = diff && deleteWrite(diff);
   // The pages of the menu "Link to an artist or label page" (ADR 0218 item 3).
   const pageCandidates = pageLinkCandidates(feeds, draft.model);
-  const pageRefusal = diff && pageRefusalView(diff.page_refusal, Boolean(selectedPage), pageCandidates.length);
+  const pageRefusal = diff && pageRefusalView(diff.page_refusal, Boolean(selectedPage));
   const guid = diff && guidChangeView(diff.guid_change, guidText);
   const keepKnownGuid = () => run(async () => {
     draft.show(await api(`/feeds/${feedId}/keep-known-guid`, { method: 'POST' }));
@@ -2353,6 +2353,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
     await refreshDiff();
     setAlsoReload((n) => n + 1);
   });
+  const chooseNewArtist = (release = null) => { ref.current.close(); onMakeArtist(release ? { release } : {}); };
   // The error of a write shows in the footer, directly above the check box
   // "Send a podping" (ADR 0228 item 16).
   const writeError = pageFailure
@@ -2411,20 +2412,21 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
       ${refusal && html`<${LinkRefusal} refusal=${refusal} busy=${busy} onRepair=${repair} />`}
       ${pageRefusal && html`<div class="notice error" role="alert"><strong>${pageRefusal.title}</strong><p>${pageRefusal.line}</p>
         ${pageRefusal.menu && html`<div class="group rows"><${ChoiceSelect} id="review-page" label=${pageRefusal.label} value=${selectedPage}
-          placeholder=${pageRefusal.placeholder} options=${pageCandidates.map((c) => [String(c.id), c.title || 'Untitled feed'])}
+          placeholder=${pageRefusal.placeholder} options=${[...pageCandidates.map((c) => [String(c.id), c.title || 'Untitled feed']), [NEW_PAGE_CHOICE, pageRefusal.newChoice]]}
           onChange=${setSelectedPage} /></div>`}
         <div class="actions"><button class="button action" type="button" disabled=${busy || pageRefusal.linkDisabled}
-          onClick=${pageRefusal.menu ? linkAndContinue : () => { ref.current.close(); onMakeArtist(); }}>${pageRefusal.button}</button></div>
+          onClick=${selectedPage === NEW_PAGE_CHOICE ? () => chooseNewArtist() : linkAndContinue}>${pageRefusal.button}</button></div>
       </div>`}
       ${linkedStopViews.map(({ row: linkedRow, candidates, view }) => html`<div class="notice error" role="alert" key=${`linked-stop-${linkedRow.id}`}>
         <strong>${view.title}</strong><p>${view.line}</p>
         ${view.menu && html`<div class="group rows"><${ChoiceSelect} id=${`review-linked-page-${linkedRow.id}`} label=${view.label}
           value=${selectedLinkedPages[linkedRow.id] || ''} placeholder=${view.placeholder}
-          options=${candidates.map((candidate) => [String(candidate.id), candidate.title || 'Untitled feed'])}
+          options=${[...candidates.map((candidate) => [String(candidate.id), candidate.title || 'Untitled feed']), [NEW_PAGE_CHOICE, view.newChoice]]}
           onChange=${(value) => setSelectedLinkedPages((selected) => ({ ...selected, [linkedRow.id]: value }))} /></div>`}
         <div class="actions">
           ${view.menu && html`<button class="button action" type="button" disabled=${busy || !selectedLinkedPages[linkedRow.id]}
-            onClick=${() => resolveLinkedStop(linkedRow, selectedLinkedPages[linkedRow.id])}>${view.link}</button>`}
+            onClick=${selectedLinkedPages[linkedRow.id] === NEW_PAGE_CHOICE ? () => chooseNewArtist(linkedRow.id)
+              : () => resolveLinkedStop(linkedRow, selectedLinkedPages[linkedRow.id])}>${view.link}</button>`}
           <button class="button" type="button" disabled=${busy} onClick=${() => keepLinkedRelease(linkedRow)}>${view.keep}</button>
         </div>
       </div>`)}
@@ -2578,13 +2580,17 @@ export function DraftToolbar({ feedId, feedConnectorId, draft, onWritten, connec
   // The page whose draft a link in Review changed (ADR 0218 item 7).
   const [linkedPage, setLinkedPage] = useState(null);
   // The form that makes an artist page from Review (ADR 0218 item 6).
-  const [making, setMaking] = useState(false);
+  const [making, setMaking] = useState(null);
   useUndoKeys(draft.undo, draft.redo);
   const madeArtist = async (page) => {
-    setMaking(false);
+    const request = making;
+    setMaking(null);
     if (!page || !(await draft.flush())) return;
-    await linkPublisherPage(page.id, feedId);
-    setLinkedPage({ id: page.id, title: page.title || 'Untitled feed' });
+    if (request?.release) await linkPublisherPage(page.id, request.release);
+    else {
+      await linkPublisherPage(page.id, feedId);
+      setLinkedPage({ id: page.id, title: page.title || 'Untitled feed' });
+    }
     await draft.load();
     await onListChanged?.();
     setOpen('review');
@@ -2616,10 +2622,10 @@ export function DraftToolbar({ feedId, feedConnectorId, draft, onWritten, connec
     <button class="button primary" type="button" onClick=${() => setOpen('review')}>Review</button>
     <${ReviewSheet} feedId=${feedId} feedConnectorId=${feedConnectorId} draft=${draft} open=${open === 'review'} mergeRequest=${mergeRequest}
       onWritten=${onWritten} onClose=${() => setOpen(null)} connectors=${connectors} onOpenHosts=${onOpenHosts}
-      feeds=${feeds} onListChanged=${onListChanged} onMakeArtist=${() => setMaking(true)} linkedPage=${linkedPage} setLinkedPage=${setLinkedPage}
+      feeds=${feeds} onListChanged=${onListChanged} onMakeArtist=${(request) => setMaking(request || {})} linkedPage=${linkedPage} setLinkedPage=${setLinkedPage}
       onOpsChanged=${onOpsChanged} onOpsCleared=${onOpsCleared} go=${go} />
     ${making && html`<${AddFeedRowSheet} open=${ARTIST_PAGE_FORM} connectors=${connectors} feeds=${feeds || []}
-      start=${{ title: draft.model?.author || '', role: 'artist' }} onAdded=${madeArtist} onClose=${() => setMaking(false)} />`}
+      start=${{ title: making.release ? '' : draft.model?.author || '', role: 'artist' }} onAdded=${madeArtist} onClose=${() => setMaking(null)} />`}
     <${VersionsSheet} feedId=${feedId} draft=${draft} open=${open === 'versions'} onClose=${() => setOpen(null)} />
   </div>`;
 }

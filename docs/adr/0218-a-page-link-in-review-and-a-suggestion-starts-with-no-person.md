@@ -6,6 +6,7 @@
 - Accepted: 2026-11-19 by the operator, through the questionnaire, from drawings. For T4, the operator selected "Link in Review". For T6, the operator selected "Select first".
 - Technical choices: the main session selected items 4, 6, 7, 9, 12 and 13.
 - Bar: opposite choice by mistake. An agent can send the user out of Review to link a page, or start a suggestion on "A new person". Items 1 to 7 also cross the editor, the Check tab and the result panel of ADR 0217.
+- Changed by: [ADR 0251](0251-review-writes-the-two-sides-of-a-changed-link.md) item 13, on 2026-11-23. Items 3 and 6: the menu always shows, and its last choice "New artist page…" opens the form of item 6. The button **Make an Artist Page…** is removed.
 - Changes: [ADR 0213](0213-a-release-starts-on-the-page-of-its-artist.md) items 18, 19 and 21. Review links the page itself, and the write button shows disabled.
 - Changes: [ADR 0203](0203-people.md) item 39. The menu "Person" starts on "Select a person" when no person has the name of the suggestion.
 - Changes: [ADR 0217](0217-a-new-artist-sees-the-result-of-a-write-the-payment-types-and-an-undo-of-a-merge.md) item 2. The result panel tells a page that the link changed.

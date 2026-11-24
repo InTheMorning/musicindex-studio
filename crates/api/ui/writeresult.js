@@ -34,17 +34,18 @@ export const ALSO_WRITE_HINT = 'A link is written on its two feeds.';
 // The text under a row (ADR 0251 item 5). `side` is the side of the row.
 // A page row is in Review of a release, and a release row is in Review of a
 // page.
-function linkNote(page, title, reviewed) {
+function linkNote(page, title, reviewed, viaTitle) {
   const added = page.change !== 'removed';
   if (page.side === 'release') {
     return added
       ? `Adds ${reviewed} as the artist or label of ${title}.`
       : `Removes ${reviewed} from the artist or label of ${title}.`;
   }
-  const place = page.artist ? 'the artist page' : title;
+  const place = page.via ? title : page.artist ? 'the artist page' : title;
+  const target = page.via ? viaTitle : reviewed;
   return added
-    ? `Adds the link to ${reviewed} on ${place}.`
-    : `Removes the link to ${reviewed} from ${place}.`;
+    ? `Adds the link to ${target} on ${place}.`
+    : `Removes the link to ${target} from ${place}.`;
 }
 
 export function alsoRows(also, diffs, off, reviewTitle) {
@@ -53,17 +54,19 @@ export function alsoRows(also, diffs, off, reviewTitle) {
     .filter((page) => diffs && diffs[page.id])
     .map((page) => {
       const title = page.title || 'Untitled feed';
+      const viaTitle = page.via && (also || []).find((entry) => entry.id === page.via)?.title;
       return {
         id: page.id,
         title,
         side: page.side,
         artist: page.artist,
         change: page.change,
+        via: page.via ?? null,
         diff: diffs[page.id],
         checked: true,
         locked: true,
         label: `Also write ${title}`,
-        note: linkNote(page, title, reviewed),
+        note: linkNote(page, title, reviewed, viaTitle || 'Untitled feed'),
       };
     });
 }

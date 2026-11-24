@@ -96,22 +96,23 @@ const PAGE_REFUSAL_TEXT = {
   no_artist_page: { line: 'Music Index lists each release under its artist.', label: 'Artist page', write: 'Link an artist page first.' },
   no_publisher_page: { line: 'Music Index lists each feed under its page.', label: 'Page', write: 'Link a page first.' },
 };
+export const NEW_PAGE_CHOICE = 'new';
 
 // The refusal panel of Review (ADR 0218 items 1 to 6). `selected` is true
-// after a selection in the menu. With no candidate page, the panel has the
-// button that makes an artist page in place of the menu.
-export function pageRefusalView(reason, selected = false, candidates = 1) {
+// after a selection in the menu. The last choice of the menu makes an artist
+// page (ADR 0251 item 13).
+export function pageRefusalView(reason, selected = false) {
   const title = PAGE_FINDING_TEXT[reason];
   if (!title) return null;
   return {
     title, ...PAGE_REFUSAL_TEXT[reason], placeholder: 'Select a page',
-    button: candidates > 0 ? 'Link and Continue' : 'Make an Artist Page…',
-    menu: candidates > 0, linkDisabled: candidates > 0 && !selected,
+    button: 'Link and Continue', menu: true, linkDisabled: !selected,
+    newChoice: 'New artist page…',
   };
 }
 
 // The Stop panel for a linked release (ADR 0251 items 10 and 11).
-export function linkedRefusalView(row, candidates) {
+export function linkedRefusalView(row) {
   const text = {
     no_artist_page: {
       line: 'A release needs an artist page.', label: 'Artist page',
@@ -124,7 +125,8 @@ export function linkedRefusalView(row, candidates) {
   }[row.refusal];
   if (!text) return null;
   return {
-    ...text, placeholder: 'Select a page', menu: candidates > 0,
+    ...text, placeholder: 'Select a page', menu: true,
+    newChoice: 'New artist page…',
     link: 'Link and Continue', keep: 'Keep the Release',
     write: `Link a page to ${row.title} first.`,
   };

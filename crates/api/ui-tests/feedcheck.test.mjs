@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   tabLabel, checkCount, checkRows, unreadableRows, repairLabel, hasShowGrant, checkTexts,
-  PAGE_FINDING_TEXT, pageRefusalView, linkedRefusalView, guidChangeView,
+  PAGE_FINDING_TEXT, pageRefusalView, linkedRefusalView, NEW_PAGE_CHOICE, guidChangeView,
   addressPanelView, repairAddresses, peoplePanelView, ADDRESS_WRITE_LINE,
   releaseChecklist, wrongAddressSet,
   CHECK_LEAD, CHECK_NONE, CHECK_GRANT, CHECK_READ_ONLY, CHECK_UNREADABLE,
@@ -94,17 +94,17 @@ test('the payment page address mark uses wrong address findings', () => {
 
 test('ADR 0251 items 10 and 11: linked refusals give the Stop panel texts', () => {
   const owner = 'ADR 0251 items 10 and 11: fix linkedRefusalView in feedcheck.js.';
-  assert.deepEqual(linkedRefusalView({ title: 'Release', refusal: 'no_artist_page' }, 2), {
+  assert.deepEqual(linkedRefusalView({ title: 'Release', refusal: 'no_artist_page' }), {
     title: 'Release has no other artist page.', line: 'A release needs an artist page.',
-    label: 'Artist page', placeholder: 'Select a page', menu: true,
+    label: 'Artist page', placeholder: 'Select a page', menu: true, newChoice: 'New artist page…',
     link: 'Link and Continue', keep: 'Keep the Release', write: 'Link a page to Release first.',
   }, owner);
-  assert.deepEqual(linkedRefusalView({ title: 'Show', refusal: 'no_publisher_page' }, 0), {
+  assert.deepEqual(linkedRefusalView({ title: 'Show', refusal: 'no_publisher_page' }), {
     title: 'Show has no other artist, label or hosting page.', line: 'A release needs a page.',
-    label: 'Page', placeholder: 'Select a page', menu: false,
+    label: 'Page', placeholder: 'Select a page', menu: true, newChoice: 'New artist page…',
     link: 'Link and Continue', keep: 'Keep the Release', write: 'Link a page to Show first.',
   }, owner);
-  assert.equal(linkedRefusalView({ title: 'Release', refusal: 'unknown' }, 1), null, owner);
+  assert.equal(linkedRefusalView({ title: 'Release', refusal: 'unknown' }), null, owner);
 });
 
 test('an old link GUID uses the target title and the repair route', () => {
@@ -274,8 +274,8 @@ test('page findings use the words of ADR 0213 items 18 and 19', () => {
 });
 
 test('the refusal panel of Review links a page (ADR 0218 items 1 to 6)', () => {
-  const owner = 'ADR 0218 items 1 to 6: the refusal panel gives its texts, the menu and Link and Continue. Fix pageRefusalView in feedcheck.js.';
-  assert.deepEqual(pageRefusalView('no_artist_page', false, 2), {
+  const owner = 'ADR 0251 items 10 and 13: the refusal panel gives its menu and new artist choice. Fix pageRefusalView in feedcheck.js.';
+  assert.deepEqual(pageRefusalView('no_artist_page', false), {
     title: 'This release has no artist page.',
     line: 'Music Index lists each release under its artist.',
     label: 'Artist page',
@@ -284,13 +284,15 @@ test('the refusal panel of Review links a page (ADR 0218 items 1 to 6)', () => {
     button: 'Link and Continue',
     menu: true,
     linkDisabled: true,
+    newChoice: 'New artist page…',
   }, owner);
-  assert.equal(pageRefusalView('no_artist_page', true, 2).linkDisabled, false, owner);
-  const show = pageRefusalView('no_publisher_page', false, 1);
+  assert.equal(pageRefusalView('no_artist_page', true).linkDisabled, false, owner);
+  const show = pageRefusalView('no_publisher_page', false);
   assert.deepEqual([show.title, show.line, show.label, show.write],
     ['This feed has no artist, label or hosting page.', 'Music Index lists each feed under its page.', 'Page', 'Link a page first.'], owner);
-  const none = pageRefusalView('no_artist_page', false, 0);
-  assert.deepEqual([none.menu, none.button, none.linkDisabled], [false, 'Make an Artist Page…', false], owner);
+  const none = pageRefusalView('no_artist_page', false);
+  assert.deepEqual([none.menu, none.button, none.linkDisabled, none.newChoice], [true, 'Link and Continue', true, 'New artist page…'], owner);
+  assert.equal(NEW_PAGE_CHOICE, 'new', owner);
   assert.equal(pageRefusalView(null), null, owner);
 });
 

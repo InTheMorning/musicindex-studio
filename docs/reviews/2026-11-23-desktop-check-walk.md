@@ -155,3 +155,5 @@ A temporary API test confirmed observation 2. A written release links to a writt
 Task 243 corrects observation 2 with ADR 0251 items 9 to 11. The screenshot harness showed the Stop panel at 1100 px and 390 px, with the write off. **Keep the Release** removed the panel and the row. **Link and Continue** with HeyCitizen removed the panel, and the write of the page and the release passed. The fit check gave no finding.
 
 Open point: after **Link and Continue**, the draft of the new page (HeyCitizen) has the new link, but Review of the first page does not write it. The new page stays "Saved, not written" until its own Review writes it.
+
+Task 244 closes the open point with ADR 0251 items 12 and 13. Review of the first page shows the new page as a locked row, and one write wrote the three feeds in the harness. The choice "New artist page…" opened the form, and after the page was made, one write wrote the page, the release and the new page.

@@ -1703,7 +1703,7 @@ async fn the_diff_of_a_new_release_names_its_artist_page_and_two_writes_leave_no
     assert_eq!(status, StatusCode::OK, "{diff}");
     assert_eq!(
         diff["also_write"],
-        json!([{ "id": artist_id, "title": "Artist", "side": "page", "artist": true, "change": "added", "refusal": null }]),
+        json!([{ "id": artist_id, "title": "Artist", "side": "page", "artist": true, "change": "added", "refusal": null, "via": null }]),
         "ADR 0251 item 9: linked_feeds_to_write must include the page side"
     );
     let (_, lonely_diff) = call(
@@ -1724,7 +1724,7 @@ async fn the_diff_of_a_new_release_names_its_artist_page_and_two_writes_leave_no
     assert_eq!(artist_diff["changed"], true, "{artist_diff}");
     assert_eq!(
         artist_diff["also_write"],
-        json!([{ "id": release_id, "title": "Release", "side": "release", "artist": false, "change": "added", "refusal": null }]),
+        json!([{ "id": release_id, "title": "Release", "side": "release", "artist": false, "change": "added", "refusal": null, "via": null }]),
         "ADR 0251 item 9: linked_feeds_to_write must include the release side"
     );
 
@@ -1792,12 +1792,12 @@ async fn a_changed_link_of_two_written_feeds_gives_a_row_on_each_side() {
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(
         also(&diff_of(second_id).await),
-        json!([{ "id": release_id, "title": "Release", "side": "release", "artist": false, "change": "added", "refusal": null }]),
+        json!([{ "id": release_id, "title": "Release", "side": "release", "artist": false, "change": "added", "refusal": null, "via": null }]),
         "ADR 0251 item 2: Review of the page must offer the written release. Fix linked_feeds_to_write or changed_links."
     );
     assert_eq!(
         also(&diff_of(release_id).await),
-        json!([{ "id": second_id, "title": "Second", "side": "page", "artist": true, "change": "added", "refusal": null }]),
+        json!([{ "id": second_id, "title": "Second", "side": "page", "artist": true, "change": "added", "refusal": null, "via": null }]),
         "ADR 0251 item 2: Review of the release must offer the written page. Fix linked_feeds_to_write or changed_links."
     );
 
@@ -1827,7 +1827,7 @@ async fn a_changed_link_of_two_written_feeds_gives_a_row_on_each_side() {
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(
         also(&diff_of(second_id).await),
-        json!([{ "id": release_id, "title": "Release", "side": "release", "artist": false, "change": "removed", "refusal": null }]),
+        json!([{ "id": release_id, "title": "Release", "side": "release", "artist": false, "change": "removed", "refusal": null, "via": null }]),
         "ADR 0251 item 3: an unlink must give a removed row. Fix changed_links."
     );
 }
@@ -1859,6 +1859,28 @@ async fn a_linked_release_refusal_is_in_the_page_review_until_the_link_returns()
     assert_eq!(
         diff["also_write"][0]["refusal"], "no_artist_page",
         "ADR 0251 item 9: include the linked release refusal. Fix linked_feeds_to_write."
+    );
+
+    let second = make_artist_page(&app, connector, "second-artist.xml", "Second Artist").await;
+    let second_id = second["id"].as_i64().unwrap();
+    assert_eq!(write_with_own_diff(&app, second_id).await.0, StatusCode::OK);
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{second_id}/links"),
+        Some(json!({ "release": release_id })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, diff) = call(&app, "GET", &format!("/api/v1/feeds/{page_id}/diff"), None).await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    assert_eq!(
+        diff["also_write"],
+        json!([
+            { "id": release_id, "title": "Release", "side": "release", "artist": false, "change": "removed", "refusal": null, "via": null },
+            { "id": second_id, "title": "Second Artist", "side": "page", "artist": true, "change": "added", "refusal": null, "via": release_id }
+        ]),
+        "ADR 0251 item 12: Review of A must include the changed page C through release B. Fix linked_feeds_to_write."
     );
 
     let (status, body) = call(

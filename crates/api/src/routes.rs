@@ -5055,6 +5055,7 @@ fn linked_feeds_to_write(
     id: FeedId,
 ) -> Result<Vec<Value>, ApiError> {
     let mut linked = Vec::new();
+    let mut included = std::collections::HashSet::new();
     for changed in publisher::changed_links(&w.collection, Some(library), id)? {
         let row = w.collection.feed(changed.feed)?;
         let (feed, _) = pipeline::draft_model(&w.collection, changed.feed)?;
@@ -5067,7 +5068,32 @@ fn linked_feeds_to_write(
             "artist": artist,
             "change": changed.change,
             "refusal": feed_page_refusal(w, changed.feed)?,
+            "via": null,
         }));
+        included.insert(changed.feed);
+        if changed.side == publisher::LinkSide::Release {
+            for page in publisher::changed_links(&w.collection, Some(library), changed.feed)? {
+                if page.side != publisher::LinkSide::Page
+                    || page.feed == id
+                    || !included.insert(page.feed)
+                {
+                    continue;
+                }
+                let row = w.collection.feed(page.feed)?;
+                let (feed, _) = pipeline::draft_model(&w.collection, page.feed)?;
+                let artist = row.medium.as_deref() == Some("publisher")
+                    && row.publisher_roles.contains(&PublisherRole::Artist);
+                linked.push(json!({
+                    "id": page.feed.0,
+                    "title": feed.title.or(row.title),
+                    "side": page.side,
+                    "artist": artist,
+                    "change": page.change,
+                    "refusal": feed_page_refusal(w, page.feed)?,
+                    "via": changed.feed.0,
+                }));
+            }
+        }
     }
     Ok(linked)
 }

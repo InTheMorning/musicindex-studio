@@ -50,9 +50,9 @@ pub enum FindingKind {
     /// An open copy of the feed has other payment recipients (ADR 0175
     /// item 6).
     CopyOtherRecipients,
-    /// The release has no artist page (ADR 0213 item 18).
+    /// The release has no artist page (ADR 0256 item 18).
     NoArtistPage,
-    /// The playlist or show has no publisher page (ADR 0213 item 18).
+    /// The playlist or show has no publisher page (ADR 0256 item 18).
     NoPublisherPage,
     /// A music release has no tracks or live items.
     NoTracks,
@@ -108,7 +108,7 @@ pub enum RepairKind {
     OpenTheTrack,
     /// **Select a Language**.
     SelectALanguage,
-    /// **Link a Page** (ADR 0213 item 19).
+    /// **Link a Page** (ADR 0256 item 19).
     LinkAPage,
     /// **Make It the Artist Link** (ADR 0252 item 4).
     MakeItTheArtistLink,
@@ -126,7 +126,7 @@ pub enum RepairKind {
     AddHttps,
 }
 
-/// The reason why a feed cannot be written under ADR 0213 item 21.
+/// The reason why a feed cannot be written under ADR 0256 item 21.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PageRefusal {
@@ -148,7 +148,7 @@ impl PageRefusal {
 }
 
 /// Give the page-rule refusal for `feed`, or none when its links obey
-/// ADR 0213 item 17.
+/// ADR 0256 item 17.
 #[must_use]
 pub fn page_refusal(feed: &Feed) -> Option<PageRefusal> {
     if feed.medium.as_deref() == Some("publisher") {
@@ -1210,7 +1210,7 @@ mod tests {
         let found = check(&release, &Facts::default());
         assert!(
             kinds(&found).contains(&FindingKind::NoArtistPage),
-            "ADR 0213 item 18: add an artist page link to this release"
+            "ADR 0256 item 18: add an artist page link to this release"
         );
         let finding = found
             .iter()
@@ -1219,12 +1219,12 @@ mod tests {
         assert_eq!(
             finding.level,
             FindingLevel::Stop,
-            "ADR 0213 item 19: show Link a Page as a repair"
+            "ADR 0256 item 19: show Link a Page as a repair"
         );
         assert_eq!(
             finding.repair,
             Some(RepairKind::LinkAPage),
-            "ADR 0213 item 19: show Link a Page as a repair"
+            "ADR 0256 item 19: show Link a Page as a repair"
         );
 
         let mut empty_release = clean();
@@ -1232,7 +1232,7 @@ mod tests {
         assert_eq!(
             page_refusal(&empty_release),
             Some(PageRefusal::NoArtistPage),
-            "ADR 0213 item 17: a music feed with no live show needs an artist page"
+            "ADR 0256 item 17: a music feed with no live show needs an artist page"
         );
 
         release.publisher = Some(Publisher {
@@ -1241,7 +1241,7 @@ mod tests {
         assert_eq!(
             page_refusal(&release),
             None,
-            "ADR 0213 item 17: a release with an artist link has no page refusal"
+            "ADR 0256 item 17: a release with an artist link has no page refusal"
         );
         release.publisher = Some(Publisher {
             remote_items: vec![publisher_link("label")],
@@ -1249,7 +1249,7 @@ mod tests {
         assert_eq!(
             page_refusal(&release),
             Some(PageRefusal::NoArtistPage),
-            "ADR 0213 item 17: a label link does not satisfy the artist page rule"
+            "ADR 0256 item 17: a label link does not satisfy the artist page rule"
         );
 
         let mut show = clean();
@@ -1258,7 +1258,7 @@ mod tests {
         assert_eq!(
             page_refusal(&show),
             Some(PageRefusal::NoPublisherPage),
-            "ADR 0213 item 17: a show without a publisher link needs one"
+            "ADR 0256 item 17: a show without a publisher link needs one"
         );
         assert_eq!(check(&show, &Facts::default())[0].level, FindingLevel::Stop);
         show.publisher = Some(Publisher {
@@ -1267,7 +1267,7 @@ mod tests {
         assert_eq!(
             page_refusal(&show),
             None,
-            "ADR 0213 item 17: a show with a publisher link has no page refusal"
+            "ADR 0256 item 17: a show with a publisher link has no page refusal"
         );
 
         let mut playlist = clean();
@@ -1275,7 +1275,7 @@ mod tests {
         assert_eq!(
             page_refusal(&playlist),
             Some(PageRefusal::NoPublisherPage),
-            "ADR 0213 item 17: musicL without a publisher link needs one"
+            "ADR 0256 item 17: musicL without a publisher link needs one"
         );
         assert_eq!(
             check(&playlist, &Facts::default())[0].level,
@@ -1287,7 +1287,7 @@ mod tests {
         assert_eq!(
             page_refusal(&playlist),
             None,
-            "ADR 0213 item 17: musicL with a publisher link has no page refusal"
+            "ADR 0256 item 17: musicL with a publisher link has no page refusal"
         );
 
         let mut publisher_feed = clean();
@@ -1295,7 +1295,7 @@ mod tests {
         assert_eq!(
             page_refusal(&publisher_feed),
             None,
-            "ADR 0213 item 17: publisher feeds get no page finding"
+            "ADR 0256 item 17: publisher feeds get no page finding"
         );
     }
 

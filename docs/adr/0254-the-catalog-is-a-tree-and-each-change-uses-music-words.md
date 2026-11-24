@@ -12,6 +12,7 @@
 - Supersedes: [ADR 0215](../archive/adr/0215-the-left-panel-shows-the-levels-of-the-publisher-feeds.md), The Left Panel Shows The Levels Of The Publisher Feeds.
 - Supersedes: [ADR 0232](../archive/adr/0232-each-group-below-an-open-feed-has-an-add-row.md), Each Group Below An Open Feed Has An Add Row.
 - Supersedes: [ADR 0240](../archive/adr/0240-hosting-is-a-first-role-and-a-stray-release-moves-to-its-pages.md), Hosting Is A First Role, And A Stray Release Moves To Its Pages.
+- Changed by: [ADR 0257](0257-a-release-has-one-artist-one-label-and-one-publisher-in-its-fields.md) items 1 to 16, on 2026-11-24. Items 20, 23, 24, 26 to 33: the fields of a release replace the sheet "Artist and label…", a release has one label and one publisher, and "Also on another label…" is removed.
 - Changes: [ADR 0243](0243-a-move-is-a-change-set-and-a-level-gathers-its-pages.md) items 1, 3, 5 and 7 to 12. The changes of the tree go into one change set (item 34). Review does not open after each change (item 35). The Add sheet replaces the menus of the add rows (items 18 to 21).
 - Changes: [ADR 0206](0206-the-shell-and-the-editor-pages.md) items 6 to 8. A publisher feed has no outline. The first row of an outline is "‹ Catalog" (item 7).
 - Changes: [ADR 0090](0090-studio-names-the-feeds-that-it-does-not-edit.md) item 2. "No artist yet" replaces "Not linked", and the heading "No role" is a heading of the top rows (items 2 and 3).

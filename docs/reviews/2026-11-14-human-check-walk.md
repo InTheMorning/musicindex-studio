@@ -342,7 +342,7 @@ The operator answered a questionnaire about the list above. These lines record t
 - Missing function 3 has a decision. The orchestrator session relayed it on 2026-11-14: the narrow layout of Studio does not change, and the website gets the same stack (musicindex ADR 0070). A swipe from the screen edge is the quick way. A visual cue for the swipe is not decided.
 - Finding from the website session, not examined: Studio makes the history entry of its root page at the start, with no input of the user (`crates/api/ui/app.js`, about line 3772). Chromium and Safari can skip such an entry at the Back button and the back swipe. Thus Back on the start page, before the first touch, possibly leaves Studio. The check tool of the agent cannot push the Back button of a browser, so only a person can examine this. No code changed.
 - Defects 3 and 4, missing function 1 and design item 8 have a decision: [ADR 0211](../adr/0211-studio-follows-a-move-that-a-different-studio-made.md), with task 145.
-- Design item 7, the flow to make a feed, has these operator choices of 2026-11-14. [ADR 0213](../adr/0213-a-release-starts-on-the-page-of-its-artist.md) and task 147 hold them:
+- Design item 7, the flow to make a feed, has these operator choices of 2026-11-14. [ADR 0256](../adr/0256-a-release-starts-on-the-page-of-its-artist.md) and task 147 hold them:
     - The operator rejected a block "Where it goes" with the levels as a tree.
     - A release is made only from within an artist. The form does not show a hosting page or a label page. Studio presumes that they are the same as for the artist.
     - The root of the levels is a publisher feed with the role hosting, not a file host. A hosting page and a label page are optional. A release must have an artist page.

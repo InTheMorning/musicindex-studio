@@ -1,8 +1,8 @@
 # Studio v1 Task 147: A Release Starts On The Page Of Its Artist
 
-Decision: [ADR 0213](../adr/0213-a-release-starts-on-the-page-of-its-artist.md).
+Decision: [ADR 0256](../adr/0256-a-release-starts-on-the-page-of-its-artist.md).
 
-Status: Complete on 2026-11-15, in three packets, with the screenshot visual check. The human gate of ADR 0213 is open.
+Status: Complete on 2026-11-15, in three packets, with the screenshot visual check. The human gate of ADR 0256 is open.
 
 ## Result Of Packet 147a
 
@@ -18,7 +18,7 @@ Status: Complete on 2026-11-15, in three packets, with the screenshot visual che
 - ChatGPT did the build. The main session read the diff, added the change set rule and ran the five checks.
 - `feed_check::page_refusal` gives the reason for a typed feed. `check` gives the findings `NoArtistPage` and `NoPublisherPage` from it, with the level Notice and the repair `LinkAPage`.
 - The diff of a feed has `page_refusal`. `write_feed` refuses with `409` and the code `no_artist_page` or `no_publisher_page`.
-- A change set writes each feed through `write_feed`. Thus the delegate build stopped a change set, which ADR 0213 item 22 does not permit. The main session added `Collection::has_open_change_set_row`. A feed with an open row of a change set has no stop and no `page_refusal`.
+- A change set writes each feed through `write_feed`. Thus the delegate build stopped a change set, which ADR 0256 item 22 does not permit. The main session added `Collection::has_open_change_set_row`. A feed with an open row of a change set has no stop and no `page_refusal`.
 - A granted write of a connected app does not go through `write_feed`, so it has no stop. No test proves it, because the setup of a grant needs one usual write of the feed.
 - The fixtures `paid_feed`, `feed_xml` of the retire tests and `FEED` of the server tests have an artist link.
 - Tests: `page_findings_follow_adr_0213_for_releases_playlists_shows_and_publishers`, `page_refusal_is_in_the_diff_and_blocks_release_and_playlist_writes`, `hidden_feed_has_no_page_refusal_and_can_be_written`, `feed_rows_report_a_completed_host_delete` (the delete of the feed file) and `a_change_set_writes_a_release_with_no_artist_page`.
@@ -48,7 +48,7 @@ Visual check, with `.studio-dev/walk/steps-147-make.json`, `steps-147-check.json
 
 ## Goal
 
-1. A release has a kind that Studio keeps and shows (ADR 0213 items 10 to 16).
+1. A release has a kind that Studio keeps and shows (ADR 0256 items 10 to 16).
 2. A new release gets the pages of its artist (items 7 and 8).
 3. A feed with no page gets a finding, and Review stops its write (items 17 to 23).
 4. A release starts only on the page of an artist (items 1 to 6).
@@ -90,21 +90,21 @@ These come from a read on 2026-11-14. Make sure that each one is correct before 
 
 ## Rules For The Delegate
 
-- Read ADR 0213 first, then ADR 0212, ADR 0164 and ADR 0174.
+- Read ADR 0256 first, then ADR 0212, ADR 0164 and ADR 0174.
 - Write comments in Simplified Technical English. The skill is `/home/citizen/.agents/skills/asd-ste100/SKILL.md`.
 - Do not commit. Leave the change in the working tree and report it. The main session reviews the diff, takes the screenshots and commits.
 - Do not change `AGENTS.md`, an ADR or a task file.
 - Change a shared component only as this task says. Do not remove a style or a comment that a different part uses. Search each caller before you change a signature.
 - A check or a lookup that runs with a locked vault must not open a file host.
-- If a step needs an architecture decision that ADR 0213 does not give, stop and report.
+- If a step needs an architecture decision that ADR 0256 does not give, stop and report.
 - `node` is not on the PATH. Use `tools/node`. `node --check` does not find a template error in `crates/api/ui/*.js`. Check a copy with the extension `.mjs`.
-- Use the exact words of ADR 0213 for each text. Use tokens only in the styles.
-- Each failure message of a new test names "ADR 0213" and gives the fix.
+- Use the exact words of ADR 0256 for each text. Use tokens only in the styles.
+- Each failure message of a new test names "ADR 0256" and gives the fix.
 
 ## Changes Of Packet 147a: The Kind And The Pages Of A New Release
 
 1. `crates/core/src/collection.rs`: one new migration adds the column `release_kind TEXT` to `feeds`, with no default. The values are `album`, `ep` and `single`, or NULL. `FeedRow` gets the field. Add a function that sets it.
-2. The core gets one pure function for the kind to show: the kept kind, or the kind from the count of the tracks (ADR 0213 item 11). Put it in the module that owns the typed feed or the collection, and say where in the report.
+2. The core gets one pure function for the kind to show: the kept kind, or the kind from the count of the tracks (ADR 0256 item 11). Put it in the module that owns the typed feed or the collection, and say where in the report.
 3. `crates/api/src/routes.rs`:
     - The feed row gets `release_kind` (the kept value or null) and `kind_shown` (`album`, `ep` or `single`) for a feed with the medium `music`. A playlist and a publisher feed get null for the two fields.
     - `POST /feeds/new` gets the optional fields `kind` and `publisher_id`. A value of `kind` that is not one of the three gives `400`. With `publisher_id`, the route links the new feed to that publisher feed with the role `artist`, and then to each hosting page and label page of the newest other release of that artist, with the roles of that release (items 7 and 8). The newest release is the release with the newest creation time in the collection.
@@ -127,7 +127,7 @@ These come from a read on 2026-11-14. Make sure that each one is correct before 
 
 ## Changes Of Packet 147c: The UI
 
-1. `crates/api/ui/addfeeds.js`: `addChoices` and `MAKE_TYPES` have no album. The group "Make a new feed" gets the hint of ADR 0213 item 2. Add the fields of the release form (item 6) and the values of the menu "Kind" (item 12).
+1. `crates/api/ui/addfeeds.js`: `addChoices` and `MAKE_TYPES` have no album. The group "Make a new feed" gets the hint of ADR 0256 item 2. Add the fields of the release form (item 6) and the values of the menu "Kind" (item 12).
 2. `crates/api/ui/welcome.js`: `releaseAdd` gives the action only for an artist page (item 4). The first-step row "Add a release" of a label opens the list of the artist pages (item 5).
 3. `crates/api/ui/app.js`: the release form opens only with a publisher feed. It has no menu "Type", it sends `kind` and `publisher_id`, and it shows the hint of item 16 at the menu. The generic form has no album.
 4. `crates/api/ui/shell.js`: `feedKind` gives the label "Album", "EP" or "Single" from `kind_shown` (item 14).
@@ -145,7 +145,7 @@ Mechanical:
 3. An API test: `PUT /feeds/{id}/kind` changes `release_kind` and `kind_shown`, changes no draft, and gives `400` for a wrong value.
 4. A core test: each case of packet 147b, change 1.
 5. An API test: the diff of a release with no artist page has `page_refusal`, and the write gives `409` with `no_artist_page`. The same for a playlist with `no_publisher_page`.
-6. An API test: each write of ADR 0213 item 22 has no stop.
+6. An API test: each write of ADR 0256 item 22 has no stop.
 7. A Node test of `addChoices`, `MAKE_TYPES` and the release form fields.
 8. A Node test of `releaseAdd`: the action for an artist page, and none for a label page and a hosting page.
 9. A Node test of `feedKind`: the label of each kind, and "Album" with no `kind_shown`.
@@ -158,7 +158,7 @@ Visual, by the main session:
 2. The tab **Settings** with the menu "Kind", and a tile of each kind.
 3. The finding on the tab **Check**, and the refusal in Review.
 
-Human, by the operator: the gate of ADR 0213.
+Human, by the operator: the gate of ADR 0256.
 
 ## Report
 

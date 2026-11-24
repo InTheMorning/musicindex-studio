@@ -14,7 +14,7 @@ export const CHECK_NONE = 'Studio found no problem in this feed.';
 // repair can reach a file.
 export const CHECK_READ_ONLY = 'This feed has no file host, so Studio shows the findings and does not repair them.';
 
-// The text of a feed with a show grant (item 20, ADR 0205 item 51).
+// The text of a feed with a show grant (item 20, ADR 0255 item 51).
 export const CHECK_GRANT = 'This feed has a show grant. A granted change waits while the draft has changes. A repair adds a change to the draft.';
 
 // The notice of an address that a read did not reach (item 16).

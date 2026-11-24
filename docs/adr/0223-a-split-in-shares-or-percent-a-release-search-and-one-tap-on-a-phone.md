@@ -8,7 +8,7 @@
 - Bar: opposite choice by mistake. Items 1 to 4 change the recipient form of ADR 0144, and items 7 and 8 change the narrow stack of ADR 0206.
 - Changes: [ADR 0144](0144-recipients-use-one-picker-and-sort-by-split.md) item 1. The split has the label "Split" and a mode menu (items 1 to 4).
 - Changes: [ADR 0206](0206-the-shell-and-the-editor-pages.md) items 13 and 14. The fixed destinations come first on the root page, and a release opens in one tap (items 7 and 8).
-- Changes: [ADR 0213](0213-a-release-starts-on-the-page-of-its-artist.md) item 11. A release with no track and no live item has the kind "Release" (item 11).
+- Changes: [ADR 0213](../archive/adr/0213-a-release-starts-on-the-page-of-its-artist.md) item 11. A release with no track and no live item has the kind "Release" (item 11).
 - Changes: [ADR 0180](0180-the-files-page-has-a-folder-picker-and-one-step-for-each-copy.md) item 8. The folder dialog also opens from the first-run library sheet (item 10).
 - Uses: musicindex ADR 0075 R-VALUE-5 for the percentage of a recipient. [ADR 0091](../archive/adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md) item 13 and the core function `scale` for the scale of the other splits. [ADR 0222](0222-errors-give-a-step-terms-get-a-hint-and-the-first-run-has-two-stages.md) item 7 for the split hint. [ADR 0036](0036-library-records-host-inventory-and-host-operations.md) item 1 for the library folder.
 - Source: [observations of the user journeys](../research/2026-11-18-user-journeys/observations.md) O10, O12, O13, O14, O15 and O16.

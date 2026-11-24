@@ -1151,7 +1151,7 @@ pub struct FeedRow {
     pub title: Option<String>,
     /// `podcast:medium`, from the last read.
     pub medium: Option<String>,
-    /// The kind kept for a music release (ADR 0213 item 10).
+    /// The kind kept for a music release (ADR 0256 item 10).
     pub release_kind: Option<String>,
     /// The version marker from the last read or write.
     pub last_version: Option<Version>,
@@ -3405,7 +3405,7 @@ impl Collection {
     /// Gives a [`CollectionError`] when SQLite fails.
     pub fn delete_draft(&self, id: FeedId) -> Result<(), CollectionError> {
         // The grants that the draft asks for go out with the draft
-        // (ADR 0205 item 47).
+        // (ADR 0255 item 47).
         self.remove_draft_grants(id)?;
         // A write ends the draft, so the kept file host goes out with it
         // (ADR 0230 item 21). A discard puts the value back before this.
@@ -3418,7 +3418,7 @@ impl Collection {
         Ok(())
     }
 
-    /// Keep a show grant that the draft of a feed asks for (ADR 0205
+    /// Keep a show grant that the draft of a feed asks for (ADR 0255
     /// item 11). The grant names one app (ADR 0110 item 19). A grant of the
     /// same live item that is there already takes the new app.
     ///
@@ -4865,7 +4865,7 @@ impl Collection {
     }
 
     /// True when an open change set has a row of the feed that is not
-    /// written (ADR 0213 item 22).
+    /// written (ADR 0256 item 22).
     ///
     /// # Errors
     ///

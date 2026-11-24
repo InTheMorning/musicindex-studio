@@ -11,7 +11,7 @@
 - Supersedes: [ADR 0087](../archive/adr/0087-the-two-sides-of-a-link-confirm-a-role.md), The Two Sides Of A Link Confirm A Role.
 - Changes: [ADR 0215](../archive/adr/0215-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) items 1, 1a, 2 and 4. A link gives the level, curator has a rank of its own, and the heading of the role `hosting` is "Publishers" (items 15 and 16).
 - Changes: [ADR 0240](../archive/adr/0240-hosting-is-a-first-role-and-a-stray-release-moves-to-its-pages.md) items 1, 2 and 3. The menu value and the Welcome row say "Publisher" (item 12).
-- Restated in: [ADR 0205](0205-publisher-feeds-announcements-and-show-grants.md) items 1, 2, 4, 6 and 11 restate items 1 to 5, 10, 20 and 22 of this ADR, and cite them.
+- Restated in: [ADR 0255](0255-publisher-feeds-announcements-and-show-grants.md) items 1, 2, 4, 6 and 11 restate items 1 to 5, 10, 20 and 22 of this ADR, and cite them.
 - Uses: musicindex ADR 0097 R-ROLE-1 to R-ROLE-8, R-WORD-8 and R-WORD-15. musicindex ADR 0033 R-WORD-3 to R-WORD-5. musicindex ADR 0037 R-WORD-7. musicindex ADR 0067 item 82. Stophammer ADR 0101 (the `rel` of each link). ADR 0041 item 4 (a change of a link). ADR 0251 (Review writes the two sides of a link).
 
 ## Context
@@ -20,6 +20,7 @@
 - The word "host" had three meanings: the role `hosting`, the role `host` of a person who presents, and the file host of ADR 0092. Studio showed the role `hosting` as "Hosting".
 - musicindex ADR 0097 gives each link its own roles, four level roles, and the screen word "Publisher" for the role `hosting`. It supersedes musicindex ADR 0036 and ADR 0066, and it keeps their rule IDs.
 - ADR 0082, ADR 0083, ADR 0084 and ADR 0087 are in `docs/archive/adr/` for research, with their context, alternatives and evidence.
+- Changed by: [ADR 0257](0257-a-release-has-one-artist-one-label-and-one-publisher-in-its-fields.md) item 10a, on 2026-11-24. Item 22: a new role does not go on a link where it gives a release a second page of that role.
 
 ## Decision
 

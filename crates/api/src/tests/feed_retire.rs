@@ -495,11 +495,11 @@ async fn feed_rows_report_a_completed_host_delete() {
     assert_eq!(
         status,
         StatusCode::OK,
-        "ADR 0213 item 22: make a diff for a feed-file deletion; fix the diff route. {diff}"
+        "ADR 0256 item 22: make a diff for a feed-file deletion; fix the diff route. {diff}"
     );
     assert!(
         diff["page_refusal"].is_null(),
-        "ADR 0213 item 22: give no refusal for a feed-file deletion; fix the diff route. {diff}"
+        "ADR 0256 item 22: give no refusal for a feed-file deletion; fix the diff route. {diff}"
     );
     let (status, written) = call(
         &app,

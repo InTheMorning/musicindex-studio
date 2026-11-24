@@ -1,6 +1,6 @@
 # Studio v1 Task 143: The Review Sheet Keeps The Podping Box In View And Names Each Delete
 
-Decision: ADR 0209, which the operator deleted on 2026-11-15. [ADR 0205](../adr/0205-publisher-feeds-announcements-and-show-grants.md) item 19, [ADR 0036](../adr/0036-library-records-host-inventory-and-host-operations.md) items 13 and 14 and [ADR 0198](../adr/0198-the-review-of-a-delete-names-the-delete-and-a-deleted-feed-shows-only-what-it-can-do.md) items 12 to 15 own its rules. ADR 0205 item 19 removes the row **Announce** of this task. The item numbers in this file are the numbers of that record.
+Decision: ADR 0209, which the operator deleted on 2026-11-15. [ADR 0255](../adr/0255-publisher-feeds-announcements-and-show-grants.md) item 19, [ADR 0036](../adr/0036-library-records-host-inventory-and-host-operations.md) items 13 and 14 and [ADR 0198](../adr/0198-the-review-of-a-delete-names-the-delete-and-a-deleted-feed-shows-only-what-it-can-do.md) items 12 to 15 own its rules. ADR 0255 item 19 removes the row **Announce** of this task. The item numbers in this file are the numbers of that record.
 
 Status: Complete on 2026-11-14, with its screenshot visual check. The human gate of the new owners is open.
 
@@ -54,7 +54,7 @@ These come from a read on 2026-11-14. Make sure that each one is correct before 
 
 ## Rules For The Delegate
 
-- Read ADR 0209 first, then ADR 0198, ADR 0193 and ADR 0205 items 19 to 26.
+- Read ADR 0209 first, then ADR 0198, ADR 0193 and ADR 0255 items 19 to 26.
 - Write comments in Simplified Technical English. The skill is `/home/citizen/.agents/skills/asd-ste100/SKILL.md`.
 - Do not commit. Leave the change in the working tree and report it. The main session reviews the diff, takes the screenshots and commits.
 - Do not change `AGENTS.md`, an ADR or a task file.

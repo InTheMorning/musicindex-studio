@@ -32,7 +32,7 @@ const CLOCK_SAME_SECONDS: i64 = 5;
 /// The most bytes of an answer.
 const MAX_ANSWER: u64 = 1024 * 1024;
 
-/// The status of a live item that an app sets (ADR 0205 item 45).
+/// The status of a live item that an app sets (ADR 0255 item 45).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ShowStatus {
     /// Go live.

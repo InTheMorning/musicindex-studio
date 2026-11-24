@@ -23,7 +23,7 @@ Facts:
     - The line "No announcement. No index learns about this write until it reads the feed by itself." when the check box is off.
     - The cause of no announcement, when the feed has no public address or the write deletes the feed file. The sheet shows no check box in these two conditions.
 
-Decided: Note 9 gives the selection. The operator deleted ADR 0208, ADR 0209 and ADR 0210 on 2026-11-15, and the ADR that owns each area states their live rules. [ADR 0205](../adr/0205-publisher-feeds-announcements-and-show-grants.md) item 19 has no row **Announce**.
+Decided: Note 9 gives the selection. The operator deleted ADR 0208, ADR 0209 and ADR 0210 on 2026-11-15, and the ADR that owns each area states their live rules. [ADR 0255](../adr/0255-publisher-feeds-announcements-and-show-grants.md) item 19 has no row **Announce**.
 
 ### Note 2: The Desktop App Asks For The Passphrase At Each Start
 
@@ -101,7 +101,7 @@ Facts:
 - `ReleasesPage` in `crates/api/ui/app.js` makes each row and each tile. The line below the title shows the kind, then "Hidden from apps", then the file host in the rows view.
 - The feed list handler in `crates/api/src/routes.rs` calculates `track_count` for each music feed. It uses the count only for `kind_shown`, and the reply does not contain the count.
 - The line gets its kind from `feedKind` in `crates/api/ui/shell.js`.
-- [ADR 0213](../adr/0213-a-release-starts-on-the-page-of-its-artist.md) has the rules of the release kind.
+- [ADR 0256](../adr/0256-a-release-starts-on-the-page-of-its-artist.md) has the rules of the release kind.
 
 Open: no task. The reply needs a `track_count` field, and the row needs a position for the count. A playlist has no tracks of its own, so the task must say what its row shows.
 
@@ -111,14 +111,14 @@ Comment: the field "Kind" must not be in the tab **Settings**. Its position is t
 
 Facts:
 
-- [ADR 0213](../adr/0213-a-release-starts-on-the-page-of-its-artist.md) item 13 owns the position. It puts the menu in the tab **Settings**. A change saves at once, is not a part of the draft and needs no write.
+- [ADR 0256](../adr/0256-a-release-starts-on-the-page-of-its-artist.md) item 13 owns the position. It puts the menu in the tab **Settings**. A change saves at once, is not a part of the draft and needs no write.
 - `settings` in `crates/api/ui/pages.js` gives a release the section `kind` as the first section of the tab. The section is in `crates/api/ui/editor.js`, with `saveKind`.
 - The other fields of the first tab are parts of the draft. "Title" and "Artist" change the feed file through Review and a write.
-- The menu also has the value "From the tracks" (ADR 0213 item 12), and its hint says that the feed file has no tag for the kind (item 16).
+- The menu also has the value "From the tracks" (ADR 0256 item 12), and its hint says that the feed file has no tag for the kind (item 16).
 
 Operator choice, from the questionnaire of 2026-11-15, from drawings: a change of the menu saves at once, as before. A hint below the menu says "Saves at once. The feed file has no tag for the kind."
 
-Open: [task 154](../tasks/studio-v1-task-154-kind-menu-in-the-first-tab-of-a-release.md) is not started. The move changes ADR 0213 items 13 and 16, in the commit of that task.
+Open: [task 154](../tasks/studio-v1-task-154-kind-menu-in-the-first-tab-of-a-release.md) is not started. The move changes ADR 0256 items 13 and 16, in the commit of that task.
 
 ### Note 8: The Domain Line After A Delete
 
@@ -149,7 +149,7 @@ Operator choice: remove the row **Announce**, and put the check box at the right
 
 Operator choice, from the questionnaire of 2026-11-15, from drawings: "Box only". The footer shows only the check box. The address and the time of the send go. When no podping is possible, a line with the cause shows in the position of the check box.
 
-Decided: [ADR 0205](../adr/0205-publisher-feeds-announcements-and-show-grants.md) item 19 gives the selection, and the review sheet shows it. `announceSkipLine` in `crates/api/ui/announce.js` gives the line with the cause.
+Decided: [ADR 0255](../adr/0255-publisher-feeds-announcements-and-show-grants.md) item 19 gives the selection, and the review sheet shows it. `announceSkipLine` in `crates/api/ui/announce.js` gives the line with the cause.
 
 ### Note 10: One Row In Review For "Hide From Apps"
 

@@ -107,7 +107,7 @@ test('a publisher form with a start role hides the Type menu (ADR 0243 item 15)'
 });
 
 test('MAKE_TYPES leaves out album, and release fields have a kind menu', () => {
-  const owner = 'ADR 0213 items 2, 6 and 12: keep Album out of Type and give the release fields and Kind values. Fix addfeeds.js and app.js.';
+  const owner = 'ADR 0256 items 2, 6 and 12: keep Album out of Type and give the release fields and Kind values. Fix addfeeds.js and app.js.';
   assert.deepEqual(MAKE_TYPES.map(([id]) => id), ['publisher', 'show', 'playlist'], owner);
   for (const [id] of MAKE_TYPES) assert.ok(makeFields(id).button, owner);
   assert.deepEqual(RELEASE_KINDS, [['', 'From the tracks'], ['album', 'Album'], ['ep', 'EP'], ['single', 'Single']], owner);

@@ -9,12 +9,12 @@
 - Changes: [ADR 0174](0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md) item 3. The levels get **Stop** (items 1 to 3).
 - Changes: [ADR 0219](0219-a-release-checklist-and-a-check-of-the-address-type.md) items 6 and 7. The checklist gets the row "Artist page" (items 4 to 6).
 - Changes: [ADR 0164](0164-the-releases-of-a-publisher-feed-have-an-add-row.md) item 3. A new release with no track opens with the sheet "Add tracks" (items 7 and 8).
-- Uses: [ADR 0213](0213-a-release-starts-on-the-page-of-its-artist.md) items 18 and 19, and [ADR 0218](0218-a-page-link-in-review-and-a-suggestion-starts-with-no-person.md) items 1 to 9, for the stop in Review and **Link a Page**. [ADR 0223](0223-a-split-in-shares-or-percent-a-release-search-and-one-tap-on-a-phone.md) item 11 for the kind "Release".
+- Uses: [ADR 0256](0256-a-release-starts-on-the-page-of-its-artist.md) items 18 and 19, and [ADR 0218](0218-a-page-link-in-review-and-a-suggestion-starts-with-no-person.md) items 1 to 9, for the stop in Review and **Link a Page**. [ADR 0223](0223-a-split-in-shares-or-percent-a-release-search-and-one-tap-on-a-phone.md) item 11 for the kind "Release".
 - Source: [observations of the user journeys](../research/2026-11-18-user-journeys/observations.md) O3 and O11.
 
 ## Context
 
-- **O3.** Review stops the write of a release with no artist page (ADR 0213 item 18). The Check tab shows the same condition with the level "Notice" (`feed_check.rs:236`). A notice tells the user nothing about the stop. The release checklist has four rows, and none of them is for the artist page (`feedcheck.js:123`).
+- **O3.** Review stops the write of a release with no artist page (ADR 0256 item 18). The Check tab shows the same condition with the level "Notice" (`feed_check.rs:236`). A notice tells the user nothing about the stop. The release checklist has four rows, and none of them is for the artist page (`feedcheck.js:123`).
 - **O11.** After **Make the Release**, the release page opens (ADR 0164 item 3). The user must then find "Add tracks" in the outline. Each new release needs tracks first. The checklist row "Tracks" has **Add Tracks** (ADR 0219), but the user must find that row first.
 - ADR 0218 decides observation O4: the write of the artist page stays separate from the write of the release, and the result panel tells it.
 
@@ -24,7 +24,7 @@
 
 1. The findings get a fourth level, **Stop**. A stop finding is a condition that makes Review refuse the write. The core gives the level `stop` to `no_artist_page` and to `no_publisher_page`. Each other finding keeps its level.
 2. The Check tab shows a stop finding first, before each warning. Its mark is "Stops the write", with the error color of the theme.
-3. The text and the repair of a stop finding do not change. **Link a Page** stays its button (ADR 0213 item 19). The stop in Review does not change (ADR 0218).
+3. The text and the repair of a stop finding do not change. **Link a Page** stays its button (ADR 0256 item 19). The stop in Review does not change (ADR 0218).
 
 ### The Checklist
 

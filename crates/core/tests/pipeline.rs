@@ -3908,7 +3908,7 @@ fn a_live_item_with_a_stream_and_no_content_link_writes() {
     assert_ne!(live(&s), FEED);
 }
 
-// ---- Show grants (task 033e, ADR 0205 items 46 to 52) ----
+// ---- Show grants (task 033e, ADR 0255 items 46 to 52) ----
 
 /// The start and the end of the show of the grant tests.
 const SHOW_START: &str = "2026-11-01T10:00:00Z";

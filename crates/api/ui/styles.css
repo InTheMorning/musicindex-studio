@@ -2159,7 +2159,7 @@ button.outline-feed {
 .grant-checks { padding: 10px 16px; display: grid; gap: 8px; }
 .grant-checks .hint { margin: 0; }
 /* A release row of the publisher page: the title, its state, and the
-   buttons that move or remove it (task 025c, ADR 0205 item 10). */
+   buttons that move or remove it (task 025c, ADR 0255 item 10). */
 .release-row { display: grid; gap: 8px; padding: 10px 16px; }
 .release-row .title { font-weight: 600; overflow-wrap: anywhere; }
 .release-row .sub { color: var(--muted); font-size: var(--text-callout); }
@@ -2348,7 +2348,7 @@ button.outline-feed {
 .section > .announce-choice { padding: 0 4px; }
 .announce-footer-row { flex: 1 0 100%; min-width: 0; display: flex; justify-content: flex-end; text-align: end; }
 /* The check box and its hint end at the right edge, above the write button
-   (ADR 0205 item 19). A long hint does not move the check box to the left. */
+   (ADR 0255 item 19). A long hint does not move the check box to the left. */
 .announce-footer-row > div { display: grid; justify-items: end; min-width: 0; }
 .announce-footer-row .check { display: flex; align-items: center; gap: 8px; min-height: var(--target); }
 .announce-footer-row .hint { margin: 0; text-align: end; }

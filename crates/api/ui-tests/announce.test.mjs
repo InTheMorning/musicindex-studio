@@ -22,9 +22,9 @@ const entry = (fields) => ({
   attempts: 0, created_at: 100, next_at: 130, finished_at: null, last_error: null, ...fields,
 });
 
-test('the footer of the review sheet gives the label and the cause of no podping (ADR 0205 item 19)', () => {
-  const fix = 'ADR 0205 item 19. Fix announceSkipLine in crates/api/ui/announce.js.';
-  assert.equal(ANNOUNCE_FOOTER_LABEL, 'Send a podping', 'ADR 0205 item 19: use the footer label.');
+test('the footer of the review sheet gives the label and the cause of no podping (ADR 0255 item 19)', () => {
+  const fix = 'ADR 0255 item 19. Fix announceSkipLine in crates/api/ui/announce.js.';
+  assert.equal(ANNOUNCE_FOOTER_LABEL, 'Send a podping', 'ADR 0255 item 19: use the footer label.');
   assert.equal(announceSkipLine({ announcements: [], announce_skip: 'no_address' }), 'No podping: this feed has no public address.', fix);
   assert.equal(announceSkipLine({ announcements: [], announce_skip: 'feed_deleted' }), 'No podping: this write deletes the feed file.', fix);
   assert.equal(announceSkipLine({ announcements: [], announce_skip: 'feed_unchanged' }), 'No podping: this write does not change the feed.', fix);

@@ -74,7 +74,7 @@ pub enum PipelineErrorKind {
     /// does not have the same text in a key field (ADR 0074 item 5).
     BadKey,
     /// A live item has no start, no stream, a stream type that is blank or
-    /// does not agree with the stream address, or a bad status (ADR 0205
+    /// does not agree with the stream address, or a bad status (ADR 0255
     /// item 4, ADR 0161).
     BadLiveItem,
     /// A live value has a long address or protocol, or a control character
@@ -123,21 +123,21 @@ pub enum PipelineErrorKind {
     /// The signing plan of the feed is missing, or it expired. The user
     /// must review the diff again (ADR 0050 item 12).
     PlanExpired,
-    /// The live item has no show grant, or its grant ended (ADR 0205
+    /// The live item has no show grant, or its grant ended (ADR 0255
     /// item 14).
     GrantNotActive,
     /// The feed has a draft with a change that the user can approve, so a
-    /// granted write cannot occur (ADR 0205 item 51).
+    /// granted write cannot occur (ADR 0255 item 51).
     DraftOpen,
     /// The granted change makes a change that the grant does not cover
-    /// (ADR 0205 item 48).
+    /// (ADR 0255 item 48).
     NotCovered,
     /// A change set operation is not valid: no part, no type, no address,
     /// or a value that the person does not have (ADR 0207, ADR 0203 item
     /// 20).
     InvalidOperation,
     /// The status of the live item cannot change to the requested status
-    /// (ADR 0205 item 40).
+    /// (ADR 0255 item 40).
     BadStatus,
     /// The stream of a live item is not live, so a change to `live` is
     /// refused (ADR 0162 items 6 and 7).
@@ -461,7 +461,7 @@ pub struct Diff {
     /// one (ADR 0204 item 18).
     pub feed_move: Option<FeedMove>,
     /// Each announcement that the write puts into the queue
-    /// (ADR 0205 items 21 to 23).
+    /// (ADR 0255 items 21 to 23).
     pub announcements: Vec<PlannedAnnouncement>,
     /// The reason why `announcements` is empty, or `None` when it is not
     /// empty.
@@ -471,7 +471,7 @@ pub struct Diff {
     pub events: Vec<DiffEvent>,
     /// The `guid` of each live item that the write gives a show grant: each
     /// grant of the draft for a `pending` live item of the draft
-    /// (ADR 0205 item 46).
+    /// (ADR 0255 item 46).
     pub grants: Vec<String>,
     /// The field changes of the draft, in groups (ADR 0114 item 1).
     pub fields: Vec<crate::review::FieldGroup>,
@@ -1100,7 +1100,7 @@ fn kept(value: Option<&str>) -> Option<String> {
 /// text of that address (ADR 0174 item 11). The core gives the real GUID
 /// when the feed gets a public address (ADR 0122 item 8). The draft sets
 /// `podcast:medium` to `medium` and `language` to `en`. The caller gives `music` for an album feed
-/// and `publisher` for a publisher feed (ADR 0205 item 2). The user sets each other field in the editor,
+/// and `publisher` for a publisher feed (ADR 0255 item 2). The user sets each other field in the editor,
 /// examines the diff, and writes it. The write puts the file only when no
 /// file exists at the path (ADR 0007).
 ///
@@ -2426,7 +2426,7 @@ pub fn host_file_matches(
 /// the `url` of the channel `image`, or the `href` of `itunes:image` of the
 /// channel or of an item (ADR 0032 item 10, ADR 0033 item 7, ADR 0036
 /// item 7 and item 10, ADR 0060). The recording of
-/// a live item is a file of the feed, as the audio of a track is (ADR 0205
+/// a live item is a file of the feed, as the audio of a track is (ADR 0255
 /// item 6).
 #[must_use]
 pub fn feed_addresses(feed: &Feed) -> Vec<Cow<'_, str>> {
@@ -3191,7 +3191,7 @@ fn feed_move_bytes(feed_move: Option<&FeedMove>) -> Vec<u8> {
 }
 
 /// The addresses that a write announces, before the first change on a host
-/// (ADR 0205 items 21 and 22). Without a feed move, it is the public address
+/// (ADR 0255 items 21 and 22). Without a feed move, it is the public address
 /// of the feed file. With a feed move, it is the address from before, or the
 /// new address when the old address is not known.
 ///
@@ -3221,7 +3221,7 @@ fn announce_addresses(
 }
 
 /// The announcements of a write. [`diff_at`] and [`write_draft_signed`]
-/// both call this function, so that they give the same plan (ADR 0205
+/// both call this function, so that they give the same plan (ADR 0255
 /// item 10).
 ///
 /// # Errors
@@ -3285,7 +3285,7 @@ fn announce_bytes(planned: &[PlannedAnnouncement], skip: Option<AnnounceSkip>) -
 
 /// The `guid` of each live item of `feed` that gets a show grant at the
 /// write: each grant of the draft for a `pending` live item of `feed`, in
-/// the sequence of the live items (ADR 0205 item 46). [`diff_at`] and
+/// the sequence of the live items (ADR 0255 item 46). [`diff_at`] and
 /// [`write_draft_signed`] both call this function.
 ///
 /// # Errors
@@ -3360,7 +3360,7 @@ fn ensure_grant_apps_active(
 
 /// The bytes that [`diff_id`] adds for the show grants, in the form of
 /// [`announce_bytes`]. A change of a grant of the draft, or of its app, after
-/// the diff changes the ID (ADR 0205 item 46, ADR 0110 item 19).
+/// the diff changes the ID (ADR 0255 item 46, ADR 0110 item 19).
 fn grant_bytes(grants: &[(String, Option<i64>)]) -> Vec<u8> {
     let mut bytes = Vec::new();
     bytes.push(0);
@@ -5229,7 +5229,7 @@ fn write_draft_signed_inner(
             ));
         }
     }
-    // ADR 0205 item 39, ADR 0161 item 5: a live item with a refusal stops
+    // ADR 0255 item 39, ADR 0161 item 5: a live item with a refusal stops
     // the write before any change on a host. A warning does not stop it.
     let live_refusals: Vec<_> = crate::live::problems(&feed)
         .into_iter()
@@ -5510,15 +5510,15 @@ fn write_draft_signed_inner(
     collection.remove_signing_plan(id)?;
     collection.delete_draft(id)?;
 
-    // The write records the grants of the diff (ADR 0205 item 47). It ends
+    // The write records the grants of the diff (ADR 0255 item 47). It ends
     // each grant whose live item is not in the written feed, or has the
-    // status `ended` (ADR 0205 item 49). This occurs before the scans, so
+    // status `ended` (ADR 0255 item 49). This occurs before the scans, so
     // that a failed scan does not lose the record.
     record_grants(collection, id, &feed, &grant_apps, now)?;
 
     // Step 6: the feed is written, and each step on a host passed. The
     // announcements go into the queue before the scans, so that a failed
-    // scan does not lose them (ADR 0205 item 27).
+    // scan does not lose them (ADR 0255 item 27).
     if let Some(moved) = &feed_move {
         collection.record_written_feed_move(
             id,
@@ -5593,7 +5593,7 @@ fn remove_sent_assets(
 }
 
 /// Write one change that a show grant covers, with no diff that the user
-/// examines (ADR 0205 items 50 and 51). `now` is the time in seconds since
+/// examines (ADR 0255 items 50 and 51). `now` is the time in seconds since
 /// the Unix epoch.
 ///
 /// The steps are:
@@ -5677,7 +5677,7 @@ pub fn write_granted(
     let grant = grant::grant_for(collection, feed_id, item_guid)?.ok_or_else(|| {
         PipelineError::new(PipelineErrorKind::GrantNotActive, "the grant is not there")
     })?;
-    // Step 6: the record of the granted write (ADR 0205 item 52).
+    // Step 6: the record of the granted write (ADR 0255 item 52).
     grant::add_write(collection, grant.id, app_name, change, written_at)?;
     if *change == GrantChange::End {
         grant::end(collection, grant.id, written_at)?;
@@ -5981,7 +5981,7 @@ fn user_draft_has_change(
 
 /// The state of a feed whose active show grant a draft with changes blocks
 /// (ADR 0110 item 42). The UI shows a notice with these values and keeps no
-/// copy of the rule of ADR 0205 item 51.
+/// copy of the rule of ADR 0255 item 51.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct GrantBlock {
     /// The state name in the feed state: always `grant_blocked_by_draft`.
@@ -6051,7 +6051,7 @@ pub fn grant_blocked_by_draft(
 }
 
 /// Record the grants of a write, and end each grant that the written feed
-/// ends (ADR 0205 items 47 and 49). Each grant names its app and keeps the
+/// ends (ADR 0255 items 47 and 49). Each grant names its app and keeps the
 /// live value origin of that app at the approval (ADR 0110 items 19 and
 /// 25). The write refused a grant whose app is not active before it ran.
 ///
@@ -6939,7 +6939,7 @@ fn delete_each_operation(
 
 /// Remove the host operations that the user started in the draft of a
 /// feed (ADR 0036 item 12), and the show grants that the draft asks for
-/// (ADR 0205 item 46).
+/// (ADR 0255 item 46).
 ///
 /// A route calls this before it discards a draft, before it puts a new
 /// draft from a snapshot, and before it deletes a feed. Task 021e removes

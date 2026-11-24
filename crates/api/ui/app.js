@@ -499,7 +499,7 @@ function title(error) {
     case 'not_found': return 'Studio did not find the file.';
     case 'invalid_feed': return 'That file is not a feed that Studio can read.';
     case 'offline': return 'No connection to Studio.';
-    // The title of the crate for a field error (musicindex ADR 0205 R-QUERY-8).
+    // The title of the crate for a field error (musicindex ADR 0255 R-QUERY-8).
     case 'query_field': return 'This search cannot run.';
     case 'index_answer': return 'Music Index gave a bad answer.';
     case 'stream_not_live': return 'Go Live refused.';
@@ -1609,9 +1609,9 @@ function AddFindSheet({ open, type, role, parent, connectors, onPick, onAdded, o
 }
 
 // One form makes each new page or release, as a draft with no file on the host
-// yet (ADR 0212 items 6, 7, 9, 10 and 12, ADR 0032 items 6 to 9, ADR 0205 item 2, ADR 0053
+// yet (ADR 0212 items 6, 7, 9, 10 and 12, ADR 0032 items 6 to 9, ADR 0255 item 2, ADR 0053
 // item 2). "Feed file" starts from the title until the user types in it.
-// `start` gives `title`, `author`, `role` and `publisher_id` (ADR 0221 item 8, ADR 0213 item 7,
+// `start` gives `title`, `author`, `role` and `publisher_id` (ADR 0221 item 8, ADR 0256 item 7,
 // ADR 0218 item 6). A release shows the parent card first, and the row "Find on
 // Music Index" fills the form from a release (ADR 0230 items 9 to 15).
 // `onKind` gets the type, the role and the name of the parent, for the title of the sheet.
@@ -2810,7 +2810,7 @@ function NostrPanel({ draft, draftState, changed, causes }) {
   </div></section>`;
 }
 
-// The connected apps (ADR 0205 items 42 to 45, ADR 0110 items 5 to 11). The
+// The connected apps (ADR 0255 items 42 to 45, ADR 0110 items 5 to 11). The
 // user gives a name. Studio then shows the pairing text one time, and the
 // app pairs with its own key. The pairing text stays in the state of this
 // panel only. It goes out of the state when the app pairs, when the user
@@ -3902,7 +3902,7 @@ function OutlinePage({ feed, panel, draft, changedFeeds, feeds, go, onAdding, on
 
 // The sort menu of a list (musicindex ADR 0080 R-LIST-1, ADR 0043 R-LIST-6).
 // Each sort has two entries: its usual direction, then its reversed direction
-// (musicindex ADR 0205 R-LIST-13, ADR 0155). `onSort` gets the sort and direction.
+// (musicindex ADR 0255 R-LIST-13, ADR 0155). `onSort` gets the sort and direction.
 export function SortMenu({ sorts, sort, reversed, onSort }) {
   const items = sortEntries(sorts).map((entry) => ({
     ...entry,

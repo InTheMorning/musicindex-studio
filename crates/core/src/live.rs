@@ -1,4 +1,4 @@
-//! The rules of a live item (ADR 0205 items 37 to 40).
+//! The rules of a live item (ADR 0255 items 37 to 40).
 
 use crate::datetime::parse_time;
 use crate::feed::{Entry, Feed, LiveItem};

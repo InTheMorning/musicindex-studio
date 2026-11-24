@@ -225,7 +225,7 @@ fn workspace_router_with_shared(workspace: Workspace) -> (Router, WorkspaceHandl
     let shared: routes::Shared = Arc::new(Mutex::new(workspace));
     // The workers lock the workspace for short steps (ADR 0204 item 7).
     queue.attach(&shared);
-    // The announcement worker also locks it for short steps (ADR 0205).
+    // The announcement worker also locks it for short steps (ADR 0255).
     announcer.attach(&shared);
     // The clean step removes the uploads that expired (ADR 0059 item 4).
     uploads::spawn_cleaner(&shared);
@@ -583,7 +583,7 @@ fn workspace_router_with_shared(workspace: Workspace) -> (Router, WorkspaceHandl
             get(routes::get_app).delete(routes::remove_app),
         )
         .with_state(Arc::clone(&shared));
-    // The routes for connected apps (ADR 0205 items 43 and 50). The outer layer
+    // The routes for connected apps (ADR 0255 items 43 and 50). The outer layer
     // checks the loopback `Host` only. The app layer checks the app token.
     let app_api = Router::new()
         .route("/pair", post(routes::pair_app))

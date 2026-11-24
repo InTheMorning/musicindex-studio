@@ -163,18 +163,18 @@ test('ADR 0198 keeps the destructive review button first and guards the write', 
     'ADR 0198 item 4: keep Write to the File Host in the guarded primary path.');
 });
 
-test('ADR 0205 item 19 puts the podping choice in the footer and refused deletes are warnings', () => {
+test('ADR 0255 item 19 puts the podping choice in the footer and refused deletes are warnings', () => {
   const editor = readFileSync(new URL('../ui/editor.js', import.meta.url), 'utf8');
   const body = editor.slice(editor.indexOf('<div class="body">', editor.indexOf('function ReviewSheet')), editor.indexOf('<footer>', editor.indexOf('function ReviewSheet')));
   const footer = editor.slice(editor.indexOf('<footer>', editor.indexOf('function ReviewSheet')), editor.indexOf('</footer>', editor.indexOf('function ReviewSheet')));
   assert.ok(!body.includes('<${AnnounceChoice}') && !body.includes('<${AnnounceFooterChoice}'),
-    'ADR 0205 item 19: the body of the review sheet has no check box of the announcement. Fix ReviewSheet in crates/api/ui/editor.js.');
+    'ADR 0255 item 19: the body of the review sheet has no check box of the announcement. Fix ReviewSheet in crates/api/ui/editor.js.');
   assert.ok(!editor.includes('AnnounceLines') && !editor.includes('announce-lines'),
-    'ADR 0205 item 19: the review sheet has no row Announce. Remove it from crates/api/ui/editor.js.');
+    'ADR 0255 item 19: the review sheet has no row Announce. Remove it from crates/api/ui/editor.js.');
   assert.ok(footer.includes('skip=${announceSkipLine(diff)}'),
-    'ADR 0205 item 19: the footer gives the cause of no podping in the position of the check box. Fix ReviewSheet in crates/api/ui/editor.js.');
+    'ADR 0255 item 19: the footer gives the cause of no podping in the position of the check box. Fix ReviewSheet in crates/api/ui/editor.js.');
   assert.ok(footer.includes('<${AnnounceFooterChoice}') && editor.includes('<span>${ANNOUNCE_FOOTER_LABEL}</span>'),
-    'ADR 0205 item 19: put the labeled choice in the footer. Fix ReviewSheet in crates/api/ui/editor.js.');
+    'ADR 0255 item 19: put the labeled choice in the footer. Fix ReviewSheet in crates/api/ui/editor.js.');
   const blocked = editor.slice(editor.indexOf('function BlockedDeleteRow'), editor.indexOf('// Each host operation', editor.indexOf('function BlockedDeleteRow')));
   assert.ok(blocked.includes('role="status"') && !blocked.includes('role="alert"') && !blocked.includes('class="host-op-row error"'),
     'ADR 0036 item 13: refused deletion is a warning status row. Fix BlockedDeleteRow in crates/api/ui/editor.js.');

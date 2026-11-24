@@ -84,7 +84,7 @@ export function kindGlow(kind) {
   return `var(--c-${['playlist', ...ROLES].includes(dot) ? dot : 'feed'})`;
 }
 
-// Is this feed a publisher feed (ADR 0205 item 1)?
+// Is this feed a publisher feed (ADR 0255 item 1)?
 export function isPublisher(feed) {
   return (feed.medium || '').toLowerCase() === 'publisher';
 }
@@ -95,7 +95,7 @@ export function isPlaylist(feed) {
 }
 
 // Is this feed an album, a publisher feed or a playlist that the editor can
-// open? A feed with no connector opens too (ADR 0029 item 4, ADR 0205 item 3,
+// open? A feed with no connector opens too (ADR 0029 item 4, ADR 0255 item 3,
 // ADR 0053 item 1, ADR 0067 item 1).
 export function isEditable(feed) {
   return mediumKind(feed.medium).label === 'Album' || isPublisher(feed) || isPlaylist(feed);
@@ -752,7 +752,7 @@ export function segmentKey(index, count, key) {
 }
 
 // The entries of a sort menu: each sort, then its reversed direction, as
-// words (musicindex ADR 0205 R-LIST-13 item 2, ADR 0155).
+// words (musicindex ADR 0255 R-LIST-13 item 2, ADR 0155).
 export function sortEntries(sorts) {
   return sorts.flatMap((sort) => [false, true].map((reversed) => ({ sort, reversed, label: sortLabel(sort, reversed) })));
 }

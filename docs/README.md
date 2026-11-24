@@ -176,12 +176,12 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0202: An http image shows from its https address](adr/0202-an-http-image-shows-from-its-https-address.md)
 - [ADR 0203: People](adr/0203-people.md)
 - [ADR 0204: Feed files, feed moves and the server shell](adr/0204-feed-files-moves-and-the-server.md)
-- [ADR 0205: Publisher feeds, announcements and show grants](adr/0205-publisher-feeds-announcements-and-show-grants.md)
+- [ADR 0255: Publisher feeds, announcements and show grants](adr/0255-publisher-feeds-announcements-and-show-grants.md)
 - [ADR 0206: The shell and the editor pages](adr/0206-the-shell-and-the-editor-pages.md)
 - [ADR 0207: Recipients, change sets and wallets](adr/0207-recipients-change-sets-and-wallets.md)
 - [ADR 0211: Studio follows a move that a different Studio made](adr/0211-studio-follows-a-move-that-a-different-studio-made.md)
 - [ADR 0212: The add pages](adr/0212-the-add-pages.md)
-- [ADR 0213: A release starts on the page of its artist](adr/0213-a-release-starts-on-the-page-of-its-artist.md)
+- [ADR 0256: A release starts on the page of its artist](adr/0256-a-release-starts-on-the-page-of-its-artist.md)
 - [ADR 0214: Each sheet fits the window, and the walk opens it](adr/0214-each-sheet-fits-the-window-and-the-walk-opens-it.md)
 - [ADR 0216: The Linux packages of the desktop app](adr/0216-the-linux-packages-of-the-desktop-app.md)
 - [ADR 0217: A new artist sees the result of a write, the payment types and an undo of a merge](adr/0217-a-new-artist-sees-the-result-of-a-write-the-payment-types-and-an-undo-of-a-merge.md)
@@ -649,9 +649,9 @@ Superseded decisions. Read them for research only. They bind no change.
 - [ADR 0135: The panel holds the content and the page has tabs](archive/adr/0135-the-panel-holds-the-content-and-the-page-has-tabs.md), superseded by ADR 0239
 - [ADR 0038: Published feeds, downloads, the folder scan and feed moves](archive/adr/0038-published-feeds-downloads-folder-scan-and-feed-moves.md), superseded by ADR 0204
 - [ADR 0039: The shell, Releases and the outline of a feed](archive/adr/0039-the-shell-releases-and-the-outline.md), superseded by ADR 0206
-- [ADR 0041: Publisher feeds and two-way links](archive/adr/0041-publisher-feeds-and-two-way-links.md), superseded by ADR 0205
-- [ADR 0052: Announcements through the Podcast Index hub](archive/adr/0052-announcements-through-the-podcast-index-hub.md), superseded by ADR 0205
-- [ADR 0054: Live items, connected apps and show grants](archive/adr/0054-live-items-connected-apps-and-show-grants.md), superseded by ADR 0205
+- [ADR 0041: Publisher feeds and two-way links](archive/adr/0041-publisher-feeds-and-two-way-links.md), superseded by ADR 0255
+- [ADR 0052: Announcements through the Podcast Index hub](archive/adr/0052-announcements-through-the-podcast-index-hub.md), superseded by ADR 0255
+- [ADR 0054: Live items, connected apps and show grants](archive/adr/0054-live-items-connected-apps-and-show-grants.md), superseded by ADR 0255
 - [ADR 0055: The server shell: user folders, accounts, sessions and the vault window](archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md), superseded by ADR 0204
 - [ADR 0064: The editor edits the fields that MSP 2.0 edits](archive/adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md), superseded by ADR 0206
 - [ADR 0068: The sequence of the sections and fields of an editor page](archive/adr/0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md), superseded by ADR 0206

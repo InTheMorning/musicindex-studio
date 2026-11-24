@@ -313,7 +313,7 @@ where
     workspace.record_all_remote_files();
     // Continue each download that was not complete (ADR 0204 item 9).
     workspace.resume_downloads();
-    // Prepare the announcement queue (ADR 0205 item 32).
+    // Prepare the announcement queue (ADR 0255 item 32).
     workspace.resume_announcements();
     let port = listener
         .local_addr()

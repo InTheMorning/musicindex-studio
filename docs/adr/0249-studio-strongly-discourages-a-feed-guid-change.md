@@ -7,7 +7,7 @@
 - Technical choices: the main session selected the known GUID of item 1 and the position of the guard in the write. It also selected the refusal of a grant write, the texts, and the behavior when the read of item 9 fails.
 - Changes: [ADR 0248](0248-music-index-changes-a-feed-guid-in-place-and-studio-restores-no-guid.md) item 2. Studio puts back an earlier GUID when the user selects **Put Back** for an outside change (item 6). Studio makes no restore on its own.
 - Changes: [ADR 0175](0175-the-check-shows-what-music-index-holds.md) item 4. An answer 404 with `superseded_by` gives the finding of item 11, not the line "Music Index does not hold this feed yet."
-- Uses: [ADR 0008](0008-feed-types-and-feed-identity.md) item 2, [ADR 0122](0122-a-new-user-starts-with-a-default-file-host.md) item 8, [ADR 0174](0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md), [ADR 0205](0205-publisher-feeds-announcements-and-show-grants.md), [ADR 0247](0247-studio-restores-a-changed-feed-guid-and-corrects-a-link-with-an-old-guid.md) items 7 to 9. Stophammer ADR 0106 owns the behavior of the index for a GUID change, and Stophammer ADR 0088 owns `GET /v1/feeds/by-url`. This record cites them and does not restate them as rules of Studio.
+- Uses: [ADR 0008](0008-feed-types-and-feed-identity.md) item 2, [ADR 0122](0122-a-new-user-starts-with-a-default-file-host.md) item 8, [ADR 0174](0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md), [ADR 0255](0255-publisher-feeds-announcements-and-show-grants.md), [ADR 0247](0247-studio-restores-a-changed-feed-guid-and-corrects-a-link-with-an-old-guid.md) items 7 to 9. Stophammer ADR 0106 owns the behavior of the index for a GUID change, and Stophammer ADR 0088 owns `GET /v1/feeds/by-url`. This record cites them and does not restate them as rules of Studio.
 - Source: the request of the operator on 2026-11-22 that Studio strongly discourages a GUID change. The search of the code paths by ChatGPT, examined by the main session.
 - Bar: crosses modules (collection, pipeline, check, move, add, UI). Without this record, an agent can add a path that writes a different GUID with only an ordinary line in Review.
 
@@ -26,7 +26,7 @@ These facts of the code on 2026-11-22 apply. The main session examined each one.
 - A move with **Replace the File** writes the moved feed over a different feed. Review says "This move replaces a different file." and gives no GUID.
 - The add by address skips an address of the collection with a different GUID, with no message.
 - The check treats 404 with `superseded_by` as a feed that the index does not hold.
-- A grant write (ADR 0205) starts from the hosted file.
+- A grant write (ADR 0255) starts from the hosted file.
 
 ## Decision
 
@@ -44,7 +44,7 @@ These facts of the code on 2026-11-22 apply. The main session examined each one.
     - The button **Keep the Old GUID**. It sets the `podcast:guid` of the draft to the known GUID.
     - The field "Type {title} to change the GUID". The write button stays off until the text of the field, with no white space at each end, is equal to the feed title. A feed with no title uses the word `CHANGE`.
 4. The write request carries the confirmation. The core refuses a GUID change with no confirmation, so a request that does not come from the panel also stops. After a confirmed write, the known GUID is the new GUID.
-5. A grant write (ADR 0205) has no user to confirm. The core refuses a grant write that is a GUID change.
+5. A grant write (ADR 0255) has no user to confirm. The core refuses a grant write that is a GUID change.
 
 ### An Outside Change
 

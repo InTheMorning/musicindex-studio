@@ -7,12 +7,12 @@
 - Technical choices: the main session selected items 11 to 17 from the causes that a research agent found. The main session examined each code citation. The operator did not receive them as a question.
 - Bar: crosses modules. It changes the core links, the remote records, the download source, the move plan, the routes and the UI. Without this record, an agent can use ADR 0230 item 9 against item 6, or ADR 0205 item 8 against item 7.
 - Changes: [ADR 0230](0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 9, 11, 27, 31 and 32 (items 1 to 6 and items 14 to 17).
-- Changes: [ADR 0205](0205-publisher-feeds-announcements-and-show-grants.md) item 8, the write of the two feeds of a link (items 7 to 10).
+- Changes: [ADR 0205](../archive/adr/0205-publisher-feeds-announcements-and-show-grants.md) item 8, the write of the two feeds of a link (items 7 to 10).
 - Changes: [ADR 0179](0179-a-release-keeps-one-library-record-for-each-file.md) items 3 and 4, the join of a remote row and a local row (items 11 to 13).
 - Changes: [ADR 0155](0155-the-sort-menu-names-both-directions.md) item 1 and [ADR 0153](0153-the-people-list-has-a-sort-and-names-sort-with-numbers.md) item 7, the name of the sort "Feed Order" (items 4 and 5).
 - Changed by: [ADR 0234](0234-a-new-release-is-written-with-its-pages-and-a-one-sided-link-is-reported.md) items 3 and 4, on 2026-11-20. Item 10: the check box is on and disabled for the first write of a new release.
 - Changed by: [ADR 0251](0251-review-writes-the-two-sides-of-a-changed-link.md) items 1 and 2, on 2026-11-23. Item 7: the rows are in Review of each feed with a linked feed, not only of a new release.
-- Uses: [ADR 0007](0007-draft-diff-write-and-announce.md), the write of a draft. [ADR 0036](0036-library-records-host-inventory-and-host-operations.md), the planned address of a library file. [ADR 0148](0148-a-move-keeps-the-old-files-until-the-user-reviews-the-deletion.md) items 2 and 3, the files of a move plan. [ADR 0198](0198-the-review-of-a-delete-names-the-delete-and-a-deleted-feed-shows-only-what-it-can-do.md), the Retire block. [ADR 0213](0213-a-release-starts-on-the-page-of-its-artist.md) item 17, the link to an artist page.
+- Uses: [ADR 0007](0007-draft-diff-write-and-announce.md), the write of a draft. [ADR 0036](0036-library-records-host-inventory-and-host-operations.md), the planned address of a library file. [ADR 0148](0148-a-move-keeps-the-old-files-until-the-user-reviews-the-deletion.md) items 2 and 3, the files of a move plan. [ADR 0198](0198-the-review-of-a-delete-names-the-delete-and-a-deleted-feed-shows-only-what-it-can-do.md), the Retire block. [ADR 0256](0256-a-release-starts-on-the-page-of-its-artist.md) item 17, the link to an artist page.
 
 ## Context
 

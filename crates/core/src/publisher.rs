@@ -1,4 +1,4 @@
-//! Publisher feeds and their links to releases (ADR 0205). A release is an
+//! Publisher feeds and their links to releases (ADR 0255). A release is an
 //! album or a playlist (ADR 0086).
 //!
 //! A link is a `podcast:remoteItem` in the draft of each of its two feeds.
@@ -207,7 +207,7 @@ impl From<CollectionError> for PublisherError {
 
 /// The roles of a publisher feed for a change of a link. Confirmed roles
 /// come first. Studio then takes the roles that the draft gives, and
-/// confirms them (ADR 0205 item 4, ADR 0082 items 4 and 5).
+/// confirms them (ADR 0255 item 4, ADR 0082 items 4 and 5).
 ///
 /// # Errors
 ///
@@ -272,7 +272,7 @@ pub fn linked_releases(
 /// Each publisher feed that links to `release`, for the line in the sheet
 /// of a delete (ADR 0131 item 13). The function reads the draft of a
 /// publisher feed, or its hosted copy when it has no draft. The match is
-/// the match of a link (ADR 0205 item 12).
+/// the match of a link (ADR 0255 item 12).
 ///
 /// # Errors
 ///
@@ -306,7 +306,7 @@ pub fn publishers_linking(
 }
 
 /// Link a publisher feed and a release. Each draft gets its `remoteItem`
-/// (ADR 0205 items 6 and 7). An existing link changes in place. A new link
+/// (ADR 0255 items 6 and 7). An existing link changes in place. A new link
 /// goes last.
 ///
 /// # Errors
@@ -471,7 +471,7 @@ pub fn unlink(
 
 /// Record and confirm the roles of a publisher feed. The `rel` of each
 /// release item of its draft changes, and so does the `rel` of its link in
-/// each linked release (ADR 0205 item 11, ADR 0082 item 8).
+/// each linked release (ADR 0255 item 11, ADR 0082 item 8).
 ///
 /// # Errors
 ///
@@ -554,7 +554,7 @@ pub struct Catalog {
     pub releases: Vec<FeedId>,
     /// For a release: its publisher feeds in the collection. The feeds of
     /// its `podcast:publisher` come first, in that sequence, so the primary
-    /// one is first (ADR 0205 item 9). Then come the publisher feeds that
+    /// one is first (ADR 0255 item 9). Then come the publisher feeds that
     /// only list it.
     pub publishers: Vec<FeedId>,
     /// For a publisher feed: true when a release of the collection gives the
@@ -758,7 +758,7 @@ fn link_levels(
 /// What a link needs from one feed.
 struct Party {
     /// The `podcast:guid` of the draft. With no draft, it is the GUID of
-    /// the hosted file (ADR 0205 item 12).
+    /// the hosted file (ADR 0255 item 12).
     guid: Option<String>,
     /// The public address of the feed.
     url: Option<String>,
@@ -776,7 +776,7 @@ fn party(collection: &Collection, row: &FeedRow) -> Result<Party, PublisherError
 }
 
 /// True when a remote item names the feed. A `feedGuid` decides. An item
-/// with no `feedGuid` matches by its `feedUrl` (ADR 0205 item 12).
+/// with no `feedGuid` matches by its `feedUrl` (ADR 0255 item 12).
 fn names(item: &RemoteItem, feed: &Party) -> bool {
     match item.feed_guid.as_deref() {
         Some(guid) => feed.guid.as_deref() == Some(guid),

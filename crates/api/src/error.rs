@@ -258,7 +258,7 @@ impl From<PipelineError> for ApiError {
                 (StatusCode::UNPROCESSABLE_ENTITY, "signature_invalid")
             }
             PipelineErrorKind::PlanExpired => (StatusCode::CONFLICT, "plan_expired"),
-            // ADR 0205 items 48 to 51: the refusals of a granted write.
+            // ADR 0255 items 48 to 51: the refusals of a granted write.
             PipelineErrorKind::GrantNotActive => (StatusCode::CONFLICT, "grant_ended"),
             PipelineErrorKind::DraftOpen => (StatusCode::CONFLICT, "draft_open"),
             PipelineErrorKind::BadStatus => (StatusCode::CONFLICT, "bad_status"),
@@ -283,7 +283,7 @@ impl From<PipelineError> for ApiError {
 
 impl From<PublisherError> for ApiError {
     fn from(error: PublisherError) -> Self {
-        // A pipeline failure keeps the mapping of its own error (ADR 0205).
+        // A pipeline failure keeps the mapping of its own error (ADR 0255).
         if error.kind() == PublisherErrorKind::Pipeline {
             return match error.pipeline() {
                 Some(pipeline) => pipeline.clone().into(),

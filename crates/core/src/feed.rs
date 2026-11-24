@@ -446,7 +446,7 @@ impl Feed {
     }
 }
 
-/// Give the kind to show for a release (ADR 0213 item 11).
+/// Give the kind to show for a release (ADR 0256 item 11).
 #[must_use]
 pub fn release_kind_shown(
     kept_kind: Option<&str>,

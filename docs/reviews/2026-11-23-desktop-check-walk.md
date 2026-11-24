@@ -47,7 +47,7 @@ The Stop "No artist page" shows together with a link to the artist page Elijah L
 
 The test album is already linked to the artist page HeyCitizen. Thus the operator removed the artist from the release and selected **Review**.
 
-Result: the locked row is correct. It reads "Also write HeyCitizen" and "Removes the link to HeyCitizen's Test Album from the artist page." The write is not possible, because the Stop "This release has no artist page." shows at the top. This Stop is correct by ADR 0213 item 18: a release with tracks needs an artist page.
+Result: the locked row is correct. It reads "Also write HeyCitizen" and "Removes the link to HeyCitizen's Test Album from the artist page." The write is not possible, because the Stop "This release has no artist page." shows at the top. This Stop is correct by ADR 0256 item 18: a release with tracks needs an artist page.
 
 Observation 2: the same rule can stop a removal from the page side. **Remove** on a release row of an artist page removes the link. Review of the page then writes the release first (ADR 0251 item 7). When this page is the only artist page of the release, the server refuses the write of the release with `no_artist_page` (`crates/api/src/routes.rs`, near `feed_page_refusal`). A failed write of a release writes nothing after it, so the page is not written either. Before ADR 0251, the page was written alone. Whether the page Review shows the Stop before the write is not examined (inference from the code, not seen on the screen). Examine this after the walk. A test in the harness can show it.
 

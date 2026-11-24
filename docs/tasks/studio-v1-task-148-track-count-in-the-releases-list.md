@@ -1,6 +1,6 @@
 # Studio v1 Task 148: The Track Count In The Releases List
 
-Decision: none. This is Note 6 of the walk. [ADR 0213](../adr/0213-a-release-starts-on-the-page-of-its-artist.md) items 11 and 14 own the kind and the type label, and they do not change.
+Decision: none. This is Note 6 of the walk. [ADR 0256](../adr/0256-a-release-starts-on-the-page-of-its-artist.md) items 11 and 14 own the kind and the type label, and they do not change.
 
 Status: Complete on 2026-11-15, with the screenshot visual check. The visual gate for the operator is open.
 

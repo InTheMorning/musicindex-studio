@@ -86,7 +86,7 @@ macro_rules! walk_feed {
             walk_item!($visit, &$($m)* entry.value, $iter, [$($m)*], &path, &head);
         }
         // A live item has the same address fields as an item, and its
-        // content links (ADR 0023 item 1, ADR 0205 item 38).
+        // content links (ADR 0023 item 1, ADR 0255 item 38).
         for (i, live) in feed.live_items.$iter().enumerate() {
             let path = format!("live_items/{i}/");
             let head = format!(

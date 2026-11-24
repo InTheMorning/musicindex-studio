@@ -1,4 +1,4 @@
-// The announcement models (ADR 0205 items 19, 20, 25 and 34, ADR 0042). This
+// The announcement models (ADR 0255 items 19, 20, 25 and 34, ADR 0042). This
 // module has no Preact and no browser state. The Node tests in
 // `ui-tests/announce.test.mjs` examine it.
 
@@ -15,12 +15,12 @@ export function announceHint(enabled, wait) {
   return 'Studio sends it 30 seconds after the write.';
 }
 
-// The label of the check box in the footer of the review sheet (ADR 0205
+// The label of the check box in the footer of the review sheet (ADR 0255
 // item 19).
 export const ANNOUNCE_FOOTER_LABEL = 'Send a podping';
 
 // The cause of no podping, or null. The footer of the review sheet shows it
-// in the position of the check box (ADR 0205 item 19). `diff` is the diff of
+// in the position of the check box (ADR 0255 item 19). `diff` is the diff of
 // the API.
 export function announceSkipLine(diff) {
   const skip = diff ? diff.announce_skip : null;

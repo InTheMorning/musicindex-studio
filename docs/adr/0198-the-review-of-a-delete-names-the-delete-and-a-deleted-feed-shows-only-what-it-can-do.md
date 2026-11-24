@@ -51,7 +51,7 @@ The read-only feed also shows **Stop Retiring** and **Link to This Page**. Each 
 14. A refused deletion ([ADR 0036](0036-library-records-host-inventory-and-host-operations.md) item 13) does not count. A diff with only refused deletions has no write.
 15. A write that changes the feed and also deletes a file keeps **Write to the File Host**. Items 1 to 3 do not change.
 16. A write of only deletions (item 12) sends no podping. The feed file does not change, so an index has nothing new to read. `plan_announcements` (`crates/core/src/pipeline.rs`) plans no announcement and gives the skip cause `feed_unchanged`.
-17. The review footer shows the line "No podping: this write does not change the feed." in the position of the check box (ADR 0205 item 19). The UI shows the cause from the core and adds no rule about the operations.
+17. The review footer shows the line "No podping: this write does not change the feed." in the position of the check box (ADR 0255 item 19). The UI shows the cause from the core and adds no rule about the operations.
 
 ## Alternatives Considered
 

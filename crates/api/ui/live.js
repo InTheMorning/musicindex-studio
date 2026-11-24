@@ -1,4 +1,4 @@
-// The live item models (ADR 0205, ADR 0042). This module has no Preact and no
+// The live item models (ADR 0255, ADR 0042). This module has no Preact and no
 // browser state. The Node tests in `ui-tests/live.test.mjs` examine it.
 //
 // An entry of `live_items` in the draft model has `status`, `start`, `end`,
@@ -18,7 +18,7 @@ export function isLiveItem(live, key) {
   return liveKey(live) === key || `cid-${live._cid}` === key;
 }
 
-// Remove one live item from the draft model (ADR 0205 item 38).
+// Remove one live item from the draft model (ADR 0255 item 38).
 export function withoutLive(model, key) {
   return { ...model, live_items: (model.live_items || []).filter((live) => !isLiveItem(live, key)) };
 }
@@ -64,14 +64,14 @@ export function statusLabel(status) {
 }
 
 // The next action of a status: the label of the button and the status that
-// the status route sets (ADR 0205 item 40). An ended show has no action.
+// the status route sets (ADR 0255 item 40). An ended show has no action.
 export function nextAction(status) {
   if (status === 'pending') return { label: 'Go Live', status: 'live' };
   if (status === 'live') return { label: 'End the Show', status: 'ended' };
   return null;
 }
 
-// Can the user add a recording? Only an ended show can have one (ADR 0205
+// Can the user add a recording? Only an ended show can have one (ADR 0255
 // item 6).
 export function canRecord(live) {
   return live.status === 'ended';
@@ -93,7 +93,7 @@ export function showSummary(live, timeText) {
   return timeText ? `${label} · starts ${timeText}` : label;
 }
 
-// ---- Show grants (ADR 0205 items 46 to 52) ----
+// ---- Show grants (ADR 0255 items 46 to 52) ----
 
 const DAY = 24 * 60 * 60;
 
@@ -111,7 +111,7 @@ function secondsOf(text) {
 
 // The time when the grant of a live item ends: 24 hours after its `end`, or
 // after its `start` when `end` is blank. It is null when a time cannot be
-// read. The core has the same rule (ADR 0205 item 49).
+// read. The core has the same rule (ADR 0255 item 49).
 export function grantLimit(liveItem) {
   const start = secondsOf(liveItem && liveItem.start);
   if (start === null) return null;

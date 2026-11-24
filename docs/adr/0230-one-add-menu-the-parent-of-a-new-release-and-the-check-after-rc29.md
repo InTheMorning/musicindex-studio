@@ -7,7 +7,7 @@
 - Technical choices: the main session selected items 14 to 16 and items 20 to 33 from the causes that two research agents found. The operator did not receive them as a question. Items 16 and 21 are open for a review by the operator.
 - Bar: crosses modules: the core drafts, the delete records, the remote records, the routes and the UI. An agent can also add the word "feed" to a new button by mistake. The earlier ADRs 0212 and 0213 give the opposite of items 1 to 13.
 - Changes: [ADR 0212](0212-the-add-pages.md) items 1, 5, 6 and 8, the add controls of the page Releases and the form (items 1 to 13).
-- Changes: [ADR 0213](0213-a-release-starts-on-the-page-of-its-artist.md) items 1, 2, 5 and 6, where a release starts and the fields of its form (items 1 to 13).
+- Changes: [ADR 0213](../archive/adr/0213-a-release-starts-on-the-page-of-its-artist.md) items 1, 2, 5 and 6, where a release starts and the fields of its form (items 1 to 13).
 - Changes: [ADR 0165](0165-the-left-panel-marks-the-state-of-each-feed.md) item 2, the click on a row with the mark "Not checked" (items 17 to 19).
 - Changes: [ADR 0148](0148-a-move-keeps-the-old-files-until-the-user-reviews-the-deletion.md) items 4 and 5, the media host and the old files of a move in the draft (items 20 to 24).
 - Changes: [ADR 0131](0131-delete-a-feed-from-its-file-host.md) items 4 and 10, the text about Music Index (items 25 and 26).

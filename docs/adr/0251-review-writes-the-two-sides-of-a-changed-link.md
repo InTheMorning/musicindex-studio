@@ -10,7 +10,7 @@
 - Changes: [ADR 0231](0231-a-new-release-writes-its-artist-page-and-the-files-of-a-restored-release.md) item 7. The rows are not only in Review of a new release.
 - Changes: [ADR 0234](0234-a-new-release-is-written-with-its-pages-and-a-one-sided-link-is-reported.md) item 3. The locked check box is not only for the first write of a new release.
 - Changes: [ADR 0218](0218-a-page-link-in-review-and-a-suggestion-starts-with-no-person.md) items 3 and 6. The menu of the refusal panel always shows, and its last choice makes an artist page.
-- Uses: [ADR 0231](0231-a-new-release-writes-its-artist-page-and-the-files-of-a-restored-release.md) items 8 and 9, one write button and the stop after a failed write. [ADR 0234](0234-a-new-release-is-written-with-its-pages-and-a-one-sided-link-is-reported.md) items 5 to 8, the report of a one-sided link. [ADR 0205](0205-publisher-feeds-announcements-and-show-grants.md) items 6 and 7, a link changes the two drafts. [ADR 0007](0007-draft-diff-write-and-announce.md), the write of a draft.
+- Uses: [ADR 0231](0231-a-new-release-writes-its-artist-page-and-the-files-of-a-restored-release.md) items 8 and 9, one write button and the stop after a failed write. [ADR 0234](0234-a-new-release-is-written-with-its-pages-and-a-one-sided-link-is-reported.md) items 5 to 8, the report of a one-sided link. [ADR 0255](0255-publisher-feeds-announcements-and-show-grants.md) items 6 and 7, a link changes the two drafts. [ADR 0007](0007-draft-diff-write-and-announce.md), the write of a draft.
 - Source: [the UI findings of 2026-11-23](../reviews/2026-11-23-ui-findings.md), finding 9.
 - Bar: crosses modules. Item 2 is in the API, and items 4 to 8 are in the UI. Without this record, an agent can keep the rows only for a new release, and a link of two written feeds then needs two reviews.
 
@@ -60,7 +60,7 @@
 
 ### A Linked Release With No Page
 
-10. A row with a `refusal` stops the review before the write, because the write of B fails (ADR 0213 item 18). The usual cause is the removal of the only artist page of a release from that page. Review shows a Stop panel above the changes, one for each such row:
+10. A row with a `refusal` stops the review before the write, because the write of B fails (ADR 0256 item 18). The usual cause is the removal of the only artist page of a release from that page. Review shows a Stop panel above the changes, one for each such row:
 
     - The title is "{release} has no other artist page." for `no_artist_page`, and "{release} has no other artist, label or hosting page." for `no_publisher_page`.
     - The line is "A release needs an artist page." or "A release needs a page."

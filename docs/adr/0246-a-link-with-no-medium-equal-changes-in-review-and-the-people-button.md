@@ -5,7 +5,7 @@
 - Owner: operator
 - Accepted: 2026-11-22 by the operator, from drawings in the questionnaire. For finding 9, Studio uses the linked feed and also adds the medium. For finding 12, the review shows the count line and a closed fold.
 - Technical choices: the main session selected the condition and the shared fold of item 4. It also selected the names of item 5 and the functions of item 2.
-- Changes: [ADR 0205](0205-publisher-feeds-announcements-and-show-grants.md) item 6. A channel link with no `medium` that names a release of the collection is a release link.
+- Changes: [ADR 0205](../archive/adr/0205-publisher-feeds-announcements-and-show-grants.md) item 6. A channel link with no `medium` that names a release of the collection is a release link.
 - Changes: [ADR 0114](0114-the-review-shows-the-changes-in-words-and-marks-the-changed-part-of-a-line.md) item 2. A set of equal changes shows no example rows.
 - Changes: [ADR 0245](0245-review-repairs-short-addresses-and-offers-the-people-values.md) item 11. The label of the People button.
 - Source: [the findings of the tutorial for a hosting user](../reviews/2026-11-22-tj-tutorial-findings.md), finding 9, finding 12 and an open point of task 235.

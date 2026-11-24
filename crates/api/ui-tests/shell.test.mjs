@@ -29,7 +29,7 @@ test('the medium kind gives the dot and the label', () => {
 });
 
 test('feedKind gives the release kind and defaults to Album', () => {
-  const owner = 'ADR 0213 item 14: feedKind shows kind_shown. Fix feedKind in crates/api/ui/shell.js.';
+  const owner = 'ADR 0256 item 14: feedKind shows kind_shown. Fix feedKind in crates/api/ui/shell.js.';
   assert.equal(feedKind({ medium: 'music', kind_shown: 'album' }).label, 'Album', owner);
   assert.equal(feedKind({ medium: 'music', kind_shown: 'release' }).label, 'Release', owner);
   assert.equal(feedKind({ medium: 'music', kind_shown: 'ep' }).label, 'EP', owner);
@@ -963,7 +963,7 @@ test('a name order reads numbers as numbers', () => {
   assert.deepEqual(list.rows.map((r) => r.title), ['Volume 9', 'Volume 10']);
 });
 
-// musicindex ADR 0205 R-LIST-13 item 2, ADR 0155: each sort has two entries
+// musicindex ADR 0255 R-LIST-13 item 2, ADR 0155: each sort has two entries
 // in words, and the reversed entry follows its usual entry.
 test('the sort menu names both directions of each sort', () => {
   const labels = (sorts) => sortEntries(sorts).map((e) => e.label);

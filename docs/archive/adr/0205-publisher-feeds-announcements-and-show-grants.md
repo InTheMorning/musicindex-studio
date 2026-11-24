@@ -1,18 +1,20 @@
+> Archived: superseded by [ADR 0255](../../adr/0255-publisher-feeds-announcements-and-show-grants.md) on 2026-11-24. ADR 0255 restates each live rule of this ADR. Its item map gives the new item of each item.
+
 # ADR 0205: Publisher Feeds, Announcements And Show Grants
 
-- Status: Accepted
+- Status: Superseded by ADR 0255
 - Date: 2026-11-14
 - Owner: operator
 - Accepted: 2026-11-14. The operator accepted the consolidation of each changed decision (musicindex-research `df7b823`). This ADR makes no new decision. It restates each live rule of the ADRs that it supersedes, with each change from a subsequent ADR.
-- Supersedes: [ADR 0041](../archive/adr/0041-publisher-feeds-and-two-way-links.md), Publisher Feeds And Two-Way Links.
-- Supersedes: [ADR 0052](../archive/adr/0052-announcements-through-the-podcast-index-hub.md), Announcements Through The Podcast Index Hub.
-- Supersedes: [ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md), Live Items, Connected Apps And Show Grants.
-- Uses: [ADR 0007](0007-draft-diff-write-and-announce.md) for the draft, the diff and the write. [ADR 0008](0008-feed-types-and-feed-identity.md) for the feed types and the GUIDs. [ADR 0035](0035-a-release-library-is-the-master-of-each-feed.md) for the release folder. [ADR 0045](0045-phase-9-crates-test-servers-and-host-forms.md) for the test servers.
-- Uses: these current ADRs own a part of this area. This ADR names each one at its item. [ADR 0058](0058-grant-vaults-and-connected-apps-on-the-server.md) (the grant vaults and the apps on the server), [ADR 0075](0075-the-publisher-page-has-payments-and-credits.md) (the payments and the credits of a publisher feed), [ADR 0253](0253-the-roles-of-a-feed-and-of-each-link.md) (the roles of a publisher feed, of each link and of the form), [ADR 0122](0122-a-new-user-starts-with-a-default-file-host.md) (the placeholder GUID), [ADR 0086](0086-a-playlist-links-to-its-artist-or-label.md) (a playlist as a release), [ADR 0110](0110-a-connected-app-signs-each-request-with-its-own-key.md) (the key of an app and the pairing), [ADR 0127](0127-a-changed-feed-gets-a-new-build-date.md) (the build date), [ADR 0239](0239-the-panel-holds-the-content-and-the-page-has-tabs.md) (the tabs and the outline), [ADR 0136](0136-one-announcement-choice-at-the-write.md) (the announcement choice), [ADR 0161](0161-a-live-item-needs-a-stream-and-a-content-link-is-recommended.md) (the checks of a live item), [ADR 0184](0184-after-a-move-studio-shows-the-podping-of-the-move.md) (the podping of a move), [ADR 0189](0189-a-move-sends-one-podping-of-the-old-address.md) (the address of a move), [ADR 0190](0190-review-gives-the-return-wait-of-music-index.md) (the send time of a return), [ADR 0191](0191-a-return-warning-has-the-warning-color-and-a-sent-podping-can-go-again.md) (the podping that goes again).
+- Supersedes: [ADR 0041](0041-publisher-feeds-and-two-way-links.md), Publisher Feeds And Two-Way Links.
+- Supersedes: [ADR 0052](0052-announcements-through-the-podcast-index-hub.md), Announcements Through The Podcast Index Hub.
+- Supersedes: [ADR 0054](0054-live-items-connected-apps-and-show-grants.md), Live Items, Connected Apps And Show Grants.
+- Uses: [ADR 0007](../../adr/0007-draft-diff-write-and-announce.md) for the draft, the diff and the write. [ADR 0008](../../adr/0008-feed-types-and-feed-identity.md) for the feed types and the GUIDs. [ADR 0035](../../adr/0035-a-release-library-is-the-master-of-each-feed.md) for the release folder. [ADR 0045](../../adr/0045-phase-9-crates-test-servers-and-host-forms.md) for the test servers.
+- Uses: these current ADRs own a part of this area. This ADR names each one at its item. [ADR 0058](../../adr/0058-grant-vaults-and-connected-apps-on-the-server.md) (the grant vaults and the apps on the server), [ADR 0075](../../adr/0075-the-publisher-page-has-payments-and-credits.md) (the payments and the credits of a publisher feed), [ADR 0253](../../adr/0253-the-roles-of-a-feed-and-of-each-link.md) (the roles of a publisher feed, of each link and of the form), [ADR 0122](../../adr/0122-a-new-user-starts-with-a-default-file-host.md) (the placeholder GUID), [ADR 0086](../../adr/0086-a-playlist-links-to-its-artist-or-label.md) (a playlist as a release), [ADR 0110](../../adr/0110-a-connected-app-signs-each-request-with-its-own-key.md) (the key of an app and the pairing), [ADR 0127](../../adr/0127-a-changed-feed-gets-a-new-build-date.md) (the build date), [ADR 0239](../../adr/0239-the-panel-holds-the-content-and-the-page-has-tabs.md) (the tabs and the outline), [ADR 0136](../../adr/0136-one-announcement-choice-at-the-write.md) (the announcement choice), [ADR 0161](../../adr/0161-a-live-item-needs-a-stream-and-a-content-link-is-recommended.md) (the checks of a live item), [ADR 0184](../../adr/0184-after-a-move-studio-shows-the-podping-of-the-move.md) (the podping of a move), [ADR 0189](../../adr/0189-a-move-sends-one-podping-of-the-old-address.md) (the address of a move), [ADR 0190](../../adr/0190-review-gives-the-return-wait-of-music-index.md) (the send time of a return), [ADR 0191](../../adr/0191-a-return-warning-has-the-warning-color-and-a-sent-podping-can-go-again.md) (the podping that goes again).
 - Revised: 2026-11-15 by operator decision. Item 19 gives the position of the check box in the review sheet, from the selections of the operator on 2026-11-14 and 2026-11-15: the sheet has no row **Announce**. Item 38 gives the removal of a live show, which the operator selected on 2026-11-14. These rules were in ADR 0209 and ADR 0210, which are deleted.
-- Changed by: [ADR 0228](0228-undo-in-the-bar-a-notice-that-stays-and-the-rc28-check-findings.md) items 14 to 16, on 2026-11-20. Item 19: the XML changes come first, the file operations are in a closed fold, and the write error is above the check box.
-- Changed by: [ADR 0231](0231-a-new-release-writes-its-artist-page-and-the-files-of-a-restored-release.md) items 7 to 11, on 2026-11-20. Item 8: Review of a new release also writes its artist page when the check box "Also write {artist page}" is on.
-- Changed by: [ADR 0246](0246-a-link-with-no-medium-equal-changes-in-review-and-the-people-button.md) items 1 to 3, on 2026-11-22. Item 6: a channel link with no `medium` that names a release of the collection is a release link. Studio adds the `medium` when it sets the `rel`.
+- Changed by: [ADR 0228](../../adr/0228-undo-in-the-bar-a-notice-that-stays-and-the-rc28-check-findings.md) items 14 to 16, on 2026-11-20. Item 19: the XML changes come first, the file operations are in a closed fold, and the write error is above the check box.
+- Changed by: [ADR 0231](../../adr/0231-a-new-release-writes-its-artist-page-and-the-files-of-a-restored-release.md) items 7 to 11, on 2026-11-20. Item 8: Review of a new release also writes its artist page when the check box "Also write {artist page}" is on.
+- Changed by: [ADR 0246](../../adr/0246-a-link-with-no-medium-equal-changes-in-review-and-the-people-button.md) items 1 to 3, on 2026-11-22. Item 6: a channel link with no `medium` that names a release of the collection is a release link. Studio adds the `medium` when it sets the `rel`.
 
 ## Context
 
@@ -52,7 +54,7 @@
 15. Studio announces a feed with one request: `GET <hub>?url=<feed address>&podping=1`. A request always has `podping=1` (ADR 0136 item 3). The hub is `https://hub.podcastindex.org/pubnotify`. A shell can select a different hub, for example a local test server.
 16. The request uses no key, no Hive account and no secret.
 17. A response with the status 200 is a success. A response with the JSON `status` `false` or `"false"` is a refusal. Each other status, each refusal and each network failure is a failure.
-18. Studio does not send a separate notice to the musicindex API. Stophammer reads the podping and crawls the feed. This changes ADR 0035 item 21: "the musicindex API" is reached through the podping. With this change, ADR 0035 item 21 is in force, and [ADR 0204](0204-feed-files-moves-and-the-server.md) item 21 gives the announcement of a move.
+18. Studio does not send a separate notice to the musicindex API. Stophammer reads the podping and crawls the feed. This changes ADR 0035 item 21: "the musicindex API" is reached through the podping. With this change, ADR 0035 item 21 is in force, and [ADR 0204](../../adr/0204-feed-files-moves-and-the-server.md) item 21 gives the announcement of a move.
 
 ### The Announcement Choice
 
@@ -65,7 +67,7 @@
 
 ### The Addresses
 
-21. Studio announces the public address of the feed ([ADR 0021](0021-public-address-of-a-feed.md)).
+21. Studio announces the public address of the feed ([ADR 0021](../../adr/0021-public-address-of-a-feed.md)).
 22. A write with a move of the feed XML announces one address: the address before the move. A move with no address before the move announces the new address (ADR 0189 items 1 and 2).
 23. A feed with no public address gets no announcement. A write is not blocked for this reason.
 24. The first write of a new release or a new publisher feed gets an announcement, as each other write does.
@@ -92,23 +94,23 @@
 
 ### The Live Item Editor
 
-36. A live item is in an album feed that Studio can write, or in a show feed. A show feed is a new feed with `podcast:medium` `music` that the user makes for live items. Its form is that of a new album feed ([ADR 0032](0032-new-releases-formats-paths-and-new-feeds.md)).
+36. A live item is in an album feed that Studio can write, or in a show feed. A show feed is a new feed with `podcast:medium` `music` that the user makes for live items. Its form is that of a new album feed ([ADR 0032](../../adr/0032-new-releases-formats-paths-and-new-feeds.md)).
 37. A new live item gets a new UUID v4 `guid`, the status `pending`, and a `start` time from the user. The `guid` does not change after that (ADR 0008).
 38. The page of a live show edits the title, the description, the image, `start`, `end`, the stream enclosure, `podcast:contentLink` and the item value routes. It shows `podcast:liveValue`, and the user can change it or remove it. The tab Live Shows of the feed page has one row for each show, and the page of one show keeps this tab (ADR 0239 item 5). The page also removes the show:
     - The page of a live show has the button **Remove the Show** at its end. It is destructive.
-    - The button opens a confirm with the title `Remove “{title}”?` and the destructive button **Remove the Show** ([ADR 0193](0193-a-destructive-button-is-the-first-button-of-its-row.md)).
+    - The button opens a confirm with the title `Remove “{title}”?` and the destructive button **Remove the Show** ([ADR 0193](../../adr/0193-a-destructive-button-is-the-first-button-of-its-row.md)).
     - The text of the confirm is "Studio removes the show from the draft. The feed changes at the next write." For a show with the status `live`, the text also says "Apps lose the stream of this show at that write."
     - After the confirm, Studio removes the live item from the draft and shows the tab **Live Shows**. Review shows the removal before the write, as each change of the draft.
     - The tab **Live Shows** has no remove control on its rows. The removal adds no rule to the UI. A rule of the core about a live item with a grant stays in the core.
 39. Studio does not write a live item with no `start`, with a `status` that is not `pending`, `live` or `ended`, or with no stream. ADR 0161 items 1 to 9 give the checks of the stream and the warning for a live item with no content link. A refusal stops the write before any change on a host, as for an incorrect address.
 40. "Go live" changes the status from `pending` to `live`, and "End the show" changes it from `live` to `ended`. Each one changes the draft and opens the review sheet. The user writes, and the announcement follows.
-41. An `ended` live item can get a recording. The user imports an audio file, as for a track ([ADR 0026](0026-import-music-files-through-the-draft.md), [ADR 0033](0033-a-lossless-import-gives-an-mp3-enclosure.md)), and the enclosure of the live item points to it.
+41. An `ended` live item can get a recording. The user imports an audio file, as for a track ([ADR 0026](../../adr/0026-import-music-files-through-the-draft.md), [ADR 0033](../../adr/0033-a-lossless-import-gives-an-mp3-enclosure.md)), and the enclosure of the live item points to it.
 
 ### Connected Apps
 
 42. A connected app is a program of the user, for example musicindex-live-publisher, that asks Studio to write a live item change. Studio owns the vault, the collection and the write. The other app does not open them.
 43. The user adds a connected app in Studio with a name. The app pairs with a one-time pairing text, and signs each request with its own key. Studio keeps no token of an app (ADR 0110 items 1 to 11). The user can remove the app at any time.
-44. The routes for connected apps are under `/app/v1/`. Each request needs a signed event of the key of an active app, and no other credential (ADR 0110 items 12 to 16). The pairing request has the signed event of a new key (ADR 0110 items 10 and 13). The routes need a loopback `Host` on the desktop, and the server serves them on the public origin (ADR 0058 item 16). The `/api/` routes do not accept the credential of an app. Thus the rule of [ADR 0017](0017-local-api-access.md) for `/api/` does not change.
+44. The routes for connected apps are under `/app/v1/`. Each request needs a signed event of the key of an active app, and no other credential (ADR 0110 items 12 to 16). The pairing request has the signed event of a new key (ADR 0110 items 10 and 13). The routes need a loopback `Host` on the desktop, and the server serves them on the public origin (ADR 0058 item 16). The `/api/` routes do not accept the credential of an app. Thus the rule of [ADR 0017](../../adr/0017-local-api-access.md) for `/api/` does not change.
 45. A connected app can only list its show grants, change the status of a granted live item, and set or remove its `podcast:liveValue`. ADR 0110 also gives the routes of the pairing, of the identity of the app, and of the wrapper of a grant (ADR 0110 item 23).
 
 ### Show Grants
@@ -132,7 +134,7 @@
 ## Alternatives Considered
 
 - Keep ADR 0041, ADR 0052 and ADR 0054 current, each with its "Changed by" lines. Not chosen: the global decision of 2026-11-14 permits three changes at most, and each of the three ADRs had five.
-- Put this area into one ADR with the ADRs that ADR 0135 or ADR 0071 also change. Not chosen: those ADRs have different subjects. The [ADR consolidation plan](../plans/adr-consolidation-plan.md) gives the areas.
+- Put this area into one ADR with the ADRs that ADR 0135 or ADR 0071 also change. Not chosen: those ADRs have different subjects. The [ADR consolidation plan](../../plans/adr-consolidation-plan.md) gives the areas.
 
 The superseded ADRs give the alternatives of each original decision.
 

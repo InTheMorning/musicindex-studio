@@ -845,9 +845,9 @@ pub struct Workspace {
     /// The queue of downloads (ADR 0204 items 7 and 9). A route clones the
     /// `Arc` and then unlocks the workspace.
     pub(crate) downloads: Arc<DownloadQueue>,
-    /// The hub that gets the announcements (ADR 0205 item 15).
+    /// The hub that gets the announcements (ADR 0255 item 15).
     pub(crate) hub: String,
-    /// The times of the announcement queue (ADR 0205 items 28 and 29).
+    /// The times of the announcement queue (ADR 0255 items 28 and 29).
     pub(crate) announce_timing: Timing,
     /// The worker of the announcement queue.
     pub(crate) announcer: Arc<Announcer>,
@@ -949,7 +949,7 @@ impl SignerSlot {
     }
 }
 
-/// The hub of a new workspace (ADR 0205 item 15).
+/// The hub of a new workspace (ADR 0255 item 15).
 #[cfg(not(test))]
 const NEW_HUB: &str = announce::DEFAULT_HUB;
 
@@ -2322,7 +2322,7 @@ impl Workspace {
         }
     }
 
-    /// Prepare the announcement queue at the start (ADR 0205 item 32). An
+    /// Prepare the announcement queue at the start (ADR 0255 item 32). An
     /// interrupted announcement waits again, and a waiting announcement
     /// older than the maximum age fails. The worker starts when the router
     /// is ready, and it then sends each due announcement.

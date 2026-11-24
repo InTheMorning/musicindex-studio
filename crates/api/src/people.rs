@@ -953,7 +953,7 @@ pub(crate) struct FieldsQuery {
     scope: Option<String>,
 }
 
-/// The rows of the field list for a text and a cursor (musicindex ADR 0205
+/// The rows of the field list for a text and a cursor (musicindex ADR 0255
 /// R-QUERY-7). The core gives each edit range. The route sends no request.
 pub(crate) async fn field_rows(Query(query): Query<FieldsQuery>) -> ApiResult {
     let cursor = query

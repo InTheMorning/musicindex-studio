@@ -1,6 +1,6 @@
 # Studio v1 Task 154: The Menu "Kind" Is In The First Tab Of A Release
 
-Decision: [ADR 0213](../adr/0213-a-release-starts-on-the-page-of-its-artist.md) items 13 and 16. The main session changes the two items in the commit of this task, with a `- Revised:` line. Item 13 then gives the position between "Title" and "Artist". Item 16 then gives the hint of this file.
+Decision: [ADR 0256](../adr/0256-a-release-starts-on-the-page-of-its-artist.md) items 13 and 16. The main session changes the two items in the commit of this task, with a `- Revised:` line. Item 13 then gives the position between "Title" and "Artist". Item 16 then gives the hint of this file.
 
 Status: Complete on 2026-11-15, with the screenshot visual check. The visual gate for the operator is open.
 
@@ -8,7 +8,7 @@ Status: Complete on 2026-11-15, with the screenshot visual check. The visual gat
 
 - The delegate was `gpt-6-luna` with medium effort.
 - Corrections of the main session: the delegate put the menu in an extra `div`, and the row did not follow the layout of the other fields. The menu is a direct row of the group. The page table and the page **Settings** do not get the release flag, because no code uses it there.
-- The main session changed ADR 0213 items 13 and 16 in the commit of this task. The form of a new release keeps the hint "Studio shows this kind. The feed file has no tag for it."
+- The main session changed ADR 0256 items 13 and 16 in the commit of this task. The form of a new release keeps the hint "Studio shows this kind. The feed file has no tag for it."
 - The gate passed on the tree with this change.
 - Screenshots of the main session, at 1280 px and at 390 px, in the light theme and the dark theme: the first tab of a release has the fields "Title", "Kind" and "Artist" in that sequence, with the hint. A change to "EP" changes the tab name, the type label of the head and the left panel. The top bar shows "No changes". The tab **Settings** has no menu "Kind". `$edges()` and `$overflow()` are empty, and the fit check has no finding.
 - A playlist and a publisher feed have no screenshot. Only `AlbumPage` gives the field, and the API gives `kind_shown` only for a feed with the medium `music`. This is a check of the source.
@@ -23,8 +23,8 @@ The menu "Kind" of a release moves from the tab **Settings** to the first tab, b
 
 - Operator choice (2026-11-15): the menu "Kind" is in the first tab of a release, between "Title" and "Artist". The tab **Settings** has no menu "Kind".
 - Operator choice (2026-11-15), from drawings: a change of the menu saves at once, as before. The hint below the menu is "Saves at once. The feed file has no tag for the kind."
-- The four values of the menu do not change (ADR 0213 item 12).
-- A playlist, a publisher feed and a feed with live shows only get no menu (ADR 0213 item 15).
+- The four values of the menu do not change (ADR 0256 item 12).
+- A playlist, a publisher feed and a feed with live shows only get no menu (ADR 0256 item 15).
 
 ## Code Locations
 
@@ -47,7 +47,7 @@ The menu "Kind" of a release moves from the tab **Settings** to the first tab, b
 ## Do Not Touch
 
 - `docs/adr/`, `AGENTS.md`
-- The API route that saves the kind, and the core rule of ADR 0213 item 11
+- The API route that saves the kind, and the core rule of ADR 0256 item 11
 - The form that makes a new release
 - `crates/api/ui/assets/tokens.json`
 
@@ -66,16 +66,16 @@ The menu "Kind" of a release moves from the tab **Settings** to the first tab, b
 1. In `pages.js`, give the first section of the page `album` the field `kind` between `title` and `author`, only for a release that has a kind. Use the option `release` that `settings` uses today. Remove the section `kind` from `settings`.
 2. In `editor.js`, show the menu at the field `kind` of the first section, with `ChoiceSelect`, `RELEASE_KINDS` and `saveKind`. Remove the section "Kind" from `SettingsPage`.
 3. Set the hint to "Saves at once. The feed file has no tag for the kind."
-4. Keep the update of the type label after a save (ADR 0213 item 14): the head of the feed page, the tab name and the left panel show the new kind with no reload.
-5. Replace the test of the Settings position with the tests of this file. Change each comment that cites ADR 0213 item 13 for the old position.
+4. Keep the update of the type label after a save (ADR 0256 item 14): the head of the feed page, the tab name and the left panel show the new kind with no reload.
+5. Replace the test of the Settings position with the tests of this file. Change each comment that cites ADR 0256 item 13 for the old position.
 
 ## Acceptance Criteria
 
 Mechanical:
 
-1. A Node test in `crates/api/ui-tests/pages.test.mjs`: the first section of the page `album` for a release has the fields `title`, `kind`, `author` in that sequence. With `release: false`, it has no field `kind`. The failure message starts with "ADR 0213 item 13" and gives the fix.
-2. A Node test: `pageSequence('settings', { album: true, release: true })` has no section `kind`. The failure message starts with "ADR 0213 item 13".
-3. A Node test reads `editor.js`: the hint text is "Saves at once. The feed file has no tag for the kind.", and the old hint text does not occur. The failure message starts with "ADR 0213 item 16".
+1. A Node test in `crates/api/ui-tests/pages.test.mjs`: the first section of the page `album` for a release has the fields `title`, `kind`, `author` in that sequence. With `release: false`, it has no field `kind`. The failure message starts with "ADR 0256 item 13" and gives the fix.
+2. A Node test: `pageSequence('settings', { album: true, release: true })` has no section `kind`. The failure message starts with "ADR 0256 item 13".
+3. A Node test reads `editor.js`: the hint text is "Saves at once. The feed file has no tag for the kind.", and the old hint text does not occur. The failure message starts with "ADR 0256 item 16".
 4. The test `the release kind section starts Settings and does not appear for a show` does not exist.
 5. `tools/gate.sh` passes.
 
@@ -98,7 +98,7 @@ Implement only this task. Do not redesign the architecture.
 
 Read:
 - `docs/tasks/studio-v1-task-154-kind-menu-in-the-first-tab-of-a-release.md` (this file), each section
-- `docs/adr/0213-a-release-starts-on-the-page-of-its-artist.md`, items 10 to 16
+- `docs/adr/0256-a-release-starts-on-the-page-of-its-artist.md`, items 10 to 16
 - `crates/api/ui/pages.js`
 - `crates/api/ui/editor.js`
 - `crates/api/ui/app.js`
@@ -113,7 +113,7 @@ Constraints:
 
 Do not touch:
 - `docs/adr/`, `AGENTS.md`
-- The API route that saves the kind, and the core rule of ADR 0213 item 11
+- The API route that saves the kind, and the core rule of ADR 0256 item 11
 - The form that makes a new release
 - `crates/api/ui/assets/tokens.json`
 

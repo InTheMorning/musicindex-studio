@@ -1690,14 +1690,14 @@ pub(crate) struct NewAlbumFeed {
     path: String,
     title: String,
     author: String,
-    /// `music` (the default), `publisher` (ADR 0205 item 2) or `musicL`
+    /// `music` (the default), `publisher` (ADR 0255 item 2) or `musicL`
     /// (ADR 0053 item 2).
     medium: Option<String>,
-    /// `artist` or `label`. A publisher feed needs it (ADR 0205 item 1).
+    /// `artist` or `label`. A publisher feed needs it (ADR 0255 item 1).
     role: Option<String>,
-    /// The kind kept for the new release (ADR 0213 item 10).
+    /// The kind kept for the new release (ADR 0256 item 10).
     kind: Option<String>,
-    /// The artist page that starts the new release (ADR 0213 items 1 and 7).
+    /// The artist page that starts the new release (ADR 0256 items 1 and 7).
     publisher_id: Option<i64>,
     /// The publisher feed above a new publisher feed (ADR 0232 item 9).
     below_id: Option<i64>,
@@ -2007,7 +2007,7 @@ fn check_found_request(body: &NewAlbumFeed) -> Result<(), ApiError> {
 }
 
 /// Make a new feed in a connected folder, as a draft with no hosted file
-/// (ADR 0032 items 6 to 9, ADR 0205 items 1 and 2).
+/// (ADR 0032 items 6 to 9, ADR 0255 items 1 and 2).
 pub(crate) async fn new_album_feed(
     State(shared): State<Shared>,
     Json(body): Json<NewAlbumFeed>,
@@ -2281,7 +2281,7 @@ pub(crate) struct UpdateReleaseKind {
     kind: Option<String>,
 }
 
-/// Keep the release kind without changing its draft (ADR 0213 item 13).
+/// Keep the release kind without changing its draft (ADR 0256 item 13).
 pub(crate) async fn set_release_kind(
     State(shared): State<Shared>,
     Path(id): Path<i64>,
@@ -3395,7 +3395,7 @@ pub(crate) fn ensure_writable_draft(w: &Workspace, id: FeedId) -> Result<(), Api
     ensure_draft(w, id)
 }
 
-/// Start the draft of a feed when it has none (ADR 0205 item 8). A feed
+/// Start the draft of a feed when it has none (ADR 0255 item 8). A feed
 /// with a draft is not changed. A feed with no connector starts its draft
 /// from its release folder (ADR 0067 item 3).
 pub(crate) fn ensure_draft(w: &Workspace, id: FeedId) -> Result<(), ApiError> {
@@ -3413,7 +3413,7 @@ pub(crate) fn ensure_draft(w: &Workspace, id: FeedId) -> Result<(), ApiError> {
 
 /// Refuse a link route for a read-only feed or a feed of the wrong medium
 /// before a draft starts, so that a refusal starts no draft. The core
-/// makes the same checks again (ADR 0205 items 1 and 5).
+/// makes the same checks again (ADR 0255 items 1 and 5).
 fn check_mediums(
     w: &Workspace,
     publisher: FeedId,
@@ -3466,7 +3466,7 @@ fn before_change(w: &Workspace, ids: &[FeedId]) -> Result<DraftBytes, ApiError> 
 }
 
 /// The feeds whose draft a publisher change altered, the publisher feed
-/// too, in the sequence of their IDs (ADR 0205 item 8). Each page leaves
+/// too, in the sequence of their IDs (ADR 0255 item 8). Each page leaves
 /// out its own feed. The title is the title of the feed row.
 fn changed_json(w: &Workspace, before: &DraftBytes) -> ApiResult {
     let mut changed = Vec::new();
@@ -3529,7 +3529,7 @@ pub(crate) struct RoleBody {
     roles: Vec<String>,
 }
 
-/// Link a publisher feed to a release. Both drafts change (ADR 0205
+/// Link a publisher feed to a release. Both drafts change (ADR 0255
 /// items 6 to 8).
 pub(crate) async fn add_link(
     State(shared): State<Shared>,
@@ -4269,7 +4269,7 @@ pub(crate) async fn list_release_on_page(
 }
 
 /// Remove the link between a publisher feed and a release from both
-/// drafts (ADR 0205 items 7 and 8).
+/// drafts (ADR 0255 items 7 and 8).
 pub(crate) async fn remove_link(
     State(shared): State<Shared>,
     Path((id, release)): Path<(i64, i64)>,
@@ -4288,7 +4288,7 @@ pub(crate) async fn remove_link(
 }
 
 /// Change and confirm the roles of a publisher feed. The `rel` of each link
-/// changes in its draft and in each linked release (ADR 0205 item 11, ADR
+/// changes in its draft and in each linked release (ADR 0255 item 11, ADR
 /// 0082 items 7 and 8).
 pub(crate) async fn set_publisher_role(
     State(shared): State<Shared>,
@@ -4612,7 +4612,7 @@ pub(crate) struct NewLiveItem {
     start: String,
 }
 
-/// Add a live item to the draft of a music feed (ADR 0205 items 36 and 37).
+/// Add a live item to the draft of a music feed (ADR 0255 items 36 and 37).
 /// The route changes the draft only. It never writes to a host.
 pub(crate) async fn add_live_item(
     State(shared): State<Shared>,
@@ -4654,7 +4654,7 @@ pub(crate) struct SentLiveStatus {
     status: String,
 }
 
-/// Change the status of a live item in the draft (ADR 0205 item 40). The
+/// Change the status of a live item in the draft (ADR 0255 item 40). The
 /// route changes the draft only. It never writes to a host.
 pub(crate) async fn set_live_status(
     State(shared): State<Shared>,
@@ -5138,7 +5138,7 @@ fn linked_feeds_to_write(
 
 /// Give the page-rule refusal for a draft. A feed-file deletion, a feed
 /// that is hidden from apps and a feed of an open change set have no
-/// refusal (ADR 0213 item 22).
+/// refusal (ADR 0256 item 22).
 fn feed_page_refusal(w: &Workspace, id: FeedId) -> Result<Option<&'static str>, ApiError> {
     if w.collection.has_draft_feed_delete(id)? || w.collection.has_open_change_set_row(id)? {
         return Ok(None);
@@ -5296,7 +5296,7 @@ pub(crate) async fn write_feed(
     .await?;
     // The write is done. A failure of this step keeps the usual send time.
     let moved = move_return_send_time(&shared, id, return_read).await;
-    // The write put its announcements into the queue (ADR 0205).
+    // The write put its announcements into the queue (ADR 0255).
     blocking(shared, move |w| {
         w.announcer.wake();
         Ok(())
@@ -5456,7 +5456,7 @@ pub(crate) async fn put_announce_settings(
     .await
 }
 
-/// The recent announcements of a feed, the newest first (ADR 0205 item 33).
+/// The recent announcements of a feed, the newest first (ADR 0255 item 33).
 pub(crate) async fn list_announcements(
     State(shared): State<Shared>,
     Path(id): Path<i64>,
@@ -9533,7 +9533,7 @@ pub(crate) async fn whoami(Extension(app): Extension<ConnectedApp>) -> Json<Valu
     Json(who_json(&app))
 }
 
-// ---- Show grants (ADR 0205 items 46 to 52) ----
+// ---- Show grants (ADR 0255 items 46 to 52) ----
 
 /// The time of the computer, in seconds since the Unix epoch.
 fn unix_now() -> u64 {
@@ -9599,7 +9599,7 @@ pub(crate) struct GrantApp {
     app_id: Option<i64>,
 }
 
-/// Ask for a show grant in the draft (ADR 0205 item 46). The body names the
+/// Ask for a show grant in the draft (ADR 0255 item 46). The body names the
 /// app: `{"app_id": 3}`. A body with no active app gives 422
 /// `app_required` (ADR 0110 item 19).
 pub(crate) async fn put_draft_grant(
@@ -9615,7 +9615,7 @@ pub(crate) async fn put_draft_grant(
     .await
 }
 
-/// Remove a show grant from the draft (ADR 0205 item 46).
+/// Remove a show grant from the draft (ADR 0255 item 46).
 pub(crate) async fn delete_draft_grant(
     State(shared): State<Shared>,
     Path((id, guid)): Path<(i64, String)>,
@@ -9628,7 +9628,7 @@ pub(crate) async fn delete_draft_grant(
 }
 
 /// End the open grant of a live item: "Stop the grant" on the live item
-/// page (ADR 0205 item 52). After it, a connected app gets 409
+/// page (ADR 0255 item 52). After it, a connected app gets 409
 /// `grant_ended` for this show. A grant that has ended stays ended.
 pub(crate) async fn end_feed_grant(
     State(shared): State<Shared>,
@@ -9662,7 +9662,7 @@ pub(crate) async fn end_feed_grant(
 }
 
 /// The show grants of a feed with their granted writes, for the live item
-/// page (ADR 0205 item 52).
+/// page (ADR 0255 item 52).
 pub(crate) async fn list_feed_grants(
     State(shared): State<Shared>,
     Path(id): Path<i64>,
@@ -9793,7 +9793,7 @@ fn grant_ended() -> ApiError {
     )
 }
 
-/// Each active show grant of the app (ADR 0205 item 43). The route has no
+/// Each active show grant of the app (ADR 0255 item 43). The route has no
 /// grant vault key, so it reads the hosted file of a feed only from a host
 /// that needs no secret. A show on a host with a secret is in the list with
 /// its feed and its live value origin, and with no status, no times and no
@@ -9856,7 +9856,7 @@ pub(crate) async fn list_shows(
     .await
 }
 
-/// Write one granted change for a connected app (ADR 0205 item 50, ADR
+/// Write one granted change for a connected app (ADR 0255 item 50, ADR
 /// 0058 items 11 to 13). Give the version, the status and the live value
 /// after the write. The app never gets a secret. The connectors get their
 /// secrets from the grant vault, which the grant vault key of the body
@@ -9955,7 +9955,7 @@ fn granted_write(
         checked,
         now,
     )?;
-    // The write put its announcements into the queue (ADR 0205).
+    // The write put its announcements into the queue (ADR 0255).
     w.announcer.wake();
     let hosted = hosted_feed(w, &hosts, show.feed_id)?;
     if let Some(feed) = &hosted {

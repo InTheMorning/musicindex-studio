@@ -23,7 +23,7 @@ ChatGPT made the search in two runs. The main session examined the sources of th
 
 | Test | What replaced it |
 | --- | --- |
-| Task 049, make an album from "Add a Feed" | ADR 0213: a release starts on the page of its artist. The gate of ADR 0213 has the new flow. The part "add a track from an address on a phone" is step C2. |
+| Task 049, make an album from "Add a Feed" | ADR 0256: a release starts on the page of its artist. The gate of ADR 0256 has the new flow. The part "add a track from an address on a phone" is step C2. |
 | Task 066, the three pickers | ADR 0144 gives the recipient one sheet, **Add a Recipient**. Step B6 uses the current sheets. |
 | Task 076, **Use** and "Saved" on the picture field | ADR 0196 gives lists of pictures and websites. Task 133 proved the lists with screenshots. Step B7 has the part with a real Nostr profile. |
 | Tasks 081 and 082, "Member of" | ADR 0132 gives the links to artist and label pages. Step B8 (task 093) has the add and the removal. |
@@ -38,7 +38,7 @@ Where a later decision changed a control name, the step gives the current name f
 
 1. Sign up on `studio.musicindex.org` with the NIP-07 extension. Sign out and sign in again. (Phase 12 test 6, ADR 0056.) Result: the two operations pass.
 2. Select **I make music** and give a name. Make the pages in the temporary area. Connect a file host and move the pages to it. (Tasks 083 and 086, ADR 0119 and ADR 0122.) Result: each hosted feed has a real GUID, and no link has a placeholder GUID.
-3. Add a release from the page of the artist, with the flow of ADR 0213. Write the two feeds through Review. Result: the release has the link to its artist page.
+3. Add a release from the page of the artist, with the flow of ADR 0256. Write the two feeds through Review. Result: the release has the link to its artist page.
 
 ### B. Feeds And People On The Server, With A Computer
 

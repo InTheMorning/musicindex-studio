@@ -33,7 +33,7 @@ The main session ran the tutorial again after commit `a0ed27c`, in `.studio-dev/
 11. **The refusal of a bad address names model paths.** The write message is "these address fields are not full http or https addresses: items/0/persons/0/href …". A user does not know what `items/0/persons/0/href` is. Proposal: name the track, the credit and the field, for example "Track 1, credit Ben Doerfel: Information address".
 12. **The review of a role change repeats one line.** The review of The Doerfels shows "Remote items: 18 entries get the relation artist", then the line "Relation: none → artist" for each entry. Proposal: show the count line only.
 
-13. **A link of Elijah Lied names an old GUID.** In `elijahliedpubfeed.xml`, the link to "This Is It" has `feedGuid="11f41bfe-7cbe-5795-85c3-6deaccac20aa"`. The feed `thisisit.xml` has the GUID `24e9311b-73a9-5f48-b593-81148712cb14`. The GUID decides the match (ADR 0205 item 12), so the move does not change that link, and the review of Elijah Lied shows 5 entries. Proposal: tell the user to correct the link in the hosted feed.
+13. **A link of Elijah Lied names an old GUID.** In `elijahliedpubfeed.xml`, the link to "This Is It" has `feedGuid="11f41bfe-7cbe-5795-85c3-6deaccac20aa"`. The feed `thisisit.xml` has the GUID `24e9311b-73a9-5f48-b593-81148712cb14`. The GUID decides the match (ADR 0255 item 12), so the move does not change that link, and the review of Elijah Lied shows 5 entries. Proposal: tell the user to correct the link in the hosted feed.
 
 The write of the new hosting page gave `not_reachable` (404) in the test, because the test does not put the file on the public site. This is a limit of the test, not a finding.
 

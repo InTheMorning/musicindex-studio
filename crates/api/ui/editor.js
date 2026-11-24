@@ -1857,7 +1857,7 @@ function useAnnounceChoice(onChange) {
   return { enabled, busy, error, change };
 }
 
-// The check box of the review page of a change set (ADR 0205 item 19).
+// The check box of the review page of a change set (ADR 0255 item 19).
 export function AnnounceChoice({ onChange, wait = null }) {
   const { enabled, busy, error, change } = useAnnounceChoice(onChange);
   if (enabled === null) return null;
@@ -1870,7 +1870,7 @@ export function AnnounceChoice({ onChange, wait = null }) {
 }
 
 // The check box in the footer of the review sheet, at the right side above
-// the write button (ADR 0205 item 19). With no possible podping, a line gives
+// the write button (ADR 0255 item 19). With no possible podping, a line gives
 // the cause in the same position.
 function AnnounceFooterChoice({ choice, skip }) {
   if (skip) return html`<div class="announce-footer-row"><span class="hint">${skip}</span></div>`;
@@ -1884,7 +1884,7 @@ function AnnounceFooterChoice({ choice, skip }) {
   </div>`;
 }
 
-// The grant control of each pending show of the draft (ADR 0205 item 46,
+// The grant control of each pending show of the draft (ADR 0255 item 46,
 // ADR 0110 item 19). `grantControl` of `apps.js` chooses the control: a
 // check box for one app, a select menu for two or more apps and a disabled
 // menu for no app. The control asks the grant route and takes the new diff
@@ -2043,7 +2043,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
     await checkLinks();
   }); };
   const refreshDiff = async () => setDiff(await api(`/feeds/${feedId}/diff`));
-  // The announcement choice of the footer (ADR 0205 item 19).
+  // The announcement choice of the footer (ADR 0255 item 19).
   const announce = useAnnounceChoice(refreshDiff);
   // The sheet examines the draft each time that it opens.
   useEffect(() => { if (open) { setResult(null); setAlsoOff(new Set()); examine(); } }, [open]);
@@ -2686,7 +2686,7 @@ export function DeleteUndoBar() {
 function FeedFacts({ feed, draft, onRemoved, onListChanged }) {
   const { busy, error, run } = useAction();
   const deleteUndo = useDeleteUndo();
-  // The announcements of the feed, the newest first (ADR 0205 item 34). The
+  // The announcements of the feed, the newest first (ADR 0255 item 34). The
   // list loads when the page opens, after each write, and each 5 seconds
   // while the newest one waits.
   const [announcements, setAnnouncements] = useState(null);
@@ -2991,7 +2991,7 @@ export function GatherPagesSheet({ page, role, feeds, onMoved, onAddHost, onOpen
 }
 
 // The section "Artists and labels" of an album or a playlist: its publisher
-// feeds, in the sequence of `podcast:publisher` (ADR 0205 item 9, ADR 0086
+// feeds, in the sequence of `podcast:publisher` (ADR 0255 item 9, ADR 0086
 // item 4). Each link changes this draft and the draft of the other feed.
 function ArtistsAndLabels({ feed, feeds, model, update, draft, go, onListChanged }) {
   const { connectors = [] } = useContext(PickerContext) || {};
@@ -3000,20 +3000,20 @@ function ArtistsAndLabels({ feed, feeds, model, update, draft, go, onListChanged
   const [changed, setChanged] = useState([]);
   const [chosen, setChosen] = useState('');
   // The publisher feeds of this release, in the sequence of
-  // `podcast:publisher` (ADR 0205 item 9). The first one is the primary.
+  // `podcast:publisher` (ADR 0255 item 9). The first one is the primary.
   const publishers = model.publisher ? model.publisher.remote_items : [];
   const rows = publishers.map((entry, index) => ({ index, entry, match: linkedFeed(feeds, entry) }));
   const candidates = pageLinkCandidates(feeds, model);
   const twoDrafts = (action, call) => changeTwoDrafts(action, { feedId: feed.id, draft, onListChanged, setChanged, call });
   // Swap this publisher feed with the one above or below it. No other feed
-  // changes (ADR 0205 item 9).
+  // changes (ADR 0255 item 9).
   const movePublisher = (index, by) => update((m) => set(m, 'publisher',
     set(m.publisher, 'remote_items', move(m.publisher.remote_items, index, by))));
   const removeRow = (row) => {
     if (!row.match) {
       // Studio keeps no link to a feed that is not in the collection. The
       // entry leaves this release only. Without entries, the element goes
-      // (ADR 0205 item 13).
+      // (ADR 0255 item 13).
       update((m) => {
         const rest = m.publisher.remote_items.filter((_, i) => i !== row.index);
         return set(m, 'publisher', rest.length === 0 ? null : set(m.publisher, 'remote_items', rest));
@@ -3095,7 +3095,7 @@ async function linkPublisherPage(pageId, releaseId) {
 // The album page: the album fields, the album details and the tracks
 // (task 014c step 3).
 // The second line of a publisher row on the album page: the role, the link
-// state and the primary mark (ADR 0205 items 6 and 9).
+// state and the primary mark (ADR 0255 items 6 and 9).
 function publisherLine(entry, match, index) {
   const parts = [relLabel(entry.rel)];
   if (!match) parts.push('Not in the collection');
@@ -3185,7 +3185,7 @@ function ExplicitField({ id, model, update }) {
 }
 
 // The menu "Kind" of a release. A change saves at once and is not a part
-// of the draft (ADR 0213 items 13 and 16).
+// of the draft (ADR 0256 items 13 and 16).
 // The change is one step of the history of the feed editor (ADR 0228 item 2).
 function ReleaseKindField({ feed, draft, onListChanged }) {
   const action = useAction();
@@ -3919,7 +3919,7 @@ function TrackPage({ feed, model, update, bad, trackIndex, go, onArtwork }) {
     </div>`;
 }
 
-// ---- The live item page (task 033b, ADR 0205) ----
+// ---- The live item page (task 033b, ADR 0255) ----
 
 // The start time of a live item in the language of the user, for the
 // summary line.
@@ -3929,7 +3929,7 @@ const timeText = (text) => {
 };
 
 // A small sheet that asks for the title and the start time of a new live
-// show (ADR 0205 item 37). `onAdd` gets the title and the start as RFC 3339 text.
+// show (ADR 0255 item 37). `onAdd` gets the title and the start as RFC 3339 text.
 function AddLiveSheet({ open, onClose, onAdd, busy, error }) {
   const ref = useSheet(open);
   const [title, setTitle] = useState('');
@@ -3965,7 +3965,7 @@ function AddLiveSheet({ open, onClose, onAdd, busy, error }) {
 }
 
 // The content links of a live item, each as one entry row (ADR 0028). A
-// show needs one link before Studio writes it (ADR 0205 item 39).
+// show needs one link before Studio writes it (ADR 0255 item 39).
 function ContentLinks({ id, links, onChange }) {
   const blank = { href: null, label: '' };
   return html`${links.length === 0 && html`<p class="hint">A content link is recommended. It gives a page for a person, for example a web player.</p>`}
@@ -3987,7 +3987,7 @@ function ContentLinks({ id, links, onChange }) {
 
 // The page of one live item. It edits the show, the stream, the content
 // links, the live value and the value routes. "Go live" and "End the show"
-// change the draft and open the review sheet (ADR 0205 items 38 and 40).
+// change the draft and open the review sheet (ADR 0255 items 38 and 40).
 // The tab "Live Shows" of an album (ADR 0239 item 5): one row for each show,
 // then the button that opens the sheet "Add a live show".
 function LiveShowsPage({ feed, model, go, onAdding }) {
@@ -4016,7 +4016,7 @@ function LivePage({ feed, model, update, bad, liveIndex, draft, go }) {
   // A change that works on the current model, also after a long upload.
   const editLive = (edit) => update((m) => set(m, 'live_items', m.live_items.map((l) => (l._cid === live._cid ? edit(l) : l))));
   // Before the first recording, the show has no audio file from before. The
-  // enclosure is then the stream (ADR 0205).
+  // enclosure is then the stream (ADR 0255).
   const recordingBefore = hasRecording(live) ? live.item : { ...live.item, enclosure: null, alternate_enclosures: [] };
   const pickRecording = useFilePick(
     'recording',
@@ -4270,7 +4270,7 @@ function LivePage({ feed, model, update, bad, liveIndex, draft, go }) {
     </div></div></section>`;
 }
 
-// ---- The publisher feed page (task 025c, ADR 0205) ----
+// ---- The publisher feed page (task 025c, ADR 0255) ----
 
 // The medium of a feed in lower case, or an empty text.
 function mediumOf(feed) {
@@ -4278,20 +4278,20 @@ function mediumOf(feed) {
 }
 
 // The feed of the list that a release entry names, by its feed GUID or its
-// public address (ADR 0205, the releases of a publisher feed).
+// public address (ADR 0255, the releases of a publisher feed).
 function linkedFeed(feeds, entry) {
   return feeds.find((f) => (f.podcast_guid && f.podcast_guid === entry.feed_guid)
     || (f.public_url && f.public_url === entry.feed_url)) || null;
 }
 
 // The text of an error of a publisher change. A missing role has its own
-// text, and each page gives that text (ADR 0205 item 4).
+// text, and each page gives that text (ADR 0255 item 4).
 function publisherError(error, roleText) {
   if (!error || error.code !== 'role_required') return error;
   return Object.assign(new Error(roleText), { code: error.code });
 }
 
-// The steps of a change of two drafts (task 025c, ADR 0205 item 8). `call`
+// The steps of a change of two drafts (task 025c, ADR 0255 item 8). `call`
 // makes the change and returns the `changed` list of the route. The
 // notices name each feed of that list, but not the open feed `feedId`.
 // The helper returns true when the change worked.
@@ -4308,7 +4308,7 @@ async function changeTwoDrafts(action, { feedId, draft, onListChanged, setChange
   return done === true;
 }
 
-// One notice for each feed whose draft a change altered (ADR 0205 item 8).
+// One notice for each feed whose draft a change altered (ADR 0255 item 8).
 // Each notice has a button that opens its feed.
 function ChangedNotices({ changed, go }) {
   return changed.map((c) => html`<div class="notice" role="status" key=${c.id}>
@@ -4320,7 +4320,7 @@ function ChangedNotices({ changed, go }) {
 
 const PUBLISHER_ROLE_TEXT = 'Select the role of this feed first.';
 
-// The publisher page: the fields, the role and the releases (ADR 0205 item
+// The publisher page: the fields, the role and the releases (ADR 0255 item
 // 3). Each link changes the draft of this feed and the draft of the release,
 // so the page loads both drafts and names each release that changed.
 function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, onMove, onListChanged, onArtwork, onRemoved, connectors }) {
@@ -4347,7 +4347,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, onMov
   };
   useEffect(() => { loadMembers(); }, [feed.id]);
   const items = model.remote_items;
-  // The releases in the sequence of the model (ADR 0205 item 10).
+  // The releases in the sequence of the model (ADR 0255 item 10).
   const rows = items
     .map((entry, index) => ({ index, entry, match: linkedFeed(feeds, entry) }))
     .filter((row) => row.entry.medium === 'music' || row.entry.medium === 'musicL');
@@ -4368,7 +4368,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, onMov
   const [custom, setCustom] = useState(false);
   const choice = custom ? 'custom' : roleChoice(roles);
   // A role change writes the links, so it needs the host of the feed, as a
-  // link does (ADR 0205 item 5).
+  // link does (ADR 0255 item 5).
   const readOnly = !feed.connector_id;
   // The add row at the end of the Releases section. It does not show with a
   // first-step row (ADR 0164 item 1).
@@ -4395,13 +4395,13 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, onMov
   const removeRow = (row) => {
     if (!row.match) {
       // Studio keeps no link to a feed that is not in the collection. Only
-      // this feed changes (ADR 0205 item 13).
+      // this feed changes (ADR 0255 item 13).
       update((m) => set(m, 'remote_items', m.remote_items.filter((e) => e._cid !== row.entry._cid)));
       return;
     }
     twoDrafts(linkAction, async () => (await api(`/feeds/${feed.id}/links/${row.match.id}`, { method: 'DELETE' })).changed);
   };
-  // Move a release to a position among the releases (ADR 0205 item 10,
+  // Move a release to a position among the releases (ADR 0255 item 10,
   // ADR 0081 item 5). The other entries of the list keep their index.
   const moveRow = (position, to) => {
     const slots = rows.map((row) => row.index);
@@ -5561,7 +5561,7 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
       differences=${differences} onRescan=${onRescan} />`;
   } else {
     // The API gives `kind_shown` only for a feed with the medium `music`
-    // (ADR 0213 items 13 and 15).
+    // (ADR 0256 items 13 and 15).
     body = html`<${AlbumPage} feed=${feed} feeds=${feeds} model=${model} update=${update} bad=${draft.bad} draft=${draft} go=${go}
       onAdding=${onAdding} onImporting=${onImporting} onRemoved=${onRemoved} onListChanged=${onListChanged} onArtwork=${onArtwork}
       release=${!!feed.kind_shown} />`;

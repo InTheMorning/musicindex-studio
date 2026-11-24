@@ -166,7 +166,7 @@ test('the texts of the Welcome page, the host rows and the steps do not use the 
 
 test('a first-step row gives the start values of its form (ADR 0221 item 8)', () => {
   assert.deepEqual(firstStart('album', 'album', { title: 'HeyCitizen' }, 8), { author: 'HeyCitizen', publisher_id: 8 },
-    'ADR 0213 item 7: the artist first step must pass its publisher ID. Fix firstStart in crates/api/ui/welcome.js.');
+    'ADR 0256 item 7: the artist first step must pass its publisher ID. Fix firstStart in crates/api/ui/welcome.js.');
   assert.deepEqual(firstStart('label', 'publisher', { title: 'Night Signals Records' }), { role: 'artist' });
   assert.deepEqual(firstStart('label', 'album', { title: 'Night Signals Records' }), {});
 });
@@ -197,9 +197,9 @@ test('the track page shows the text of ADR 0122 item 14 under a placeholder addr
   assert.match(editor, /isPlaceholderAddress\(value\.url\) \? HOST_STEP\.placeholderAddress : null/);
 });
 
-test('releaseAdd gives the add action only on an artist page (ADR 0213 item 4)', () => {
+test('releaseAdd gives the add action only on an artist page (ADR 0256 item 4)', () => {
   const artist = { id: 1, medium: 'publisher', connector_id: 4, publisher_roles: ['artist'], release_ids: [7], child_ids: [] };
-  const owner = 'ADR 0213 item 4: only a writable artist page gets Add a Release. Fix releaseAdd in crates/api/ui/welcome.js.';
+  const owner = 'ADR 0256 item 4: only a writable artist page gets Add a Release. Fix releaseAdd in crates/api/ui/welcome.js.';
   assert.deepEqual(releaseAdd(artist, 'HeyCitizen'), { label: 'Add a Release', start: { author: 'HeyCitizen', publisher_id: 1 } }, owner);
   const label = { ...artist, publisher_roles: ['label'] };
   assert.equal(releaseAdd(label, 'A Label'), null, owner);
@@ -212,14 +212,14 @@ test('releaseAdd gives the add action only on an artist page (ADR 0213 item 4)',
   assert.equal(releaseAdd(null, ''), null, owner);
 });
 
-test('a release start lists writable artist pages only (ADR 0213 items 4 and 5)', () => {
+test('a release start lists writable artist pages only (ADR 0256 items 4 and 5)', () => {
   const feeds = [
     { id: 1, medium: 'publisher', connector_id: 4, publisher_roles: ['artist'], title: 'Artist' },
     { id: 2, medium: 'publisher', connector_id: null, publisher_roles: ['artist'], title: 'Read-only artist' },
     { id: 3, medium: 'publisher', connector_id: 4, publisher_roles: ['label'], title: 'Label' },
   ];
   assert.deepEqual(releaseArtistChoices(feeds), [['1', 'Artist']],
-    'ADR 0213 items 4 and 5: a release needs a writable artist page. Fix releaseArtistChoices in crates/api/ui/welcome.js.');
+    'ADR 0256 items 4 and 5: a release needs a writable artist page. Fix releaseArtistChoices in crates/api/ui/welcome.js.');
 });
 
 test('ADR 0231 item 6: the parent choices of a new release have artist pages only', () => {

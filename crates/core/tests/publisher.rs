@@ -1,5 +1,5 @@
 //! The publisher feeds and their links, over the local folder connector
-//! (ADR 0205).
+//! (ADR 0255).
 
 use studio_core::collection::{
     Collection, ConnectorId, FeedId, PublisherRole, inferred_roles, rel_of, roles_from_rel,

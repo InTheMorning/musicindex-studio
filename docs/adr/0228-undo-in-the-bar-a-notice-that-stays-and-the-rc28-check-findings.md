@@ -10,7 +10,7 @@
 - Changes: [ADR 0175](0175-the-check-shows-what-music-index-holds.md) item 1, the notice after a write with a podping. [ADR 0191](0191-a-return-warning-has-the-warning-color-and-a-sent-podping-can-go-again.md) item 4, for the confirmation only (items 8 to 10).
 - Changes: [ADR 0223](0223-a-split-in-shares-or-percent-a-release-search-and-one-tap-on-a-phone.md) item 8, the button "Sections" (item 11).
 - Changes: [ADR 0174](0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md) item 17, the tab label (item 13).
-- Changes: [ADR 0205](0205-publisher-feeds-announcements-and-show-grants.md) item 19, the order of the Review sheet (items 14 to 16).
+- Changes: [ADR 0205](../archive/adr/0205-publisher-feeds-announcements-and-show-grants.md) item 19, the order of the Review sheet (items 14 to 16).
 - Changes: [ADR 0117](0117-the-page-of-a-person-finds-values-on-musicindex.md) item 1, for a linked person (item 18).
 - Changes: [ADR 0200](0200-studio-deletes-a-feed-file-only-after-music-index-removes-the-entry.md) items 4 and 6, for a leftover copy (items 19 to 21).
 - Uses: [ADR 0227](0227-undo-and-redo.md) items 1 to 12 and 20 to 22: the history of a page and the operations with no undo.

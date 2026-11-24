@@ -173,11 +173,11 @@ async fn page_refusal_is_in_the_diff_and_blocks_release_and_playlist_writes() {
         assert_eq!(
             status,
             StatusCode::OK,
-            "ADR 0213 item 21: expose the page refusal in the diff; fix the diff route. {diff}"
+            "ADR 0256 item 21: expose the page refusal in the diff; fix the diff route. {diff}"
         );
         assert_eq!(
             diff["page_refusal"], code,
-            "ADR 0213 item 21: expose the refusal code; fix the diff route. {diff}"
+            "ADR 0256 item 21: expose the refusal code; fix the diff route. {diff}"
         );
         let (status, refused) = call(
             &app,
@@ -189,15 +189,15 @@ async fn page_refusal_is_in_the_diff_and_blocks_release_and_playlist_writes() {
         assert_eq!(
             status,
             StatusCode::CONFLICT,
-            "ADR 0213 item 21: stop a feed write with no page; fix the write route. {refused}"
+            "ADR 0256 item 21: stop a feed write with no page; fix the write route. {refused}"
         );
         assert_eq!(
             refused["error"]["code"], code,
-            "ADR 0213 item 21: give the page refusal code; fix the write route. {refused}"
+            "ADR 0256 item 21: give the page refusal code; fix the write route. {refused}"
         );
         assert_eq!(
             refused["error"]["message"], message,
-            "ADR 0213 item 18: give the finding text in the refusal. {refused}"
+            "ADR 0256 item 18: give the finding text in the refusal. {refused}"
         );
     }
 }
@@ -294,17 +294,17 @@ async fn hidden_feed_has_no_page_refusal_and_can_be_written() {
     assert_eq!(
         status,
         StatusCode::OK,
-        "ADR 0213 item 22: hide the draft from apps; fix the listing route."
+        "ADR 0256 item 22: hide the draft from apps; fix the listing route."
     );
     let (status, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
     assert_eq!(
         status,
         StatusCode::OK,
-        "ADR 0213 item 22: make a diff for a hidden feed; fix the diff route. {diff}"
+        "ADR 0256 item 22: make a diff for a hidden feed; fix the diff route. {diff}"
     );
     assert!(
         diff["page_refusal"].is_null(),
-        "ADR 0213 item 22: give no refusal for a hidden feed; fix the diff route. {diff}"
+        "ADR 0256 item 22: give no refusal for a hidden feed; fix the diff route. {diff}"
     );
     let (status, written) = call(
         &app,
@@ -316,7 +316,7 @@ async fn hidden_feed_has_no_page_refusal_and_can_be_written() {
     assert_eq!(
         status,
         StatusCode::OK,
-        "ADR 0213 item 22: allow a hidden feed write; fix the write route. {written}"
+        "ADR 0256 item 22: allow a hidden feed write; fix the write route. {written}"
     );
 }
 

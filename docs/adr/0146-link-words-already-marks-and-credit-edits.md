@@ -5,6 +5,7 @@
 - Owner: operator
 - Accepted: 2026-11-06 by the operator, from screenshots of the local build. The operator gave the words "link to Artist or Label page", and asked that a row that is already there keeps its content with a mark.
 - Technical choices: item 5 is a choice of the planning model.
+- Changed by: [ADR 0257](0257-a-release-has-one-artist-one-label-and-one-publisher-in-its-fields.md) item 20, on 2026-11-24. Item 1: the section "Linked artist and label pages" is for a playlist, a show feed and a person only.
 - Changes: the words of [ADR 0132](0132-a-person-can-be-part-of-many-artists-and-labels.md), "Part of" and "Add an artist or label".
 - Changes: [ADR 0145](0145-each-sheet-that-adds-a-value-has-one-layout.md) item 10, the look of a row that the list has already.
 - Source: [findings of local use, findings 33 to 37](../reviews/2026-11-06-local-use-findings.md)

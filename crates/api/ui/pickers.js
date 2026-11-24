@@ -36,7 +36,7 @@ export function RowList({ children, className = 'group', selector = ROWS, mode =
     onKeyDown=${(event) => onPageListKey(event, current, setCurrent, selector, mode)}>${children}<//>`;
 }
 
-// The field list of a search field (ADR 0154, musicindex ADR 0205 R-QUERY-7).
+// The field list of a search field (ADR 0154, musicindex ADR 0255 R-QUERY-7).
 // `id` is the ID of the input, `value` its text and `setValue` sets the text.
 // `scope` is 'publisher' for a search of artist and label feeds only. The hook
 // gives `input`, the properties of the input, and `list`, the list to show

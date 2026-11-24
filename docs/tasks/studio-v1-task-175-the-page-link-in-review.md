@@ -1,6 +1,6 @@
 # Studio v1 Task 175: The Page Link In Review
 
-Decision: [ADR 0218](../adr/0218-a-page-link-in-review-and-a-suggestion-starts-with-no-person.md) items 1 to 9. [ADR 0213](../adr/0213-a-release-starts-on-the-page-of-its-artist.md) items 17 to 21.
+Decision: [ADR 0218](../adr/0218-a-page-link-in-review-and-a-suggestion-starts-with-no-person.md) items 1 to 9. [ADR 0256](../adr/0256-a-release-starts-on-the-page-of-its-artist.md) items 17 to 21.
 
 Status: Complete, with one open visual check.
 

@@ -264,7 +264,7 @@ element_type! {
 
 element_type! {
     /// `podcast:liveValue`: the address where an app gets the live value
-    /// events of a live item (ADR 0205).
+    /// events of a live item (ADR 0255).
     LiveValue = (Ns::Podcast, "liveValue") {
         /// `uri`.
         uri => "uri",

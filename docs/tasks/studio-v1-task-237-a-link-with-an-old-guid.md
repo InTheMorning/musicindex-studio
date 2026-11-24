@@ -21,7 +21,7 @@ Status: Done.
 
 | Component | Status | Location | Reason |
 | --- | --- | --- | --- |
-| Link match | extend | crates/core/src/publisher.rs | `names` and `Party` decide which feed a link names (ADR 0205 item 12). A new public function finds and corrects the links of item 7 with the same `Party` data. |
+| Link match | extend | crates/core/src/publisher.rs | `names` and `Party` decide which feed a link names (ADR 0255 item 12). A new public function finds and corrects the links of item 7 with the same `Party` data. |
 | Feed identity | reuse | crates/core/src/pipeline.rs | `feed_identity` gives the current GUID and title of a feed, from the draft or the row. |
 | URL spelling rule | reuse | crates/core/src/feed_check.rs | `same_but_spelling` gives the rule of ADR 0174 item 12. It gives false for equal text, so the caller also tests equal text. |
 | Check facts | extend | crates/core/src/feed_check.rs | `Facts` gets the feeds of the collection that a link can name. |
@@ -33,7 +33,7 @@ Status: Done.
 
 ## Changes
 
-1. Read ADR 0247 items 7 to 9, ADR 0248, ADR 0174 items 7 and 12, ADR 0205 item 12 and ADR 0243 first. Then read `names`, `Party`, `party`, `catalogs_with_kept` and `set_roles` in `crates/core/src/publisher.rs`, `feed_identity` in `crates/core/src/pipeline.rs`, `Facts`, `check`, `check_links` and `same_but_spelling` in `crates/core/src/feed_check.rs`, `facts_for` and `check_with` in `crates/core/src/feed_reads.rs`, all of `crates/core/src/pipeline/check_repair.rs`, `crates/api/src/feed_check.rs`, `gather_pages` in `crates/api/src/routes.rs`, and `checkRows` in `crates/api/ui/feedcheck.js`.
+1. Read ADR 0247 items 7 to 9, ADR 0248, ADR 0174 items 7 and 12, ADR 0255 item 12 and ADR 0243 first. Then read `names`, `Party`, `party`, `catalogs_with_kept` and `set_roles` in `crates/core/src/publisher.rs`, `feed_identity` in `crates/core/src/pipeline.rs`, `Facts`, `check`, `check_links` and `same_but_spelling` in `crates/core/src/feed_check.rs`, `facts_for` and `check_with` in `crates/core/src/feed_reads.rs`, all of `crates/core/src/pipeline/check_repair.rs`, `crates/api/src/feed_check.rs`, `gather_pages` in `crates/api/src/routes.rs`, and `checkRows` in `crates/api/ui/feedcheck.js`.
 2. Core, the link target. Add a public type `LinkTarget { guid: String, url: String, title: Option<String> }` in `crates/core/src/feed_check.rs` (or a module that both `feed_check` and `publisher` can use). A target is a feed of the collection with a `podcast:guid` and a public address. Add one core function that gives the targets of a collection: it reads `Collection::feeds()` and uses `feed_identity` for each row. It sends no request. Use one code path for the targets in the check, the repair and the move.
 3. Core, item 7. Add one pure function that gives the old links of a feed: `old_links(feed: &Feed, targets: &[LinkTarget]) -> Vec<OldLink>`. It examines each `podcast:remoteItem` of `remote_items`, of `podroll` and of `publisher`. A link is old when each condition is true:
     - Its `feedGuid` is present and equal to the `guid` of no target.

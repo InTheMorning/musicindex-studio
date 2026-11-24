@@ -1,4 +1,4 @@
-//! Connected apps (ADR 0205 items 42 to 45, ADR 0110).
+//! Connected apps (ADR 0255 items 42 to 45, ADR 0110).
 //!
 //! A connected app is a program that calls the `/app/v1/` routes. It has its
 //! own secp256k1 key pair, and it signs each request. Studio never sees the

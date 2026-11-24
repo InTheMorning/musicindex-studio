@@ -28,7 +28,7 @@ Findings 3 and 4 of the [check after rc.29](../reviews/2026-11-20-rc29-human-che
 3. Item 12: the fields are "Title", "Kind", "Artist name", "File host" and "Feed file". "Artist name" starts with the name of the parent.
 4. Item 13: remove "Start from", `startChoices`, the route field `from`, `copy_feed` and their tests.
 5. Items 14 and 15: a pick fills "Title", "Artist name", and "Kind" when the found feed gives a track count. The route takes the description, the artwork address and the website of the pick. The core puts them in the first draft of the new release. When the search result does not give a value, report it and leave it out.
-6. Move `docs/adr/0077-a-new-album-can-start-from-an-album.md` to `docs/archive/adr/` with `git mv`. Update the links to it in `docs/README.md`, `docs/adr/0212-the-add-pages.md`, `docs/adr/0213-a-release-starts-on-the-page-of-its-artist.md`, `docs/adr/0127-a-changed-feed-gets-a-new-build-date.md` and `docs/adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md`. Move its line in `docs/README.md` to the section "Archive" with "Replaced by ADR 0230". Remove the rule about the copy from `AGENTS.md` near line 177.
+6. Move `docs/adr/0077-a-new-album-can-start-from-an-album.md` to `docs/archive/adr/` with `git mv`. Update the links to it in `docs/README.md`, `docs/adr/0212-the-add-pages.md`, `docs/adr/0256-a-release-starts-on-the-page-of-its-artist.md`, `docs/adr/0127-a-changed-feed-gets-a-new-build-date.md` and `docs/adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md`. Move its line in `docs/README.md` to the section "Archive" with "Replaced by ADR 0230". Remove the rule about the copy from `AGENTS.md` near line 177.
 
 ## Checks
 
@@ -66,8 +66,8 @@ Answers to the open points:
 - A request with `from` is ignored, not refused. The route struct has no `deny_unknown_fields`. An API test checks this.
 - The search result of `/musicindex/search` gives `title`, `artist` and `image_url`. The route `/musicindex/values/{guid}` adds `website` and `feed_url`.
 - Music Index gives no description and no track count in these answers. A pick leaves out "Kind" and the description. The code uses them when they are present.
-- The rule that a track count gives a kind (1 to 3 single, 4 to 6 EP, more album) is the rule of ADR 0213 item 11, which `release_kind_shown` in `crates/core/src/feed.rs` applies. `kindOfTrackCount` uses the same split. Closed on 2026-11-20 by the main session: no new rule.
-- ADR 0230 item 9 says the list has artist pages and label pages. The route accepts only an artist page (ADR 0213 item 7). The list has artist pages only. Closed: ADR 0231 item 6 corrects ADR 0230 item 9, and the list has no label page.
+- The rule that a track count gives a kind (1 to 3 single, 4 to 6 EP, more album) is the rule of ADR 0256 item 11, which `release_kind_shown` in `crates/core/src/feed.rs` applies. `kindOfTrackCount` uses the same split. Closed on 2026-11-20 by the main session: no new rule.
+- ADR 0230 item 9 says the list has artist pages and label pages. The route accepts only an artist page (ADR 0256 item 7). The list has artist pages only. Closed: ADR 0231 item 6 corrects ADR 0230 item 9, and the list has no label page.
 
 Checks:
 

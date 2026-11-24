@@ -11261,7 +11261,7 @@ async fn an_ended_live_item_gets_the_enclosure_of_an_uploaded_recording() {
     );
     assert!(!xml.contains("stream.m3u8"), "{xml}");
     assert!(xml.contains("status=\"ended\""), "{xml}");
-    // The write puts the recording on the host (ADR 0205 item 41).
+    // The write puts the recording on the host (ADR 0255 item 41).
     assert!(app.feeds.path().join("album/tagged.mp3").exists());
 }
 
@@ -11481,7 +11481,7 @@ async fn the_core_refuses_a_long_or_control_live_value_in_a_draft_save() {
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
     assert_eq!(
         body["error"]["code"], "invalid_live_value",
-        "ADR 0205 item 48: the draft save must refuse a long or control live value. Call live::check_live_values in replace_model."
+        "ADR 0255 item 48: the draft save must refuse a long or control live value. Call live::check_live_values in replace_model."
     );
 }
 
@@ -18224,13 +18224,13 @@ async fn a_change_set_writes_a_release_with_no_artist_page() {
     assert_eq!(status, StatusCode::OK, "{diff}");
     assert!(
         diff["page_refusal"].is_null(),
-        "ADR 0213 item 22: give no refusal for a feed of an open change set; fix feed_page_refusal. {diff}"
+        "ADR 0256 item 22: give no refusal for a feed of an open change set; fix feed_page_refusal. {diff}"
     );
     let (status, body) = write_through_routes(&app, id).await;
     assert_eq!(
         status,
         StatusCode::OK,
-        "ADR 0213 item 22: a write of a change set has no stop; fix feed_page_refusal. {body}"
+        "ADR 0256 item 22: a write of a change set has no stop; fix feed_page_refusal. {body}"
     );
 
     // The change set is closed. The next write of the feed has the stop.
@@ -18240,7 +18240,7 @@ async fn a_change_set_writes_a_release_with_no_artist_page() {
     assert_eq!(status, StatusCode::OK, "{diff}");
     assert_eq!(
         diff["page_refusal"], "no_artist_page",
-        "ADR 0213 item 21: the stop comes back after the change set is written. {diff}"
+        "ADR 0256 item 21: the stop comes back after the change set is written. {diff}"
     );
 }
 
@@ -20412,7 +20412,7 @@ async fn a_text_with_nothing_to_search_is_not_marked_as_a_search() {
     let (app, seen, person) = search_app(ONE_FEED).await;
     let (status, body) = call(&app, "GET", &format!("{person}?q=in%3Aindex"), None).await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    // The crate gives the note of a text with no word (musicindex ADR 0205
+    // The crate gives the note of a text with no word (musicindex ADR 0255
     // R-QUERY-8).
     assert_eq!(
         body["note"]["message"],

@@ -163,7 +163,7 @@ export function nextStep(feed) {
 }
 
 // The add action of the releases of a publisher feed (ADR 0164 items 1, 2
-// and 6, ADR 0213 item 4). A writable artist page gets the action. The page
+// and 6, ADR 0256 item 4). A writable artist page gets the action. The page
 // of the feed shows it only with no first-step row.
 export function releaseAdd(feed, name) {
   const start = releaseStart(feed, name);

@@ -8,10 +8,11 @@
 - Bar: opposite choice by mistake. An agent can send the user out of Review to link a page, or start a suggestion on "A new person". Items 1 to 7 also cross the editor, the Check tab and the result panel of ADR 0217.
 - Changed by: [ADR 0251](0251-review-writes-the-two-sides-of-a-changed-link.md) item 13, on 2026-11-23. Items 3 and 6: the menu always shows, and its last choice "New artist page…" opens the form of item 6. The button **Make an Artist Page…** is removed.
 - Changed by: [ADR 0252](0252-a-publisher-link-with-no-role-gets-a-repair.md) items 2 to 6, on 2026-11-23. Items 1 and 8: a link with no role gets the repair **Make It the Artist Link**, and the finding of a read-only feed is a Notice.
-- Changes: [ADR 0213](0213-a-release-starts-on-the-page-of-its-artist.md) items 18, 19 and 21. Review links the page itself, and the write button shows disabled.
+- Changed by: [ADR 0257](0257-a-release-has-one-artist-one-label-and-one-publisher-in-its-fields.md) item 19, on 2026-11-24. Items 3, 4 and 6: for a release, the refusal panel uses the pages of the field Artist and sets that field. A new artist page gets the artist text of the release.
+- Changes: [ADR 0213](../archive/adr/0213-a-release-starts-on-the-page-of-its-artist.md) items 18, 19 and 21. Review links the page itself, and the write button shows disabled.
 - Changes: [ADR 0203](0203-people.md) item 39. The menu "Person" starts on "Select a person" when no person has the name of the suggestion.
 - Changes: [ADR 0217](0217-a-new-artist-sees-the-result-of-a-write-the-payment-types-and-an-undo-of-a-merge.md) item 2. The result panel tells a page that the link changed.
-- Uses: [ADR 0205](0205-publisher-feeds-announcements-and-show-grants.md) items 5 to 8 for the links of a publisher feed. [ADR 0174](0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md) for the findings. [ADR 0007](0007-draft-diff-write-and-announce.md) for Review.
+- Uses: [ADR 0255](0255-publisher-feeds-announcements-and-show-grants.md) items 5 to 8 for the links of a publisher feed. [ADR 0174](0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md) for the findings. [ADR 0007](0007-draft-diff-write-and-announce.md) for Review.
 - Source: [analysis of two journeys for a new independent artist](../research/2026-11-18-user-journeys/analysis.md), themes T4 and T6, and its section "Operator choices".
 
 ## Context

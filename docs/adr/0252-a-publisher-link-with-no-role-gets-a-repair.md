@@ -6,7 +6,7 @@
 - Accepted: 2026-11-23 by the operator, through the questionnaire, from drawings. For a link with no `rel`, the operator selected "Stop with a repair". For a feed that Studio cannot write, the operator selected "Notice".
 - Technical choices: the main session selected the texts, the link of item 3 and the order of the buttons in items 2 and 4.
 - Changes: [ADR 0218](0218-a-page-link-in-review-and-a-suggestion-starts-with-no-person.md) items 1 and 8. The refusal panel and the finding get the repair of a link with no role, and the finding of a read-only feed is a Notice.
-- Uses: [ADR 0213](0213-a-release-starts-on-the-page-of-its-artist.md) items 17, 18 and 23, the page rule and its finding. [ADR 0174](0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md), a repair changes the draft. [ADR 0249](0249-studio-strongly-discourages-a-feed-guid-change.md) item 6, a finding with a second repair.
+- Uses: [ADR 0256](0256-a-release-starts-on-the-page-of-its-artist.md) items 17, 18 and 23, the page rule and its finding. [ADR 0174](0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md), a repair changes the draft. [ADR 0249](0249-studio-strongly-discourages-a-feed-guid-change.md) item 6, a finding with a second repair.
 - Source: observation 1 of [the desktop check walk of 2026-11-23](../reviews/2026-11-23-desktop-check-walk.md).
 - Bar: opposite choice by mistake. An agent can count a link with no `rel` as an artist link, or keep the Stop on a feed that Studio cannot write.
 
@@ -20,11 +20,11 @@
 
 ### The Link With No Role
 
-1. A link with no role is a `podcast:remoteItem` in `podcast:publisher` with `medium="publisher"` and no `rel` attribute. It is not an artist link. ADR 0213 item 17 does not change.
+1. A link with no role is a `podcast:remoteItem` in `podcast:publisher` with `medium="publisher"` and no `rel` attribute. It is not an artist link. ADR 0256 item 17 does not change.
 
 ### The Finding
 
-2. When a release has the finding "This release has no artist page." (ADR 0213 item 18) and a link with no role, the finding gets the line "The link to {title} has no role." Its first button is **Make It the Artist Link**, and its second button is **Link a Page** (ADR 0213 item 19).
+2. When a release has the finding "This release has no artist page." (ADR 0256 item 18) and a link with no role, the finding gets the line "The link to {title} has no role." Its first button is **Make It the Artist Link**, and its second button is **Link a Page** (ADR 0256 item 19).
 3. `{title}` is the title of the linked feed in the collection. With no such feed, it is the `title` attribute of the link. With no `title`, it is the `feedUrl` of the link.
 4. **Make It the Artist Link** adds `rel="artist"` to the first link with no role, in the draft (ADR 0174). It changes no other attribute and no other link. The user then writes the draft in Review.
 

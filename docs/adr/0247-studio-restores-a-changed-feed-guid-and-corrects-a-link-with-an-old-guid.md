@@ -6,7 +6,7 @@
 - Accepted: 2026-11-22 by the operator, from drawings in the questionnaire. The move corrects the link, and the tab **Issues** shows each link with an old GUID with a repair. For a changed feed GUID, the tab shows one row for each feed and one row for all on the page that links the feeds.
 - Technical choices: the main session selected the reads of items 1 and 2 and the condition of item 3. It also selected the level, the texts and the path of the repair.
 - Changed by: [ADR 0248](0248-music-index-changes-a-feed-guid-in-place-and-studio-restores-no-guid.md) items 1 to 5, on 2026-11-22. Items 1 to 6, 10 and 11 are deleted. Music Index changes a feed GUID in place (Stophammer ADR 0106), so Studio restores no GUID. Items 7 to 9 stay current. This record no longer changes ADR 0175.
-- Uses: [ADR 0008](0008-feed-types-and-feed-identity.md) item 2, [ADR 0122](0122-a-new-user-starts-with-a-default-file-host.md) item 8, [ADR 0174](0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md), [ADR 0205](0205-publisher-feeds-announcements-and-show-grants.md) item 12, [ADR 0243](0243-a-move-is-a-change-set-and-a-level-gathers-its-pages.md). Stophammer ADR 0052 sections 4 and 5 own the pending GUID change. This record cites them and does not restate them as rules of Studio.
+- Uses: [ADR 0008](0008-feed-types-and-feed-identity.md) item 2, [ADR 0122](0122-a-new-user-starts-with-a-default-file-host.md) item 8, [ADR 0174](0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md), [ADR 0255](0255-publisher-feeds-announcements-and-show-grants.md) item 12, [ADR 0243](0243-a-move-is-a-change-set-and-a-level-gathers-its-pages.md). Stophammer ADR 0052 sections 4 and 5 own the pending GUID change. This record cites them and does not restate them as rules of Studio.
 - Source: [the findings of the tutorial for a hosting user](../reviews/2026-11-22-tj-tutorial-findings.md), finding 13.
 - Bar: crosses modules. The reads, the check, the repair, the move and the UI change. Without this record, an agent can correct the links to the changed GUID, and Music Index then keeps the old record.
 
@@ -49,7 +49,7 @@ Items 1 to 6 are deleted by [ADR 0248](0248-music-index-changes-a-feed-guid-in-p
 
    The check finds such a link with no request.
 8. The finding `link_guid_old` has the level Warning. Its title is "A link to {title} has an old GUID". Its reason gives the old GUID and the GUID of the feed. Its button is **Use the GUID of {title}**. The repair sets the `feedGuid` of each such link of the draft that names that feed. The repair changes only the draft of this feed.
-9. Before the move of ADR 0243 sets the roles, the move corrects each link of item 7 in the drafts that it changes. Thus the match of ADR 0205 item 12 then finds the release, and the release gets its role.
+9. Before the move of ADR 0243 sets the roles, the move corrects each link of item 7 in the drafts that it changes. Thus the match of ADR 0255 item 12 then finds the release, and the release gets its role.
 
 ### Facts That Give No Finding
 
@@ -60,7 +60,7 @@ Items 10 and 11 are deleted by [ADR 0248](0248-music-index-changes-a-feed-guid-i
 - Correct the links to the changed GUID. Rejected, because Music Index keeps the original record, and a feed GUID must not change (ADR 0008 item 2).
 - Ask the operator of Music Index to approve the change. Rejected, because the publisher confirmed that the change is an error. Also, the user of Studio cannot decide a GUID change.
 - A row for each feed only, or a row on the linking page only. The operator selected both rows.
-- Match a link by its `feedUrl` when its `feedGuid` names no feed, in ADR 0205 item 12. Not chosen: the move corrects the link first, so the match rule does not change.
+- Match a link by its `feedUrl` when its `feedGuid` names no feed, in ADR 0255 item 12. Not chosen: the move corrects the link first, so the match rule does not change.
 
 ## Checks
 

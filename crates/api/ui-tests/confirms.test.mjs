@@ -26,27 +26,27 @@ test('the leave sheet of a person has the texts of ADR 0116 item 8', () => {
   assert.equal(entry.cancel, 'Keep Editing');
 });
 
-test('the live show removal confirm follows ADR 0205 item 38', () => {
+test('the live show removal confirm follows ADR 0255 item 38', () => {
   const pending = CONFIRMS.removeLiveShow('Show title', { status: 'pending' });
   assert.deepEqual(pending, {
     title: 'Remove “Show title”?',
     text: 'Studio removes the show from the draft. The feed changes at the next write.',
     action: 'Remove the Show', role: 'destructive',
-  }, 'ADR 0205 item 38: use the pending show confirm text. Fix removeLiveShow in crates/api/ui/confirms.js.');
+  }, 'ADR 0255 item 38: use the pending show confirm text. Fix removeLiveShow in crates/api/ui/confirms.js.');
   const live = CONFIRMS.removeLiveShow('', { status: 'live' });
-  assert.equal(live.title, 'Remove “Untitled show”?', 'ADR 0205 item 38: name an untitled show. Fix removeLiveShow in crates/api/ui/confirms.js.');
+  assert.equal(live.title, 'Remove “Untitled show”?', 'ADR 0255 item 38: name an untitled show. Fix removeLiveShow in crates/api/ui/confirms.js.');
   assert.equal(live.text, 'Studio removes the show from the draft. The feed changes at the next write. Apps lose the stream of this show at that write.',
-    'ADR 0205 item 38: add the live show stream text. Fix removeLiveShow in crates/api/ui/confirms.js.');
-  assert.equal(live.action, 'Remove the Show', 'ADR 0205 item 38: label the destructive button Remove the Show. Fix removeLiveShow in crates/api/ui/confirms.js.');
+    'ADR 0255 item 38: add the live show stream text. Fix removeLiveShow in crates/api/ui/confirms.js.');
+  assert.equal(live.action, 'Remove the Show', 'ADR 0255 item 38: label the destructive button Remove the Show. Fix removeLiveShow in crates/api/ui/confirms.js.');
 });
 
-test('LivePage confirms and removes a show under ADR 0205 item 38', () => {
+test('LivePage confirms and removes a show under ADR 0255 item 38', () => {
   const editor = readFileSync(new URL('../ui/editor.js', import.meta.url), 'utf8');
   const start = editor.indexOf('function LivePage');
   const end = editor.indexOf('// ---- The publisher feed page', start);
   const page = editor.slice(start, end);
-  assert.match(page, /Remove the Show/, 'ADR 0205 item 38: add Remove the Show to LivePage in crates/api/ui/editor.js.');
-  assert.match(page, /CONFIRMS\.removeLiveShow/, 'ADR 0205 item 38: confirm live show removal in LivePage.');
+  assert.match(page, /Remove the Show/, 'ADR 0255 item 38: add Remove the Show to LivePage in crates/api/ui/editor.js.');
+  assert.match(page, /CONFIRMS\.removeLiveShow/, 'ADR 0255 item 38: confirm live show removal in LivePage.');
 });
 
 test('restore the hosted copy is destructive and asks first (ADR 0195)', () => {

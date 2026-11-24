@@ -96,7 +96,7 @@ On 2026-11-12 the operator selected this answer in the questionnaire: the file r
 
 ### Finding 6: The Pencil Of A Group In The Left Panel
 
-Decision: [ADR 0181](../adr/0181-a-level-shows-the-state-of-its-own-feed.md).
+Decision: [ADR 0181](../archive/adr/0181-a-level-shows-the-state-of-its-own-feed.md).
 
 Owner: [ADR 0165](../adr/0165-the-left-panel-marks-the-state-of-each-feed.md) items 1 to 4.
 

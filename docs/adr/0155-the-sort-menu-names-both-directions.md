@@ -17,7 +17,7 @@ Releases, the page of an artist or a label, "Not linked", "Other feeds" and the 
 1. The sort menu of each list of Studio lists each sort in its usual direction, then in its reversed direction, as words: "Newest", "Oldest", "A to Z", "Z to A", "Feed Order", "Feed Order, Reversed" (R-LIST-13 item 2).
 2. No list of Studio has a reverse icon. The trigger names the current entry, and only that entry has the check mark.
 3. Each list of Studio with a control has two or more sorts. Thus no list of Studio has the "Reverse" toggle of R-LIST-14.
-4. The state of a list does not change: it is a sort and a direction. Releases keeps a reversed direction in the address as `reversed=1`. A feed group and the People list keep it in the navigation record (ADR 0085 item 8, ADR 0153 item 3). A letter bar of "Z to A" shows its letters from Z to A.
+4. The state of a list does not change: it is a sort and a direction. Releases keeps a reversed direction in the address as `reversed=1`. A feed group and the People list keep it in the navigation record (ADR 0254 item 13a, ADR 0153 item 3). A letter bar of "Z to A" shows its letters from Z to A.
 5. The view icons of Releases do not change.
 
 ## How This Decision Is Checked

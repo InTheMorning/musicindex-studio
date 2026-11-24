@@ -10,6 +10,7 @@
 - Uses: [ADR 0150](0150-studio-shows-a-change-from-outside-when-a-page-opens.md) for the check. [ADR 0088](../archive/adr/0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) for the rows of the left panel. musicindex ADR 0032 R-DOT-1 keeps the dot for the type only.
 - Changed by: [ADR 0211](0211-studio-follows-a-move-that-a-different-studio-made.md) items 20 and 21: the mark of an outside change has the Warning color.
 - Changed by: [ADR 0230](0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 17 to 19, on 2026-11-20. Item 2: a click on a row with "Not checked" also checks its feeds.
+- Changed by: [ADR 0254](0254-the-catalog-is-a-tree-and-each-change-uses-music-words.md) item 6a, on 2026-11-24. Item 3: a tree row covers its feed and each release that it shows, also when the row is open. It does not cover the rows below it. "No artist yet" and "Other feeds" cover the feeds that they hold.
 
 ## Context
 

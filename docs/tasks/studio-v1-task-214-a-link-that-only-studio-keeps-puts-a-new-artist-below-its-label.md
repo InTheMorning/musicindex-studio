@@ -1,6 +1,6 @@
 # Studio v1 Task 214: A Link That Only Studio Keeps Puts A New Artist Below Its Label
 
-Decision: [ADR 0232](../adr/0232-each-group-below-an-open-feed-has-an-add-row.md) items 9 to 12.
+Decision: [ADR 0232](../archive/adr/0232-each-group-below-an-open-feed-has-an-add-row.md) items 9 to 12.
 
 Status: Done.
 

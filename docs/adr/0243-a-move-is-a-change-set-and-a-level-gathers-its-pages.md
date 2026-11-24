@@ -6,11 +6,12 @@
 - Accepted: 2026-11-22 by the operator. The operator asked the main session to correct the findings of the tutorial for a hosting user before the tutorial. The operator selected three options from drawings in the questionnaire. A move makes one change set and opens its review. A hosting page moves the artists of the collection below it in one sheet. The folder search goes deeper and reports the feeds that it did not find.
 - Technical choices: the main session selected the texts and the start values of item 9. It also selected the depth of 6 and the limit of 5000 files in item 13, and items 6, 7 and 16.
 - Bar: crosses modules. It changes the move route, the change set of the core, the panel add rows, the File hosts page and the wallet sheets. Without this record, an agent can keep a move as many separate drafts.
-- Changes: [ADR 0240](0240-hosting-is-a-first-role-and-a-stray-release-moves-to-its-pages.md) items 18 and 19. A move refuses with the names of the feeds, and it makes a change set.
+- Changes: [ADR 0240](../archive/adr/0240-hosting-is-a-first-role-and-a-stray-release-moves-to-its-pages.md) items 18 and 19. A move refuses with the names of the feeds, and it makes a change set.
 - Changes: [ADR 0207](0207-recipients-change-sets-and-wallets.md) items 10 and 27. The sheet of Use the LNURL Address lists only the feeds that change, and Discard of a move puts back the kept links.
-- Changes: [ADR 0232](0232-each-group-below-an-open-feed-has-an-add-row.md) item 5. On a hosting level and on a label level, an add row opens a menu.
+- Changes: [ADR 0232](../archive/adr/0232-each-group-below-an-open-feed-has-an-add-row.md) item 5. On a hosting level and on a label level, an add row opens a menu.
 - Changes: [ADR 0019](0019-select-a-feed-from-the-host.md) item 3. The depth and the file limit of a list.
-- Uses: [ADR 0253](0253-the-roles-of-a-feed-and-of-each-link.md) for the roles. [ADR 0215](0215-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) item 2 for the rule "below". [ADR 0222](0222-errors-give-a-step-terms-get-a-hint-and-the-first-run-has-two-stages.md) for the step of an error.
+- Changed by: [ADR 0254](0254-the-catalog-is-a-tree-and-each-change-uses-music-words.md) items 18 to 21 and 34 to 36, on 2026-11-24. Items 1 and 3: the changes of the Catalog go into one change set, and Review does not open after each change. Item 5: it applies only to a different open change set (ADR 0254 item 34a). Items 7 to 12: the Add sheet replaces the menus of the add rows.
+- Uses: [ADR 0253](0253-the-roles-of-a-feed-and-of-each-link.md) for the roles. [ADR 0253](0253-the-roles-of-a-feed-and-of-each-link.md) item 15 for the rule "below". [ADR 0222](0222-errors-give-a-step-terms-get-a-hint-and-the-first-run-has-two-stages.md) for the step of an error.
 - Source: [the findings of the tutorial for a hosting user](../reviews/2026-11-22-tj-tutorial-findings.md), findings 1, 2, 3, 4 and 6.
 
 ## Context
@@ -29,8 +30,8 @@ A change set already holds a payee operation (ADR 0207) and a move of files (ADR
 
 ### A Move Makes A Change Set
 
-1. Each move makes one change set (ADR 0207 items 24 to 33). These are the moves: a release (ADR 0240 items 9 to 19), an artist page or a label page (ADR 0240 items 20 to 25), and the pages of item 11. The change set holds each feed whose draft the move changes, with the outcome "changed".
-2. Before the first link, the core keeps the draft of each feed of item 1. It also keeps each kept link (ADR 0232 item 9) that the move adds or removes. Discard puts back each draft and each kept link. A page that the user made from the sheet (ADR 0240 item 14) stays after Discard.
+1. Each move makes one change set (ADR 0207 items 24 to 33). These are the moves: a release (ADR 0254 items 29 to 33), an artist page or a label page (ADR 0254 items 22 to 28), and the pages of item 11. The change set holds each feed whose draft the move changes, with the outcome "changed".
+2. Before the first link, the core keeps the draft of each feed of item 1. It also keeps each kept link (ADR 0254 item 40) that the move adds or removes. Discard puts back each draft and each kept link. A page that the user made from the sheet (ADR 0254 item 30) stays after Discard.
 3. After **Move**, the sheet closes and Studio opens the review of the change set (ADR 0207 item 28). The review has the title "Move {name} to {page}". When the move has two or more pages, the title is "Move {N} artists to {page}" or "Move {N} labels to {page}".
 4. "Changes to write" of People also shows the change set, with the title of item 3.
 5. When a feed of the move is in an open change set, the move changes no draft. The sheet says "{name} has changes to write. Write or discard them first." for each such feed, and its button opens that change set.
@@ -42,7 +43,7 @@ A change set already holds a payee operation (ADR 0207) and a move of files (ADR
 8. "Move Artists Here…" opens the sheet "Move artists to {page}". It lists each writable publisher page of the collection with the role artist or with no role, that is not below the page of the level now (ADR 0215 item 2). "Move Labels Here…" lists the label pages and the pages with no role in the same way. Each row has a check box, the name, the number of releases, and the role or "No role".
 9. Each check box starts selected for a page with no role, and not selected for a page with a role. The button is **Move {N} Artists** or **Move {N} Labels**, with the number of selected rows. With no selected row, the button is not available.
 10. Below the list, the sheet says "A page with no role gets the role Artist." or "A page with no role gets the role Label." when a selected row has no role.
-11. **Move** gives each selected page with no role the role of the sheet (ADR 0253 items 5 and 10). The core changes the publisher feed and each linked release, as the Role field of the page form does. Then the core applies ADR 0240 item 23 and item 24 to each selected page, with the page of the level as the selected page of its role. The links of the other roles do not change.
+11. **Move** gives each selected page with no role the role of the sheet (ADR 0253 items 5 and 10). The core changes the publisher feed and each linked release, as the Role field of the page form does. Then the core applies ADR 0254 items 26 and 27 to each selected page, with the page of the level as the selected page of its role. The links of the other roles do not change.
 12. Item 1 to item 6 apply to the move of item 11. One change set holds the feeds of all selected pages.
 
 ### A Folder Search Reports What It Did Not Find

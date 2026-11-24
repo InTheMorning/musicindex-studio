@@ -1,6 +1,6 @@
 # Studio v1 Task 224: Hosting Is A First Role, And A Stray Release Moves To Its Pages
 
-Decision: [ADR 0240](../adr/0240-hosting-is-a-first-role-and-a-stray-release-moves-to-its-pages.md) items 1 to 19. Task 225 does items 20 to 25.
+Decision: [ADR 0240](../archive/adr/0240-hosting-is-a-first-role-and-a-stray-release-moves-to-its-pages.md) items 1 to 19. Task 225 does items 20 to 25.
 
 Status: Done. The main session checked the visual criteria with screenshots on 2026-11-21, in the dark theme at 1280 px: the panel of a hosting page and of a label page, the Welcome page with three rows, and a move from "Not linked" with a new artist page and a hosting page. The move from a release page has no screenshot. It uses the same sheet and the same completion function, and Node tests cover it.
 

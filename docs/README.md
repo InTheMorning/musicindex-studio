@@ -74,7 +74,6 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0079: The core writes both track numbers](adr/0079-the-core-writes-both-track-numbers.md)
 - [ADR 0080: The season of a track is an experimental disc setting](adr/0080-the-season-of-a-track-is-an-experimental-disc-setting.md)
 - [ADR 0081: A position menu sets the sequence of a list](adr/0081-a-position-menu-sets-the-sequence-of-a-list.md)
-- [ADR 0085: Each artist and label is a destination](adr/0085-each-artist-and-label-is-a-destination.md)
 - [ADR 0086: A playlist links to its artist or label](adr/0086-a-playlist-links-to-its-artist-or-label.md)
 - [ADR 0089: The left panel shows the art of each publisher feed](adr/0089-the-left-panel-shows-the-art-of-each-publisher-feed.md)
 - [ADR 0090: Studio names the feeds that it does not edit](adr/0090-studio-names-the-feeds-that-it-does-not-edit.md)
@@ -154,7 +153,6 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0178: A move replaces a file at the feed path in Studio](adr/0178-a-move-replaces-a-file-at-the-feed-path-in-studio.md)
 - [ADR 0179: A release keeps one library record for each file](adr/0179-a-release-keeps-one-library-record-for-each-file.md)
 - [ADR 0180: The Files page has a folder picker and one step for each copy](adr/0180-the-files-page-has-a-folder-picker-and-one-step-for-each-copy.md)
-- [ADR 0181: A level shows the state of its own feed](adr/0181-a-level-shows-the-state-of-its-own-feed.md)
 - [ADR 0182: The page of a person starts with its links and has a nickname](adr/0182-the-page-of-a-person-starts-with-its-links-and-has-a-nickname.md)
 - [ADR 0183: Each collection row has one Actions menu](adr/0183-each-collection-row-has-one-actions-menu.md)
 - [ADR 0184: After a move Studio shows the podping of the move](adr/0184-after-a-move-studio-shows-the-podping-of-the-move.md)
@@ -185,7 +183,6 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0212: The add pages](adr/0212-the-add-pages.md)
 - [ADR 0213: A release starts on the page of its artist](adr/0213-a-release-starts-on-the-page-of-its-artist.md)
 - [ADR 0214: Each sheet fits the window, and the walk opens it](adr/0214-each-sheet-fits-the-window-and-the-walk-opens-it.md)
-- [ADR 0215: The left panel shows the levels of the publisher feeds](adr/0215-the-left-panel-shows-the-levels-of-the-publisher-feeds.md)
 - [ADR 0216: The Linux packages of the desktop app](adr/0216-the-linux-packages-of-the-desktop-app.md)
 - [ADR 0217: A new artist sees the result of a write, the payment types and an undo of a merge](adr/0217-a-new-artist-sees-the-result-of-a-write-the-payment-types-and-an-undo-of-a-merge.md)
 - [ADR 0218: A page link in Review, and a suggestion starts with no person](adr/0218-a-page-link-in-review-and-a-suggestion-starts-with-no-person.md)
@@ -202,7 +199,6 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0229: The media host after a follow, a podping again, and empty folders](adr/0229-the-media-host-after-a-follow-a-podping-again-and-empty-folders.md)
 - [ADR 0230: One add menu, the parent of a new release, and the check after rc.29](adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md)
 - [ADR 0231: A new release writes its artist page, and the files of a restored release](adr/0231-a-new-release-writes-its-artist-page-and-the-files-of-a-restored-release.md)
-- [ADR 0232: Each group below an open feed has an add row](adr/0232-each-group-below-an-open-feed-has-an-add-row.md)
 - [ADR 0233: Each add form finds on Music Index and copies the found feed](adr/0233-each-add-form-finds-on-music-index-and-copies-the-found-feed.md)
 - [ADR 0234: A new release is written with its pages, and a one-sided link is reported](adr/0234-a-new-release-is-written-with-its-pages-and-a-one-sided-link-is-reported.md)
 - [ADR 0235: The desktop app can open the vault from the keyring of the computer](adr/0235-the-desktop-app-can-open-the-vault-from-the-keyring-of-the-computer.md)
@@ -210,7 +206,6 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0237: The README shows a few screenshots in the dark theme](adr/0237-the-readme-shows-a-few-screenshots-in-the-dark-theme.md)
 - [ADR 0238: A found release gives the page of each role](adr/0238-a-found-release-gives-the-page-of-each-role.md)
 - [ADR 0239: The panel holds the content and the page has tabs](adr/0239-the-panel-holds-the-content-and-the-page-has-tabs.md)
-- [ADR 0240: Hosting is a first role, and a stray release moves to its pages](adr/0240-hosting-is-a-first-role-and-a-stray-release-moves-to-its-pages.md)
 - [ADR 0241: Sign Out and Switch Collection are rows of the panel footer](adr/0241-sign-out-and-switch-collection-are-rows-of-the-panel-footer.md)
 - [ADR 0242: The collection row of the footer opens Switch Collection](adr/0242-the-collection-row-of-the-footer-opens-switch-collection.md)
 - [ADR 0243: A move is a change set, and a level gathers its pages](adr/0243-a-move-is-a-change-set-and-a-level-gathers-its-pages.md)
@@ -224,6 +219,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0251: Review writes the two sides of a changed link](adr/0251-review-writes-the-two-sides-of-a-changed-link.md)
 - [ADR 0252: A publisher link with no role gets a repair](adr/0252-a-publisher-link-with-no-role-gets-a-repair.md)
 - [ADR 0253: The roles of a feed and of each link](adr/0253-the-roles-of-a-feed-and-of-each-link.md)
+- [ADR 0254: The Catalog is a tree, and each change uses music words](adr/0254-the-catalog-is-a-tree-and-each-change-uses-music-words.md)
 
 ## Plans
 
@@ -637,6 +633,11 @@ Each release candidate after 0.1.0-rc.8 has one notes file ([ADR 0100](adr/0100-
 
 Superseded decisions. Read them for research only. They bind no change.
 
+- [ADR 0085: Each artist and label is a destination](archive/adr/0085-each-artist-and-label-is-a-destination.md), superseded by ADR 0254
+- [ADR 0181: A level shows the state of its own feed](archive/adr/0181-a-level-shows-the-state-of-its-own-feed.md), superseded by ADR 0254
+- [ADR 0215: The left panel shows the levels of the publisher feeds](archive/adr/0215-the-left-panel-shows-the-levels-of-the-publisher-feeds.md), superseded by ADR 0254
+- [ADR 0232: Each group below an open feed has an add row](archive/adr/0232-each-group-below-an-open-feed-has-an-add-row.md), superseded by ADR 0254
+- [ADR 0240: Hosting is a first role, and a stray release moves to its pages](archive/adr/0240-hosting-is-a-first-role-and-a-stray-release-moves-to-its-pages.md), superseded by ADR 0254
 - [ADR 0082: A publisher feed has a set of roles](archive/adr/0082-a-publisher-feed-has-a-set-of-roles.md), superseded by ADR 0253
 - [ADR 0083: Hosting is a first-class role](archive/adr/0083-hosting-is-a-first-class-role.md), superseded by ADR 0253
 - [ADR 0084: The label of a feed lists each role](archive/adr/0084-the-label-of-a-feed-lists-each-role.md), superseded by ADR 0253

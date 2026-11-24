@@ -9,8 +9,8 @@
 - Supersedes: [ADR 0083](../archive/adr/0083-hosting-is-a-first-class-role.md), Hosting Is A First-Class Role.
 - Supersedes: [ADR 0084](../archive/adr/0084-the-label-of-a-feed-lists-each-role.md), The Label Of A Feed Lists Each Role.
 - Supersedes: [ADR 0087](../archive/adr/0087-the-two-sides-of-a-link-confirm-a-role.md), The Two Sides Of A Link Confirm A Role.
-- Changes: [ADR 0215](0215-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) items 1, 1a, 2 and 4. A link gives the level, curator has a rank of its own, and the heading of the role `hosting` is "Publishers" (items 15 and 16).
-- Changes: [ADR 0240](0240-hosting-is-a-first-role-and-a-stray-release-moves-to-its-pages.md) items 1, 2 and 3. The menu value and the Welcome row say "Publisher" (item 12).
+- Changes: [ADR 0215](../archive/adr/0215-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) items 1, 1a, 2 and 4. A link gives the level, curator has a rank of its own, and the heading of the role `hosting` is "Publishers" (items 15 and 16).
+- Changes: [ADR 0240](../archive/adr/0240-hosting-is-a-first-role-and-a-stray-release-moves-to-its-pages.md) items 1, 2 and 3. The menu value and the Welcome row say "Publisher" (item 12).
 - Restated in: [ADR 0205](0205-publisher-feeds-announcements-and-show-grants.md) items 1, 2, 4, 6 and 11 restate items 1 to 5, 10, 20 and 22 of this ADR, and cite them.
 - Uses: musicindex ADR 0097 R-ROLE-1 to R-ROLE-8, R-WORD-8 and R-WORD-15. musicindex ADR 0033 R-WORD-3 to R-WORD-5. musicindex ADR 0037 R-WORD-7. musicindex ADR 0067 item 82. Stophammer ADR 0101 (the `rel` of each link). ADR 0041 item 4 (a change of a link). ADR 0251 (Review writes the two sides of a link).
 
@@ -55,7 +55,7 @@
 15. These items change ADR 0215 items 1, 1a and 2:
     - The level roles are hosting, label, curator and artist, in that rank (musicindex ADR 0097 R-ROLE-8). The other roles are credits. They show on a page and make no level.
     - The rank of a feed comes from its first level role in the sequence of item 1. A feed with the roles `artist` and `hosting` is one feed at the artist rank. A feed with the roles `artist` and `label` is also one feed at the artist rank.
-    - Feed B is below feed A when A and B link the same release of the collection, and the link of A gives a level role with a higher rank than the rank of B. A kept link (ADR 0232 item 10) also puts B below A. The role set of A alone does not put B below A.
+    - Feed B is below feed A when A and B link the same release of the collection, and the link of A gives a level role with a higher rank than the rank of B. A kept link (ADR 0254 item 40) also puts B below A. The role set of A alone does not put B below A.
     - Example: Elm Street Duo has the roles `artist hosting`. Its link to the EP of Harbor Lights gives `hosting`, so Harbor Lights is below Elm Street Duo. Its links to its own releases give `artist hosting`, so Elm Street Duo is one row.
 16. ADR 0215 item 4 changes: the heading of the role `hosting` is "Publishers", and the heading of the role `curator` comes after "Labels" and before "Artists".
 

@@ -1,6 +1,6 @@
 # Studio v1 Task 225: An Artist Page Or A Label Page Moves
 
-Decision: [ADR 0240](../adr/0240-hosting-is-a-first-role-and-a-stray-release-moves-to-its-pages.md) items 20 to 25.
+Decision: [ADR 0240](../archive/adr/0240-hosting-is-a-first-role-and-a-stray-release-moves-to-its-pages.md) items 20 to 25.
 
 Status: Done. The main session checked the visual criteria with screenshots on 2026-11-21, in the dark theme at 1280 px. The sheet "Move Test Artist" opened from the row menu **⋯** and from the head button **Move To…**. It showed the change lines "+ Test Label" and "− Test Label". After the move, the artist page was below the label page. The row menu of a release opened the sheet of that release.
 

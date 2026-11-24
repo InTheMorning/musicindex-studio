@@ -10,7 +10,7 @@
 ## Context
 
 - ADR 0041 links a publisher feed and an album. A playlist (`musicL`, [ADR 0053](0053-playlists-are-musicl-feeds-with-remote-items.md)) had no link to an artist feed or a label feed.
-- [ADR 0085](0085-each-artist-and-label-is-a-destination.md) shows the releases of each publisher feed. On 2026-10-30 the operator decided that a playlist can be in this list.
+- [ADR 0085](../archive/adr/0085-each-artist-and-label-is-a-destination.md) shows the releases of each publisher feed. On 2026-10-30 the operator decided that a playlist can be in this list.
 - `docs/tags/publisher.md` of the namespace puts `podcast:publisher` in `channel`, and it does not limit the `podcast:medium` of the feed. `docs/tags/medium.md` says that a publisher feed "links to other feeds a publisher owns".
 - Stophammer reads `musicL` feeds and keeps the `podcast:publisher` link of each feed. A test that shows a playlist on a page of musicindex.org was not done.
 

@@ -8,7 +8,7 @@
 - Bar: crosses modules. It changes the Music Index client, the feed reader, the make of a feed, the remove of a feed, the routes and the UI. Without this record, an agent can keep the scope of ADR 0230 item 16 and copy no tracks.
 - Changes: [ADR 0230](0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 1, 4, 11, 14, 15 and 16, the add menu and the scope of a selection (items 1 to 12).
 - Changes: [ADR 0212](0212-the-add-pages.md) item 1, the page with the rows "By address or name", "From a file host folder" and "From MSP 2.0 backups" (items 3 and 4).
-- Changes: [ADR 0232](0232-each-group-below-an-open-feed-has-an-add-row.md) item 8, the page **Add One You Have** as a start of a new feed (item 3).
+- Changes: [ADR 0232](../archive/adr/0232-each-group-below-an-open-feed-has-an-add-row.md) item 8, the page **Add One You Have** as a start of a new feed (item 3).
 - Changed by: [ADR 0234](0234-a-new-release-is-written-with-its-pages-and-a-one-sided-link-is-reported.md) item 11, on 2026-11-20. Item 15: the remove also clears a link that only a draft has for a written release.
 - Changed by: [ADR 0238](0238-a-found-release-gives-the-page-of-each-role.md) items 1 to 9, on 2026-11-21. Items 6 to 9: in the Artist, Label and Hosting forms, a found release gives the page of the form role.
 - Uses: [ADR 0227](0227-undo-and-redo.md), the undo of a remove. [ADR 0231](0231-a-new-release-writes-its-artist-page-and-the-files-of-a-restored-release.md) items 7 and 11, the link of a new release to its artist page.

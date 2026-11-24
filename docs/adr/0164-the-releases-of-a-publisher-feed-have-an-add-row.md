@@ -31,7 +31,7 @@ The first-step row also did not link the new album to the artist. The form sent 
 
 ### The List View Of A Group
 
-6. The list view of a group of a publisher feed (ADR 0085) has the same action, as a button adjacent to "Open the Feed". It has the words of item 2, and it shows when the feed has a file host. It shows also when the group has no release, because the list view has no first-step row. Items 3 to 5 apply, but when the link fails, the list view stays open. At 760 px or less, a group opens in the one stack of the left panel, which has no list view. There, the add row of item 1 is the action.
+6. The list view of a group of a publisher feed (ADR 0254 item 13) has the same action, as a button adjacent to "Open the Feed". It has the words of item 2, and it shows when the feed has a file host. It shows also when the group has no release, because the list view has no first-step row. Items 3 to 5 apply, but when the link fails, the list view stays open. At 760 px or less, a group opens in the one stack of the left panel, which has no list view. There, the add row of item 1 is the action.
 
 ### The Title Of The Sheet
 

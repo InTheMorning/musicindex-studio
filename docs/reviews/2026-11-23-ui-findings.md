@@ -96,7 +96,7 @@ Status: corrected. The cause was a stale feed list: `ReleaseKindField` in `crate
 
 Recommendation: question for the operator. A button and a menu row can have different case by rule. If the words differ ("Add release" and "Add a Release"), use one form.
 
-Status: decided by [ADR 0232](../adr/0232-each-group-below-an-open-feed-has-an-add-row.md) item 6. The add rows of the left panel are "Add release", "Add artist" and "Add label", and the add row "Add a Release" in the body of an artist page stays. The operator selected "Add a release" in a question that did not name ADR 0232. A change needs a new decision for the three add rows. The case of "Add tracks" and "Add Tracks" is correct by musicindex ADR 0085 R-CASE-1: a button is title case, and a sidebar row and a sheet title are sentence case.
+Status: decided by [ADR 0232](../archive/adr/0232-each-group-below-an-open-feed-has-an-add-row.md) item 6. The add rows of the left panel are "Add release", "Add artist" and "Add label", and the add row "Add a Release" in the body of an artist page stays. The operator selected "Add a release" in a question that did not name ADR 0232. A change needs a new decision for the three add rows. The case of "Add tracks" and "Add Tracks" is correct by musicindex ADR 0085 R-CASE-1: a button is title case, and a sidebar row and a sheet title are sentence case.
 
 ## Finding 9: the link of an existing release needs two reviews
 

@@ -1,6 +1,6 @@
 # Studio v1 Task 215: Add Rows In The Left Panel And The Back Row Of A New Feed
 
-Decision: [ADR 0232](../adr/0232-each-group-below-an-open-feed-has-an-add-row.md) items 1 to 8.
+Decision: [ADR 0232](../archive/adr/0232-each-group-below-an-open-feed-has-an-add-row.md) items 1 to 8.
 
 Status: Done.
 

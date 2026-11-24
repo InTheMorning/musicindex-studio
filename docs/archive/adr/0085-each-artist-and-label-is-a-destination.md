@@ -1,20 +1,22 @@
+> Archived: superseded by [ADR 0254](../../adr/0254-the-catalog-is-a-tree-and-each-change-uses-music-words.md) on 2026-11-24. ADR 0254 items 2 to 13a restate each live rule of this ADR for the Catalog tree.
+
 # ADR 0085: Each Artist And Label Is A Destination
 
-- Status: Accepted
+- Status: Superseded by ADR 0254
 - Date: 2026-10-30
 - Owner: operator
 - Accepted: 2026-10-30 by the operator.
-- Changes: [ADR 0039](../archive/adr/0039-the-shell-releases-and-the-outline.md) items 1, 2 and 11. Releases is no longer the only destination of the left panel, and it no longer lists the publisher feeds.
-- Changed by: [ADR 0088](../archive/adr/0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md), The Left Panel Shows The Levels Of The Publisher Feeds. It shows only the top feeds at level 0, with role headings, and gives each feed a level (items 1 and 3). It leaves the feeds above and below out of the note of item 5.
-- Changed by: [ADR 0089](0089-the-left-panel-shows-the-art-of-each-publisher-feed.md), The Left Panel Shows The Art Of Each Publisher Feed. It shows the art of the feed in the row of item 1, with the dot on the art.
-- Changed by: [ADR 0090](0090-studio-names-the-feeds-that-it-does-not-edit.md), Studio Names The Feeds That It Does Not Edit. It keeps each feed that is not an album or a playlist out of Releases and "Not linked" (items 3 and 6), and adds "Other feeds".
+- Changes: [ADR 0039](0039-the-shell-releases-and-the-outline.md) items 1, 2 and 11. Releases is no longer the only destination of the left panel, and it no longer lists the publisher feeds.
+- Changed by: [ADR 0088](0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md), The Left Panel Shows The Levels Of The Publisher Feeds. It shows only the top feeds at level 0, with role headings, and gives each feed a level (items 1 and 3). It leaves the feeds above and below out of the note of item 5.
+- Changed by: [ADR 0089](../../adr/0089-the-left-panel-shows-the-art-of-each-publisher-feed.md), The Left Panel Shows The Art Of Each Publisher Feed. It shows the art of the feed in the row of item 1, with the dot on the art.
+- Changed by: [ADR 0090](../../adr/0090-studio-names-the-feeds-that-it-does-not-edit.md), Studio Names The Feeds That It Does Not Edit. It keeps each feed that is not an album or a playlist out of Releases and "Not linked" (items 3 and 6), and adds "Other feeds".
 - Uses: musicindex ADR 0080 R-SHELL-1 items 1 and 2, R-LIST-1, musicindex ADR 0080 R-SHELL-2 item 2 and musicindex ADR 0037 R-WORD-7.
 
 ## Context
 
 - Releases listed each feed of the collection in one list: the albums, the playlists and the publisher feeds. ADR 0084 gave the type label of a publisher feed each of its roles, so a row could be too long for its line.
 - The operator wants an artist, a label or a hosting service to see its feeds in a hierarchy. On 2026-10-30 the operator decided on one level: each publisher feed, then its releases.
-- [ADR 0041](../archive/adr/0041-publisher-feeds-and-two-way-links.md) links a publisher feed and a release. [ADR 0086](0086-a-playlist-links-to-its-artist-or-label.md) makes a playlist a release.
+- [ADR 0041](0041-publisher-feeds-and-two-way-links.md) links a publisher feed and a release. [ADR 0086](../../adr/0086-a-playlist-links-to-its-artist-or-label.md) makes a playlist a release.
 - musicindex ADR 0033 R-WORD-4 permits the word "publisher" only as an RSS name. Thus the interface cannot use the words "No publisher" or "Publisher order".
 
 ## Decision
@@ -41,5 +43,5 @@
 
 ## Invariants
 
-- The UI has no copy of the link rule of item 2. It shows the fields `release_ids` and `publisher_ids` of the feed list ([ADR 0065](0065-the-core-applies-each-feed-rule.md)).
+- The UI has no copy of the link rule of item 2. It shows the fields `release_ids` and `publisher_ids` of the feed list ([ADR 0065](../../adr/0065-the-core-applies-each-feed-rule.md)).
 - `crates/core/tests/publisher.rs` tests item 2. `crates/api/ui-tests/shell.test.mjs` tests items 1 and 3 to 7.

@@ -47,7 +47,7 @@ Facts:
 
 - At 760 px or less, Studio shows no left panel. `App` in `crates/api/ui/app.js` makes the `nav` element with the class `sidebar` only when the width is more than 760 px.
 - [ADR 0088](../archive/adr/0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) item 7 owns the narrow layout of the levels. Each level is a page of the stack, and Back opens the level above.
-- [ADR 0085](../adr/0085-each-artist-and-label-is-a-destination.md) item 7 puts the destinations on the root page at that width. It names musicindex ADR 0069 R-SHELL-2 item 2 as the rule of the three apps.
+- [ADR 0085](../archive/adr/0085-each-artist-and-label-is-a-destination.md) item 7 puts the destinations on the root page at that width. It names musicindex ADR 0069 R-SHELL-2 item 2 as the rule of the three apps.
 - The edge grip shows only on a touch screen. A device with no touch screen has the Back button of the toolbar and the Back key of the browser.
 - The search found no keyboard shortcut for a move between pages in `crates/api/ui`. The key handlers there move the focus in a list, a tree, a menu or a tab row.
 

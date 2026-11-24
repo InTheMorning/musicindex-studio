@@ -1,19 +1,22 @@
+> Archived: superseded by [ADR 0254](../../adr/0254-the-catalog-is-a-tree-and-each-change-uses-music-words.md) on 2026-11-24. ADR 0254 restates each live rule of this ADR, with the changes of ADR 0243 and ADR 0253. The item map of ADR 0254 gives the new item of each item. This ADR has no other live rule.
+
 # ADR 0240: Hosting Is A First Role, And A Stray Release Moves To Its Pages
 
-- Status: Accepted
+- Status: Superseded by ADR 0254
 - Date: 2026-11-21
 - Owner: operator
 - Accepted: 2026-11-21 by the operator. In the chat, the operator gave three rules. A hosting page makes labels and artists, not releases. A release cannot start without an artist. A stray release needs a path into an artist page, a label page or a hosting page. The operator asked for Hosting as the third role in the menus, with the long form "I'm hosting for other artists". The operator then selected the panel of items 5 to 8 and the sheet of items 12 to 19 from drawings in the questionnaire.
 - Revised: 2026-11-21. Items 20 to 25 add the move of an artist page and a label page. The operator asked in the chat that releases, artists and labels can move, not only a stray release. The operator then selected from drawings in the questionnaire: a move links the releases of the page, and Move To… is in the page head and in the menu of a panel row.
 - Technical choices: the main session selected the texts of items 2 and 3 and the menu of a page head in item 4. It also selected the start values of item 15 and the route of item 18. The operator did not receive them as a question.
 - Bar: crosses modules. It changes the add menu, the Welcome page and the left panel. It also changes the Not linked list, a release page and a route. Without this record, an agent can keep **＋ Add release** on a hosting page.
-- Changes: [ADR 0230](0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 1 and 2 (items 1 and 4).
-- Changes: [ADR 0221](0221-the-welcome-page-and-the-first-steps.md) items 2, 4 and 8 (items 2 and 3).
+- Changes: [ADR 0230](../../adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 1 and 2 (items 1 and 4).
+- Changes: [ADR 0221](../../adr/0221-the-welcome-page-and-the-first-steps.md) items 2, 4 and 8 (items 2 and 3).
 - Changes: [ADR 0232](0232-each-group-below-an-open-feed-has-an-add-row.md) items 2, 3 and 4 (items 5 to 8).
-- Changes: [ADR 0239](0239-the-panel-holds-the-content-and-the-page-has-tabs.md) item 4 (item 7).
-- Uses: [ADR 0253](0253-the-roles-of-a-feed-and-of-each-link.md) for the roles. [ADR 0205](0205-publisher-feeds-announcements-and-show-grants.md) for the two-way link of a page and a release. [ADR 0215](0215-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) item 2 for the rule "below". [ADR 0238](0238-a-found-release-gives-the-page-of-each-role.md) item 4 for the meaning of the hosting role.
-- Changed by: [ADR 0243](0243-a-move-is-a-change-set-and-a-level-gathers-its-pages.md) items 1 to 6, on 2026-11-22. Items 18 and 19: a move refuses with the names of the feeds, and it makes a change set.
-- Changed by: [ADR 0253](0253-the-roles-of-a-feed-and-of-each-link.md) item 12, on 2026-11-24. Items 1 to 3: the menu value is "Publisher", and the Welcome row is "I publish music for other artists".
+- Changes: [ADR 0239](../../adr/0239-the-panel-holds-the-content-and-the-page-has-tabs.md) item 4 (item 7).
+- Uses: [ADR 0253](../../adr/0253-the-roles-of-a-feed-and-of-each-link.md) for the roles. [ADR 0205](../../adr/0205-publisher-feeds-announcements-and-show-grants.md) for the two-way link of a page and a release. [ADR 0215](0215-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) item 2 for the rule "below". [ADR 0238](../../adr/0238-a-found-release-gives-the-page-of-each-role.md) item 4 for the meaning of the hosting role.
+- Changed by: [ADR 0243](../../adr/0243-a-move-is-a-change-set-and-a-level-gathers-its-pages.md) items 1 to 6, on 2026-11-22. Items 18 and 19: a move refuses with the names of the feeds, and it makes a change set.
+- Changed by: [ADR 0253](../../adr/0253-the-roles-of-a-feed-and-of-each-link.md) item 12, on 2026-11-24. Items 1 to 3: the menu value is "Publisher", and the Welcome row is "I publish music for other artists".
+- Changed by: [ADR 0254](../../adr/0254-the-catalog-is-a-tree-and-each-change-uses-music-words.md), on 2026-11-24. It supersedes this ADR.
 
 ## Context
 

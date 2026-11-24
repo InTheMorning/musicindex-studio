@@ -1,6 +1,6 @@
 # Studio v1 Task 162: The Curator Role And Its Color
 
-Decision: musicindex ADR 0081 R-CURATOR-1 and R-CURATOR-2 (musicindex `e8d7541`). The token is `entity.dark.curator` and `entity.light.curator` of musicindex-assets (`d7f6ed2`). [ADR 0215](../adr/0215-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) gives the heading of the left panel.
+Decision: musicindex ADR 0081 R-CURATOR-1 and R-CURATOR-2 (musicindex `e8d7541`). The token is `entity.dark.curator` and `entity.light.curator` of musicindex-assets (`d7f6ed2`). [ADR 0215](../archive/adr/0215-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) gives the heading of the left panel.
 
 Status: Complete on 2026-11-17, with its screenshot visual check. The orchestrator session sent this task on 2026-11-17.
 

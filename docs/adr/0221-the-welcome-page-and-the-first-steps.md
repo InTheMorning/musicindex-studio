@@ -8,7 +8,8 @@
 - Changed by: [ADR 0222](0222-errors-give-a-step-terms-get-a-hint-and-the-first-run-has-two-stages.md) item 8, on 2026-11-19. Item 4: the sheet has two stages.
 - Uses: these current ADRs own a part of this area. This ADR names each one at its item. [ADR 0122](0122-a-new-user-starts-with-a-default-file-host.md) items 1 to 4 (the rows of step 2), [ADR 0164](0164-the-releases-of-a-publisher-feed-have-an-add-row.md) item 3 (the link of the new release to its artist), [ADR 0212](0212-the-add-pages.md) (the form "Add tracks" and the search), [ADR 0020](0020-first-run-asks-one-question.md) items 3 to 15 (the search of "My music is online already").
 - Uses: [ADR 0007](0007-draft-diff-write-and-announce.md) for the first write. [ADR 0045](0045-phase-9-crates-test-servers-and-host-forms.md) for the file host forms. [ADR 0253](0253-the-roles-of-a-feed-and-of-each-link.md) for the roles. [ADR 0107](0107-a-user-can-export-and-import-an-account.md) for the import.
-- Changed by: [ADR 0240](0240-hosting-is-a-first-role-and-a-stray-release-moves-to-its-pages.md) items 2 and 3, on 2026-11-21. Item 2: the third row "I'm hosting for other artists". Items 4 and 8: its steps and its first rows.
+- Changed by: [ADR 0240](../archive/adr/0240-hosting-is-a-first-role-and-a-stray-release-moves-to-its-pages.md) items 2 and 3, on 2026-11-21. Item 2: the third row "I'm hosting for other artists". Items 4 and 8: its steps and its first rows.
+- Changed by: [ADR 0254](0254-the-catalog-is-a-tree-and-each-change-uses-music-words.md) item 46, on 2026-11-24. Item 8: the page of a new label has no row "Find an artist that is online".
 
 ## Context
 

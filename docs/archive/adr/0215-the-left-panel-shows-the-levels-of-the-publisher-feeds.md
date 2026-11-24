@@ -1,16 +1,19 @@
+> Archived: superseded by [ADR 0254](../../adr/0254-the-catalog-is-a-tree-and-each-change-uses-music-words.md) on 2026-11-24. ADR 0254 restates each live rule of this ADR, with the changes of ADR 0232 and ADR 0253. ADR 0253 item 15 owns the rank and the rule "below". The item map of ADR 0254 gives the new item of each item. This ADR has no other live rule.
+
 # ADR 0215: The Left Panel Shows The Levels Of The Publisher Feeds
 
-- Status: Accepted
+- Status: Superseded by ADR 0254
 - Date: 2026-11-17
 - Owner: operator
 - Accepted: 2026-11-17. The operator accepted the consolidation of each changed decision (musicindex-research `df7b823`). This ADR restates each live rule of ADR 0088, with each change from a subsequent ADR. It keeps the item numbers of ADR 0088.
-- Supersedes: [ADR 0088](../archive/adr/0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md), The Left Panel Shows The Levels Of The Publisher Feeds.
+- Supersedes: [ADR 0088](0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md), The Left Panel Shows The Levels Of The Publisher Feeds.
 - Changed by: [ADR 0232](0232-each-group-below-an-open-feed-has-an-add-row.md) items 9 to 12 add a link that only Studio keeps to item 2. Items 1 to 7 add the add rows to item 5. Item 8 gives the level of a new feed to item 6.
-- Changed by: [ADR 0253](0253-the-roles-of-a-feed-and-of-each-link.md) items 15 and 16, on 2026-11-24. Items 1, 1a and 2: a link gives the level, and curator has a rank between label and artist. Item 4: the heading of the role `hosting` is "Publishers".
+- Changed by: [ADR 0253](../../adr/0253-the-roles-of-a-feed-and-of-each-link.md) items 15 and 16, on 2026-11-24. Items 1, 1a and 2: a link gives the level, and curator has a rank between label and artist. Item 4: the heading of the role `hosting` is "Publishers".
 - Uses: Stophammer ADR 0069 §4 (`co_credited_feeds`) and §"A direct link between a label feed and an artist feed".
 - Uses: musicindex ADR 0097 R-ROLE-1 and musicindex ADR 0081 R-CURATOR-1 item 1 for the sequence of the roles.
-- Uses: these current ADRs own a part of this area. This ADR names each one at its item. [ADR 0085](0085-each-artist-and-label-is-a-destination.md) (the destinations), [ADR 0069](0069-the-outline-head-opens-the-feed-page.md) (the outline head), [ADR 0089](0089-the-left-panel-shows-the-art-of-each-publisher-feed.md) (the art of a row), [ADR 0090](0090-studio-names-the-feeds-that-it-does-not-edit.md) ("Other feeds" and "No role"), [ADR 0181](0181-a-level-shows-the-state-of-its-own-feed.md) (the tile of the level feed).
+- Uses: these current ADRs own a part of this area. This ADR names each one at its item. [ADR 0085](0085-each-artist-and-label-is-a-destination.md) (the destinations), [ADR 0069](../../adr/0069-the-outline-head-opens-the-feed-page.md) (the outline head), [ADR 0089](../../adr/0089-the-left-panel-shows-the-art-of-each-publisher-feed.md) (the art of a row), [ADR 0090](../../adr/0090-studio-names-the-feeds-that-it-does-not-edit.md) ("Other feeds" and "No role"), [ADR 0181](0181-a-level-shows-the-state-of-its-own-feed.md) (the tile of the level feed).
 - Open: no shared musicindex ADR owns the levels. musicindex ADR 0080 R-SHELL-2 item 3 gives the stack "the root, a list, the outline of an item, then one part of the item". This record adds levels between the root and the outline. The operator decided to write the Studio record first.
+- Changed by: [ADR 0254](../../adr/0254-the-catalog-is-a-tree-and-each-change-uses-music-words.md), on 2026-11-24. It supersedes this ADR.
 
 ## Context
 
@@ -58,5 +61,5 @@
 
 ## Invariants
 
-- The UI has no copy of the rules of items 1 and 2. It shows `child_ids` and `parent_ids` ([ADR 0065](0065-the-core-applies-each-feed-rule.md)).
+- The UI has no copy of the rules of items 1 and 2. It shows `child_ids` and `parent_ids` ([ADR 0065](../../adr/0065-the-core-applies-each-feed-rule.md)).
 - `crates/core/tests/publisher.rs` has the test `the_levels_follow_the_rank_and_the_shared_releases`. `crates/api/ui-tests/shell.test.mjs` tests items 3 to 8, and the heading "Curators" of item 4.

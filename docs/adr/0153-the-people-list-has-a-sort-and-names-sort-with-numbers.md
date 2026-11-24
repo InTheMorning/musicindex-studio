@@ -16,7 +16,7 @@ musicindex ADR 0053 gives the lists of the three apps that have a sort, a revers
 
 1. The People list has the sorts "A to Z", the default, and "Newest", with the reverse icon (R-LIST-9). It has no view icons, because its rows have no art (R-LIST-10). "Newest" gives the person that the user added last first. The core gives the time when the user added each person.
 2. The sort control of the People list is at the right end of the row of "Add a Person" and "Export People" (R-LIST-11 item 1). "A to Z" shows the letter bar of R-LIST-1 item 2 in the fold "People".
-3. The People list keeps its sort and its reversed state in the navigation record of the session. The page of an artist or a label does the same (ADR 0085 item 8). The address does not keep them.
+3. The People list keeps its sort and its reversed state in the navigation record of the session. The page of an artist or a label does the same (ADR 0254 item 13a). The address does not keep them.
 4. Each sort by name in the UI compares the names in the language of the reader. It reads a number in a name as a number (R-LIST-12 item 1). This applies to these lists:
    - Releases and the left panel.
    - The menus of people and feeds, and the album menu of a new album.
@@ -28,7 +28,7 @@ musicindex ADR 0053 gives the lists of the three apps that have a sort, a revers
    - The suggestions, and the results of each picker (ADR 0151 item 8).
    - The lists of the page of a person.
    - The file hosts, the collections, the change sets and the versions.
-7. The page of an artist or a label keeps "Feed Order" as its default (ADR 0085 item 4). The user edits this sequence of releases in the publisher feed. The row "The releases of an artist, a label or a name" of R-LIST-9 has no "Feed Order". This difference stays open until a musicindex record decides it.
+7. The page of an artist or a label keeps "Feed Order" as its default (ADR 0254 item 13a). The user edits this sequence of releases in the publisher feed. The row "The releases of an artist, a label or a name" of R-LIST-9 has no "Feed Order". This difference stays open until a musicindex record decides it.
 
 ## How This Decision Is Checked
 

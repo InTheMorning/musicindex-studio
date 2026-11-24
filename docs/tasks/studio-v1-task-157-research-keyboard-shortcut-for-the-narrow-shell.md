@@ -1,6 +1,6 @@
 # Studio v1 Task 157: Research, A Keyboard Shortcut For The Left Panel At A Narrow Width
 
-Decision: none. This is Note 3 of the walk. [ADR 0088](../archive/adr/0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) item 7 and [ADR 0085](../adr/0085-each-artist-and-label-is-a-destination.md) item 7 own the narrow layout. musicindex ADR 0069 R-SHELL-2 owns the rule of the three apps. This task changes no rule and no code. Its result gives the options for a decision of the operator.
+Decision: none. This is Note 3 of the walk. [ADR 0088](../archive/adr/0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) item 7 and [ADR 0085](../archive/adr/0085-each-artist-and-label-is-a-destination.md) item 7 own the narrow layout. musicindex ADR 0069 R-SHELL-2 owns the rule of the three apps. This task changes no rule and no code. Its result gives the options for a decision of the operator.
 
 Status: Complete on 2026-11-15. The [research note](../research/2026-11-15-keyboard-shortcut-for-the-narrow-shell.md) is ready for the operator decision.
 

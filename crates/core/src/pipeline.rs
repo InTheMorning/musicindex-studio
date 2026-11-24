@@ -1648,9 +1648,52 @@ pub fn edit_draft(
 ) -> Result<DraftRow, PipelineError> {
     let before = current_draft(collection, id)?;
     let before_xml = before.draft_xml.clone();
-    let draft = dated_like_base(changed_draft(before, change)?, &before_xml)?;
+    let mut draft = dated_like_base(changed_draft(before, change)?, &before_xml)?;
+    if let Some(base) = draft_base_model_from_xml(&draft.base_xml)? {
+        let current = Feed::read(&Document::parse_bytes(&draft.draft_xml)?)?;
+        if same_model_without_entry_identity_or_date(&current, &base) {
+            draft.draft_xml.clone_from(&draft.base_xml);
+        }
+    }
     collection.save_draft(id, &draft)?;
     Ok(draft)
+}
+
+fn draft_base_model_from_xml(bytes: &[u8]) -> Result<Option<Feed>, PipelineError> {
+    if bytes.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(Feed::read(&Document::parse_bytes(bytes)?)?))
+}
+
+fn same_model_without_entry_identity_or_date(a: &Feed, b: &Feed) -> bool {
+    fn normalized(feed: &Feed) -> Option<serde_json::Value> {
+        fn remove_entry_keys(value: &mut serde_json::Value) {
+            match value {
+                serde_json::Value::Object(object) => {
+                    object.remove("key");
+                    for child in object.values_mut() {
+                        remove_entry_keys(child);
+                    }
+                }
+                serde_json::Value::Array(items) => {
+                    for child in items {
+                        remove_entry_keys(child);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        let mut value = serde_json::to_value(feed).ok()?;
+        if let serde_json::Value::Object(object) = &mut value {
+            object.remove("last_build_date");
+        }
+        remove_entry_keys(&mut value);
+        Some(value)
+    }
+
+    matches!((normalized(a), normalized(b)), (Some(a), Some(b)) if a == b)
 }
 
 /// The draft of a save that changed the feed, with the date of its base
@@ -6982,6 +7025,19 @@ fn current_draft(collection: &Collection, id: FeedId) -> Result<DraftRow, Pipeli
             format!("feed {} has no draft", id.0),
         )
     })
+}
+
+/// Read the model of the file that started the draft.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when the draft is missing or its base is not a feed.
+pub(crate) fn draft_base_model(
+    collection: &Collection,
+    id: FeedId,
+) -> Result<Option<Feed>, PipelineError> {
+    let draft = current_draft(collection, id)?;
+    draft_base_model_from_xml(&draft.base_xml)
 }
 
 /// The ID of the diff of a draft, from its bytes and `extra`. The ID

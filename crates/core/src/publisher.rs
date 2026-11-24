@@ -343,8 +343,16 @@ pub fn link(
         rel: Some(rel.clone()),
         ..RemoteItem::default()
     };
+    let publisher_base = pipeline::draft_base_model(collection, publisher)?;
     pipeline::edit_draft(collection, publisher, |feed| {
-        upsert(&mut feed.remote_items, &release_party, channel_link);
+        upsert(
+            &mut feed.remote_items,
+            publisher_base
+                .as_ref()
+                .map_or(&[], |base| &base.remote_items),
+            &release_party,
+            channel_link,
+        );
     })?;
 
     let publisher_link = RemoteItem {
@@ -355,9 +363,18 @@ pub fn link(
         rel: Some(rel.clone()),
         ..RemoteItem::default()
     };
+    let release_base = pipeline::draft_base_model(collection, release)?;
     pipeline::edit_draft(collection, release, |feed| {
         let links = feed.publisher.get_or_insert_with(Publisher::default);
-        upsert(&mut links.remote_items, &publisher_party, publisher_link);
+        upsert(
+            &mut links.remote_items,
+            release_base
+                .as_ref()
+                .and_then(|base| base.publisher.as_ref())
+                .map_or(&[], |base| &base.remote_items),
+            &publisher_party,
+            publisher_link,
+        );
     })?;
     Ok(())
 }
@@ -388,8 +405,16 @@ pub fn list_on_page(
         rel: Some(rel),
         ..RemoteItem::default()
     };
+    let publisher_base = pipeline::draft_base_model(collection, publisher)?;
     pipeline::edit_draft(collection, publisher, |feed| {
-        upsert(&mut feed.remote_items, &release_party, link);
+        upsert(
+            &mut feed.remote_items,
+            publisher_base
+                .as_ref()
+                .map_or(&[], |base| &base.remote_items),
+            &release_party,
+            link,
+        );
     })?;
     Ok(())
 }
@@ -761,15 +786,58 @@ fn names(item: &RemoteItem, feed: &Party) -> bool {
 
 /// Change the first item that names the feed, and keep its position. Add
 /// the item last when no item names the feed.
-fn upsert(items: &mut Vec<Entry<RemoteItem>>, feed: &Party, link: RemoteItem) {
+fn upsert(
+    items: &mut Vec<Entry<RemoteItem>>,
+    base: &[Entry<RemoteItem>],
+    feed: &Party,
+    link: RemoteItem,
+) {
     if let Some(entry) = items.iter_mut().find(|entry| names(&entry.value, feed)) {
-        entry.value.feed_guid = link.feed_guid;
-        entry.value.feed_url = link.feed_url;
-        entry.value.title = link.title;
-        entry.value.medium = link.medium;
-        entry.value.rel = link.rel;
-    } else {
+        update_link(&mut entry.value, &link);
+        return;
+    }
+
+    let Some(base_index) = base.iter().position(|entry| names(&entry.value, feed)) else {
         items.push(Entry::new(link));
+        return;
+    };
+    let mut restored = base[base_index].clone();
+    update_link(&mut restored.value, &link);
+    let insertion = base[..base_index]
+        .iter()
+        .rev()
+        .find_map(|prior| {
+            items
+                .iter()
+                .position(|entry| same_name(&entry.value, &prior.value))
+                .map(|position| position + 1)
+        })
+        .unwrap_or(0);
+    items.insert(insertion, restored);
+}
+
+fn same_name(a: &RemoteItem, b: &RemoteItem) -> bool {
+    match a.feed_guid.as_deref() {
+        Some(guid) => b.feed_guid.as_deref() == Some(guid),
+        None => a.feed_url.is_some() && a.feed_url == b.feed_url,
+    }
+}
+
+fn update_link(current: &mut RemoteItem, link: &RemoteItem) {
+    if current.feed_guid != link.feed_guid {
+        current.feed_guid.clone_from(&link.feed_guid);
+    }
+    if current.feed_url != link.feed_url {
+        current.feed_url.clone_from(&link.feed_url);
+    }
+    if current.medium != link.medium {
+        current.medium.clone_from(&link.medium);
+    }
+    if current.rel != link.rel {
+        current.rel.clone_from(&link.rel);
+    }
+    if current.title.is_some() && current.title != link.title {
+        current.title.clone_from(&link.title);
     }
 }
 

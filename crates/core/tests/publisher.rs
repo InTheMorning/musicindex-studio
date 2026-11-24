@@ -59,6 +59,9 @@ fn remember_written(s: &Setup, id: FeedId) {
     let bytes = s.collection.draft(id).unwrap().unwrap().draft_xml;
     s.collection.record_feed_write(id, 1, None).unwrap();
     s.collection.record_written_xml(id, &bytes).unwrap();
+    let mut draft = s.collection.draft(id).unwrap().unwrap();
+    draft.base_xml.clone_from(&bytes);
+    s.collection.save_draft(id, &draft).unwrap();
 }
 
 #[test]
@@ -320,6 +323,116 @@ fn a_new_link_goes_last_after_the_links_of_the_release() {
     assert_eq!(links.len(), 2);
     assert_eq!(links[0].feed_guid.as_deref(), Some("other-guid"));
     assert_eq!(links[1].title.as_deref(), Some("Label"));
+}
+
+#[test]
+fn linking_back_restores_the_written_entry_and_bytes() {
+    let mut s = setup();
+    let page = new_feed(&mut s, "artist.xml", "Artist", "publisher");
+    s.collection
+        .set_publisher_roles(page, &[PublisherRole::Artist], true)
+        .unwrap();
+    let releases = [
+        new_feed(&mut s, "a.xml", "Release A", "music"),
+        new_feed(&mut s, "b.xml", "Release B", "music"),
+        new_feed(&mut s, "c.xml", "Release C", "music"),
+    ];
+    for release in releases {
+        publisher::link(&s.collection, page, release).unwrap();
+    }
+    let release_b = releases[1];
+    remember_written(&s, page);
+    remember_written(&s, release_b);
+    let page_base = s.collection.draft(page).unwrap().unwrap().base_xml;
+    let release_base = s.collection.draft(release_b).unwrap().unwrap().base_xml;
+
+    publisher::unlink(&s.collection, page, release_b).unwrap();
+    publisher::link(&s.collection, page, release_b).unwrap();
+
+    let page_draft = s.collection.draft(page).unwrap().unwrap();
+    let release_draft = s.collection.draft(release_b).unwrap().unwrap();
+    assert_eq!(
+        page_draft.draft_xml, page_base,
+        "observation 4 of the 2026-11-23 walk: publisher::upsert must restore the page bytes"
+    );
+    assert_eq!(
+        release_draft.draft_xml, release_base,
+        "observation 4 of the 2026-11-23 walk: publisher::upsert must restore the release bytes"
+    );
+}
+
+#[test]
+fn link_back_keeps_written_position_and_element_after_another_edit() {
+    let mut s = setup();
+    let page = new_feed(&mut s, "artist.xml", "Artist", "publisher");
+    s.collection
+        .set_publisher_roles(page, &[PublisherRole::Artist], true)
+        .unwrap();
+    let releases = [
+        new_feed(&mut s, "a.xml", "Release A", "music"),
+        new_feed(&mut s, "b.xml", "Release B", "music"),
+        new_feed(&mut s, "c.xml", "Release C", "music"),
+    ];
+    for release in releases {
+        publisher::link(&s.collection, page, release).unwrap();
+    }
+    let release_b = releases[1];
+    remember_written(&s, page);
+    let base = s.collection.draft(page).unwrap().unwrap().base_xml;
+    let written_b = remote_item_bytes(&base, "Release B");
+
+    publisher::unlink(&s.collection, page, release_b).unwrap();
+    pipeline::edit_draft(&s.collection, page, |feed| {
+        feed.title = Some("Renamed Artist".into());
+    })
+    .unwrap();
+    publisher::link(&s.collection, page, release_b).unwrap();
+
+    let draft = s.collection.draft(page).unwrap().unwrap();
+    let feed = model(&s, page);
+    assert_eq!(
+        feed.remote_items
+            .iter()
+            .map(|entry| entry.value.title.as_deref().unwrap())
+            .collect::<Vec<_>>(),
+        ["Release A", "Release B", "Release C"],
+        "observation 4 of the 2026-11-23 walk: publisher::upsert must restore the base position"
+    );
+    assert!(
+        String::from_utf8_lossy(&draft.draft_xml).contains(written_b),
+        "observation 4 of the 2026-11-23 walk: publisher::upsert must keep the written element bytes"
+    );
+}
+
+#[test]
+fn linking_an_existing_entry_without_a_title_keeps_it_absent() {
+    let mut s = setup();
+    let (page, release) = pair(&mut s);
+    s.collection
+        .set_publisher_roles(page, &[PublisherRole::Artist], true)
+        .unwrap();
+    publisher::link(&s.collection, page, release).unwrap();
+    pipeline::edit_draft(&s.collection, page, |feed| {
+        feed.remote_items[0].value.title = None;
+    })
+    .unwrap();
+    remember_written(&s, page);
+
+    publisher::link(&s.collection, page, release).unwrap();
+
+    assert_eq!(
+        model(&s, page).remote_items[0].value.title,
+        None,
+        "observation 4 of the 2026-11-23 walk: publisher::upsert must keep an absent title"
+    );
+}
+
+fn remote_item_bytes<'a>(bytes: &'a [u8], title: &str) -> &'a str {
+    let text = std::str::from_utf8(bytes).unwrap();
+    let title_at = text.find(&format!("title=\"{title}\"")).unwrap();
+    let start = text[..title_at].rfind("<podcast:remoteItem").unwrap();
+    let end = text[title_at..].find("/>").unwrap() + title_at + 2;
+    &text[start..end]
 }
 
 #[test]

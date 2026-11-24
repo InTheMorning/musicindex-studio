@@ -914,14 +914,28 @@ pub(crate) fn remove_child(children: &mut Vec<Node>, index: usize) {
 ///
 /// The writer copies it before a new element, so that the new element has
 /// the indentation of its neighbors.
-/// The attribute names of the first source element of each qualified name,
-/// in their source sequence.
+/// The attribute names of source elements of each qualified name, in sequence.
 pub(crate) fn attribute_orders(root: &Element) -> HashMap<String, Vec<String>> {
     fn walk(element: &Element, orders: &mut HashMap<String, Vec<String>>) {
         if !element.created && !element.attributes.is_empty() {
-            orders
-                .entry(element.name.clone())
-                .or_insert_with(|| element.attributes.iter().map(|a| a.name.clone()).collect());
+            let order = orders.entry(element.name.clone()).or_default();
+            for (index, attribute) in element.attributes.iter().enumerate() {
+                if order.contains(&attribute.name) {
+                    continue;
+                }
+                let prior = element.attributes[..index]
+                    .iter()
+                    .rev()
+                    .find_map(|candidate| order.iter().position(|name| name == &candidate.name));
+                let next = element.attributes[index + 1..]
+                    .iter()
+                    .find_map(|candidate| order.iter().position(|name| name == &candidate.name));
+                let position = prior
+                    .map(|position| position + 1)
+                    .or(next)
+                    .unwrap_or(order.len());
+                order.insert(position, attribute.name.clone());
+            }
         }
         for node in &element.children {
             if let Node::Element(child) = node {

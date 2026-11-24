@@ -341,7 +341,15 @@ A phase gets task files in `docs/tasks/` before work starts.
 
 - Source: observations 6 to 9, 11 and 14 to 19 of the [desktop walk of 2026-11-23](../reviews/2026-11-23-desktop-check-walk.md). Two outside reviews of the design brief are in `.studio-dev/design-brief/`, which Git ignores. The main session uses the review by Fable as the base. It uses the review by Astra only where the two agree.
 - Step 1, defects with no new design: [task 249](../tasks/studio-v1-task-249-a-move-to-a-written-page-with-no-draft-and-the-links-after-a-write.md) corrects observation 14 and shows that the harness caused observation 15. Observations 16 and 17 go into the structural design, because the count of a row and the text of the move sheet depend on it.
-- Decision for topics A to E of the brief and observations 16 to 19: [ADR 0254](../adr/0254-the-catalog-is-a-tree-and-each-change-uses-music-words.md). The roles are in [ADR 0253](../adr/0253-the-roles-of-a-feed-and-of-each-link.md), after musicindex ADR 0097. The panel is the Catalog tree, each change uses music words and waits for Review, and drag and drop with Undo is on the desktop only. Next: the task packets for the code.
+- Decision for topics A to E of the brief and observations 16 to 19: [ADR 0254](../adr/0254-the-catalog-is-a-tree-and-each-change-uses-music-words.md). The roles are in [ADR 0253](../adr/0253-the-roles-of-a-feed-and-of-each-link.md), after musicindex ADR 0097. The panel is the Catalog tree, each change uses music words and waits for Review, and drag and drop with Undo is on the desktop only.
+- Decision for the release fields: [ADR 0257](../adr/0257-a-release-has-one-artist-one-label-and-one-publisher-in-its-fields.md). A release has one artist page, one label page and one publisher, in select menus of its first tab.
+- The build is five tasks, in this sequence. None is started.
+  1. [Task 250](../tasks/studio-v1-task-250-the-roles-of-each-link-and-one-page-for-each-role.md): the roles of each link, one page for each role, and the levels from a link (core and API, four packets).
+  2. [Task 251](../tasks/studio-v1-task-251-the-changes-of-the-catalog-in-one-change-set.md): the page actions in music words, one change set of the Catalog, and Undo (core and API, three packets, schema 51).
+  3. [Task 252](../tasks/studio-v1-task-252-the-artist-label-and-publisher-fields-of-a-release.md): the fields of a release (core, API and UI, four packets).
+  4. [Task 253](../tasks/studio-v1-task-253-the-catalog-tree-and-the-word-publisher.md): the word "Publisher", the Catalog tree and the page of a publisher feed (UI, four packets). Most of packet 253a needs no other task.
+  5. [Task 254](../tasks/studio-v1-task-254-the-sheets-of-a-catalog-change-review-and-drag-and-drop.md): the sheets of a change, the Add sheet, Review and drag and drop (UI, four packets).
+- Open: the control on the screen that adds a credit role to one link or removes a role from one link (ADR 0253 item 21). Task 250 gives the core function and the route. The control needs a mockup and a decision of the place first.
 
 ### Phase 13: Desktop Shell
 

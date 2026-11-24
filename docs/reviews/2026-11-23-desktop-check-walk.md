@@ -167,3 +167,11 @@ Task 246 corrects observations 10 and 13. The title of a release move names the 
 Observation 1: the link of the release has no `rel`. ADR 0252 gives the decision, and task 247 builds it.
 
 Task 247 builds ADR 0252. In the screenshot harness, a written release had its artist link with no `rel`. **Issues** showed "The link to Big Sky Choir has no role." with **Make It the Artist Link** and **Link a Page**. The refusal panel of Review showed the line and the button at 1100 px and 390 px. After a click on the button, the panel went, and the write wrote `rel="artist"` into the file. An API test proves the Notice on a read-only feed. The human check on Elijah Lied stays open.
+
+## After The Walk: The Design Brief
+
+Observations 6, 7, 8, 9 and 11 are in a brief for an outside design review. The brief and its screenshots are in `.studio-dev/design-brief/brief/`, which Git ignores. The harness of the brief found two possible defects. Neither is examined in the code.
+
+Observation 14 (possible defect): **Move To…** of a release to a hosting page failed with `no_guid` ("the draft of feed 1 has no podcast:guid"). The sheet showed "Studio could not finish this." The hosting page was written and had no draft. After `GET /api/v1/feeds/{id}/draft` started its draft, the same move passed. In the walk, Test Hosting was not written, so the walk did not show this fault. The cause is possibly that the move reads a draft that does not exist (inference). Examine this in an API test.
+
+Observation 15 (possible defect, possibly a fault of the harness): the harness linked a written release to an artist page with `POST /api/v1/feeds/{page}/links`. A subsequent write of the release with the test helper `write_with_own_diff` removed each link of the release, and the label page lost its child. A first write of a release made with `publisher_id` also removed its link. The helper writes one feed with its own diff, and Review of the UI writes the linked feeds together (ADR 0251 item 7). Thus the helper is possibly the cause (inference). Examine this in an API test that writes as Review does.

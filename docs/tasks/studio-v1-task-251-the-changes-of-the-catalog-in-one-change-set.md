@@ -3,13 +3,13 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Levels And Moves".
 Decisions: [ADR 0254](../adr/0254-the-catalog-is-a-tree-and-each-change-uses-music-words.md) items 21, 26 to 28, 34 to 37, 40 and 41. [ADR 0257](../adr/0257-a-release-has-one-artist-one-label-and-one-publisher-in-its-fields.md) items 14 and 15.
 
-Status: Packet 251a is done. Packets 251b and 251c are not started.
+Status: Packets 251a and 251b are done. Packet 251c is not started.
 
 Technical choices of the main session (no ADR, because ADR 0254 gives the rule and this is how the code does it):
 
 - The page actions move from `move_publisher_page_to_pages` in `crates/api/src/routes.rs` into one core function. The route only reads the request and calls the core (ADR 0065).
 - The change set of the Catalog is a change set with a new operation kind. Each change adds its feeds and its kept links to the one open change set. A feed that is already in it keeps its first `before` draft, so Discard puts back the state before the first change.
-- Undo needs the state before each change. The collection gets two tables: `catalog_steps` (the drafts before one change) and `catalog_step_kept_levels` (the kept links before one change). This is schema version 51. Undo puts back the last step and deletes it. When no step stays, the change set has no change and closes.
+- Undo needs the state before each change. The collection gets three tables: `catalog_steps` (one row for each change), `catalog_step_feeds` (the drafts before one change) and `catalog_step_kept_levels` (the kept links before one change). This is schema version 53. Undo puts back the last step and deletes it. When no step stays, the change set has no change and closes.
 - The Catalog Undo has no Redo (ADR 0254 item 37 gives only Undo).
 
 ## Goal
@@ -25,7 +25,7 @@ Each change of the Catalog uses music words: sign to a label, change label, go i
 | Kept links | reuse | crates/core/src/collection.rs | `add_kept_level` and `remove_kept_level`. |
 | Page move change set | extend | crates/core/src/change_set.rs | `record_page_move_change_set` adds to the open change set of the Catalog. |
 | Discard | reuse | crates/core/src/change_set.rs | `discard_change_set` already puts back drafts and kept links. |
-| Migrations | extend | crates/core/src/collection.rs | `MIGRATIONS` gets entry 51 for the step tables. |
+| Migrations | extend | crates/core/src/collection.rs | `MIGRATIONS` gets entry 53 for the step tables. |
 | Gather route | extend | crates/api/src/routes.rs | `gather_pages` does the Sign and Publish of the Add sheet. |
 | Change set tests | extend | crates/core/tests/change_set.rs | Undo and Discard of two changes. |
 | API move tests | extend | crates/api/src/tests.rs | `an_artist_page_move_updates_its_releases_and_kept_level` and the tests near it. |
@@ -71,7 +71,7 @@ Each change of the Catalog uses music words: sign to a label, change label, go i
 
 ### 251b: One Change Set And Undo (Core)
 
-1. Migration 51: the tables `catalog_steps` and `catalog_step_kept_levels`, with the change set ID and a step number.
+1. Migration 53: the tables `catalog_steps`, `catalog_step_feeds` and `catalog_step_kept_levels`, with the change set ID and a step number.
 2. A new operation kind of a change set for the Catalog. `record_page_move_change_set` (or a function that it calls) adds the feeds and the kept links of a change to the open change set of the Catalog, when one exists. Otherwise it makes one. A feed that is already in the change set keeps its first `before`.
 3. Each change records one step: the draft of each changed feed before the change, and the kept links before the change.
 4. ADR 0254 item 34a: a change refuses a feed that is in a different open change set, with the error of ADR 0243 item 5. The open change set of the Catalog does not refuse.
@@ -81,7 +81,7 @@ Each change of the Catalog uses music words: sign to a label, change label, go i
    - Undo after two changes gives the state after the first change. A second Undo gives the state before the first change, and the change set closes.
    - Discard after two changes gives the state before the first change, also for the kept links.
    - A feed in a recipient change set refuses a Catalog change.
-   - The migration test of `crates/core/src/collection.rs` gets version 51.
+   - The migration test of `crates/core/src/collection.rs` gets version 53.
 
 ### 251c: The Routes (API)
 

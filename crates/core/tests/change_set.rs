@@ -1598,3 +1598,331 @@ fn a_change_set_gets_a_date_at_its_diff_and_discard_puts_back_the_draft_with_no_
     assert_eq!(date_of(&s, one), None);
     assert!(s.collection.draft(two).unwrap().is_none());
 }
+
+struct CatalogSetup {
+    setup: Setup,
+    artist: FeedId,
+    labels: [FeedId; 2],
+}
+
+fn catalog_setup() -> CatalogSetup {
+    use studio_core::collection::PublisherRole;
+    use studio_core::publisher;
+
+    let mut s = setup();
+    for &feed in &s.feeds {
+        pipeline::start_draft(&s.collection, s.connector.as_ref(), feed).unwrap();
+    }
+    let connector = s.collection.feed(s.feeds[0]).unwrap().connector_id.unwrap();
+    let mut pages = Vec::new();
+    for (name, role) in [
+        ("Artist", PublisherRole::Artist),
+        ("First label", PublisherRole::Label),
+        ("Second label", PublisherRole::Label),
+    ] {
+        let path = format!("{name}.xml");
+        let page = pipeline::new_feed(
+            &mut s.collection,
+            s.connector.as_ref(),
+            connector,
+            &path,
+            name,
+            "Artist",
+            "publisher",
+        )
+        .unwrap();
+        s.collection
+            .set_publisher_roles(page, &[role], true)
+            .unwrap();
+        pages.push(page);
+    }
+    for &release in &s.feeds {
+        publisher::link(&s.collection, pages[0], release, None).unwrap();
+    }
+    CatalogSetup {
+        setup: s,
+        artist: pages[0],
+        labels: [pages[1], pages[2]],
+    }
+}
+
+fn catalog_change(s: &CatalogSetup, label: FeedId, releases: &[FeedId]) {
+    studio_core::publisher::change_page(
+        &s.setup.collection,
+        None,
+        s.artist,
+        studio_core::publisher::PageAction::ChangeLabel,
+        Some(label),
+        releases,
+    )
+    .unwrap();
+}
+
+fn catalog_drafts(s: &CatalogSetup) -> Vec<(FeedId, Option<studio_core::collection::DraftRow>)> {
+    s.setup
+        .collection
+        .feeds()
+        .unwrap()
+        .into_iter()
+        .map(|row| (row.id, s.setup.collection.draft(row.id).unwrap()))
+        .collect()
+}
+
+#[test]
+fn two_catalog_changes_share_one_change_set_with_both_feed_lists() {
+    let s = catalog_setup();
+    catalog_change(&s, s.labels[0], &[s.setup.feeds[0]]);
+    let first = change_set::change_sets(&s.setup.collection)
+        .unwrap()
+        .remove(0);
+    catalog_change(&s, s.labels[1], &[s.setup.feeds[1]]);
+    let sets = change_set::change_sets(&s.setup.collection).unwrap();
+    assert_eq!(sets.len(), 1);
+    let set = &sets[0];
+    assert_eq!(set.id, first.id);
+    assert_eq!(set.operation, RecipientOperation::Catalog);
+    assert_eq!(set.catalog_steps, 2);
+    for feed in [s.labels[0], s.labels[1], s.setup.feeds[0], s.setup.feeds[1]] {
+        assert!(set.feeds.iter().any(|row| row.feed_id == feed));
+    }
+}
+
+#[test]
+fn two_catalog_undos_restore_each_step_and_close_the_change_set() {
+    let s = catalog_setup();
+    s.setup
+        .collection
+        .add_kept_level(s.labels[0], s.artist)
+        .unwrap();
+    let before = catalog_drafts(&s);
+    let kept_before = s.setup.collection.kept_levels().unwrap();
+    catalog_change(&s, s.labels[0], &[s.setup.feeds[0]]);
+    let after_first = catalog_drafts(&s);
+    let kept_first = s.setup.collection.kept_levels().unwrap();
+    // The second change includes a feed from the first change and a new feed.
+    catalog_change(&s, s.labels[1], &s.setup.feeds);
+    let set = change_set::undo_catalog_step(&s.setup.collection)
+        .unwrap()
+        .unwrap();
+    assert_eq!(set.catalog_steps, 1);
+    assert!(!set.feeds.iter().any(|row| row.feed_id == s.labels[1]));
+    assert_eq!(catalog_drafts(&s), after_first);
+    assert_eq!(s.setup.collection.kept_levels().unwrap(), kept_first);
+    assert!(
+        change_set::undo_catalog_step(&s.setup.collection)
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(catalog_drafts(&s), before);
+    assert_eq!(s.setup.collection.kept_levels().unwrap(), kept_before);
+    assert_eq!(
+        change_set::change_sets(&s.setup.collection).unwrap(),
+        Vec::<change_set::ChangeSet>::new()
+    );
+    assert_eq!(s.setup.collection.change_set_rows().unwrap(), Vec::new());
+}
+
+#[test]
+fn discard_of_two_catalog_changes_restores_first_drafts_and_kept_links() {
+    let s = catalog_setup();
+    s.setup
+        .collection
+        .add_kept_level(s.labels[0], s.artist)
+        .unwrap();
+    let before = catalog_drafts(&s);
+    let kept = s.setup.collection.kept_levels().unwrap();
+    catalog_change(&s, s.labels[0], &[s.setup.feeds[0]]);
+    catalog_change(&s, s.labels[1], &s.setup.feeds);
+    let set = change_set::change_sets(&s.setup.collection)
+        .unwrap()
+        .remove(0);
+    discard_change_set(&s.setup.collection, set.id).unwrap();
+    assert_eq!(catalog_drafts(&s), before);
+    assert_eq!(s.setup.collection.kept_levels().unwrap(), kept);
+    assert_eq!(s.setup.collection.change_set_rows().unwrap(), Vec::new());
+}
+
+#[test]
+fn a_recipient_change_set_refuses_a_catalog_change_without_database_changes() {
+    let s = catalog_setup();
+    let recipient_set = make_change_set(
+        &s.setup.collection,
+        &mut start(&s.setup),
+        &key(),
+        &change_address(),
+        &[s.setup.feeds[0]],
+    )
+    .unwrap();
+    let before = catalog_drafts(&s);
+    let kept = s.setup.collection.kept_levels().unwrap();
+    let error = studio_core::publisher::change_page(
+        &s.setup.collection,
+        None,
+        s.artist,
+        studio_core::publisher::PageAction::ChangeLabel,
+        Some(s.labels[0]),
+        &[s.setup.feeds[0]],
+    )
+    .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("Album has changes to write. Write or discard them first.")
+    );
+    assert!(
+        error
+            .to_string()
+            .contains(&format!("change set {}", recipient_set.id))
+    );
+    assert_eq!(catalog_drafts(&s), before);
+    assert_eq!(s.setup.collection.kept_levels().unwrap(), kept);
+    assert_eq!(
+        change_set::change_sets(&s.setup.collection).unwrap(),
+        vec![recipient_set]
+    );
+}
+
+#[test]
+fn kept_link_only_catalog_changes_stay_open_and_undo_each_step() {
+    let s = catalog_setup();
+    let before = catalog_drafts(&s);
+    catalog_change(&s, s.labels[0], &[]);
+    catalog_change(&s, s.labels[1], &[]);
+    let set = change_set::change_sets(&s.setup.collection)
+        .unwrap()
+        .remove(0);
+    assert_eq!(set.feeds, Vec::new());
+    assert_eq!(set.catalog_steps, 2);
+    assert_eq!(
+        s.setup.collection.kept_levels().unwrap(),
+        vec![(s.labels[1], s.artist)]
+    );
+    change_set::undo_catalog_step(&s.setup.collection).unwrap();
+    assert_eq!(
+        s.setup.collection.kept_levels().unwrap(),
+        vec![(s.labels[0], s.artist)]
+    );
+    change_set::undo_catalog_step(&s.setup.collection).unwrap();
+    assert_eq!(s.setup.collection.kept_levels().unwrap(), Vec::new());
+    assert_eq!(catalog_drafts(&s), before);
+}
+
+#[test]
+fn one_catalog_undo_restores_the_label_and_publisher_removed_by_leave_all() {
+    use studio_core::collection::PublisherRole;
+    use studio_core::publisher::{self, PageAction};
+
+    let mut s = catalog_setup();
+    let connector = s
+        .setup
+        .collection
+        .feed(s.artist)
+        .unwrap()
+        .connector_id
+        .unwrap();
+    let publisher = pipeline::new_feed(
+        &mut s.setup.collection,
+        s.setup.connector.as_ref(),
+        connector,
+        "publisher.xml",
+        "Publisher",
+        "Artist",
+        "publisher",
+    )
+    .unwrap();
+    s.setup
+        .collection
+        .set_publisher_roles(publisher, &[PublisherRole::Hosting], true)
+        .unwrap();
+    for &release in &s.setup.feeds {
+        publisher::link(&s.setup.collection, s.labels[0], release, None).unwrap();
+        publisher::link(&s.setup.collection, publisher, release, None).unwrap();
+    }
+    let before = catalog_drafts(&s);
+    publisher::change_page(
+        &s.setup.collection,
+        None,
+        s.artist,
+        PageAction::LeaveAll,
+        None,
+        &s.setup.feeds,
+    )
+    .unwrap();
+    assert_ne!(catalog_drafts(&s), before);
+    assert!(
+        change_set::undo_catalog_step(&s.setup.collection)
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(catalog_drafts(&s), before);
+}
+
+#[test]
+fn catalog_steps_survive_a_collection_reopen() {
+    let s = catalog_setup();
+    catalog_change(&s, s.labels[0], &[s.setup.feeds[0]]);
+    let first = catalog_drafts(&s);
+    catalog_change(&s, s.labels[1], &s.setup.feeds);
+    let collection = Collection::open(&s.setup.dir.path().join("collection.sqlite")).unwrap();
+    let set = change_set::undo_catalog_step(&collection).unwrap().unwrap();
+    assert_eq!(set.catalog_steps, 1);
+    assert_eq!(catalog_drafts(&s), first);
+}
+
+#[test]
+fn a_feed_removal_and_undo_keep_the_catalog_step_snapshots() {
+    let s = catalog_setup();
+    let before = catalog_drafts(&s);
+    catalog_change(&s, s.labels[0], &[s.setup.feeds[0]]);
+    people::remove_feed(&s.setup.collection, s.setup.feeds[0]).unwrap();
+    people::undo_delete(&s.setup.collection).unwrap();
+    change_set::undo_catalog_step(&s.setup.collection).unwrap();
+    assert_eq!(catalog_drafts(&s), before);
+}
+
+#[test]
+fn catalog_discard_removes_drafts_that_the_first_change_started() {
+    let s = setup();
+    let feeds = &s.feeds;
+    let before = [(feeds[0], None), (feeds[1], None)];
+    for &feed in feeds {
+        pipeline::start_draft(&s.collection, s.connector.as_ref(), feed).unwrap();
+    }
+    pipeline::edit_draft(&s.collection, feeds[0], |feed| {
+        feed.title = Some("First".into());
+    })
+    .unwrap();
+    let first = change_set::record_page_move_change_set(
+        &s.collection,
+        &RecipientOperation::Catalog,
+        &before,
+        &[],
+        &[],
+    )
+    .unwrap();
+    assert!(s.collection.draft(feeds[1]).unwrap().is_none());
+    let second_before = feeds
+        .iter()
+        .map(|&feed| (feed, s.collection.draft(feed).unwrap()))
+        .collect::<Vec<_>>();
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), feeds[1]).unwrap();
+    for &feed in feeds {
+        pipeline::edit_draft(&s.collection, feed, |feed| {
+            feed.title = Some("Second".into());
+        })
+        .unwrap();
+    }
+    let second = change_set::record_page_move_change_set(
+        &s.collection,
+        &RecipientOperation::Catalog,
+        &second_before,
+        &[],
+        &[],
+    )
+    .unwrap();
+    assert_eq!(first.id, second.id);
+    discard_change_set(&s.collection, second.id).unwrap();
+    for &feed in feeds {
+        assert!(s.collection.draft(feed).unwrap().is_none());
+    }
+}

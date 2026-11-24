@@ -113,6 +113,8 @@ pub enum RecipientOperation {
         /// The waiting time of the old copies.
         wait_days: u32,
     },
+    /// The changes of the Catalog (ADR 0254 item 34).
+    Catalog,
     /// Move publisher pages and their releases (ADR 0243 items 1 to 3).
     MovePages {
         /// The names of the moved pages (ADR 0243 item 3).
@@ -660,9 +662,9 @@ fn apply_block(
         },
         // A credit feed has no payee, as Add to all releases with only a credit.
         RecipientOperation::CreditFeed { .. } => BlockResult::Skipped(Cause::NothingSelected),
-        RecipientOperation::MoveReleases { .. } | RecipientOperation::MovePages { .. } => {
-            BlockResult::Skipped(Cause::NothingToMove)
-        }
+        RecipientOperation::MoveReleases { .. }
+        | RecipientOperation::MovePages { .. }
+        | RecipientOperation::Catalog => BlockResult::Skipped(Cause::NothingToMove),
         RecipientOperation::Correct { .. } => correct_in_block(block, wallet, operation),
     }
 }
@@ -1158,7 +1160,9 @@ pub fn apply(feed: &mut Feed, wallet: &Wallet, operation: &RecipientOperation) -
     // A move changes no recipient. See `make_move_change_set`.
     if matches!(
         operation,
-        RecipientOperation::MoveReleases { .. } | RecipientOperation::MovePages { .. }
+        RecipientOperation::MoveReleases { .. }
+            | RecipientOperation::MovePages { .. }
+            | RecipientOperation::Catalog
     ) {
         return Outcome::not_changed(Cause::NothingToMove);
     }
@@ -1266,15 +1270,19 @@ pub struct ChangeSet {
     pub feeds: Vec<ChangeSetFeed>,
     /// The person of a person operation (ADR 0203 item 26).
     pub person: Option<PersonId>,
+    /// The number of Catalog changes that Undo can put back.
+    pub catalog_steps: u32,
 }
 
 impl ChangeSet {
     /// True while a changed feed has no write (ADR 0207 item 26).
     #[must_use]
     pub fn is_open(&self) -> bool {
-        self.feeds
-            .iter()
-            .any(|f| f.outcome.is_changed() && f.written_at.is_none())
+        (self.catalog_steps > 0 && self.feeds.is_empty())
+            || self
+                .feeds
+                .iter()
+                .any(|f| f.outcome.is_changed() && f.written_at.is_none())
     }
 }
 
@@ -1364,7 +1372,11 @@ pub fn make_move_change_set(
     )
 }
 
-/// Record a completed page move with the drafts and kept links from before it.
+/// Record a completed page move with its earlier drafts and kept links.
+///
+/// `Catalog` adds one step to the open Catalog change set (ADR 0254 items 34 and 37).
+/// The first draft and kept link snapshots stay until Discard.
+/// The caller keeps the change and this record in one Catalog transaction.
 ///
 /// A feed whose draft did not change is not in the change set, and a draft
 /// that the move started with no change goes out (ADR 0243 item 1).
@@ -1379,33 +1391,95 @@ pub fn record_page_move_change_set(
     kept_before: &[(FeedId, FeedId)],
     kept_after: &[(FeedId, FeedId)],
 ) -> Result<ChangeSet, PipelineError> {
+    if collection.db().is_autocommit() {
+        collection.catalog_transaction(|| {
+            record_page_move_inner(collection, operation, before, kept_before, kept_after)
+        })
+    } else {
+        record_page_move_inner(collection, operation, before, kept_before, kept_after)
+    }
+}
+
+fn record_page_move_inner(
+    collection: &Collection,
+    operation: &RecipientOperation,
+    before: &[(FeedId, Option<crate::collection::DraftRow>)],
+    kept_before: &[(FeedId, FeedId)],
+    kept_after: &[(FeedId, FeedId)],
+) -> Result<ChangeSet, PipelineError> {
     let no_recipient = RecipientKey {
         address: String::new(),
         custom_key: None,
         custom_value: None,
     };
-    collection.delete_closed_change_sets()?;
-    let id =
-        collection.add_change_set(&to_json(operation)?, &to_json(&no_recipient)?, now(), None)?;
-    let after_set: HashSet<_> = kept_after.iter().copied().collect();
-    let before_set: HashSet<_> = kept_before.iter().copied().collect();
-    for &(upper, lower) in before_set.union(&after_set) {
-        let was_present = before_set.contains(&(upper, lower));
-        if was_present != after_set.contains(&(upper, lower)) {
-            collection.add_change_set_kept_level(id, upper, lower, was_present)?;
-        }
-    }
-    for (feed_id, draft) in before {
-        let unchanged = match (draft, collection.draft(*feed_id)?) {
+    let catalog = matches!(operation, RecipientOperation::Catalog);
+    let mut changed = Vec::new();
+    for (feed, draft) in before {
+        let after = collection.draft(*feed)?;
+        let unchanged = match (draft, &after) {
             (Some(earlier), Some(now)) => earlier.draft_xml == now.draft_xml,
             (None, Some(now)) => now.draft_xml == now.base_xml,
             (None, None) => true,
             (Some(_), None) => false,
         };
-        if unchanged {
-            if draft.is_none() {
+        if !unchanged {
+            changed.push(*feed);
+        }
+    }
+    let after_set: HashSet<_> = kept_after.iter().copied().collect();
+    let before_set: HashSet<_> = kept_before.iter().copied().collect();
+    let kept_changes: Vec<_> = before_set
+        .symmetric_difference(&after_set)
+        .copied()
+        .collect();
+    if catalog {
+        let mut affected = changed.clone();
+        for &(upper, lower) in &kept_changes {
+            affected.extend([upper, lower]);
+        }
+        check_catalog_change_feeds(collection, &affected)?;
+    }
+    collection.delete_closed_change_sets()?;
+    let open_catalog = if catalog {
+        change_sets(collection)?
+            .into_iter()
+            .find(|set| matches!(set.operation, RecipientOperation::Catalog))
+    } else {
+        None
+    };
+    let id = match open_catalog {
+        Some(set) => set.id,
+        None => collection.add_change_set(
+            &to_json(operation)?,
+            &to_json(&no_recipient)?,
+            now(),
+            None,
+        )?,
+    };
+    let step = if catalog && (!changed.is_empty() || !kept_changes.is_empty()) {
+        Some(collection.add_catalog_step(id)?)
+    } else {
+        None
+    };
+    for (upper, lower) in kept_changes {
+        let was_present = before_set.contains(&(upper, lower));
+        collection.add_change_set_kept_level(id, upper, lower, was_present)?;
+        if let Some(step) = step {
+            collection.add_catalog_step_kept_level(id, step, upper, lower, was_present)?;
+        }
+    }
+    let existing = collection.change_set_feed_rows(id)?;
+    for (feed_id, draft) in before {
+        if !changed.contains(feed_id) {
+            if draft.is_none() && collection.draft(*feed_id)?.is_some() {
                 remove_new_draft(collection, *feed_id)?;
             }
+            continue;
+        }
+        if let Some(step) = step {
+            collection.add_catalog_step_feed(id, step, *feed_id, draft.as_ref())?;
+        }
+        if existing.iter().any(|row| row.feed_id == *feed_id) {
             continue;
         }
         collection.add_change_set_feed(
@@ -1427,6 +1501,92 @@ pub fn record_page_move_change_set(
         )?;
     }
     change_set(collection, id)
+}
+
+/// Refuse feeds in a different open change set (ADR 0254 item 34a).
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] that names each feed in a different open change set.
+pub fn check_catalog_change_feeds(
+    collection: &Collection,
+    feeds: &[FeedId],
+) -> Result<(), PipelineError> {
+    let mut conflicts = Vec::new();
+    for set in change_sets(collection)? {
+        if matches!(set.operation, RecipientOperation::Catalog) {
+            continue;
+        }
+        for feed in set.feeds.iter().filter(|feed| {
+            feeds.contains(&feed.feed_id) && feed.outcome.is_changed() && feed.written_at.is_none()
+        }) {
+            let row = collection.feed(feed.feed_id)?;
+            let name = row.title.unwrap_or_else(|| format!("Feed {}", row.id.0));
+            conflicts.push(format!(
+                "{name} has changes to write. Write or discard them first. (change set {})",
+                set.id
+            ));
+        }
+    }
+    if !conflicts.is_empty() {
+        return Err(invalid(conflicts.join("\n")));
+    }
+    Ok(())
+}
+
+/// Put back the last Catalog change (ADR 0254 item 37).
+///
+/// Gives the remaining change set, or `None` after its last step.
+///
+/// # Errors
+///
+/// Gives a [`PipelineError`] when SQLite fails or the change set has no Catalog step.
+/// A written feed cannot use Undo (ADR 0227 item 8).
+pub fn undo_catalog_step(collection: &Collection) -> Result<Option<ChangeSet>, PipelineError> {
+    collection.catalog_transaction(|| {
+        let set = change_sets(collection)?
+            .into_iter()
+            .find(|set| matches!(set.operation, RecipientOperation::Catalog))
+            .ok_or_else(|| invalid("the Catalog has no change to undo"))?;
+        if set.feeds.iter().any(|feed| feed.written_at.is_some()) {
+            return Err(invalid("a written feed cannot use Undo"));
+        }
+        let step = i64::from(set.catalog_steps);
+        if step == 0 {
+            return Err(invalid("the Catalog has no change to undo"));
+        }
+        for (feed, before) in collection.catalog_step_feeds(set.id, step)? {
+            match before {
+                Some(draft) => collection.save_draft(feed, &draft)?,
+                None => remove_new_draft(collection, feed)?,
+            }
+        }
+        restore_kept_levels(
+            collection,
+            &collection.catalog_step_kept_levels(set.id, step)?,
+        )?;
+        collection.delete_catalog_step(set.id, step)?;
+        if step == 1 {
+            discard_change_set(collection, set.id)?;
+            Ok(None)
+        } else {
+            Ok(Some(change_set(collection, set.id)?))
+        }
+    })
+}
+
+fn restore_kept_levels(
+    collection: &Collection,
+    levels: &[(FeedId, FeedId, bool)],
+) -> Result<(), PipelineError> {
+    for &(upper, lower, was_present) in levels {
+        if was_present {
+            collection.add_kept_level(upper, lower)?;
+        } else {
+            collection.remove_kept_level(upper, lower)?;
+        }
+    }
+    Ok(())
 }
 
 /// The outcome of a move of one release: `feed_moves` in the place of the
@@ -2151,6 +2311,7 @@ fn change_set(collection: &Collection, id: i64) -> Result<ChangeSet, PipelineErr
         made_at: row.made_at,
         feeds,
         person: row.person_id.map(PersonId),
+        catalog_steps: collection.catalog_step_count(id)?,
     })
 }
 
@@ -2181,6 +2342,14 @@ pub fn change_sets(collection: &Collection) -> Result<Vec<ChangeSet>, PipelineEr
 /// Gives a [`PipelineError`] when the collection fails. The change set then
 /// stays.
 pub fn discard_change_set(collection: &Collection, id: i64) -> Result<(), PipelineError> {
+    if collection.db().is_autocommit() {
+        collection.catalog_transaction(|| discard_change_set_inner(collection, id))
+    } else {
+        discard_change_set_inner(collection, id)
+    }
+}
+
+fn discard_change_set_inner(collection: &Collection, id: i64) -> Result<(), PipelineError> {
     let set = change_set(collection, id)?;
     let is_file_move = matches!(set.operation, RecipientOperation::MoveReleases { .. });
     for row in collection.change_set_feed_rows(id)? {
@@ -2208,13 +2377,7 @@ pub fn discard_change_set(collection: &Collection, id: i64) -> Result<(), Pipeli
             )?;
         }
     }
-    for (upper, lower, was_present) in collection.change_set_kept_levels(id)? {
-        if was_present {
-            collection.add_kept_level(upper, lower)?;
-        } else {
-            collection.remove_kept_level(upper, lower)?;
-        }
-    }
+    restore_kept_levels(collection, &collection.change_set_kept_levels(id)?)?;
     collection.delete_change_set(id)?;
     Ok(())
 }

@@ -98,14 +98,30 @@ pub fn change_page(
     selected_releases: &[FeedId],
 ) -> Result<PageChangeResult, PublisherError> {
     collection.catalog_transaction(|| {
-        change_page_inner(
+        let before = collection
+            .feeds()?
+            .into_iter()
+            .map(|row| Ok((row.id, collection.draft(row.id)?)))
+            .collect::<Result<Vec<_>, crate::collection::CollectionError>>()?;
+        let kept_before = collection.kept_levels()?;
+        let result = change_page_inner(
             collection,
             library,
             page,
             action,
             selected_page,
             selected_releases,
-        )
+        )?;
+        if !result.nothing_changes {
+            crate::change_set::record_page_move_change_set(
+                collection,
+                &crate::change_set::RecipientOperation::Catalog,
+                &before,
+                &kept_before,
+                &collection.kept_levels()?,
+            )?;
+        }
+        Ok(result)
     })
 }
 

@@ -734,6 +734,32 @@ ALTER TABLE feeds ADD COLUMN known_guid TEXT;
 UPDATE feeds SET known_guid = podcast_guid
 WHERE podcast_guid IS NOT NULL AND podcast_guid NOT LIKE 'pending-%';
 ",
+    r"
+CREATE TABLE catalog_steps (
+    change_set_id INTEGER NOT NULL REFERENCES change_sets(id) ON DELETE CASCADE,
+    step INTEGER NOT NULL,
+    PRIMARY KEY (change_set_id, step)
+);
+CREATE TABLE catalog_step_feeds (
+    change_set_id INTEGER NOT NULL,
+    step INTEGER NOT NULL,
+    feed_id INTEGER NOT NULL REFERENCES feeds(id) ON DELETE CASCADE,
+    before_xml BLOB,
+    before_base_xml BLOB,
+    before_base_version TEXT,
+    PRIMARY KEY (change_set_id, step, feed_id),
+    FOREIGN KEY (change_set_id, step) REFERENCES catalog_steps(change_set_id, step) ON DELETE CASCADE
+);
+CREATE TABLE catalog_step_kept_levels (
+    change_set_id INTEGER NOT NULL,
+    step INTEGER NOT NULL,
+    upper_id INTEGER NOT NULL REFERENCES feeds(id) ON DELETE CASCADE,
+    lower_id INTEGER NOT NULL REFERENCES feeds(id) ON DELETE CASCADE,
+    was_present INTEGER NOT NULL,
+    PRIMARY KEY (change_set_id, step, upper_id, lower_id),
+    FOREIGN KEY (change_set_id, step) REFERENCES catalog_steps(change_set_id, step) ON DELETE CASCADE
+);
+",
 ];
 
 /// `root` as a relative path under `data_dir`, when it is a folder inside
@@ -3362,7 +3388,7 @@ impl Collection {
         was_present: bool,
     ) -> Result<(), CollectionError> {
         self.db.execute(
-            "INSERT INTO change_set_kept_levels (change_set_id, upper_id, lower_id, was_present)
+            "INSERT OR IGNORE INTO change_set_kept_levels (change_set_id, upper_id, lower_id, was_present)
              VALUES (?1, ?2, ?3, ?4)",
             params![change_set, upper.0, lower.0, was_present],
         )?;
@@ -4881,6 +4907,134 @@ impl Collection {
         Ok(rows)
     }
 
+    /// The number of Catalog steps (ADR 0254 item 36).
+    ///
+    /// # Errors
+    ///
+    /// Gives a [`CollectionError`] when SQLite fails.
+    pub fn catalog_step_count(&self, id: i64) -> Result<u32, CollectionError> {
+        Ok(self.db.query_row(
+            "SELECT COUNT(*) FROM catalog_steps WHERE change_set_id = ?1",
+            [id],
+            |row| row.get(0),
+        )?)
+    }
+
+    pub(crate) fn add_catalog_step(&self, id: i64) -> Result<i64, CollectionError> {
+        let step = self.db.query_row(
+            "SELECT COALESCE(MAX(step), 0) + 1 FROM catalog_steps WHERE change_set_id = ?1",
+            [id],
+            |row| row.get::<_, i64>(0),
+        )?;
+        self.db.execute(
+            "INSERT INTO catalog_steps (change_set_id, step) VALUES (?1, ?2)",
+            params![id, step],
+        )?;
+        Ok(step)
+    }
+
+    pub(crate) fn add_catalog_step_feed(
+        &self,
+        id: i64,
+        step: i64,
+        feed: FeedId,
+        before: Option<&DraftRow>,
+    ) -> Result<(), CollectionError> {
+        self.db.execute(
+            "INSERT INTO catalog_step_feeds
+             (change_set_id, step, feed_id, before_xml, before_base_xml, before_base_version)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                id,
+                step,
+                feed.0,
+                before.map(|d| &d.draft_xml),
+                before.map(|d| &d.base_xml),
+                before.and_then(|d| d.base_version.as_ref().map(Version::as_str))
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub(crate) fn catalog_step_feeds(
+        &self,
+        id: i64,
+        step: i64,
+    ) -> Result<Vec<(FeedId, Option<DraftRow>)>, CollectionError> {
+        let mut statement = self.db.prepare(
+            "SELECT feed_id, before_xml, before_base_xml, before_base_version
+             FROM catalog_step_feeds WHERE change_set_id = ?1 AND step = ?2 ORDER BY feed_id",
+        )?;
+        Ok(statement
+            .query_map(params![id, step], |row| {
+                let xml: Option<Vec<u8>> = row.get(1)?;
+                let base_xml: Option<Vec<u8>> = row.get(2)?;
+                let version: Option<String> = row.get(3)?;
+                Ok((
+                    FeedId(row.get(0)?),
+                    xml.map(|draft_xml| DraftRow {
+                        draft_xml,
+                        base_xml: base_xml.unwrap_or_default(),
+                        base_version: version.map(Version::new),
+                    }),
+                ))
+            })?
+            .collect::<Result<_, _>>()?)
+    }
+
+    pub(crate) fn add_catalog_step_kept_level(
+        &self,
+        id: i64,
+        step: i64,
+        upper: FeedId,
+        lower: FeedId,
+        was_present: bool,
+    ) -> Result<(), CollectionError> {
+        self.db.execute(
+            "INSERT INTO catalog_step_kept_levels
+             (change_set_id, step, upper_id, lower_id, was_present) VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![id, step, upper.0, lower.0, was_present],
+        )?;
+        Ok(())
+    }
+
+    pub(crate) fn catalog_step_kept_levels(
+        &self,
+        id: i64,
+        step: i64,
+    ) -> Result<Vec<(FeedId, FeedId, bool)>, CollectionError> {
+        let mut statement = self.db.prepare(
+            "SELECT upper_id, lower_id, was_present FROM catalog_step_kept_levels
+             WHERE change_set_id = ?1 AND step = ?2 ORDER BY upper_id, lower_id",
+        )?;
+        Ok(statement
+            .query_map(params![id, step], |row| {
+                Ok((FeedId(row.get(0)?), FeedId(row.get(1)?), row.get(2)?))
+            })?
+            .collect::<Result<_, _>>()?)
+    }
+
+    pub(crate) fn delete_catalog_step(&self, id: i64, step: i64) -> Result<(), CollectionError> {
+        self.db.execute(
+            "DELETE FROM catalog_steps WHERE change_set_id = ?1 AND step = ?2",
+            params![id, step],
+        )?;
+        // A feed used only by the removed step leaves the change set.
+        self.db.execute(
+            "DELETE FROM change_set_feeds WHERE change_set_id = ?1 AND feed_id NOT IN
+             (SELECT feed_id FROM catalog_step_feeds WHERE change_set_id = ?1)",
+            [id],
+        )?;
+        self.db.execute(
+            "DELETE FROM change_set_kept_levels WHERE change_set_id = ?1 AND NOT EXISTS
+             (SELECT 1 FROM catalog_step_kept_levels s WHERE s.change_set_id = ?1
+              AND s.upper_id = change_set_kept_levels.upper_id
+              AND s.lower_id = change_set_kept_levels.lower_id)",
+            [id],
+        )?;
+        Ok(())
+    }
+
     /// True when an open change set has a row of the feed that is not
     /// written (ADR 0256 item 22).
     ///
@@ -4926,7 +5080,9 @@ impl Collection {
             "DELETE FROM change_sets WHERE NOT EXISTS (
                  SELECT 1 FROM change_set_feeds f
                  WHERE f.change_set_id = change_sets.id AND f.written_at IS NULL
-                   AND json_extract(f.outcome, '$.outcome') = 'changed')",
+                   AND json_extract(f.outcome, '$.outcome') = 'changed')
+             AND NOT (EXISTS (SELECT 1 FROM catalog_steps s WHERE s.change_set_id = change_sets.id)
+                 AND NOT EXISTS (SELECT 1 FROM change_set_feeds f WHERE f.change_set_id = change_sets.id))",
             [],
         )?)
     }
@@ -5402,6 +5558,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("collection.sqlite");
         let collection = Collection::open(&path).unwrap();
+        assert_eq!(SCHEMA_VERSION, 53);
         assert_eq!(collection.schema_version().unwrap(), SCHEMA_VERSION);
         collection
             .add_connector("local", "Home", "{}", None)
@@ -5410,6 +5567,53 @@ mod tests {
         let collection = Collection::open(&path).unwrap();
         assert_eq!(collection.schema_version().unwrap(), SCHEMA_VERSION);
         assert_eq!(collection.connectors().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn migration_53_keeps_existing_drafts_change_sets_and_kept_links() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("collection.sqlite");
+        let mut collection = Collection::open(&path).unwrap();
+        let upper = collection.add_feed(None, None).unwrap();
+        let lower = collection.add_feed(None, None).unwrap();
+        let draft = DraftRow {
+            base_version: Some(Version::new("old-version")),
+            base_xml: b"old base".to_vec(),
+            draft_xml: b"old draft".to_vec(),
+        };
+        collection.save_draft(lower, &draft).unwrap();
+        collection.add_kept_level(upper, lower).unwrap();
+        let set = collection.add_change_set("{}", "{}", 123, None).unwrap();
+        collection
+            .add_change_set_kept_level(set, upper, lower, false)
+            .unwrap();
+        let before = collection.feeds().unwrap();
+        collection
+            .db
+            .execute_batch(
+                "DROP TABLE catalog_step_feeds;
+             DROP TABLE catalog_step_kept_levels;
+             DROP TABLE catalog_steps;
+             PRAGMA user_version = 52;",
+            )
+            .unwrap();
+        drop(collection);
+
+        let collection = Collection::open(&path).unwrap();
+        assert_eq!(collection.schema_version().unwrap(), 53);
+        assert_eq!(collection.feeds().unwrap(), before);
+        assert_eq!(collection.draft(lower).unwrap(), Some(draft));
+        assert_eq!(collection.kept_levels().unwrap(), [(upper, lower)]);
+        assert_eq!(
+            collection.change_set_row(set).unwrap().unwrap().made_at,
+            123
+        );
+        assert_eq!(
+            collection.change_set_kept_levels(set).unwrap(),
+            [(upper, lower, false)]
+        );
+        assert_eq!(collection.catalog_step_count(set).unwrap(), 0);
+        assert_eq!(collection.add_catalog_step(set).unwrap(), 1);
     }
 
     /// The index of the one migration that holds `marker`. A test of a

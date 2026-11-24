@@ -418,7 +418,10 @@ fn workspace_router_with_shared(workspace: Workspace) -> (Router, WorkspaceHandl
             "/feeds/{id}/links/{release}/list",
             post(routes::list_release_on_page),
         )
-        .route("/feeds/{id}/links/{release}", delete(routes::remove_link))
+        .route(
+            "/feeds/{id}/links/{release}",
+            delete(routes::remove_link).put(routes::set_link_roles),
+        )
         .route("/feeds/{id}/move-to", post(routes::move_release_to_pages))
         .route("/feeds/{id}/gather", post(routes::gather_pages))
         .route("/feeds/{id}/role", put(routes::set_publisher_role))

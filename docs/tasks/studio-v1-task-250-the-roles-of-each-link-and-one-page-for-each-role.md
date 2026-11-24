@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Levels And Moves".
 Decisions: [ADR 0253](../adr/0253-the-roles-of-a-feed-and-of-each-link.md) items 15, 17, 19 to 23. [ADR 0257](../adr/0257-a-release-has-one-artist-one-label-and-one-publisher-in-its-fields.md) items 7, 9, 10, 10a, 12 and 16a. [ADR 0254](../adr/0254-the-catalog-is-a-tree-and-each-change-uses-music-words.md) items 4, 40 and 41.
 
-Status: Packets 250a, 250b and 250c are done. Packet 250d is not started. This is the first task of the code of ADR 0253, ADR 0254 and ADR 0257. Tasks 251 to 254 use it.
+Status: Packets 250a to 250d are done. This is the first task of the code of ADR 0253, ADR 0254 and ADR 0257. Tasks 251 to 254 use it.
 
 Technical choices of the main session (no ADR, because the ADRs give the rule and this is how the code does it):
 

@@ -748,6 +748,7 @@ fn rel_with_other_words(current: &str, roles: &[PublisherRole]) -> String {
 ///
 /// Gives `NoRole` for an empty role list or a role outside the publisher feed.
 /// Gives `NotLinked` when either draft does not contain this link.
+/// Gives `RoleTaken` when a different page has a selected role (ADR 0257 item 10).
 pub fn set_link_roles(
     collection: &Collection,
     publisher: FeedId,
@@ -782,6 +783,7 @@ pub fn set_link_roles(
             "the publisher and release drafts do not contain this link",
         ));
     }
+    check_role_available(collection, release, Some(publisher), &selected)?;
     pipeline::edit_draft(collection, publisher, |feed| {
         if let Some(item) = feed
             .remote_items
@@ -894,14 +896,7 @@ pub fn catalogs_with_kept(
 ) -> Vec<Catalog> {
     let parties: Vec<Party> = feeds
         .iter()
-        .map(|(row, model)| Party {
-            guid: model
-                .as_ref()
-                .and_then(|feed| feed.podcast_guid.clone())
-                .or_else(|| row.podcast_guid.clone()),
-            url: row.public_url.clone(),
-            title: None,
-        })
+        .map(|(row, model)| party_of(row, model.as_ref()))
         .collect();
     let is_publisher = |index: usize| feeds[index].0.medium.as_deref() == Some("publisher");
     let find = |item: &RemoteItem, wanted: &dyn Fn(usize) -> bool| {
@@ -1108,16 +1103,8 @@ fn shared_level(
 /// credit roles has no rank.
 fn link_rank(feeds: &[(FeedRow, Option<Feed>)], release: FeedId, publisher: usize) -> Option<u8> {
     let (release_row, release_model) = feeds.iter().find(|(row, _)| row.id == release)?;
-    let identity = |row: &FeedRow, model: &Option<Feed>| Party {
-        guid: model
-            .as_ref()
-            .and_then(|feed| feed.podcast_guid.clone())
-            .or_else(|| row.podcast_guid.clone()),
-        url: row.public_url.clone(),
-        title: None,
-    };
-    let release_party = identity(release_row, release_model);
-    let publisher_party = identity(&feeds[publisher].0, &feeds[publisher].1);
+    let release_party = party_of(release_row, release_model.as_ref());
+    let publisher_party = party_of(&feeds[publisher].0, feeds[publisher].1.as_ref());
     let channel = feeds[publisher]
         .1
         .iter()
@@ -1133,6 +1120,53 @@ fn link_rank(feeds: &[(FeedRow, Option<Feed>)], release: FeedId, publisher: usiz
         .flat_map(|item| roles_from_rel(item.rel.as_deref().unwrap_or_default()))
         .filter_map(|role| rank(&[role]))
         .max()
+}
+
+/// Select the pages of a new release (ADR 0257 item 16a).
+/// The artist comes from the add. The newest other release gives the first
+/// label link and the first publisher link in its file sequence.
+#[must_use]
+pub fn new_release_pages(
+    feeds: &[(FeedRow, Option<Feed>)],
+    artist: FeedId,
+    release: FeedId,
+) -> Vec<(FeedId, Vec<PublisherRole>)> {
+    let mut pages = vec![(artist, vec![PublisherRole::Artist])];
+    let catalogs = catalogs(feeds);
+    let newest = feeds
+        .iter()
+        .position(|(row, _)| row.id == artist)
+        .and_then(|index| {
+            feeds
+                .iter()
+                .filter(|(row, _)| row.id != release && catalogs[index].releases.contains(&row.id))
+                .max_by_key(|(row, _)| row.added_at)
+        })
+        .and_then(|(_, model)| model.as_ref());
+    let Some(links) = newest.and_then(|feed| feed.publisher.as_ref()) else {
+        return pages;
+    };
+    for role in [PublisherRole::Label, PublisherRole::Hosting] {
+        let Some(item) = links
+            .remote_items
+            .iter()
+            .find(|item| roles_from_rel(item.rel.as_deref().unwrap_or_default()).contains(&role))
+        else {
+            continue;
+        };
+        let page = feeds.iter().find(|(row, model)| {
+            row.medium.as_deref() == Some("publisher")
+                && names(&item.value, &party_of(row, model.as_ref()))
+        });
+        if let Some((row, _)) = page {
+            if let Some((_, roles)) = pages.iter_mut().find(|(id, _)| *id == row.id) {
+                roles.push(role);
+            } else {
+                pages.push((row.id, vec![role]));
+            }
+        }
+    }
+    pages
 }
 
 /// What a link needs from one feed.
@@ -1153,6 +1187,17 @@ fn party(collection: &Collection, row: &FeedRow) -> Result<Party, PublisherError
         url: row.public_url.clone(),
         title: title.or_else(|| row.title.clone()),
     })
+}
+
+/// Give the party of a feed row and its model, with no title.
+fn party_of(row: &FeedRow, model: Option<&Feed>) -> Party {
+    Party {
+        guid: model
+            .and_then(|feed| feed.podcast_guid.clone())
+            .or_else(|| row.podcast_guid.clone()),
+        url: row.public_url.clone(),
+        title: None,
+    }
 }
 
 /// True when a remote item names the feed. A `feedGuid` decides. An item

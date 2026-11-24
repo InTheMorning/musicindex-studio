@@ -1507,6 +1507,260 @@ async fn the_feed_list_gives_the_link_of_each_feed() {
 }
 
 #[tokio::test]
+async fn a_second_artist_link_returns_role_taken_without_draft_changes() {
+    let (app, connector) = publisher_app().await;
+    let artist = make_artist_page(&app, connector, "artist.xml", "Artist").await;
+    let other = make_artist_page(&app, connector, "other.xml", "Other artist").await;
+    let release = make_release(
+        &app,
+        connector,
+        "release.xml",
+        "Release",
+        "Artist",
+        artist["id"].as_i64().unwrap(),
+    )
+    .await;
+    let ids = [
+        artist["id"].as_i64().unwrap(),
+        other["id"].as_i64().unwrap(),
+        release["id"].as_i64().unwrap(),
+    ];
+    let before = move_draft_rows(&app, &ids);
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{}/links", ids[1]),
+        Some(json!({ "release": ids[2] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["error"]["code"], "role_taken");
+    assert_eq!(
+        body["error"]["message"],
+        "Release already has the artist page Artist. Change it in the fields of the release."
+    );
+    assert_eq!(move_draft_rows(&app, &ids), before);
+}
+
+#[tokio::test]
+async fn a_role_response_names_releases_that_keep_their_label_page() {
+    let (app, connector) = publisher_app().await;
+    let artist = make_artist_page(&app, connector, "artist.xml", "Artist").await;
+    let label = make_feed(
+        &app,
+        new_feed_body(
+            connector,
+            "label.xml",
+            "Label",
+            Some("publisher"),
+            Some("label"),
+        ),
+    )
+    .await;
+    let release = make_release(
+        &app,
+        connector,
+        "release.xml",
+        "Release",
+        "Artist",
+        artist["id"].as_i64().unwrap(),
+    )
+    .await;
+    let artist_id = artist["id"].as_i64().unwrap();
+    let release_id = release["id"].as_i64().unwrap();
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{}/links", label["id"].as_i64().unwrap()),
+        Some(json!({ "release": release_id })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, body) = call(
+        &app,
+        "PUT",
+        &format!("/api/v1/feeds/{artist_id}/role"),
+        Some(json!({ "roles": ["artist", "label"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        body["kept_role_releases"],
+        json!({ "label": [{ "id": release_id, "title": "Release" }] })
+    );
+    let model = draft_model(&app, release_id).await;
+    assert_eq!(model["publisher"]["remote_items"][0]["rel"], "label");
+    assert_eq!(model["publisher"]["remote_items"][1]["rel"], "artist");
+}
+
+#[tokio::test]
+async fn the_link_role_route_changes_only_one_link_on_both_sides() {
+    let (app, connector) = publisher_app().await;
+    let artist = make_artist_page(&app, connector, "artist.xml", "Artist").await;
+    let artist_id = artist["id"].as_i64().unwrap();
+    let first = make_release(&app, connector, "first.xml", "First", "Artist", artist_id).await;
+    let second = make_release(&app, connector, "second.xml", "Second", "Artist", artist_id).await;
+    let first_id = first["id"].as_i64().unwrap();
+    let second_id = second["id"].as_i64().unwrap();
+    let (status, body) = call(
+        &app,
+        "PUT",
+        &format!("/api/v1/feeds/{artist_id}/role"),
+        Some(json!({ "roles": ["artist", "producer"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["kept_role_releases"], json!({}));
+    let before_second = move_draft_rows(&app, &[second_id]);
+    let path = format!("/api/v1/feeds/{artist_id}/links/{first_id}");
+    let (status, body) = call(&app, "PUT", &path, Some(json!({ "roles": ["producer"] }))).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        body["changed"],
+        json!([
+            { "id": artist_id, "title": "Artist" }, { "id": first_id, "title": "First" }
+        ])
+    );
+    let model = draft_model(&app, artist_id).await;
+    let first_guid = draft_model(&app, first_id).await["podcast_guid"].clone();
+    assert_eq!(
+        model["remote_items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["feed_guid"] == first_guid)
+            .unwrap()["rel"],
+        "producer"
+    );
+    assert_eq!(
+        draft_model(&app, first_id).await["publisher"]["remote_items"][0]["rel"],
+        "producer"
+    );
+    assert_eq!(move_draft_rows(&app, &[second_id]), before_second);
+    assert_eq!(
+        draft_model(&app, second_id).await["publisher"]["remote_items"][0]["rel"],
+        "artist producer"
+    );
+    let before = move_draft_rows(&app, &[artist_id, first_id]);
+    for roles in [json!([]), json!(["unknown"]), json!(["label"])] {
+        let (status, body) = call(&app, "PUT", &path, Some(json!({ "roles": roles }))).await;
+        assert!(status.is_client_error(), "{body}");
+        assert_eq!(move_draft_rows(&app, &[artist_id, first_id]), before);
+    }
+}
+
+#[tokio::test]
+async fn a_new_release_merges_inherited_roles_for_the_same_page() {
+    for artist_is_publisher in [false, true] {
+        let (app, connector) = publisher_app().await;
+        let artist = make_artist_page(&app, connector, "artist.xml", "Artist").await;
+        let artist_id = artist["id"].as_i64().unwrap();
+        let old = make_release(&app, connector, "old.xml", "Old", "Artist", artist_id).await;
+        let page = if artist_is_publisher {
+            artist
+        } else {
+            make_feed(
+                &app,
+                new_feed_body(
+                    connector,
+                    "label.xml",
+                    "Label",
+                    Some("publisher"),
+                    Some("label"),
+                ),
+            )
+            .await
+        };
+        let page_id = page["id"].as_i64().unwrap();
+        let role = if artist_is_publisher {
+            "artist"
+        } else {
+            "label"
+        };
+        let (status, body) = call(
+            &app,
+            "PUT",
+            &format!("/api/v1/feeds/{page_id}/role"),
+            Some(json!({ "roles": [role, "hosting"] })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        let (status, body) = call(
+            &app,
+            "POST",
+            &format!("/api/v1/feeds/{page_id}/links"),
+            Some(json!({ "release": old["id"] })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        let new = make_release(&app, connector, "new.xml", "New", "Artist", artist_id).await;
+        let model = draft_model(&app, new["id"].as_i64().unwrap()).await;
+        let links = model["publisher"]["remote_items"].as_array().unwrap();
+        assert_eq!(
+            links.len(),
+            if artist_is_publisher { 1 } else { 2 },
+            "{model}"
+        );
+        assert_eq!(links[0]["rel"], format!("{role} hosting"));
+        let page_model = draft_model(&app, page_id).await;
+        let channel_link = page_model["remote_items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|item| item["feed_guid"] == model["podcast_guid"])
+            .unwrap();
+        assert_eq!(channel_link["rel"], format!("{role} hosting"));
+    }
+}
+
+#[tokio::test]
+async fn the_link_role_route_refuses_a_second_artist_without_draft_changes() {
+    use studio_core::collection::{FeedId, PublisherRole};
+
+    let (app, connector) = publisher_app().await;
+    let artist = make_artist_page(&app, connector, "artist.xml", "Artist").await;
+    let other = make_artist_page(&app, connector, "other.xml", "Other artist").await;
+    let release = make_release(
+        &app,
+        connector,
+        "release.xml",
+        "Release",
+        "Artist",
+        artist["id"].as_i64().unwrap(),
+    )
+    .await;
+    let other_id = other["id"].as_i64().unwrap();
+    let release_id = release["id"].as_i64().unwrap();
+    let collection = collection_of(&app);
+    collection
+        .set_publisher_roles(
+            FeedId(other_id),
+            &[PublisherRole::Artist, PublisherRole::Producer],
+            true,
+        )
+        .unwrap();
+    studio_core::publisher::link(
+        &collection,
+        FeedId(other_id),
+        FeedId(release_id),
+        Some(&[PublisherRole::Producer]),
+    )
+    .unwrap();
+    let ids = [artist["id"].as_i64().unwrap(), other_id, release_id];
+    let before = move_draft_rows(&app, &ids);
+    let (status, body) = call(
+        &app,
+        "PUT",
+        &format!("/api/v1/feeds/{other_id}/links/{release_id}"),
+        Some(json!({ "roles": ["artist", "producer"] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["error"]["code"], "role_taken");
+    assert_eq!(move_draft_rows(&app, &ids), before);
+}
+
+#[tokio::test]
 #[expect(clippy::too_many_lines, reason = "the test follows one user flow")]
 async fn a_new_release_keeps_its_kind_and_inherits_the_newest_artists_pages() {
     let (app, connector) = publisher_app().await;
@@ -1554,6 +1808,43 @@ async fn a_new_release_keeps_its_kind_and_inherits_the_newest_artists_pages() {
         .await;
         assert_eq!(status, StatusCode::OK, "{body}");
     }
+    let collection = collection_of(&app);
+    let second_label_guid =
+        draft_model(&app, old_label["id"].as_i64().unwrap()).await["podcast_guid"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+    // An older file can have two label links (ADR 0257 item 11).
+    studio_core::pipeline::edit_draft(
+        &collection,
+        studio_core::collection::FeedId(newest_id),
+        |feed| {
+            feed.publisher
+                .as_mut()
+                .unwrap()
+                .remote_items
+                .push(studio_core::feed::Entry::new(
+                    studio_core::feed::RemoteItem {
+                        feed_guid: Some(second_label_guid),
+                        medium: Some("publisher".to_owned()),
+                        rel: Some("label".to_owned()),
+                        ..Default::default()
+                    },
+                ));
+        },
+    )
+    .unwrap();
+    // The label set alone does not give the new link a publisher role.
+    collection
+        .set_publisher_roles(
+            studio_core::collection::FeedId(label["id"].as_i64().unwrap()),
+            &[
+                studio_core::collection::PublisherRole::Label,
+                studio_core::collection::PublisherRole::Hosting,
+            ],
+            true,
+        )
+        .unwrap();
     let db = rusqlite::Connection::open(app.data.path().join("collection.sqlite")).unwrap();
     db.execute("UPDATE feeds SET created_at = 10 WHERE id = ?1", [old_id])
         .unwrap();
@@ -1595,6 +1886,7 @@ async fn a_new_release_keeps_its_kind_and_inherits_the_newest_artists_pages() {
 
     let new_model = draft_model(&app, new_id).await;
     let links = new_model["publisher"]["remote_items"].as_array().unwrap();
+    assert_eq!(links.len(), 3, "{new_model}");
     let linked_guids: Vec<_> = links
         .iter()
         .filter_map(|item| item["feed_guid"].as_str())

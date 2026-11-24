@@ -2215,54 +2215,14 @@ fn link_new_release_pages(
     artist_id: FeedId,
     release_id: FeedId,
 ) -> Result<(), ApiError> {
-    // A written artist page has no draft. The link needs one (ADR 0231
-    // item 11).
     ensure_draft(w, artist_id)?;
-    publisher::link(&w.collection, artist_id, release_id, None)?;
-    let feeds = feed_models(w)?;
-    let catalog_feeds: Vec<_> = feeds
-        .iter()
-        .map(|(row, model)| (row.clone(), Some(model.clone())))
+    let feeds: Vec<_> = feed_models(w)?
+        .into_iter()
+        .map(|(row, model)| (row, Some(model)))
         .collect();
-    let kept = w.collection.kept_levels()?;
-    let catalogs = publisher::catalogs_with_kept(&catalog_feeds, &kept);
-    let newest = feeds
-        .iter()
-        .enumerate()
-        .find(|(_, (row, _))| row.id == artist_id)
-        .and_then(|(index, _)| {
-            catalogs[index]
-                .releases
-                .iter()
-                .filter(|id| **id != release_id)
-                .filter_map(|id| {
-                    feeds
-                        .iter()
-                        .find(|(row, _)| row.id == *id)
-                        .map(|(row, _)| (row.added_at, *id))
-                })
-                .max_by_key(|(added_at, _)| *added_at)
-                .map(|(_, id)| id)
-        });
-    let Some(newest) = newest else {
-        return Ok(());
-    };
-    let newest_index = feeds
-        .iter()
-        .position(|(row, _)| row.id == newest)
-        .ok_or_else(|| ApiError::internal("the newest release is missing"))?;
-    for publisher_id in &catalogs[newest_index].publishers {
-        let publisher_row = w.collection.feed(*publisher_id)?;
-        if publisher_row
-            .publisher_roles
-            .iter()
-            .any(|role| matches!(role, PublisherRole::Hosting | PublisherRole::Label))
-        {
-            // A written label or hosting page has no draft either (ADR 0231
-            // item 11).
-            ensure_draft(w, *publisher_id)?;
-            publisher::link(&w.collection, *publisher_id, release_id, None)?;
-        }
+    for (page, roles) in publisher::new_release_pages(&feeds, artist_id, release_id) {
+        ensure_draft(w, page)?;
+        publisher::link(&w.collection, page, release_id, Some(&roles))?;
     }
     remove_shared_kept_levels(w)?;
     Ok(())
@@ -3554,6 +3514,27 @@ pub(crate) async fn add_link(
     .await
 }
 
+/// Change the roles of one link in each draft (ADR 0253 item 21).
+pub(crate) async fn set_link_roles(
+    State(shared): State<Shared>,
+    Path((id, release)): Path<(i64, i64)>,
+    Json(body): Json<RoleBody>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let roles = parse_role_body(&body)?;
+        let publisher_id = FeedId(id);
+        let release_id = FeedId(release);
+        check_mediums(w, publisher_id, Some(release_id))?;
+        ensure_draft(w, publisher_id)?;
+        ensure_draft(w, release_id)?;
+        let before = before_change(w, &[publisher_id, release_id])?;
+        publisher::set_link_roles(&w.collection, publisher_id, release_id, &roles)?;
+        remove_shared_kept_levels(w)?;
+        changed_json(w, &before)
+    })
+    .await
+}
+
 #[derive(Deserialize)]
 pub(crate) struct MoveToBody {
     // The field names of the body are `artist_id`, `label_id` and
@@ -4291,6 +4272,21 @@ pub(crate) async fn remove_link(
     .await
 }
 
+fn parse_role_body(body: &RoleBody) -> Result<Vec<PublisherRole>, ApiError> {
+    body.roles
+        .iter()
+        .map(|text| PublisherRole::parse(text))
+        .collect::<Option<Vec<_>>>()
+        .filter(|roles| !roles.is_empty())
+        .ok_or_else(|| {
+            ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_feed",
+                "give one or more roles: artist, label, hosting, curator, producer, host, author, network or sponsor",
+            )
+        })
+}
+
 /// Change and confirm the roles of a publisher feed. The `rel` of each link
 /// changes in its draft and in each linked release (ADR 0255 item 11, ADR
 /// 0082 items 7 and 8).
@@ -4300,19 +4296,7 @@ pub(crate) async fn set_publisher_role(
     Json(body): Json<RoleBody>,
 ) -> ApiResult {
     blocking(shared, move |w| {
-        let roles = body
-            .roles
-            .iter()
-            .map(|text| PublisherRole::parse(text))
-            .collect::<Option<Vec<_>>>()
-            .filter(|roles| !roles.is_empty())
-            .ok_or_else(|| {
-                ApiError::new(
-                    StatusCode::UNPROCESSABLE_ENTITY,
-                    "invalid_feed",
-                    "give one or more roles: artist, label, hosting, curator, producer, host, author, network or sponsor",
-                )
-            })?;
+        let roles = parse_role_body(&body)?;
         let publisher_id = FeedId(id);
         check_mediums(w, publisher_id, None)?;
         ensure_draft(w, publisher_id)?;
@@ -4325,8 +4309,18 @@ pub(crate) async fn set_publisher_role(
         feeds.extend(&releases);
         feeds.sort_by_key(|feed| feed.0);
         let before = before_change(w, &feeds)?;
-        publisher::set_roles(&w.collection, publisher_id, &roles)?;
-        changed_json(w, &before)
+        let kept = publisher::set_roles(&w.collection, publisher_id, &roles)?;
+        let mut kept_role_releases = std::collections::BTreeMap::<_, Vec<_>>::new();
+        for (role, release) in kept {
+            let row = w.collection.feed(release)?;
+            kept_role_releases
+                .entry(role.as_str())
+                .or_default()
+                .push(json!({ "id": release.0, "title": row.title }));
+        }
+        let Json(mut response) = changed_json(w, &before)?;
+        response["kept_role_releases"] = json!(kept_role_releases);
+        Ok(Json(response))
     })
     .await
 }

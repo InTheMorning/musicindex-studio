@@ -1784,3 +1784,466 @@ fn a_kept_link_goes_only_when_a_shared_release_gives_the_level() {
         "{message}"
     );
 }
+
+fn catalog_page(s: &mut Setup, name: &str, roles: &[PublisherRole]) -> FeedId {
+    let id = new_feed(s, &format!("{name}.xml"), name, "publisher");
+    s.collection.set_publisher_roles(id, roles, true).unwrap();
+    id
+}
+
+fn release_link_roles(s: &Setup, release: FeedId, page: FeedId) -> Option<String> {
+    let guid = model(s, page).podcast_guid.unwrap();
+    model(s, release)
+        .publisher
+        .into_iter()
+        .flat_map(|links| links.remote_items)
+        .find(|item| item.feed_guid.as_deref() == Some(&guid))
+        .map(|item| item.rel.clone().unwrap_or_default())
+}
+
+fn page_lists_release(s: &Setup, page: FeedId, release: FeedId) -> bool {
+    let guid = model(s, release).podcast_guid.unwrap();
+    model(s, page)
+        .remote_items
+        .iter()
+        .any(|item| item.feed_guid.as_deref() == Some(&guid))
+}
+
+#[test]
+fn a_catalog_label_change_changes_only_the_selected_release() {
+    use PublisherRole::{Artist, Hosting, Label};
+    let mut s = setup();
+    let artist = catalog_page(&mut s, "Artist", &[Artist]);
+    let old = catalog_page(&mut s, "Old label", &[Label]);
+    let new = catalog_page(&mut s, "New label", &[Label]);
+    let host = catalog_page(&mut s, "Publisher", &[Hosting]);
+    let other_host = catalog_page(&mut s, "Old publisher", &[Hosting]);
+    let first = new_feed(&mut s, "first.xml", "First", "music");
+    let second = new_feed(&mut s, "second.xml", "Second", "musicL");
+    for release in [first, second] {
+        for page in [artist, old, other_host] {
+            publisher::link(&s.collection, page, release, None).unwrap();
+        }
+    }
+    s.collection.add_kept_level(host, new).unwrap();
+    let untouched = s.collection.draft(second).unwrap();
+    let result = publisher::change_page(
+        &s.collection,
+        None,
+        artist,
+        publisher::PageAction::ChangeLabel,
+        Some(new),
+        &[first, first],
+    )
+    .unwrap();
+    assert_eq!(result.changed_releases, 1);
+    assert_eq!(result.kept_release_titles, ["Second"]);
+    assert!(!result.nothing_changes);
+    assert!(result.place.contains("New label"));
+    assert!(result.place.contains("Publisher"));
+    assert_eq!(release_link_roles(&s, first, old), None);
+    assert_eq!(release_link_roles(&s, first, other_host), None);
+    assert_eq!(release_link_roles(&s, first, new).as_deref(), Some("label"));
+    assert_eq!(
+        release_link_roles(&s, first, host).as_deref(),
+        Some("hosting")
+    );
+    assert_eq!(
+        release_link_roles(&s, first, artist).as_deref(),
+        Some("artist")
+    );
+    assert!(!page_lists_release(&s, old, first));
+    assert!(!page_lists_release(&s, other_host, first));
+    assert!(page_lists_release(&s, new, first));
+    assert!(page_lists_release(&s, host, first));
+    assert_eq!(s.collection.draft(second).unwrap(), untouched);
+    assert_eq!(
+        release_link_roles(&s, second, old).as_deref(),
+        Some("label")
+    );
+    assert_eq!(
+        release_link_roles(&s, second, other_host).as_deref(),
+        Some("hosting")
+    );
+}
+
+#[test]
+fn a_catalog_label_with_hosting_gets_only_the_selected_link_role() {
+    use PublisherRole::{Artist, Hosting, Label};
+    let mut s = setup();
+    let artist = catalog_page(&mut s, "Artist", &[Artist]);
+    let label = catalog_page(&mut s, "Label publisher", &[Label, Hosting]);
+    let host_z = catalog_page(&mut s, "Zulu publisher", &[Hosting]);
+    let host_a = catalog_page(&mut s, "Alpha publisher", &[Hosting]);
+    let first = new_feed(&mut s, "first.xml", "First", "music");
+    publisher::link(&s.collection, artist, first, None).unwrap();
+    for (name, host) in [("seed-z", host_z), ("seed-a", host_a)] {
+        let seed = new_feed(&mut s, &format!("{name}.xml"), name, "music");
+        publisher::link(&s.collection, label, seed, Some(&[Label])).unwrap();
+        publisher::link(&s.collection, host, seed, Some(&[Hosting])).unwrap();
+    }
+    publisher::change_page(
+        &s.collection,
+        None,
+        artist,
+        publisher::PageAction::SignToLabel,
+        Some(label),
+        &[first],
+    )
+    .unwrap();
+    assert_eq!(
+        release_link_roles(&s, first, label).as_deref(),
+        Some("label")
+    );
+    assert_eq!(
+        release_link_roles(&s, first, host_a).as_deref(),
+        Some("hosting")
+    );
+    assert_eq!(release_link_roles(&s, first, host_z), None);
+    // Two selected roles on one page share one link (ADR 0257 item 7).
+    publisher::change_page(
+        &s.collection,
+        None,
+        artist,
+        publisher::PageAction::ChangePublisher,
+        Some(label),
+        &[first],
+    )
+    .unwrap();
+    assert_eq!(
+        release_link_roles(&s, first, label).as_deref(),
+        Some("label hosting")
+    );
+    assert_eq!(release_link_roles(&s, first, host_a), None);
+}
+
+#[test]
+fn a_catalog_page_without_releases_replaces_its_kept_link() {
+    use PublisherRole::{Artist, Hosting, Label};
+    let mut s = setup();
+    let artist = catalog_page(&mut s, "Artist", &[Artist]);
+    let old = catalog_page(&mut s, "Old label", &[Label]);
+    let new = catalog_page(&mut s, "New label", &[Label]);
+    let host = catalog_page(&mut s, "Publisher", &[Hosting]);
+    s.collection.add_kept_level(old, artist).unwrap();
+    s.collection.add_kept_level(host, new).unwrap();
+    let before = s.collection.draft(artist).unwrap();
+    let result = publisher::change_page(
+        &s.collection,
+        None,
+        artist,
+        publisher::PageAction::ChangeLabel,
+        Some(new),
+        &[],
+    )
+    .unwrap();
+    assert_eq!(result.changed_releases, 0);
+    assert!(!result.nothing_changes);
+    assert_eq!(result.place, "On New label, published by Publisher");
+    assert_eq!(
+        s.collection.kept_levels().unwrap(),
+        [(new, artist), (host, new)]
+    );
+    assert_eq!(s.collection.draft(artist).unwrap(), before);
+}
+
+#[test]
+fn a_catalog_change_to_the_same_label_changes_nothing() {
+    use PublisherRole::{Artist, Hosting, Label};
+    let mut s = setup();
+    let artist = catalog_page(&mut s, "Artist", &[Artist]);
+    let label = catalog_page(&mut s, "Label", &[Label]);
+    let host = catalog_page(&mut s, "Publisher", &[Hosting]);
+    let release = new_feed(&mut s, "release.xml", "Release", "music");
+    for page in [artist, label, host] {
+        publisher::link(&s.collection, page, release, None).unwrap();
+    }
+    let before: Vec<_> = [artist, label, host, release]
+        .map(|id| s.collection.draft(id).unwrap())
+        .into();
+    let result = publisher::change_page(
+        &s.collection,
+        None,
+        artist,
+        publisher::PageAction::ChangeLabel,
+        Some(label),
+        &[release],
+    )
+    .unwrap();
+    assert!(result.nothing_changes);
+    assert_eq!(result.changed_releases, 0);
+    for (id, draft) in [artist, label, host, release].into_iter().zip(before) {
+        assert_eq!(s.collection.draft(id).unwrap(), draft);
+    }
+    assert_eq!(s.collection.kept_levels().unwrap(), []);
+}
+
+#[test]
+fn a_catalog_leave_all_removes_label_and_publisher_in_one_call() {
+    use PublisherRole::{Artist, Curator, Hosting, Label};
+    let mut s = setup();
+    let artist = catalog_page(&mut s, "Artist", &[Artist]);
+    let label = catalog_page(&mut s, "Label", &[Label]);
+    let host = catalog_page(&mut s, "Publisher", &[Hosting]);
+    let curator = catalog_page(&mut s, "Curator", &[Curator]);
+    let release = new_feed(&mut s, "release.xml", "Release", "music");
+    for page in [artist, label, host, curator] {
+        publisher::link(&s.collection, page, release, None).unwrap();
+    }
+    s.collection.add_kept_level(label, artist).unwrap();
+    s.collection.add_kept_level(host, artist).unwrap();
+    let result = publisher::change_page(
+        &s.collection,
+        None,
+        artist,
+        publisher::PageAction::LeaveAll,
+        None,
+        &[release],
+    )
+    .unwrap();
+    assert_eq!(result.changed_releases, 1);
+    assert_eq!(result.place, "Independent, not published");
+    assert_eq!(release_link_roles(&s, release, label), None);
+    assert_eq!(release_link_roles(&s, release, host), None);
+    assert_eq!(
+        release_link_roles(&s, release, artist).as_deref(),
+        Some("artist")
+    );
+    assert_eq!(
+        release_link_roles(&s, release, curator).as_deref(),
+        Some("curator")
+    );
+    assert!(!page_lists_release(&s, label, release));
+    assert!(!page_lists_release(&s, host, release));
+    assert_eq!(s.collection.kept_levels().unwrap(), []);
+}
+
+#[test]
+fn a_catalog_change_removes_outside_roles_and_keeps_other_roles() {
+    use PublisherRole::{Artist, Curator, Label};
+    let mut s = setup();
+    let artist = catalog_page(&mut s, "Artist", &[Artist]);
+    let old = catalog_page(&mut s, "Old label", &[Label, Curator]);
+    let new = catalog_page(&mut s, "New label", &[Label]);
+    let release = new_feed(&mut s, "release.xml", "Release", "music");
+    publisher::link(&s.collection, artist, release, None).unwrap();
+    publisher::link(&s.collection, old, release, None).unwrap();
+    pipeline::edit_draft(&s.collection, release, |feed| {
+        let links = &mut feed.publisher.as_mut().unwrap().remote_items;
+        links.push(Entry::new(remote(
+            "publisher",
+            "outside-label",
+            "https://outside.example/label.xml",
+            "Outside label",
+            Some("label curator custom"),
+        )));
+        links.push(Entry::new(remote(
+            "publisher",
+            "outside-publisher",
+            "https://outside.example/publisher.xml",
+            "Outside publisher",
+            Some("hosting"),
+        )));
+    })
+    .unwrap();
+    publisher::change_page(
+        &s.collection,
+        None,
+        artist,
+        publisher::PageAction::ChangeLabel,
+        Some(new),
+        &[release],
+    )
+    .unwrap();
+    assert_eq!(
+        release_link_roles(&s, release, old).as_deref(),
+        Some("curator")
+    );
+    assert_eq!(
+        model(&s, old).remote_items[0].rel.as_deref(),
+        Some("curator")
+    );
+    let feed = model(&s, release);
+    let links = &feed.publisher.as_ref().unwrap().remote_items;
+    assert_eq!(
+        links
+            .iter()
+            .find(|item| item.feed_guid.as_deref() == Some("outside-label"))
+            .unwrap()
+            .rel
+            .as_deref(),
+        Some("curator custom")
+    );
+    assert!(
+        !links
+            .iter()
+            .any(|item| item.feed_guid.as_deref() == Some("outside-publisher"))
+    );
+    assert_eq!(
+        release_link_roles(&s, release, new).as_deref(),
+        Some("label")
+    );
+}
+
+#[test]
+fn a_catalog_start_selection_uses_the_selected_tree_parent() {
+    use PublisherRole::{Artist, Label};
+    let mut s = setup();
+    let artist = catalog_page(&mut s, "Artist", &[Artist]);
+    let first_label = catalog_page(&mut s, "First label", &[Label]);
+    let second_label = catalog_page(&mut s, "Second label", &[Label]);
+    let first = new_feed(&mut s, "first.xml", "First", "music");
+    let second = new_feed(&mut s, "second.xml", "Second", "music");
+    for (release, label) in [(first, first_label), (second, second_label)] {
+        publisher::link(&s.collection, artist, release, None).unwrap();
+        publisher::link(&s.collection, label, release, None).unwrap();
+    }
+    let (feeds, _) = all_catalogs(&s);
+    assert_eq!(
+        publisher::page_change_selection(&feeds, artist, Some(first_label)),
+        [first]
+    );
+    assert_eq!(
+        publisher::page_change_selection(&feeds, artist, Some(second_label)),
+        [second]
+    );
+    assert_eq!(
+        publisher::page_change_selection(&feeds, artist, Some(FeedId(-1))),
+        [first, second]
+    );
+    assert_eq!(
+        publisher::page_change_selection(&feeds, artist, None),
+        [first, second]
+    );
+}
+
+#[test]
+fn a_catalog_failed_change_puts_back_each_draft_and_kept_link() {
+    use PublisherRole::{Artist, Label};
+    let mut s = setup();
+    let artist = catalog_page(&mut s, "Artist", &[Artist]);
+    let old = catalog_page(&mut s, "Old label", &[Label]);
+    let new = catalog_page(&mut s, "New label", &[Label]);
+    let first = new_feed(&mut s, "first.xml", "First", "music");
+    let second = new_feed(&mut s, "second.xml", "Second", "music");
+    for release in [first, second] {
+        publisher::link(&s.collection, artist, release, None).unwrap();
+        publisher::link(&s.collection, old, release, None).unwrap();
+    }
+    s.collection.add_kept_level(old, artist).unwrap();
+    s.collection.delete_draft(new).unwrap();
+    let ids = [artist, old, new, first, second];
+    let before = ids.map(|id| s.collection.draft(id).unwrap());
+    let error = publisher::change_page(
+        &s.collection,
+        None,
+        artist,
+        publisher::PageAction::ChangeLabel,
+        Some(new),
+        &[first, second],
+    )
+    .unwrap_err();
+    assert_eq!(error.kind(), PublisherErrorKind::Pipeline);
+    for (id, draft) in ids.into_iter().zip(before) {
+        assert_eq!(s.collection.draft(id).unwrap(), draft);
+    }
+    assert_eq!(s.collection.kept_levels().unwrap(), [(old, artist)]);
+}
+
+#[test]
+fn a_catalog_independent_action_keeps_the_publisher_and_other_link_roles() {
+    use PublisherRole::{Artist, Curator, Hosting, Label};
+    let mut s = setup();
+    let artist = catalog_page(&mut s, "Artist", &[Artist]);
+    let label = catalog_page(&mut s, "Label", &[Label, Curator]);
+    let host = catalog_page(&mut s, "Publisher", &[Hosting]);
+    let release = new_feed(&mut s, "release.xml", "Release", "music");
+    for page in [artist, label, host] {
+        publisher::link(&s.collection, page, release, None).unwrap();
+    }
+    s.collection.add_kept_level(label, artist).unwrap();
+    s.collection.add_kept_level(host, artist).unwrap();
+    let host_before = s.collection.draft(host).unwrap();
+    let result = publisher::change_page(
+        &s.collection,
+        None,
+        artist,
+        publisher::PageAction::GoIndependent,
+        None,
+        &[release],
+    )
+    .unwrap();
+    assert_eq!(result.changed_releases, 1);
+    assert_eq!(
+        release_link_roles(&s, release, label).as_deref(),
+        Some("curator")
+    );
+    assert_eq!(
+        release_link_roles(&s, release, host).as_deref(),
+        Some("hosting")
+    );
+    assert_eq!(s.collection.draft(host).unwrap(), host_before);
+    assert!(
+        !s.collection
+            .kept_levels()
+            .unwrap()
+            .contains(&(label, artist))
+    );
+}
+
+#[test]
+fn a_catalog_label_changes_publisher_and_can_be_not_published() {
+    use PublisherRole::{Artist, Hosting, Label};
+    let mut s = setup();
+    let artist = catalog_page(&mut s, "Artist", &[Artist]);
+    let label = catalog_page(&mut s, "Label", &[Label]);
+    let old = catalog_page(&mut s, "Old publisher", &[Hosting]);
+    let new = catalog_page(&mut s, "New publisher", &[Hosting]);
+    let release = new_feed(&mut s, "release.xml", "Release", "music");
+    for page in [artist, label, old] {
+        publisher::link(&s.collection, page, release, None).unwrap();
+    }
+    s.collection.add_kept_level(old, label).unwrap();
+    publisher::change_page(
+        &s.collection,
+        None,
+        label,
+        publisher::PageAction::ChangePublisher,
+        Some(new),
+        &[release],
+    )
+    .unwrap();
+    assert_eq!(release_link_roles(&s, release, old), None);
+    assert_eq!(
+        release_link_roles(&s, release, new).as_deref(),
+        Some("hosting")
+    );
+    assert_eq!(
+        release_link_roles(&s, release, artist).as_deref(),
+        Some("artist")
+    );
+    assert_eq!(
+        release_link_roles(&s, release, label).as_deref(),
+        Some("label")
+    );
+    let result = publisher::change_page(
+        &s.collection,
+        None,
+        label,
+        publisher::PageAction::ChangePublisher,
+        None,
+        &[release],
+    )
+    .unwrap();
+    assert_eq!(result.changed_releases, 1);
+    assert_eq!(release_link_roles(&s, release, new), None);
+    assert_eq!(
+        release_link_roles(&s, release, label).as_deref(),
+        Some("label")
+    );
+    assert_eq!(
+        release_link_roles(&s, release, artist).as_deref(),
+        Some("artist")
+    );
+    assert_eq!(s.collection.kept_levels().unwrap(), []);
+}

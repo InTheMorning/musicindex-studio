@@ -18,6 +18,9 @@ use crate::feed::{Entry, Feed, Publisher, RemoteItem};
 use crate::library::Library;
 use crate::pipeline::{self, PipelineError};
 
+mod page_change;
+pub use page_change::{PageAction, PageChangeResult, change_page, page_change_selection};
+
 /// The side of the linked feed (ADR 0251 item 2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -140,6 +143,8 @@ fn is_release(medium: Option<&str>) -> bool {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum PublisherErrorKind {
+    /// The page action or its selection is not available (ADR 0254 items 23 and 26).
+    InvalidAction,
     /// The first feed is not a publisher feed.
     NotPublisher,
     /// The second feed is not an album or a playlist.

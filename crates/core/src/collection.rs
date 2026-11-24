@@ -3074,6 +3074,23 @@ impl Collection {
         put_draft(&self.db, id, draft)
     }
 
+    /// Apply a Catalog change in one transaction. An error puts back each database change.
+    pub(crate) fn catalog_transaction<T, E>(
+        &self,
+        change: impl FnOnce() -> Result<T, E>,
+    ) -> Result<T, E>
+    where
+        E: From<CollectionError>,
+    {
+        let tx = self
+            .db
+            .unchecked_transaction()
+            .map_err(CollectionError::from)?;
+        let result = change()?;
+        tx.commit().map_err(CollectionError::from)?;
+        Ok(result)
+    }
+
     /// Save the drafts of several feeds in one transaction (ADR 0122 item 8).
     ///
     /// # Errors

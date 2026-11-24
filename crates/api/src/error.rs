@@ -298,6 +298,9 @@ impl From<PublisherError> for ApiError {
             PublisherErrorKind::NoGuid => (StatusCode::UNPROCESSABLE_ENTITY, "no_guid"),
             PublisherErrorKind::RoleTaken => (StatusCode::CONFLICT, "role_taken"),
             PublisherErrorKind::NotLinked => (StatusCode::NOT_FOUND, "not_linked"),
+            PublisherErrorKind::InvalidAction => {
+                (StatusCode::UNPROCESSABLE_ENTITY, "invalid_action")
+            }
             _ => (StatusCode::INTERNAL_SERVER_ERROR, "publisher"),
         };
         Self::new(status, code, error.to_string())

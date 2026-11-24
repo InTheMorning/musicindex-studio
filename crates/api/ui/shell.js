@@ -28,6 +28,20 @@ export function roleHint(feed, readOnly = false) {
   return `Studio found ${roles.length === 1 ? 'this role' : 'these roles'} in the feed: ${roles.map(roleWord).join(', ')}.${readOnly ? '' : ' Select the roles to confirm them.'}`;
 }
 
+// The folds after a change of the Role field: each role that some releases
+// keep on a different page, with the titles of those releases (ADR 0257
+// item 10a). `kept` is `kept_role_releases` of the response.
+export function keptRoleFolds(kept) {
+  return ROLES.filter((role) => (kept?.[role] || []).length > 0).map((role) => {
+    const releases = kept[role];
+    const page = `${roleWord(role).toLowerCase()} page`;
+    return {
+      summary: releases.length === 1 ? `1 release keeps its ${page}.` : `${releases.length} releases keep their ${page}.`,
+      names: releases.map((release) => release.title || 'Untitled release'),
+    };
+  });
+}
+
 // The kind of a medium: its dot class and its label. A publisher feed lists
 // each of its roles, and its dot has the color of the first one (musicindex
 // ADR 0037 R-WORD-7, ADR 0084). The dot is hollow while nothing confirms the

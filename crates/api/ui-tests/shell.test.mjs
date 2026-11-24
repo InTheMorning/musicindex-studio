@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  pageTabs, tabsFit, mediumKind, feedKind, trackCountText, roleChoice, roleHint, toggleRole, isEditable, isReadOnly, reviewHost, moveNote, isPublisher, isPlaylist, trackKey, isTrack,
+  pageTabs, tabsFit, mediumKind, feedKind, trackCountText, roleChoice, roleHint, keptRoleFolds, toggleRole, isEditable, isReadOnly, reviewHost, moveNote, isPublisher, isPlaylist, trackKey, isTrack,
   leftPanel, releasesList, listQuery, queryText, sortLabel, sortEntries, compareNames, byName, segmentKey, levelFeedSet,
   startNav, pushNav, backNav, forwardNav, canBack, canForward, setScroll, releasesView,
   narrowStack, openFeedView, newFeedView, navAtWidth, widthNav, wideView, publisherArt, mosaicCells, otherFeedText, mediumProblemView, mediumProblemCause,
@@ -1024,4 +1024,17 @@ test('the arrow keys, Home and End move the focus between the segments', () => {
   assert.equal(segmentKey(3, 6, 'End'), 5);
   assert.equal(segmentKey(3, 6, 'Enter'), null, 'Enter selects through the click of the button');
   assert.equal(segmentKey(0, 0, 'ArrowRight'), null);
+});
+
+test('the releases that keep a page of a role show in one fold for each role', () => {
+  const owner = 'ADR 0257 item 10a: name the releases that keep a page of a role. Fix keptRoleFolds in crates/api/ui/shell.js.';
+  assert.deepEqual(keptRoleFolds(undefined), [], owner);
+  assert.deepEqual(keptRoleFolds({}), [], owner);
+  assert.deepEqual(keptRoleFolds({
+    artist: [{ id: 3, title: 'Low Tide' }],
+    hosting: [{ id: 4, title: 'Harbor EP' }, { id: 5, title: '' }],
+  }), [
+    { summary: '1 release keeps its artist page.', names: ['Low Tide'] },
+    { summary: '2 releases keep their publisher page.', names: ['Harbor EP', 'Untitled release'] },
+  ], owner);
 });

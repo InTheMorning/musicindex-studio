@@ -14,7 +14,7 @@ import { onListKey, onTreeKey } from './listkeys.js';
 import { creditPickRows, supportPickRows, creditChoices, creditFillRows, creditFillValue, creditFillNote, creditFillNoteText, CREDIT_FIELD_LABELS, fundingChoices, nostrChoices, withPersonValues, filterRows, nostrPickRows, feedWord, memberRowLine, memberSectionNote } from './people.js';
 import { withCids, STATUS } from './draft.js';
 import { roleSummary } from './roles.js';
-import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, roleHint, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName, newFeedView, pageLevel, movedReleaseView } from './shell.js';
+import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, roleHint, keptRoleFolds, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName, newFeedView, pageLevel, movedReleaseView } from './shell.js';
 import { isLiveItem, liveKey, liveDot, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner, OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning, hasBadAddress, problemGroup, setLiveStreamType, viewAfterLiveGone, withoutLive } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
 import { checkRows, unreadableRows, hasShowGrant, checkTexts, pageRefusalView, linkedRefusalView, NEW_PAGE_CHOICE, guidChangeView, repairAddresses, wrongAddressSet, OPEN_ACTIONS, COPY_SHEET_TEXT, WAYS_SHEET_TEXT } from './feedcheck.js';
@@ -4378,9 +4378,16 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, onMov
   // The steps of this page for one change of two drafts.
   const twoDrafts = (action, call) => changeTwoDrafts(action, { feedId: feed.id, draft, onListChanged, setChanged, call });
   // Save and confirm a set of roles (ADR 0082 items 5 and 8).
+  // The releases that keep a page of a role (ADR 0257 item 10a).
+  const [keptFolds, setKeptFolds] = useState([]);
   const setRoles = (next) => {
     if (next.length === 0) return;
-    twoDrafts(roleAction, async () => (await api(`/feeds/${feed.id}/role`, { method: 'PUT', body: { roles: next } })).changed);
+    setKeptFolds([]);
+    twoDrafts(roleAction, async () => {
+      const response = await api(`/feeds/${feed.id}/role`, { method: 'PUT', body: { roles: next } });
+      setKeptFolds(keptRoleFolds(response.kept_role_releases));
+      return response.changed;
+    });
   };
   const choose = (value) => {
     setCustom(value === 'custom');
@@ -4452,6 +4459,8 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, onMov
             <span class="hint">The first role in this list gives the type of the feed. A feed has one or more roles.</span>`}
           </div>
         </div>
+        ${keptFolds.map((fold, i) => html`<details class="disclosure" key=${`k${i}`}><summary class="link-row"><span class="summary">${fold.summary}</span></summary>
+          <div class="form">${fold.names.map((name, j) => html`<div class="link-row static" key=${j}><span class="text">${name}</span></div>`)}</div></details>`)}
         <${ErrorNotice} error=${publisherError(roleAction.error, PUBLISHER_ROLE_TEXT)} />
       </div>
     </section>`,

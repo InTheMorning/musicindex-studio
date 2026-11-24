@@ -4,7 +4,7 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Levels And Move
 Decisions: [ADR 0253](../adr/0253-the-roles-of-a-feed-and-of-each-link.md) items 7 to 14, 16 and 18. [ADR 0254](../adr/0254-the-catalog-is-a-tree-and-each-change-uses-music-words.md) items 1 to 17 and 43 to 46.
 Prototype: `.studio-dev/design-brief/prototype/structure.html`. Git ignores it. Its words "Hosting" and "Catalog" follow the ADRs, not the prototype, where the two are different.
 
-Status: Packet 253a is done, but not item 5a. Item 5a needs packet 250d. Packets 253b to 253d need task 250 (the levels from a link).
+Status: Packet 253a is done. Packets 253b to 253d are not started.
 
 ## Goal
 

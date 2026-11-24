@@ -424,6 +424,11 @@ fn workspace_router_with_shared(workspace: Workspace) -> (Router, WorkspaceHandl
         )
         .route("/feeds/{id}/move-to", post(routes::move_release_to_pages))
         .route("/feeds/{id}/gather", post(routes::gather_pages))
+        .route(
+            "/feeds/{id}/page-change",
+            get(routes::preview_page_change).post(routes::change_page),
+        )
+        .route("/catalog/undo", post(routes::undo_catalog))
         .route("/feeds/{id}/role", put(routes::set_publisher_role))
         .route("/feeds/{id}/refresh", post(routes::refresh_feed))
         .route("/feeds/{id}/outside", get(routes::outside_check))

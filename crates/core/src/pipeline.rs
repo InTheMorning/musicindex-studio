@@ -136,6 +136,8 @@ pub enum PipelineErrorKind {
     /// or a value that the person does not have (ADR 0207, ADR 0203 item
     /// 20).
     InvalidOperation,
+    /// A feed has unwritten changes in a different change set.
+    InChangeSet,
     /// The status of the live item cannot change to the requested status
     /// (ADR 0255 item 40).
     BadStatus,
@@ -161,6 +163,18 @@ pub struct PipelineError {
     conflict_times: Option<(Option<i64>, Option<i64>)>,
     /// Boxed so that the error stays small.
     bad_fields: Option<Box<BadFields>>,
+    blocked_feeds: Option<Box<[BlockedChangeSetFeed]>>,
+}
+
+/// A feed with unwritten changes in a different change set.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct BlockedChangeSetFeed {
+    /// The feed ID.
+    pub id: i64,
+    /// The recorded feed title.
+    pub title: Option<String>,
+    /// The ID of the change set with unwritten changes.
+    pub change_set_id: i64,
 }
 
 /// A change from the accepted feed GUID to the draft GUID (ADR 0249 item 3).
@@ -232,6 +246,7 @@ impl PipelineError {
             existing_file: None,
             conflict_times: None,
             bad_fields: None,
+            blocked_feeds: None,
         }
     }
 
@@ -267,7 +282,20 @@ impl PipelineError {
             existing_file: None,
             conflict_times: None,
             bad_fields: None,
+            blocked_feeds: None,
         }
+    }
+
+    pub(crate) fn in_change_set(message: String, feeds: Vec<BlockedChangeSetFeed>) -> Self {
+        let mut error = Self::new(PipelineErrorKind::InChangeSet, message);
+        error.blocked_feeds = Some(feeds.into_boxed_slice());
+        error
+    }
+
+    /// The feeds with unwritten changes in a different change set.
+    #[must_use]
+    pub fn blocked_feeds(&self) -> &[BlockedChangeSetFeed] {
+        self.blocked_feeds.as_deref().unwrap_or_default()
     }
 
     /// The kind of the error.

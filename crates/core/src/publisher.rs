@@ -19,7 +19,10 @@ use crate::library::Library;
 use crate::pipeline::{self, PipelineError};
 
 mod page_change;
-pub use page_change::{PageAction, PageChangeResult, change_page, page_change_selection};
+pub use page_change::{
+    PageAction, PageChangePreview, PageChangeRequest, PageChangeResult, change_page,
+    gather_pages_with_drafts, page_change_selection, page_change_with_drafts,
+};
 
 /// The side of the linked feed (ADR 0251 item 2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -168,7 +171,17 @@ pub enum PublisherErrorKind {
 pub struct PublisherError {
     kind: PublisherErrorKind,
     message: String,
-    pipeline: Option<PipelineError>,
+    pipeline: Option<Box<PipelineError>>,
+    read_only_feeds: Option<Box<[ReadOnlyFeed]>>,
+}
+
+/// A feed that Studio cannot write because it has no connector.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct ReadOnlyFeed {
+    /// The feed ID.
+    pub id: i64,
+    /// The recorded feed title.
+    pub title: Option<String>,
 }
 
 impl PublisherError {
@@ -177,7 +190,14 @@ impl PublisherError {
             kind,
             message: message.into(),
             pipeline: None,
+            read_only_feeds: None,
         }
+    }
+
+    /// The feeds that Studio cannot write because they have no connector.
+    #[must_use]
+    pub fn read_only_feeds(&self) -> Option<&[ReadOnlyFeed]> {
+        self.read_only_feeds.as_deref()
     }
 
     /// The kind of the error.
@@ -190,7 +210,7 @@ impl PublisherError {
     /// [`PublisherErrorKind::Pipeline`].
     #[must_use]
     pub fn pipeline(&self) -> Option<&PipelineError> {
-        self.pipeline.as_ref()
+        self.pipeline.as_deref()
     }
 }
 
@@ -207,7 +227,8 @@ impl From<PipelineError> for PublisherError {
         Self {
             kind: PublisherErrorKind::Pipeline,
             message: error.to_string(),
-            pipeline: Some(error),
+            pipeline: Some(Box::new(error)),
+            read_only_feeds: None,
         }
     }
 }
@@ -1311,13 +1332,18 @@ fn check_release(collection: &Collection, id: FeedId) -> Result<FeedRow, Publish
 
 fn check_connector(row: &FeedRow) -> Result<(), PublisherError> {
     if row.connector_id.is_none() {
-        return Err(PublisherError::new(
+        let mut error = PublisherError::new(
             PublisherErrorKind::ReadOnly,
             format!(
                 "feed {} has no connector, so Studio cannot write it",
                 row.id.0
             ),
-        ));
+        );
+        error.read_only_feeds = Some(Box::new([ReadOnlyFeed {
+            id: row.id.0,
+            title: row.title.clone(),
+        }]));
+        return Err(error);
     }
     Ok(())
 }

@@ -217,6 +217,10 @@ impl From<PipelineError> for ApiError {
             )
             .with_details(serde_json::json!({ "fields": error.bad_fields() }));
         }
+        if error.kind() == PipelineErrorKind::InChangeSet {
+            return Self::new(StatusCode::CONFLICT, "in_change_set", error.to_string())
+                .with_details(json!({ "feeds": error.blocked_feeds() }));
+        }
         let (status, code) = match error.kind() {
             PipelineErrorKind::ReadOnly => (StatusCode::CONFLICT, "read_only"),
             PipelineErrorKind::NotFound => (StatusCode::NOT_FOUND, "not_found"),
@@ -289,6 +293,10 @@ impl From<PublisherError> for ApiError {
                 Some(pipeline) => pipeline.clone().into(),
                 None => Self::internal(error.to_string()),
             };
+        }
+        if let Some(feeds) = error.read_only_feeds() {
+            return Self::new(StatusCode::CONFLICT, "read_only", error.to_string())
+                .with_details(json!({ "feeds": feeds }));
         }
         let (status, code) = match error.kind() {
             PublisherErrorKind::NotPublisher => (StatusCode::UNPROCESSABLE_ENTITY, "not_publisher"),

@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Levels And Moves".
 Decisions: [ADR 0254](../adr/0254-the-catalog-is-a-tree-and-each-change-uses-music-words.md) items 21, 26 to 28, 34 to 37, 40 and 41. [ADR 0257](../adr/0257-a-release-has-one-artist-one-label-and-one-publisher-in-its-fields.md) items 14 and 15.
 
-Status: Packets 251a and 251b are done. Packet 251c is not started.
+Status: Done. The old page move route stays while crates/api/ui/editor.js calls it.
 
 Technical choices of the main session (no ADR, because ADR 0254 gives the rule and this is how the code does it):
 

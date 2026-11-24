@@ -482,3 +482,245 @@ fn place(feeds: &[(FeedRow, Option<Feed>)], kept: &[(FeedId, FeedId)], page: Fee
     };
     format!("{label}, {publisher}")
 }
+
+/// The selection and result for a Catalog sheet.
+#[derive(Debug, Serialize)]
+pub struct PageChangePreview {
+    /// The releases selected when the sheet opens.
+    pub start_selection: Vec<FeedId>,
+    /// The releases selected for this preview.
+    pub selected_releases: Vec<FeedId>,
+    /// The result after the selected change.
+    pub result: PageChangeResult,
+}
+
+/// The values of one Catalog sheet.
+#[derive(Debug)]
+pub struct PageChangeRequest {
+    /// The page with the links to change.
+    pub page: FeedId,
+    /// The music change selected by the user.
+    pub action: PageAction,
+    /// The new label or publisher, when selected.
+    pub selected_page: Option<FeedId>,
+    /// The selected releases, or the start selection when not supplied.
+    pub releases: Option<Vec<FeedId>>,
+    /// The parent of the selected tree row.
+    pub above: Option<FeedId>,
+}
+
+/// Apply or preview one page change with drafts from the shell.
+/// A preview puts back all database changes before it returns.
+///
+/// # Errors
+///
+/// Gives a publisher error when the change fails, or the error of the draft reader.
+pub fn page_change_with_drafts<E>(
+    collection: &Collection,
+    library: Option<&Library>,
+    request: &PageChangeRequest,
+    preview: bool,
+    mut start: impl FnMut(FeedId) -> Result<(), E>,
+) -> Result<PageChangePreview, E>
+where
+    E: From<PublisherError> + From<crate::collection::CollectionError>,
+{
+    let tx = collection
+        .db()
+        .unchecked_transaction()
+        .map_err(crate::collection::CollectionError::from)?;
+    let feeds = models(collection, library).map_err(E::from)?;
+    let start_selection = page_change_selection(&feeds, request.page, request.above);
+    let selected = request.releases.as_ref().unwrap_or(&start_selection);
+    let before = draft_snapshot(collection)?;
+    let kept = collection.kept_levels()?;
+    start_page_drafts(
+        collection,
+        &feeds,
+        request.page,
+        request.selected_page,
+        selected,
+        &mut start,
+    )?;
+    let result = change_page_inner(
+        collection,
+        library,
+        request.page,
+        request.action,
+        request.selected_page,
+        selected,
+    )
+    .map_err(E::from)?;
+    let selected_releases = selected.clone();
+    if preview || result.nothing_changes {
+        tx.rollback()
+            .map_err(crate::collection::CollectionError::from)?;
+        return Ok(PageChangePreview {
+            start_selection,
+            selected_releases,
+            result,
+        });
+    }
+    // Remove drafts that the procedure did not change.
+    record_catalog(collection, &before, &kept).map_err(E::from)?;
+    tx.commit()
+        .map_err(crate::collection::CollectionError::from)?;
+    Ok(PageChangePreview {
+        start_selection,
+        selected_releases,
+        result,
+    })
+}
+
+type DraftSnapshot = Vec<(FeedId, Option<crate::collection::DraftRow>)>;
+
+fn draft_snapshot(
+    collection: &Collection,
+) -> Result<DraftSnapshot, crate::collection::CollectionError> {
+    collection
+        .feeds()?
+        .into_iter()
+        .map(|row| Ok((row.id, collection.draft(row.id)?)))
+        .collect()
+}
+
+fn record_catalog(
+    collection: &Collection,
+    before: &DraftSnapshot,
+    kept: &[(FeedId, FeedId)],
+) -> Result<crate::change_set::ChangeSet, PublisherError> {
+    Ok(crate::change_set::record_page_move_change_set(
+        collection,
+        &crate::change_set::RecipientOperation::Catalog,
+        before,
+        kept,
+        &collection.kept_levels()?,
+    )?)
+}
+
+fn start_page_drafts<E>(
+    collection: &Collection,
+    feeds: &[(FeedRow, Option<Feed>)],
+    page: FeedId,
+    target: Option<FeedId>,
+    releases: &[FeedId],
+    start: &mut impl FnMut(FeedId) -> Result<(), E>,
+) -> Result<Vec<FeedId>, E>
+where
+    E: From<PublisherError> + From<crate::collection::CollectionError>,
+{
+    let catalog = catalogs_with_kept(feeds, &collection.kept_levels()?);
+    let mut ids = vec![page];
+    ids.extend_from_slice(releases);
+    for (index, (row, _)) in feeds.iter().enumerate() {
+        if releases.contains(&row.id) {
+            ids.extend_from_slice(&catalog[index].publishers);
+        }
+        if Some(row.id) == target {
+            ids.push(row.id);
+            ids.extend_from_slice(&catalog[index].parents);
+        }
+    }
+    ids.sort_by_key(|id| id.0);
+    ids.dedup();
+    for &id in &ids {
+        // The change checks a read-only feed only when its links must change.
+        if collection.feed(id)?.connector_id.is_some() && collection.draft(id)?.is_none() {
+            start(id)?;
+        }
+    }
+    Ok(ids)
+}
+
+/// Sign or publish the selected pages in one Catalog step.
+/// The shell supplies each missing draft.
+///
+/// # Errors
+///
+/// Gives a publisher error for an invalid selection, or the error of the draft reader.
+pub fn gather_pages_with_drafts<E>(
+    collection: &Collection,
+    library: Option<&Library>,
+    parent: FeedId,
+    role: PublisherRole,
+    pages: &[FeedId],
+    mut start: impl FnMut(FeedId) -> Result<(), E>,
+) -> Result<crate::change_set::ChangeSet, E>
+where
+    E: From<PublisherError> + From<crate::collection::CollectionError>,
+{
+    collection.catalog_transaction(|| {
+        let parent_row = check_publisher(collection, parent).map_err(E::from)?;
+        let action = match rank(&parent_row.publisher_roles) {
+            Some(3) if role == PublisherRole::Artist => PageAction::SignToLabel,
+            Some(4) if matches!(role, PublisherRole::Artist | PublisherRole::Label) => {
+                PageAction::ChangePublisher
+            }
+            _ => {
+                return Err(E::from(invalid(
+                    "select a label or publisher with the required role",
+                )));
+            }
+        };
+        if pages.is_empty() {
+            return Err(E::from(invalid("select at least one page")));
+        }
+        let before = draft_snapshot(collection)?;
+        let kept = collection.kept_levels()?;
+        let targets = crate::feed_check::link_targets(collection)
+            .map_err(PublisherError::from)
+            .map_err(E::from)?;
+        let mut seen = std::collections::HashSet::new();
+        for &page in pages.iter().filter(|page| seen.insert(**page)) {
+            let row = check_publisher(collection, page).map_err(E::from)?;
+            check_connector(&row).map_err(E::from)?;
+            if !row.publisher_roles.is_empty() && !row.publisher_roles.contains(&role) {
+                return Err(E::from(invalid("a selected page has a different role")));
+            }
+            if collection.draft(page)?.is_none() {
+                start(page)?;
+            }
+            pipeline::correct_draft_old_links(collection, page, &targets)
+                .map_err(PublisherError::from)
+                .map_err(E::from)?;
+            let feeds = models(collection, library).map_err(E::from)?;
+            let catalog = catalogs_with_kept(&feeds, &collection.kept_levels()?);
+            let mut pending = vec![page];
+            let mut ancestors = std::collections::HashSet::new();
+            while let Some(id) = pending.pop() {
+                if id == parent {
+                    return Err(E::from(invalid(
+                        "a selected page is already below the target page",
+                    )));
+                }
+                if ancestors.insert(id)
+                    && let Some(index) = feeds.iter().position(|(row, _)| row.id == id)
+                {
+                    pending.extend_from_slice(&catalog[index].parents);
+                }
+            }
+            let releases = page_change_selection(&feeds, page, None);
+            let touched = start_page_drafts(
+                collection,
+                &feeds,
+                page,
+                Some(parent),
+                &releases,
+                &mut start,
+            )?;
+            for feed in touched {
+                if collection.draft(feed)?.is_some() {
+                    pipeline::correct_draft_old_links(collection, feed, &targets)
+                        .map_err(PublisherError::from)
+                        .map_err(E::from)?;
+                }
+            }
+            if row.publisher_roles.is_empty() {
+                super::set_roles(collection, page, &[role]).map_err(E::from)?;
+            }
+            change_page_inner(collection, library, page, action, Some(parent), &releases)
+                .map_err(E::from)?;
+        }
+        record_catalog(collection, &before, &kept).map_err(E::from)
+    })
+}

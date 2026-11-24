@@ -3297,7 +3297,7 @@ async fn writing_only_the_release_keeps_its_link_and_leaves_the_page_file() {
 #[tokio::test]
 async fn an_artist_page_move_updates_its_releases_and_kept_level() {
     let (app, connector) = publisher_app().await;
-    let [artist, _, label_a, hosting, release_a] = move_pages(&app, connector).await;
+    let [artist, _, label_a, _hosting, release_a] = move_pages(&app, connector).await;
     let label_b = make_feed(
         &app,
         new_feed_body(
@@ -3345,8 +3345,8 @@ async fn an_artist_page_move_updates_its_releases_and_kept_level() {
     let (status, body) = call(
         &app,
         "POST",
-        &format!("/api/v1/feeds/{artist}/move-to"),
-        Some(json!({ "label_id": label_b, "hosting_id": hosting })),
+        &format!("/api/v1/feeds/{artist}/page-change"),
+        Some(json!({ "action": "change_label", "page": label_b, "releases": [release_a, release_b] })),
     )
     .await;
     assert_eq!(
@@ -3454,8 +3454,8 @@ async fn a_label_page_move_keeps_artist_links_and_a_page_without_releases_moves(
     let (status, body) = call(
         &app,
         "POST",
-        &format!("/api/v1/feeds/{label}/move-to"),
-        Some(json!({ "hosting_id": null })),
+        &format!("/api/v1/feeds/{label}/page-change"),
+        Some(json!({ "action": "change_publisher", "page": null, "releases": [release] })),
     )
     .await;
     assert_eq!(
@@ -3498,8 +3498,8 @@ async fn a_label_page_move_keeps_artist_links_and_a_page_without_releases_moves(
     let (status, body) = call(
         &app,
         "POST",
-        &format!("/api/v1/feeds/{empty_artist}/move-to"),
-        Some(json!({ "label_id": other_label, "hosting_id": null })),
+        &format!("/api/v1/feeds/{empty_artist}/page-change"),
+        Some(json!({ "action": "change_label", "page": other_label, "releases": [] })),
     )
     .await;
     assert_eq!(
@@ -3644,8 +3644,8 @@ async fn a_page_move_records_one_change_set_and_discard_restores_drafts_and_kept
     let (status, body) = call(
         &app,
         "POST",
-        &format!("/api/v1/feeds/{artist}/move-to"),
-        Some(json!({ "hosting_id": hosting })),
+        &format!("/api/v1/feeds/{artist}/page-change"),
+        Some(json!({ "action": "leave_all", "page": null, "releases": [first_release, second_release] })),
     )
     .await;
     assert_eq!(
@@ -4125,6 +4125,8 @@ async fn gather_moves_two_pages_with_no_role_in_one_change_set() {
         body["change_set_id"].as_i64().is_some(),
         "ADR 0243 item 12, gather_pages: {body}"
     );
+    assert_eq!(body["change_set"]["operation"]["kind"], "catalog");
+    assert_eq!(body["change_set"]["catalog_steps"], 1);
     let pages_again: Vec<i64> = pages.iter().map(|(page, _)| *page).collect();
     for (page, release) in pages {
         assert_eq!(
@@ -4157,7 +4159,7 @@ async fn gather_moves_two_pages_with_no_role_in_one_change_set() {
     .await;
     assert_eq!(
         status,
-        StatusCode::BAD_REQUEST,
+        StatusCode::UNPROCESSABLE_ENTITY,
         "ADR 0243 item 8, gather_pages must refuse a page that is below the page now: {body}"
     );
 }
@@ -4204,7 +4206,7 @@ async fn gather_on_a_label_page_refuses_labels_and_an_empty_list() {
         .await;
         assert_eq!(
             status,
-            StatusCode::BAD_REQUEST,
+            StatusCode::UNPROCESSABLE_ENTITY,
             "ADR 0243 item 7, gather_pages: a label page gathers only artists, and the list is not empty: {response}"
         );
     }
@@ -4352,6 +4354,17 @@ async fn each_publisher_route_needs_the_token() {
             "/api/v1/feeds/1/role",
             Some(json!({ "roles": ["label"] })),
         ),
+        (
+            "GET",
+            "/api/v1/feeds/1/page-change?action=go_independent",
+            None,
+        ),
+        (
+            "POST",
+            "/api/v1/feeds/1/page-change",
+            Some(json!({ "action": "go_independent", "releases": [] })),
+        ),
+        ("POST", "/api/v1/catalog/undo", None),
     ];
     for (method, path, body) in routes {
         let request = Request::builder()
@@ -20993,4 +21006,368 @@ async fn the_library_folder_browser_lists_one_level_and_makes_a_folder() {
     )
     .await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[tokio::test]
+async fn catalog_preview_uses_the_tree_parent_and_changes_no_draft() {
+    let (app, connector) = publisher_app().await;
+    let [artist, _, first_label, host, first_release] = move_pages(&app, connector).await;
+    let second_label = make_feed(
+        &app,
+        new_feed_body(
+            connector,
+            "second-label.xml",
+            "Second label",
+            Some("publisher"),
+            Some("label"),
+        ),
+    )
+    .await["id"]
+        .as_i64()
+        .unwrap();
+    let second_release = make_feed(
+        &app,
+        new_feed_body(connector, "second.xml", "Second", None, None),
+    )
+    .await["id"]
+        .as_i64()
+        .unwrap();
+    let third_release = make_feed(
+        &app,
+        new_feed_body(connector, "third.xml", "Third", None, None),
+    )
+    .await["id"]
+        .as_i64()
+        .unwrap();
+    for (page, release) in [
+        (artist, first_release),
+        (first_label, first_release),
+        (artist, second_release),
+        (second_label, second_release),
+        (artist, third_release),
+    ] {
+        let (status, body) = call(
+            &app,
+            "POST",
+            &format!("/api/v1/feeds/{page}/links"),
+            Some(json!({ "release": release })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+    }
+    let ids = [
+        artist,
+        first_label,
+        second_label,
+        host,
+        first_release,
+        second_release,
+        third_release,
+    ];
+    let before = move_draft_rows(&app, &ids);
+    let workspace = Workspace::open(app.data.path()).unwrap();
+    let kept = workspace.collection.kept_levels().unwrap();
+    for (above, release) in [(first_label, first_release), (second_label, second_release)] {
+        let (status, body) = call(
+            &app,
+            "GET",
+            &format!("/api/v1/feeds/{artist}/page-change?action=go_independent&above={above}"),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(body["start_selection"], json!([release]));
+        assert_eq!(body["selected_releases"], json!([release]));
+        assert_eq!(body["result"]["changed_releases"], 1);
+    }
+    let (status, body) = call(&app, "GET", &format!(
+        "/api/v1/feeds/{artist}/page-change?action=change_publisher&page={host}&releases={first_release},{third_release}"), None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["result"]["changed_releases"], 2);
+    assert_eq!(body["result"]["kept_release_titles"], json!(["Second"]));
+    assert_eq!(move_draft_rows(&app, &ids), before);
+    assert_eq!(workspace.collection.kept_levels().unwrap(), kept);
+    assert_eq!(
+        studio_core::change_set::change_sets(&workspace.collection).unwrap(),
+        Vec::<studio_core::change_set::ChangeSet>::new()
+    );
+}
+
+#[tokio::test]
+async fn catalog_routes_add_two_steps_and_undo_each_step() {
+    let (app, connector) = publisher_app().await;
+    let [artist, _, label, host, release] = move_pages(&app, connector).await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{artist}/links"),
+        Some(json!({ "release": release })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let ids = [artist, label, host, release];
+    let before = move_draft_rows(&app, &ids);
+    let (status, first) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{artist}/page-change"),
+        Some(json!({ "action": "sign_to_label", "page": label, "releases": [release] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{first}");
+    assert_eq!(first["change_set"]["catalog_steps"], 1);
+    let after_first = move_draft_rows(&app, &ids);
+    let (status, second) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{artist}/page-change"),
+        Some(json!({ "action": "change_publisher", "page": host, "releases": [release] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{second}");
+    assert_eq!(first["change_set_id"], second["change_set_id"]);
+    assert_eq!(second["change_set"]["catalog_steps"], 2);
+    let (status, sets) = call(&app, "GET", "/api/v1/change-sets", None).await;
+    assert_eq!(status, StatusCode::OK, "{sets}");
+    assert_eq!(sets[0]["catalog_steps"], 2);
+    let (status, body) = call(&app, "POST", "/api/v1/catalog/undo", None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["change_set"]["catalog_steps"], 1);
+    assert_eq!(move_draft_rows(&app, &ids), after_first);
+    let (status, body) = call(&app, "POST", "/api/v1/catalog/undo", None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(body["change_set"].is_null());
+    assert_eq!(move_draft_rows(&app, &ids), before);
+}
+
+#[tokio::test]
+async fn catalog_no_change_and_invalid_selection_leave_no_change_set() {
+    let (app, connector) = publisher_app().await;
+    let [artist, _, label, host, release] = move_pages(&app, connector).await;
+    let ids = [artist, label, host, release];
+    let before = move_draft_rows(&app, &ids);
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{artist}/page-change"),
+        Some(json!({ "action": "go_independent", "releases": [] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["nothing_changes"], true);
+    assert!(body["change_set"].is_null());
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{artist}/page-change"),
+        Some(json!({ "action": "sign_to_label", "page": label, "releases": [host] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(move_draft_rows(&app, &ids), before);
+    let (status, body) = call(&app, "POST", "/api/v1/catalog/undo", None).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+}
+
+#[tokio::test]
+async fn catalog_gather_undo_restores_both_pages_and_kept_links() {
+    let (app, connector) = publisher_app().await;
+    let [artist, other_artist, label, host, release] = move_pages(&app, connector).await;
+    let ids = [artist, other_artist, label, host, release];
+    let before = move_draft_rows(&app, &ids);
+    let workspace = Workspace::open(app.data.path()).unwrap();
+    let kept = workspace.collection.kept_levels().unwrap();
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{label}/gather"),
+        Some(json!({ "role": "artist", "page_ids": [artist, other_artist] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["change_set"]["catalog_steps"], 1);
+    let (status, body) = call(&app, "POST", "/api/v1/catalog/undo", None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(body["change_set"].is_null());
+    assert_eq!(move_draft_rows(&app, &ids), before);
+    assert_eq!(workspace.collection.kept_levels().unwrap(), kept);
+}
+
+#[tokio::test]
+async fn catalog_gather_failure_restores_the_first_page() {
+    let (app, connector) = publisher_app().await;
+    let [artist, _, label, host, release] = move_pages(&app, connector).await;
+    let ids = [artist, label, host, release];
+    let before = move_draft_rows(&app, &ids);
+    let workspace = Workspace::open(app.data.path()).unwrap();
+    let kept = workspace.collection.kept_levels().unwrap();
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{host}/gather"),
+        Some(json!({ "role": "artist", "page_ids": [artist, label] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(move_draft_rows(&app, &ids), before);
+    assert_eq!(workspace.collection.kept_levels().unwrap(), kept);
+    assert_eq!(
+        studio_core::change_set::change_sets(&workspace.collection).unwrap(),
+        Vec::<studio_core::change_set::ChangeSet>::new()
+    );
+}
+
+#[tokio::test]
+async fn catalog_preview_restores_feeds_without_existing_drafts() {
+    let (app, connector) = publisher_app().await;
+    let [artist, _, label, host, release] = move_pages(&app, connector).await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{artist}/links"),
+        Some(json!({ "release": release })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let ids = [artist, label, host, release];
+    for id in ids {
+        let (status, body) = write_with_own_diff(&app, id).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+    }
+    let before = move_draft_rows(&app, &ids);
+    let (status, body) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{artist}/page-change?action=sign_to_label&page={label}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["result"]["changed_releases"], 1);
+    assert_eq!(move_draft_rows(&app, &ids), before);
+}
+
+fn catalog_database_rows(app: &App) -> Vec<(String, Vec<String>)> {
+    let db = rusqlite::Connection::open(app.data.path().join("collection.sqlite")).unwrap();
+    let tables = db
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+        .unwrap()
+        .query_map([], |row| row.get::<_, String>(0))
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    tables
+        .into_iter()
+        .map(|table| {
+            let mut statement = db
+                .prepare(&format!("SELECT * FROM \"{}\"", table.replace('"', "\"\"")))
+                .unwrap();
+            let columns = statement.column_count();
+            let mut rows = statement
+                .query_map([], |row| {
+                    let values = (0..columns)
+                        .map(|index| row.get::<_, rusqlite::types::Value>(index))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    Ok(format!("{values:?}"))
+                })
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap();
+            rows.sort();
+            (table, rows)
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn catalog_gather_and_page_change_name_a_feed_in_an_open_change_set() {
+    let (app, connector) = publisher_app().await;
+    let [artist, _, label, _, _] = move_pages(&app, connector).await;
+    let release = add_paid_feed(
+        &app,
+        connector,
+        "busy.xml",
+        &paid_feed("Busy Release", "busy-guid", &[ANN], &[], "")
+            .replace("rel=\"artist\"", "rel=\"curator\""),
+    )
+    .await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{artist}/links"),
+        Some(json!({ "release": release })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, set) = call(
+        &app,
+        "POST",
+        "/api/v1/change-sets",
+        Some(json!({
+            "recipient": ann_key(),
+            "operation": { "kind": "rename", "name": "Anna" },
+            "feed_ids": [release],
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{set}");
+    let before = catalog_database_rows(&app);
+    for (route, request) in [
+        (
+            format!("/api/v1/feeds/{label}/gather"),
+            json!({ "role": "artist", "page_ids": [artist] }),
+        ),
+        (
+            format!("/api/v1/feeds/{artist}/page-change"),
+            json!({ "action": "sign_to_label", "page": label, "releases": [release] }),
+        ),
+    ] {
+        let (status, body) = call(&app, "POST", &route, Some(request)).await;
+        assert_eq!(status, StatusCode::CONFLICT, "{body}");
+        assert_eq!(body["error"]["code"], "in_change_set");
+        assert_eq!(
+            body["error"]["details"]["feeds"],
+            json!([{ "id": release, "title": "Busy Release", "change_set_id": set["id"] }])
+        );
+        assert_eq!(catalog_database_rows(&app), before);
+    }
+}
+
+#[tokio::test]
+async fn catalog_gather_and_page_change_name_a_read_only_feed() {
+    let (app, connector) = publisher_app().await;
+    let [artist, other_artist, label, _, release] = move_pages(&app, connector).await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{artist}/links"),
+        Some(json!({ "release": release })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let workspace = Workspace::open(app.data.path()).unwrap();
+    workspace
+        .collection
+        .clear_feed_location(studio_core::collection::FeedId(release))
+        .unwrap();
+    let before = catalog_database_rows(&app);
+    for (route, request) in [
+        (
+            format!("/api/v1/feeds/{label}/gather"),
+            json!({ "role": "artist", "page_ids": [other_artist, artist] }),
+        ),
+        (
+            format!("/api/v1/feeds/{artist}/page-change"),
+            json!({ "action": "sign_to_label", "page": label, "releases": [release] }),
+        ),
+    ] {
+        let (status, body) = call(&app, "POST", &route, Some(request)).await;
+        assert_eq!(status, StatusCode::CONFLICT, "{body}");
+        assert_eq!(body["error"]["code"], "read_only");
+        assert_eq!(
+            body["error"]["details"]["feeds"],
+            json!([{ "id": release, "title": "Release" }])
+        );
+        assert_eq!(catalog_database_rows(&app), before);
+    }
 }

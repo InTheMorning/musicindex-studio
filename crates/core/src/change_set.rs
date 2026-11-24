@@ -1513,6 +1513,7 @@ pub fn check_catalog_change_feeds(
     feeds: &[FeedId],
 ) -> Result<(), PipelineError> {
     let mut conflicts = Vec::new();
+    let mut blocked_feeds = Vec::new();
     for set in change_sets(collection)? {
         if matches!(set.operation, RecipientOperation::Catalog) {
             continue;
@@ -1521,7 +1522,15 @@ pub fn check_catalog_change_feeds(
             feeds.contains(&feed.feed_id) && feed.outcome.is_changed() && feed.written_at.is_none()
         }) {
             let row = collection.feed(feed.feed_id)?;
-            let name = row.title.unwrap_or_else(|| format!("Feed {}", row.id.0));
+            let name = row
+                .title
+                .clone()
+                .unwrap_or_else(|| format!("Feed {}", row.id.0));
+            blocked_feeds.push(crate::pipeline::BlockedChangeSetFeed {
+                id: row.id.0,
+                title: row.title,
+                change_set_id: set.id,
+            });
             conflicts.push(format!(
                 "{name} has changes to write. Write or discard them first. (change set {})",
                 set.id
@@ -1529,7 +1538,10 @@ pub fn check_catalog_change_feeds(
         }
     }
     if !conflicts.is_empty() {
-        return Err(invalid(conflicts.join("\n")));
+        return Err(PipelineError::in_change_set(
+            conflicts.join("\n"),
+            blocked_feeds,
+        ));
     }
     Ok(())
 }

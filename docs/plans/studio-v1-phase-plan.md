@@ -349,7 +349,7 @@ A phase gets task files in `docs/tasks/` before work starts.
   3. [Task 252](../tasks/studio-v1-task-252-the-artist-label-and-publisher-fields-of-a-release.md): the fields of a release (core, API and UI, four packets).
   4. [Task 253](../tasks/studio-v1-task-253-the-catalog-tree-and-the-word-publisher.md): the word "Publisher", the Catalog tree and the page of a publisher feed (UI, four packets). Most of packet 253a needs no other task.
   5. [Task 254](../tasks/studio-v1-task-254-the-sheets-of-a-catalog-change-review-and-drag-and-drop.md): the sheets of a change, the Add sheet, Review and drag and drop (UI, four packets).
-- Open: the control on the screen that adds a credit role to one link or removes a role from one link (ADR 0253 item 21). Task 250 gives the core function and the route. The control needs a mockup and a decision of the place first.
+- The control that adds a role to one link or removes a role from one link (ADR 0253 item 21): [task 255](../tasks/studio-v1-task-255-the-roles-of-one-release-on-a-page.md), with the operator choice of 2026-11-24. Each release row of a publisher page shows its roles and a **Change…** button that opens a sheet with check boxes.
 
 ### Phase 13: Desktop Shell
 

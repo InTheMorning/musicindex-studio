@@ -716,10 +716,12 @@ async fn the_host_lists_its_feed_files_and_marks_the_ones_in_the_collection() {
     let app = app();
     std::fs::write(
         app.feeds.path().join("single.xml"),
-        FEED.replace("Album", "Single").replace(
-            "<podcast:medium>music</podcast:medium>",
-            "<podcast:meduim>music</podcast:meduim>",
-        ),
+        FEED.replace("Album", "Single")
+            .replace("g-1", "g-single")
+            .replace(
+                "<podcast:medium>music</podcast:medium>",
+                "<podcast:meduim>music</podcast:meduim>",
+            ),
     )
     .unwrap();
     std::fs::write(app.feeds.path().join("notes.txt"), "not a feed").unwrap();
@@ -738,6 +740,81 @@ async fn the_host_lists_its_feed_files_and_marks_the_ones_in_the_collection() {
     assert_eq!(feeds[1]["medium"], Value::Null);
     assert_eq!(feeds[1]["medium_problem"]["kind"], "misspelled_tag");
     assert_eq!(feeds[1]["in_collection"], false);
+}
+
+#[tokio::test]
+async fn the_host_marks_a_feed_with_a_collection_guid_on_another_host() {
+    let app = app();
+    let feed_id = set_up(&app).await;
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{feed_id}/refresh"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let other_host = tempfile::tempdir().unwrap();
+    std::fs::write(other_host.path().join("copy.xml"), FEED).unwrap();
+    let (status, connector) = call(
+        &app,
+        "POST",
+        "/api/v1/connectors",
+        Some(json!({
+            "kind": "local",
+            "name": "Other",
+            "root": other_host.path(),
+            "base_url": "https://other.example"
+        })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    let (status, body) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/connectors/{}/feeds", connector["id"]),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        body["feeds"][0]["in_collection"], true,
+        "Observation 13 of the 2026-11-23 walk, connector_feeds: the GUID match on another host is not marked"
+    );
+}
+
+#[tokio::test]
+async fn the_release_move_title_names_the_first_new_page() {
+    let (app, connector) = publisher_app().await;
+    let [artist, _other_artist, _label, hosting, release] = move_pages(&app, connector).await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{artist}/links"),
+        Some(json!({ "release": release })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{release}/move-to"),
+        Some(json!({ "artist_id": artist, "hosting_id": hosting })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let change_set_id = body["change_set_id"].as_i64().unwrap();
+    let (_, change_set) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/change-sets/{change_set_id}"),
+        None,
+    )
+    .await;
+    assert_eq!(
+        change_set["operation"]["target_name"], "Hosting",
+        "Observation 10 of the 2026-11-23 walk, move_release_to_pages: the title does not name the new hosting page"
+    );
 }
 
 #[tokio::test]

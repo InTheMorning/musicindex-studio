@@ -2743,12 +2743,18 @@ pub(crate) async fn connector_feeds(
             .filter(|f| f.connector_id == Some(row.id))
             .filter_map(|f| f.path)
             .collect();
+        let (_, known_guids) = collection_keys(w)?;
         let feeds: Vec<Value> = candidates
             .feeds
             .iter()
             .map(|c| {
                 let mut value = serde_json::to_value(c).unwrap_or(Value::Null);
-                value["in_collection"] = Value::Bool(known.contains(&c.path));
+                value["in_collection"] = Value::Bool(
+                    known.contains(&c.path)
+                        || c.podcast_guid
+                            .as_deref()
+                            .is_some_and(|guid| known_guids.contains(&guid.to_ascii_lowercase())),
+                );
                 value
             })
             .collect();
@@ -3723,6 +3729,23 @@ pub(crate) async fn move_release_to_pages(
                 others.push(*page);
             }
         }
+        let artist = selected
+            .iter()
+            .find(|(_, role)| *role == PublisherRole::Artist)
+            .map(|(page, _)| *page);
+        let artist_name = artist
+            .map(|page| w.collection.feed(page))
+            .transpose()?
+            .and_then(|row| row.title);
+        let target_name = selected
+            .iter()
+            .map(|(page, _)| *page)
+            .find(|page| !catalogs[release_index].publishers.contains(page))
+            .map(|page| w.collection.feed(page))
+            .transpose()?
+            .and_then(|row| row.title)
+            .or(artist_name)
+            .unwrap_or_else(|| "Artist".to_owned());
         let mut touched: Vec<FeedId> = selected.iter().map(|(page, _)| *page).collect();
         touched.extend(&others);
         touched.push(release_id);
@@ -3758,20 +3781,13 @@ pub(crate) async fn move_release_to_pages(
             publisher::unlink(&w.collection, *page, release_id)?;
         }
         remove_shared_kept_levels(w)?;
-        let artist = selected
-            .iter()
-            .find(|(_, role)| *role == PublisherRole::Artist)
-            .map(|(id, _)| w.collection.feed(*id))
-            .transpose()?
-            .and_then(|row| row.title)
-            .unwrap_or_else(|| "Artist".to_owned());
         page_move_response(
             w,
             &snapshot,
             &RecipientOperation::MovePages {
                 page_names: Vec::new(),
                 release_title: moved.title,
-                target_name: artist,
+                target_name,
                 role: "release".to_owned(),
             },
         )

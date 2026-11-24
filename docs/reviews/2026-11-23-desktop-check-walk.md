@@ -157,3 +157,11 @@ Task 243 corrects observation 2 with ADR 0251 items 9 to 11. The screenshot harn
 Open point: after **Link and Continue**, the draft of the new page (HeyCitizen) has the new link, but Review of the first page does not write it. The new page stays "Saved, not written" until its own Review writes it.
 
 Task 244 closes the open point with ADR 0251 items 12 and 13. Review of the first page shows the new page as a locked row, and one write wrote the three feeds in the harness. The choice "New artist page…" opened the form, and after the page was made, one write wrote the page, the release and the new page.
+
+## After The Walk: Observations 1, 4, 5, 10 And 13
+
+Task 245 corrects observations 4 and 5. A link back puts the written element back at its written position. A draft that is the same as its base file has the bytes of the base file. A link that exists keeps its attributes, and a new element uses the attribute order of each element of the file. In the screenshot harness, a link back after an unlink gave `changed` `false` in the diff of the page and of the release. The page showed "No changes".
+
+Task 246 corrects observations 10 and 13. The title of a release move names the first page that the move adds. **Find Other Feeds** marks a file as in the collection when a feed of the collection has the same GUID. API tests prove the two corrections. The screenshot harness did not show them.
+
+Observation 1: the link of the release has no `rel`. ADR 0252 gives the decision, and task 247 builds it.

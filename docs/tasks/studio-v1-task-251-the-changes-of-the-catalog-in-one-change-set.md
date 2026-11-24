@@ -57,6 +57,7 @@ Each change of the Catalog uses music words: sign to a label, change label, go i
    - `GoIndependent` removes the link to each label page.
    - `ChangePublisher` removes the link to each publisher page and adds the selected publisher with the role `hosting`.
    - A link that has a removed role and also a different role keeps the different role. It loses only the removed role.
+   - "Each label page" and "each publisher page" include a page outside Studio: a release item with that role in its `rel` and no feed in the collection. If not, the link of the new page gives `RoleTaken` (packet 250b). Two API tests of the previous move routes prevent this condition with `rel="curator"` in their fixtures (`the_move_route_links_three_pages_and_unlinks_the_other_artist_page`, `a_page_move_names_a_release_in_an_open_change_set`). Give them back their previous `rel` when the new route replaces the previous one.
    - The links to curator pages, to the page of the action and (on a label page) to the artist pages stay.
 3. ADR 0254 item 27: the kept links of the page change in the same way. `SignToLabel`, `ChangeLabel` and `ChangePublisher` replace each kept link to a page of that role. `ChangePublisher` with no page removes each kept link to a publisher page. `GoIndependent` removes each kept link to a label page.
 4. A function gives the start selection of ADR 0254 item 28, with the page above as an argument: the releases that link to the page above. With no such release, each release of the page.

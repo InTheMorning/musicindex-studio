@@ -150,6 +150,8 @@ pub enum PublisherErrorKind {
     NoRole,
     /// A draft has no `podcast:guid`.
     NoGuid,
+    /// A release already has a page for this role.
+    RoleTaken,
     /// The publisher and release drafts do not contain the same link.
     NotLinked,
     /// A draft or the collection failed. See [`PublisherError::pipeline`].
@@ -341,6 +343,7 @@ pub fn link(
     check_named(&release_party, "release")?;
     let feed_roles = roles(collection, publisher)?;
     let selected = selected_link_roles(link_roles, &feed_roles)?;
+    check_role_available(collection, release, Some(publisher), &selected)?;
     let rel = rel_of(&selected);
 
     // The channel item has the medium of the release (ADR 0086 item 2).
@@ -384,6 +387,7 @@ pub fn link(
             &publisher_party,
             publisher_link,
         );
+        sort_publisher_links(links);
     })?;
     Ok(())
 }
@@ -505,6 +509,8 @@ pub fn unlink(
                     .retain(|item| !names(&item.value, &publisher_party));
                 if links.remote_items.is_empty() {
                     feed.publisher = None;
+                } else {
+                    sort_publisher_links(links);
                 }
             }
         })?;
@@ -596,6 +602,7 @@ pub fn set_roles(
                             change_rel_roles(item.rel.as_deref(), &old_roles, roles, &kept_roles);
                     }
                 }
+                sort_publisher_links(links);
             }
         })?;
     }
@@ -606,6 +613,97 @@ pub fn set_roles(
 /// `rel` attribute.
 fn nonempty_rel(rel: String) -> Option<String> {
     (!rel.is_empty()).then_some(rel)
+}
+
+/// Refuse a link that gives a release a second page of the role artist,
+/// label or hosting (ADR 0257 item 10). `publisher` is the page of the new
+/// link, or `None` for a page that does not exist yet. A link of that page
+/// itself does not count. A route calls this before it makes a new page, so
+/// a refusal changes nothing.
+///
+/// # Errors
+///
+/// Gives `RoleTaken` with the name of the page that has the role, or an
+/// error of the collection.
+pub fn check_role_available(
+    collection: &Collection,
+    release: FeedId,
+    publisher: Option<FeedId>,
+    requested: &[PublisherRole],
+) -> Result<(), PublisherError> {
+    let publisher_party = match publisher {
+        Some(id) => Some(party(collection, &collection.feed(id)?)?),
+        None => None,
+    };
+    let (release_feed, _) = pipeline::draft_model(collection, release)?;
+    let Some(links) = release_feed.publisher else {
+        return Ok(());
+    };
+    for (role, role_name) in [
+        (PublisherRole::Artist, "artist"),
+        (PublisherRole::Label, "label"),
+        (PublisherRole::Hosting, "publisher"),
+    ] {
+        if !requested.contains(&role) {
+            continue;
+        }
+        let taken = links.remote_items.iter().find(|item| {
+            roles_from_rel(item.value.rel.as_deref().unwrap_or_default()).contains(&role)
+                && publisher_party
+                    .as_ref()
+                    .is_none_or(|own| !names(&item.value, own))
+        });
+        if let Some(item) = taken {
+            let page = page_title(collection, &item.value)?;
+            let release_title = release_feed.title.as_deref().unwrap_or("This release");
+            return Err(PublisherError::new(
+                PublisherErrorKind::RoleTaken,
+                format!(
+                    "{release_title} already has the {role_name} page {page}. Change it in the fields of the release."
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// The name of the page that a link item names: the title of the item, or
+/// the title of the page in the collection. A page outside Studio with no
+/// title gives its address.
+fn page_title(collection: &Collection, item: &RemoteItem) -> Result<String, PublisherError> {
+    if let Some(title) = item.title.as_deref().filter(|title| !title.is_empty()) {
+        return Ok(title.to_owned());
+    }
+    for row in collection.feeds()? {
+        if row.medium.as_deref() != Some("publisher") {
+            continue;
+        }
+        let page = party(collection, &row)?;
+        if names(item, &page)
+            && let Some(title) = page.title
+        {
+            return Ok(title);
+        }
+    }
+    Ok(item
+        .feed_url
+        .clone()
+        .or_else(|| item.feed_guid.clone())
+        .unwrap_or_else(|| "outside Studio".to_owned()))
+}
+
+fn sort_publisher_links(publisher: &mut Publisher) {
+    publisher.remote_items.sort_by_key(|item| {
+        let roles = roles_from_rel(item.value.rel.as_deref().unwrap_or_default());
+        [
+            PublisherRole::Hosting,
+            PublisherRole::Label,
+            PublisherRole::Artist,
+        ]
+        .into_iter()
+        .position(|role| roles.contains(&role))
+        .unwrap_or(3)
+    });
 }
 
 /// Update role words and keep other `rel` words.
@@ -707,6 +805,9 @@ pub fn set_link_roles(
                 item.rel.as_deref().unwrap_or_default(),
                 &selected,
             ));
+        }
+        if let Some(links) = feed.publisher.as_mut() {
+            sort_publisher_links(links);
         }
     })?;
     Ok(())

@@ -1846,7 +1846,17 @@ async fn a_changed_link_of_two_written_feeds_gives_a_row_on_each_side() {
         StatusCode::OK
     );
     assert_eq!(write_with_own_diff(&app, first_id).await.0, StatusCode::OK);
-    let second = make_artist_page(&app, connector, "second.xml", "Second").await;
+    let second = make_feed(
+        &app,
+        new_feed_body(
+            connector,
+            "second.xml",
+            "Second",
+            Some("publisher"),
+            Some("label"),
+        ),
+    )
+    .await;
     let second_id = second["id"].as_i64().unwrap();
     assert_eq!(write_with_own_diff(&app, second_id).await.0, StatusCode::OK);
 
@@ -1874,7 +1884,7 @@ async fn a_changed_link_of_two_written_feeds_gives_a_row_on_each_side() {
     );
     assert_eq!(
         also(&diff_of(release_id).await),
-        json!([{ "id": second_id, "title": "Second", "side": "page", "artist": true, "change": "added", "refusal": null, "via": null }]),
+        json!([{ "id": second_id, "title": "Second", "side": "page", "artist": false, "change": "added", "refusal": null, "via": null }]),
         "ADR 0251 item 2: Review of the release must offer the written page. Fix linked_feeds_to_write or changed_links."
     );
 
@@ -1960,6 +1970,14 @@ async fn a_linked_release_refusal_is_in_the_page_review_until_the_link_returns()
         "ADR 0251 item 12: Review of A must include the changed page C through release B. Fix linked_feeds_to_write."
     );
 
+    let (status, body) = call(
+        &app,
+        "DELETE",
+        &format!("/api/v1/feeds/{second_id}/links/{release_id}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
     let (status, body) = call(
         &app,
         "POST",
@@ -2680,6 +2698,7 @@ async fn the_move_route_links_three_pages_and_unlinks_the_other_artist_page() {
     outside["feed_guid"] = json!("outside-page-guid");
     outside["feed_url"] = json!("https://outside.example/page.xml");
     outside["title"] = json!("Outside page");
+    outside["rel"] = json!("curator");
     model["publisher"]["remote_items"]
         .as_array_mut()
         .unwrap()
@@ -2827,9 +2846,10 @@ async fn the_move_route_accepts_a_written_hosting_page_without_a_draft() {
         "Observation 14, move_release_to_pages: {body}"
     );
     assert_eq!(listed(&app, hosting).await["release_ids"], json!([release]));
+    // ADR 0257 item 12 puts the hosting page before the artist page.
     assert_eq!(
         listed(&app, release).await["publisher_ids"],
-        json!([artist, hosting])
+        json!([hosting, artist])
     );
 }
 
@@ -2842,7 +2862,17 @@ async fn written_page_links_survive_writes_in_review_order() {
         write_with_own_diff(&app, original_id).await.0,
         StatusCode::OK
     );
-    let page = make_artist_page(&app, connector, "page.xml", "Page").await;
+    let page = make_feed(
+        &app,
+        new_feed_body(
+            connector,
+            "page.xml",
+            "Page",
+            Some("publisher"),
+            Some("label"),
+        ),
+    )
+    .await;
     let page_id = page["id"].as_i64().unwrap();
     assert_eq!(write_with_own_diff(&app, page_id).await.0, StatusCode::OK);
     let release = make_release(
@@ -2908,7 +2938,17 @@ async fn writing_only_the_release_keeps_its_link_and_leaves_the_page_file() {
         write_with_own_diff(&app, original_id).await.0,
         StatusCode::OK
     );
-    let page = make_artist_page(&app, connector, "page.xml", "Page").await;
+    let page = make_feed(
+        &app,
+        new_feed_body(
+            connector,
+            "page.xml",
+            "Page",
+            Some("publisher"),
+            Some("label"),
+        ),
+    )
+    .await;
     let page_id = page["id"].as_i64().unwrap();
     assert_eq!(write_with_own_diff(&app, page_id).await.0, StatusCode::OK);
     let release = make_release(
@@ -3387,6 +3427,10 @@ async fn review_findings_of(app: &App, feed: i64) -> (StatusCode, Value) {
 /// of an open move change set with no change set of their own. **Discard**
 /// of the move then puts back the draft from before the move.
 #[tokio::test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "The test covers People values and discard of a move."
+)]
 async fn people_values_go_into_a_draft_of_an_open_move_and_discard_of_the_move_removes_them() {
     let owner = "ADR 0245 item 12: fix correct_drafts in crates/core/src/change_set.rs";
     let (app, connector) = publisher_app().await;
@@ -3397,7 +3441,8 @@ async fn people_values_go_into_a_draft_of_an_open_move_and_discard_of_the_move_r
         &app,
         connector,
         "ann-release.xml",
-        &paid_feed("Ann Release", "gann", &[], &[], credit),
+        &paid_feed("Ann Release", "gann", &[], &[], credit)
+            .replace("rel=\"artist\"", "rel=\"curator\""),
     )
     .await;
     let (status, body) = call(
@@ -3940,7 +3985,8 @@ async fn a_page_move_names_a_release_in_an_open_change_set() {
         &app,
         connector,
         "busy.xml",
-        &paid_feed("Busy Release", "busy-guid", &[ANN], &[], ""),
+        &paid_feed("Busy Release", "busy-guid", &[ANN], &[], "")
+            .replace("rel=\"artist\"", "rel=\"curator\""),
     )
     .await;
     let (status, body) = call(
@@ -4937,9 +4983,9 @@ async fn a_hosting_page_from_a_found_release_has_no_recipients_website_or_items(
     assert_eq!(model["remote_items"][0]["feed_guid"], "found-guid");
 }
 
-/// ADR 0238 item 6: a found release in the collection is linked in both drafts.
+/// ADR 0257 item 10: a second artist page changes no existing draft.
 #[tokio::test]
-async fn a_page_from_a_found_release_in_the_collection_links_both_drafts() {
+async fn a_second_artist_page_from_a_found_release_is_refused_without_draft_changes() {
     let source = web_feeds();
     let app = app_with_index(&source.url(""));
     let (_, connector) = call(&app, "POST", "/api/v1/connectors", Some(json!({"kind":"local","name":"Music","root":app.feeds.path(),"base_url":"https://music.example"}))).await;
@@ -4963,19 +5009,31 @@ async fn a_page_from_a_found_release_in_the_collection_links_both_drafts() {
         200,
         FOUND_FEED.replace("FOUND_GUID", &release_guid).into_bytes(),
     );
-    let page = make_feed(&app, json!({
+    let ids: Vec<_> = collection_of(&app)
+        .feeds()
+        .unwrap()
+        .iter()
+        .map(|row| row.id.0)
+        .collect();
+    let before = move_draft_rows(&app, &ids);
+    let (status, body) = call(&app, "POST", "/api/v1/feeds/new", Some(json!({
         "connector_id": connector["id"], "path":"second.xml", "title":"Found Artist", "author":"Found Artist",
         "medium":"publisher", "role":"artist", "from_found": format!("{}/found.xml", source.url(""))
-    })).await;
-    let page_model = &found_draft(&app, &page["id"]).await["model"];
-    let items = page_model["remote_items"].as_array().unwrap();
-    assert_eq!(items.len(), 1, "{page_model}");
-    assert_eq!(items[0]["feed_guid"], release_guid.as_str());
-    let release_model = &found_draft(&app, &release["id"]).await["model"];
-    let links = release_model["publisher"]["remote_items"]
-        .as_array()
-        .unwrap();
-    assert_eq!(links.len(), 2, "{release_model}");
+    }))).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["error"]["code"], "role_taken");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("artist page First Artist")),
+        "ADR 0257 item 10: the refusal names the page in the collection. Fix check_role_available: {body}"
+    );
+    assert_eq!(move_draft_rows(&app, &ids), before);
+    assert_eq!(
+        collection_of(&app).feeds().unwrap().len(),
+        ids.len(),
+        "ADR 0257 item 10: a refusal makes no page. Call check_role_available before new_feed_with."
+    );
 }
 
 /// ADR 0238 item 7: a found feed makes only a publisher page, and not with a copy.

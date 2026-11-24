@@ -201,8 +201,24 @@ fn release_levels_give_artist_and_parent_label_and_renames_move_no_folder() {
         .unwrap();
     publisher::link(&s.collection, label, release, None).unwrap();
     publisher::link(&s.collection, artist, release, None).unwrap();
-    publisher::link(&s.collection, second_label, release, None).unwrap();
-    publisher::link(&s.collection, second_artist, release, None).unwrap();
+    publisher::link(&s.collection, second_label, release, Some(&[])).unwrap();
+    publisher::link(&s.collection, second_artist, release, Some(&[])).unwrap();
+    pipeline::edit_draft(&s.collection, release, |feed| {
+        let links = &mut feed.publisher.as_mut().unwrap().remote_items;
+        links
+            .iter_mut()
+            .find(|item| item.value.title.as_deref() == Some("Label Two"))
+            .unwrap()
+            .value
+            .rel = Some("label".to_owned());
+        links
+            .iter_mut()
+            .find(|item| item.value.title.as_deref() == Some("Artist Two"))
+            .unwrap()
+            .value
+            .rel = Some("artist".to_owned());
+    })
+    .unwrap();
     let feeds: Vec<_> = s
         .collection
         .feeds()
@@ -585,7 +601,7 @@ fn a_new_link_goes_last_after_the_links_of_the_release() {
     let mut s = setup();
     let (publisher, release) = pair(&mut s);
     s.collection
-        .set_publisher_roles(publisher, &[PublisherRole::Label], true)
+        .set_publisher_roles(publisher, &[PublisherRole::Hosting], true)
         .unwrap();
     pipeline::edit_draft(&s.collection, release, |feed| {
         feed.publisher = Some(Publisher {
@@ -603,8 +619,94 @@ fn a_new_link_goes_last_after_the_links_of_the_release() {
 
     let links = model(&s, release).publisher.unwrap().remote_items;
     assert_eq!(links.len(), 2);
-    assert_eq!(links[0].feed_guid.as_deref(), Some("other-guid"));
-    assert_eq!(links[1].title.as_deref(), Some("Label"));
+    assert_eq!(links[0].title.as_deref(), Some("Label"));
+    assert_eq!(links[1].feed_guid.as_deref(), Some("other-guid"));
+}
+
+#[test]
+fn a_second_curator_page_is_allowed() {
+    let mut s = setup();
+    let (first, release) = pair(&mut s);
+    let second = new_feed(&mut s, "curator.xml", "Curator", "publisher");
+    s.collection
+        .set_publisher_roles(first, &[PublisherRole::Curator], true)
+        .unwrap();
+    s.collection
+        .set_publisher_roles(second, &[PublisherRole::Curator], true)
+        .unwrap();
+
+    publisher::link(&s.collection, first, release, None).unwrap();
+    publisher::link(&s.collection, second, release, None).unwrap();
+}
+
+#[test]
+fn set_roles_sorts_a_new_hosting_role_before_the_artist_link() {
+    let mut s = setup();
+    let (artist, release) = pair(&mut s);
+    let hosting = new_feed(&mut s, "hosting.xml", "Hosting", "publisher");
+    s.collection
+        .set_publisher_roles(artist, &[PublisherRole::Artist], true)
+        .unwrap();
+    s.collection
+        .set_publisher_roles(hosting, &[PublisherRole::Hosting], true)
+        .unwrap();
+    publisher::link(&s.collection, artist, release, None).unwrap();
+    pipeline::edit_draft(&s.collection, release, |feed| {
+        feed.publisher.as_mut().unwrap().remote_items.insert(
+            0,
+            Entry::new(remote(
+                "publisher",
+                "other-guid",
+                "https://music.example/other.xml",
+                "Other",
+                Some("producer"),
+            )),
+        );
+    })
+    .unwrap();
+
+    publisher::set_roles(
+        &s.collection,
+        artist,
+        &[PublisherRole::Artist, PublisherRole::Hosting],
+    )
+    .unwrap();
+
+    let links = model(&s, release).publisher.unwrap().remote_items;
+    assert_eq!(links[0].value.rel.as_deref(), Some("artist hosting"));
+    assert_eq!(links[1].value.rel.as_deref(), Some("producer"));
+}
+
+#[test]
+fn a_second_artist_label_or_publisher_page_is_refused_before_draft_changes() {
+    for role in [
+        PublisherRole::Artist,
+        PublisherRole::Label,
+        PublisherRole::Hosting,
+    ] {
+        let mut s = setup();
+        let (first, release) = pair(&mut s);
+        let second = new_feed(&mut s, "second.xml", "Second Page", "publisher");
+        s.collection
+            .set_publisher_roles(first, &[role], true)
+            .unwrap();
+        s.collection
+            .set_publisher_roles(second, &[role], true)
+            .unwrap();
+        publisher::link(&s.collection, first, release, None).unwrap();
+        let first_items = model(&s, first).remote_items;
+        let second_items = model(&s, second).remote_items;
+        let release_items = model(&s, release).publisher.unwrap().remote_items;
+
+        let error = publisher::link(&s.collection, second, release, None).unwrap_err();
+        assert_eq!(error.kind(), PublisherErrorKind::RoleTaken);
+        assert_eq!(model(&s, first).remote_items, first_items);
+        assert_eq!(model(&s, second).remote_items, second_items);
+        assert_eq!(
+            model(&s, release).publisher.unwrap().remote_items,
+            release_items
+        );
+    }
 }
 
 #[test]
@@ -1166,7 +1268,7 @@ fn catalogs_give_the_releases_of_each_publisher_and_the_publishers_of_each_relea
     // release that names the label only.
     assert_eq!(of(label).releases, vec![shared, mixtape, half]);
     // ADR 0085 item 5: the primary publisher comes first.
-    assert_eq!(of(shared).publishers, vec![artist, label]);
+    assert_eq!(of(shared).publishers, vec![label, artist]);
     assert_eq!(of(first).publishers, vec![artist]);
     assert_eq!(of(mixtape).publishers, vec![label]);
     assert_eq!(of(half).publishers, vec![label]);
@@ -1401,7 +1503,7 @@ fn a_feed_with_the_roles_artist_and_label_is_one_feed_at_the_artist_rank() {
         .set_publisher_roles(label, &[PublisherRole::Label], true)
         .unwrap();
     let album = new_feed(&mut s, "album.xml", "Album", "music");
-    publisher::link(&s.collection, own, album, None).unwrap();
+    publisher::link(&s.collection, own, album, Some(&[PublisherRole::Artist])).unwrap();
     publisher::link(&s.collection, label, album, None).unwrap();
 
     let feeds: Vec<_> = s
@@ -1421,4 +1523,31 @@ fn a_feed_with_the_roles_artist_and_label_is_one_feed_at_the_artist_rank() {
     assert_eq!(catalogs[index(label)].children, vec![own], "{message}");
     assert_eq!(catalogs[index(own)].parents, vec![label], "{message}");
     assert_eq!(catalogs[index(own)].children, Vec::new(), "{message}");
+}
+
+#[test]
+fn a_release_with_two_label_items_reads_and_writes_the_same_bytes_without_an_edit() {
+    let bytes = br#"<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:podcast="https://podcastindex.org/namespace/1.0">
+  <channel>
+    <title>Release</title>
+    <podcast:medium>music</podcast:medium>
+    <podcast:publisher>
+      <podcast:remoteItem medium="publisher" rel="label" feedGuid="label-b" feedUrl="https://music.example/b.xml"/>
+      <podcast:remoteItem medium="publisher" rel="label" feedGuid="label-a" feedUrl="https://music.example/a.xml"/>
+    </podcast:publisher>
+  </channel>
+</rss>
+"#;
+    let mut document = studio_core::xml::Document::parse_bytes(bytes).unwrap();
+    let feed = Feed::read(&document).unwrap();
+    let items = &feed.publisher.as_ref().unwrap().remote_items;
+    assert_eq!(items.len(), 2);
+    assert!(
+        items
+            .iter()
+            .all(|item| item.rel.as_deref() == Some("label"))
+    );
+    feed.write(&mut document).unwrap();
+    assert_eq!(document.write().as_bytes(), bytes);
 }

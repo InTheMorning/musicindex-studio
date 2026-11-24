@@ -1951,8 +1951,17 @@ fn link_found_release(
     feed: Option<&Feed>,
     body: &NewAlbumFeed,
 ) -> Result<(), ApiError> {
-    let linked = ensure_draft(w, release).is_ok()
-        && publisher::link(&w.collection, page, release, None).is_ok();
+    let linked = if ensure_draft(w, release).is_ok() {
+        match publisher::link(&w.collection, page, release, None) {
+            Ok(()) => true,
+            Err(error) if error.kind() == publisher::PublisherErrorKind::RoleTaken => {
+                return Err(error.into());
+            }
+            Err(_) => false,
+        }
+    } else {
+        false
+    };
     if !linked && let Some(link) = found_remote_item(role, address, feed, body) {
         pipeline::edit_draft(&w.collection, page, |feed| {
             feed.remote_items.push(Entry::new(link));
@@ -2081,6 +2090,11 @@ pub(crate) async fn new_album_feed(
         // A copy gives the description, the artwork and the website of the
         // found feed file (ADR 0233 item 9).
         let (first, linked_release) = first_values_of(w, &body, copy.feed, &found, role)?;
+        // A second page of one role is refused before the page exists, so a
+        // refusal makes no page (ADR 0257 item 10).
+        if let (Some(release), Some(role)) = (linked_release, role) {
+            publisher::check_role_available(&w.collection, release, None, &[role])?;
+        }
         let id = pipeline::new_feed_with(
             &mut w.collection,
             made.as_ref(),
@@ -3787,11 +3801,11 @@ pub(crate) async fn move_release_to_pages(
         for feed in &touched {
             ensure_draft(w, *feed)?;
         }
-        for (page, _) in &selected {
-            publisher::link(&w.collection, *page, release_id, None)?;
-        }
         for page in &others {
             publisher::unlink(&w.collection, *page, release_id)?;
+        }
+        for (page, _) in &selected {
+            publisher::link(&w.collection, *page, release_id, None)?;
         }
         remove_shared_kept_levels(w)?;
         page_move_response(
@@ -4214,11 +4228,11 @@ fn move_publisher_page_to_pages(
         ensure_draft(w, *feed)?;
     }
     for (release, old) in per_release {
-        for (target, _) in &selected {
-            publisher::link(&w.collection, *target, release, None)?;
-        }
         for old_page in old {
             publisher::unlink(&w.collection, old_page, release)?;
+        }
+        for (target, _) in &selected {
+            publisher::link(&w.collection, *target, release, None)?;
         }
     }
     for parent in current_parents {

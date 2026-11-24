@@ -109,7 +109,8 @@
 
 ## Open Points
 
-- The sequence of `podcast:publisher` of item 12, and the conflict with the count "Single" of the specification. The orchestrator gets both for musicindex.
+- Closed on 2026-11-24 by the orchestrator for musicindex. R-ROLE-7 of musicindex ADR 0097 keeps one remoteItem with `rel` for each linked page (Podcast Namespace PR #793, musicindex ADR 0067 item 87). R-ROLE-7 adds the sequence of item 12 as a rule for a writer. The website session gives the commit. The rule of one page for each role (item 10) is a Studio rule only, because a reader can read a feed from a different tool with two labels.
+- Known limit: MSP 2.0 writes the `podcast:publisher` block again when a user saves a feed, and it keeps only one link. Stophammer reads the publisher title from the first remoteItem with `medium="publisher"`. Thus the sequence of item 12 also gives the hosting page to Stophammer.
 - The rank of curator (musicindex ADR 0097 open point 1) does not change item 12, because a release has no curator link in `podcast:publisher` now.
 
 ## How This Decision Is Checked

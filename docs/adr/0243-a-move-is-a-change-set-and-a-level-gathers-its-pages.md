@@ -10,7 +10,7 @@
 - Changes: [ADR 0207](0207-recipients-change-sets-and-wallets.md) items 10 and 27. The sheet of Use the LNURL Address lists only the feeds that change, and Discard of a move puts back the kept links.
 - Changes: [ADR 0232](0232-each-group-below-an-open-feed-has-an-add-row.md) item 5. On a hosting level and on a label level, an add row opens a menu.
 - Changes: [ADR 0019](0019-select-a-feed-from-the-host.md) item 3. The depth and the file limit of a list.
-- Uses: [ADR 0082](0082-a-publisher-feed-has-a-set-of-roles.md) for the roles. [ADR 0215](0215-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) item 2 for the rule "below". [ADR 0222](0222-errors-give-a-step-terms-get-a-hint-and-the-first-run-has-two-stages.md) for the step of an error.
+- Uses: [ADR 0253](0253-the-roles-of-a-feed-and-of-each-link.md) for the roles. [ADR 0215](0215-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) item 2 for the rule "below". [ADR 0222](0222-errors-give-a-step-terms-get-a-hint-and-the-first-run-has-two-stages.md) for the step of an error.
 - Source: [the findings of the tutorial for a hosting user](../reviews/2026-11-22-tj-tutorial-findings.md), findings 1, 2, 3, 4 and 6.
 
 ## Context
@@ -42,7 +42,7 @@ A change set already holds a payee operation (ADR 0207) and a move of files (ADR
 8. "Move Artists Here…" opens the sheet "Move artists to {page}". It lists each writable publisher page of the collection with the role artist or with no role, that is not below the page of the level now (ADR 0215 item 2). "Move Labels Here…" lists the label pages and the pages with no role in the same way. Each row has a check box, the name, the number of releases, and the role or "No role".
 9. Each check box starts selected for a page with no role, and not selected for a page with a role. The button is **Move {N} Artists** or **Move {N} Labels**, with the number of selected rows. With no selected row, the button is not available.
 10. Below the list, the sheet says "A page with no role gets the role Artist." or "A page with no role gets the role Label." when a selected row has no role.
-11. **Move** gives each selected page with no role the role of the sheet (ADR 0082). The core changes the publisher feed and each linked release, as the Role field of the page form does. Then the core applies ADR 0240 item 23 and item 24 to each selected page, with the page of the level as the selected page of its role. The links of the other roles do not change.
+11. **Move** gives each selected page with no role the role of the sheet (ADR 0253 items 5 and 10). The core changes the publisher feed and each linked release, as the Role field of the page form does. Then the core applies ADR 0240 item 23 and item 24 to each selected page, with the page of the level as the selected page of its role. The links of the other roles do not change.
 12. Item 1 to item 6 apply to the move of item 11. One change set holds the feeds of all selected pages.
 
 ### A Folder Search Reports What It Did Not Find

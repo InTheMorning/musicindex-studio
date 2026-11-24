@@ -19,10 +19,10 @@
 
 ## Decision
 
-1. Below Releases, the left panel has one destination for each publisher feed of the collection, A to Z by title. A row shows the dot of the feed (ADR 0084 item 2), its title and the number of its releases. The row Releases opens Releases from each of these destinations.
+1. Below Releases, the left panel has one destination for each publisher feed of the collection, A to Z by title. A row shows the dot of the feed (ADR 0253 item 8), its title and the number of its releases. The row Releases opens Releases from each of these destinations.
 2. The core gives the links of each feed of the collection. A publisher feed has its releases, and a release has its publisher feeds. A link counts when one of the two feeds names the other. A publisher feed gives first the releases of its channel, in that sequence, then the releases that only name it. A release gives first the feeds of its `podcast:publisher`, in that sequence, then the feeds that only list it.
 3. After the publisher feeds, the destination "Not linked" holds the releases with no publisher feed in the collection. It shows only when such a release exists.
-4. A destination is a list page with the title of the feed. Its head shows the label of ADR 0084, with each role, and the button "Open the feed". Its sorts are "Feed order", the default, then "Newest" and "A to Z". "Feed order" is the sequence of item 2. "Not linked" has the sorts of Releases, and no "Open the feed".
+4. A destination is a list page with the title of the feed. Its head shows the label of ADR 0253 item 7, with each role, and the button "Open the feed". Its sorts are "Feed order", the default, then "Newest" and "A to Z". "Feed order" is the sequence of item 2. "Not linked" has the sorts of Releases, and no "Open the feed".
 5. A release of more than one publisher feed shows on the page of each feed. On each page, a line names the other feeds, for example "Also on Some Label".
 6. Releases lists each album and each playlist. A publisher feed opens from its destination, not from a row of Releases.
 7. At 760 px or less, the root page shows the destinations of item 1 below Releases. A destination opens as a page of the root (musicindex ADR 0080 R-SHELL-2 item 2).

@@ -1,12 +1,15 @@
+> Archived: superseded by [ADR 0253](../../adr/0253-the-roles-of-a-feed-and-of-each-link.md) on 2026-11-24. ADR 0253 items 7 to 9 restate each live rule of this ADR, with the words of musicindex ADR 0097. This ADR has no other live rule.
+
 # ADR 0084: The Label Of A Feed Lists Each Role
 
-- Status: Accepted
+- Status: Superseded by ADR 0253
 - Date: 2026-10-29
 - Owner: operator
 - Accepted: 2026-10-29 by the operator.
 - Changes: [ADR 0082](0082-a-publisher-feed-has-a-set-of-roles.md) item 6 and [ADR 0083](0083-hosting-is-a-first-class-role.md) item 1, which give a feed the label of its first role.
 - Changes: [ADR 0083](0083-hosting-is-a-first-class-role.md), Hosting Is A First-Class Role. ADR 0083 names the changed items.
 - Uses: musicindex ADR 0037 R-WORD-7.
+- Changed by: [ADR 0253](../../adr/0253-the-roles-of-a-feed-and-of-each-link.md), on 2026-11-24. It supersedes this ADR.
 
 ## Context
 

@@ -74,12 +74,8 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0079: The core writes both track numbers](adr/0079-the-core-writes-both-track-numbers.md)
 - [ADR 0080: The season of a track is an experimental disc setting](adr/0080-the-season-of-a-track-is-an-experimental-disc-setting.md)
 - [ADR 0081: A position menu sets the sequence of a list](adr/0081-a-position-menu-sets-the-sequence-of-a-list.md)
-- [ADR 0082: A publisher feed has a set of roles](adr/0082-a-publisher-feed-has-a-set-of-roles.md)
-- [ADR 0083: Hosting is a first-class role](adr/0083-hosting-is-a-first-class-role.md)
-- [ADR 0084: The label of a feed lists each role](adr/0084-the-label-of-a-feed-lists-each-role.md)
 - [ADR 0085: Each artist and label is a destination](adr/0085-each-artist-and-label-is-a-destination.md)
 - [ADR 0086: A playlist links to its artist or label](adr/0086-a-playlist-links-to-its-artist-or-label.md)
-- [ADR 0087: The two sides of a link confirm a role](adr/0087-the-two-sides-of-a-link-confirm-a-role.md)
 - [ADR 0089: The left panel shows the art of each publisher feed](adr/0089-the-left-panel-shows-the-art-of-each-publisher-feed.md)
 - [ADR 0090: Studio names the feeds that it does not edit](adr/0090-studio-names-the-feeds-that-it-does-not-edit.md)
 - [ADR 0092: File hosts and the destination icons](adr/0092-file-hosts-and-the-destination-icons.md)
@@ -226,6 +222,8 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0249: Studio strongly discourages a feed GUID change](adr/0249-studio-strongly-discourages-a-feed-guid-change.md)
 - [ADR 0250: Studio corrects the type of a feed with a bad or missing medium tag](adr/0250-studio-corrects-the-type-of-a-feed-with-a-bad-or-missing-medium-tag.md)
 - [ADR 0251: Review writes the two sides of a changed link](adr/0251-review-writes-the-two-sides-of-a-changed-link.md)
+- [ADR 0252: A publisher link with no role gets a repair](adr/0252-a-publisher-link-with-no-role-gets-a-repair.md)
+- [ADR 0253: The roles of a feed and of each link](adr/0253-the-roles-of-a-feed-and-of-each-link.md)
 
 ## Plans
 
@@ -639,6 +637,11 @@ Each release candidate after 0.1.0-rc.8 has one notes file ([ADR 0100](adr/0100-
 
 Superseded decisions. Read them for research only. They bind no change.
 
+- [ADR 0082: A publisher feed has a set of roles](archive/adr/0082-a-publisher-feed-has-a-set-of-roles.md), superseded by ADR 0253
+- [ADR 0083: Hosting is a first-class role](archive/adr/0083-hosting-is-a-first-class-role.md), superseded by ADR 0253
+- [ADR 0084: The label of a feed lists each role](archive/adr/0084-the-label-of-a-feed-lists-each-role.md), superseded by ADR 0253
+- [ADR 0087: The two sides of a link confirm a role](archive/adr/0087-the-two-sides-of-a-link-confirm-a-role.md), superseded by ADR 0253
+- [ADR 0088: The left panel shows the levels of the publisher feeds](archive/adr/0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md), superseded by ADR 0215
 - [ADR 0077: A new album can start from an album](archive/adr/0077-a-new-album-can-start-from-an-album.md), replaced by ADR 0230
 - [ADR 0027: The recipient picker](archive/adr/0027-the-recipient-picker.md), superseded by ADR 0207
 - [ADR 0073: The add pages ask one question at a time](archive/adr/0073-the-add-pages-ask-one-question-at-a-time.md), superseded by ADR 0212
@@ -651,7 +654,6 @@ Superseded decisions. Read them for research only. They bind no change.
 - [ADR 0055: The server shell: user folders, accounts, sessions and the vault window](archive/adr/0055-the-server-shell-user-folders-sessions-and-the-vault-window.md), superseded by ADR 0204
 - [ADR 0064: The editor edits the fields that MSP 2.0 edits](archive/adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md), superseded by ADR 0206
 - [ADR 0068: The sequence of the sections and fields of an editor page](archive/adr/0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md), superseded by ADR 0206
-- [ADR 0088: The left panel shows the levels of the publisher feeds](archive/adr/0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md), superseded by ADR 0215
 - [ADR 0091: A change set edits one recipient in many feeds](archive/adr/0091-a-change-set-edits-one-recipient-in-many-feeds.md), superseded by ADR 0207
 - [ADR 0095: A Lightning address and its node key are one recipient](archive/adr/0095-a-lightning-address-and-its-node-key-are-one-recipient.md), superseded by ADR 0207
 - [ADR 0098: The People module](archive/adr/0098-the-people-module.md), superseded by ADR 0203

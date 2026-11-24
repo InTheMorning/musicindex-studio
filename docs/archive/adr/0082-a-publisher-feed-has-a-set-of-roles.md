@@ -1,16 +1,19 @@
+> Archived: superseded by [ADR 0253](../../adr/0253-the-roles-of-a-feed-and-of-each-link.md) on 2026-11-24. ADR 0253 items 1 to 10 and 20 to 23 restate each live rule of this ADR, with the words of musicindex ADR 0097. This ADR has no other live rule.
+
 # ADR 0082: A Publisher Feed Has A Set Of Roles
 
-- Status: Accepted
+- Status: Superseded by ADR 0253
 - Date: 2026-10-29
 - Owner: operator
 - Accepted: 2026-10-29 by the operator.
-- Changes: [ADR 0041](../archive/adr/0041-publisher-feeds-and-two-way-links.md) items 1, 4 and 11, which give one role, `artist` or `label`.
+- Changes: [ADR 0041](0041-publisher-feeds-and-two-way-links.md) items 1, 4 and 11, which give one role, `artist` or `label`.
 - Changed by: [ADR 0083](0083-hosting-is-a-first-class-role.md) gives the sequence of musicindex ADR 0036 to item 1. It adds "Hosting" to the menu of item 7 and to the form of item 9.
 - Changed by: [ADR 0084](0084-the-label-of-a-feed-lists-each-role.md) replaces the label of item 6. The label lists each role.
 - Changed by: [ADR 0087](0087-the-two-sides-of-a-link-confirm-a-role.md) also fills the dot when the two sides of a link give the first role (items 5 and 6).
 - Uses: musicindex ADR 0067 item 82 (`rel` is a set of role words), musicindex ADR 0036 R-ROLE-1 (the sequence of the roles), musicindex ADR 0067 item 43 (the color of the roles) and items 47 to 49 (the hollow dot), musicindex ADR 0033 R-WORD-3 and musicindex ADR 0035 R-WORD-6 (the label).
 - Revised: 2026-11-14. musicindex ADR 0067 item 82 replaces musicindex ADR 0011 item 1. The citations name the new item. No rule changes.
 - Revised: 2026-11-14. musicindex ADR 0036 R-ROLE-1 replaced the role sequence of musicindex ADR 0012 item 5, and ADR 0083 applied it to item 1. The citations and the Context name R-ROLE-1 and ADR 0067. No rule changes.
+- Changed by: [ADR 0253](../../adr/0253-the-roles-of-a-feed-and-of-each-link.md), on 2026-11-24. It supersedes this ADR.
 
 ## Context
 

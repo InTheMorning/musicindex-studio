@@ -1,11 +1,14 @@
+> Archived: superseded by [ADR 0253](../../adr/0253-the-roles-of-a-feed-and-of-each-link.md) on 2026-11-24. ADR 0253 items 8 and 17 to 19 restate each live rule of this ADR, with the words of musicindex ADR 0097. This ADR has no other live rule.
+
 # ADR 0087: The Two Sides Of A Link Confirm A Role
 
-- Status: Accepted
+- Status: Superseded by ADR 0253
 - Date: 2026-10-30
 - Owner: operator
 - Accepted: 2026-10-30 by the operator.
 - Changes: [ADR 0082](0082-a-publisher-feed-has-a-set-of-roles.md) items 5 and 6. These items give a filled dot only to a set that the user selects, or that Studio records for a link change.
 - Uses: musicindex ADR 0033 R-WORD-3 item 3.
+- Changed by: [ADR 0253](../../adr/0253-the-roles-of-a-feed-and-of-each-link.md), on 2026-11-24. It supersedes this ADR.
 
 ## Context
 

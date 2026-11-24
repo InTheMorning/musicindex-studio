@@ -22,7 +22,7 @@
 1. The outline of an album holds its head, its tracks and "Add tracks".
 2. The page of a feed has tabs below its head. A feed that the editor does not open has no tabs. The tabs are, in this sequence:
    - A release (medium `music`): Release, Live Shows, Value Routes, Credits, Files, Check and Settings. The first tab is "Release" for each kind ([ADR 0225](0225-the-first-tab-of-a-release-is-release.md) item 1).
-   - A publisher feed (an artist, a label or a hosting feed, [ADR 0083](0083-hosting-is-a-first-class-role.md)): its type word, Value Routes, Credits, Files, Check and Settings.
+   - A publisher feed (an artist, a label or a publisher, [ADR 0253](0253-the-roles-of-a-feed-and-of-each-link.md)): its type word, Value Routes, Credits, Files, Check and Settings.
    - A playlist: Playlist, Tracks, Value Routes, Files, Check and Settings.
 
    The tab Check comes before Settings, and its label has the count of the findings ([ADR 0174](0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md) item 17).

@@ -18,7 +18,7 @@
 
 1. A release is an album (`music`) or a playlist (`musicL`). A link joins a publisher feed and a release, with the checks of ADR 0041 item 5.
 2. The channel `remoteItem` in the publisher feed has the `medium` value of the release: `music` or `musicL`. The link in the release does not change: a `remoteItem` with `medium="publisher"` in `podcast:publisher`.
-3. Studio reads the roles of a publisher feed from its `music` items and its `musicL` items (ADR 0082 item 4). A change of the roles changes the `rel` of the two kinds of item.
+3. Studio reads the roles of a publisher feed from its `music` items and its `musicL` items (ADR 0253 item 4). A change of the roles changes the `rel` of the two kinds of item.
 4. The playlist page has the section "Artists and labels" of the album page, with the tier "details" (ADR 0071). The publisher page offers the playlists of the collection as releases.
 
 ## Alternatives Considered

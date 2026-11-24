@@ -11,8 +11,9 @@
 - Changes: [ADR 0221](0221-the-welcome-page-and-the-first-steps.md) items 2, 4 and 8 (items 2 and 3).
 - Changes: [ADR 0232](0232-each-group-below-an-open-feed-has-an-add-row.md) items 2, 3 and 4 (items 5 to 8).
 - Changes: [ADR 0239](0239-the-panel-holds-the-content-and-the-page-has-tabs.md) item 4 (item 7).
-- Uses: [ADR 0082](0082-a-publisher-feed-has-a-set-of-roles.md) and [ADR 0083](0083-hosting-is-a-first-class-role.md) for the roles. [ADR 0205](0205-publisher-feeds-announcements-and-show-grants.md) for the two-way link of a page and a release. [ADR 0215](0215-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) item 2 for the rule "below". [ADR 0238](0238-a-found-release-gives-the-page-of-each-role.md) item 4 for the meaning of the hosting role.
+- Uses: [ADR 0253](0253-the-roles-of-a-feed-and-of-each-link.md) for the roles. [ADR 0205](0205-publisher-feeds-announcements-and-show-grants.md) for the two-way link of a page and a release. [ADR 0215](0215-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) item 2 for the rule "below". [ADR 0238](0238-a-found-release-gives-the-page-of-each-role.md) item 4 for the meaning of the hosting role.
 - Changed by: [ADR 0243](0243-a-move-is-a-change-set-and-a-level-gathers-its-pages.md) items 1 to 6, on 2026-11-22. Items 18 and 19: a move refuses with the names of the feeds, and it makes a change set.
+- Changed by: [ADR 0253](0253-the-roles-of-a-feed-and-of-each-link.md) item 12, on 2026-11-24. Items 1 to 3: the menu value is "Publisher", and the Welcome row is "I publish music for other artists".
 
 ## Context
 

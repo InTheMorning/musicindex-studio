@@ -337,6 +337,15 @@ A phase gets task files in `docs/tasks/` before work starts.
 - Decision: [ADR 0175](../adr/0175-the-check-shows-what-music-index-holds.md), Proposed. The check also shows what Music Index holds: a different address and a copy that pays other people. [Task 110](../tasks/studio-v1-task-110-index-view.md) gives the build in three packets, and none is started.
 - Decision: [ADR 0131](../adr/0131-delete-a-feed-from-its-file-host.md). Delete a feed from its file host, with a retire first. [Task 111](../tasks/studio-v1-task-111-delete-from-host.md) gives the build in three packets, and none is started.
 
+### Levels And Moves
+
+- Source: observations 6 to 9, 11 and 14 to 19 of the [desktop walk of 2026-11-23](../reviews/2026-11-23-desktop-check-walk.md). Two outside reviews of the design brief are in `.studio-dev/design-brief/`, which Git ignores. The main session uses the review by Fable as the base. It uses the review by Astra only where the two agree.
+- Step 1, defects with no new design: [task 249](../tasks/studio-v1-task-249-a-move-to-a-written-page-with-no-draft-and-the-links-after-a-write.md) corrects observation 14 and shows that the harness caused observation 15. Observations 16 and 17 go into the structural design, because the count of a row and the text of the move sheet depend on it.
+- Step 2, the rule of a move (topics B, C and D of the brief): one **Move To…** entry point on each page row and page head, one destination menu, and a release list with check boxes. One **Add** sheet shows the pages of the collection first, then Music Index, then a new page. The row "Find an artist that is online" goes. Mockups come first. Then one ADR changes ADR 0240 items 3 and 12 to 25 and ADR 0243 items 7 to 12.
+- Step 3, a move that is not written (topic E and observation 19): a mark on a page with a changed place, a section "What moves" in Review, and a panel row for the open change set. Mockups, then an ADR.
+- Step 4, the hierarchy of the panel (topic A and observation 18): a tree of pages, a path above the main pane, and the pages below a hosting page or a label page in its main pane. Mockups, then an ADR that changes ADR 0215. At 760 px or less, the levels stay a stack.
+- Not in this work: drag and drop.
+
 ### Phase 13: Desktop Shell
 
 - Package the Tauri app for Linux, macOS and Windows.

@@ -3648,6 +3648,27 @@ fn check_page_move_feeds(w: &Workspace, feeds: &[FeedId]) -> Result<(), ApiError
     Ok(())
 }
 
+/// Read the GUID from the same source that starts a draft for a writable feed.
+fn move_feed_guid(w: &Workspace, feed: FeedId) -> Result<Option<String>, ApiError> {
+    if w.collection.draft(feed)?.is_some() {
+        return Ok(pipeline::draft_model(&w.collection, feed)?.0.podcast_guid);
+    }
+    let row = w.collection.feed(feed)?;
+    let Some(path) = row.path.as_deref() else {
+        return Ok(None);
+    };
+    let read = writer(w, feed)?.read(path)?;
+    let Some(read) = read else {
+        return Ok(None);
+    };
+    let Ok(document) = studio_core::xml::Document::parse_bytes(&read.bytes) else {
+        return Ok(None);
+    };
+    Ok(Feed::read(&document)
+        .ok()
+        .and_then(|model| model.podcast_guid))
+}
+
 /// Move a release to its pages: link the artist page and the optional label
 /// page and hosting page, then unlink each other page of the collection with
 /// the role artist, label or hosting. Each check runs before the first
@@ -3753,20 +3774,12 @@ pub(crate) async fn move_release_to_pages(
         touched.dedup();
         check_page_move_feeds(w, &touched)?;
         for feed in &touched {
-            let guid = if w.collection.draft(*feed)?.is_some() {
-                pipeline::draft_model(&w.collection, *feed)?.0.podcast_guid
-            } else {
-                catalog_feeds
-                    .iter()
-                    .find(|(candidate, _)| candidate.id == *feed)
-                    .and_then(|(_, model)| model.as_ref())
-                    .and_then(|model| model.podcast_guid.clone())
-            };
+            let guid = move_feed_guid(w, *feed)?;
             if guid.is_none() {
                 return Err(ApiError::new(
                     StatusCode::UNPROCESSABLE_ENTITY,
                     "no_guid",
-                    format!("the draft of feed {} has no podcast:guid", feed.0),
+                    format!("feed {} has no podcast:guid", feed.0),
                 ));
             }
         }

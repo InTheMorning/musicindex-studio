@@ -2807,6 +2807,162 @@ async fn the_move_route_changes_no_draft_when_a_page_fails_its_check() {
 }
 
 #[tokio::test]
+async fn the_move_route_accepts_a_written_hosting_page_without_a_draft() {
+    let (app, connector) = publisher_app().await;
+    let [artist, _, _, hosting, release] = move_pages(&app, connector).await;
+    write_once(&app, hosting).await;
+    assert_eq!(move_draft_rows(&app, &[hosting])[0], None);
+
+    let path = format!("/api/v1/feeds/{release}/move-to");
+    let (status, body) = call(
+        &app,
+        "POST",
+        &path,
+        Some(json!({ "artist_id": artist, "label_id": null, "hosting_id": hosting })),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "Observation 14, move_release_to_pages: {body}"
+    );
+    assert_eq!(listed(&app, hosting).await["release_ids"], json!([release]));
+    assert_eq!(
+        listed(&app, release).await["publisher_ids"],
+        json!([artist, hosting])
+    );
+}
+
+#[tokio::test]
+async fn written_page_links_survive_writes_in_review_order() {
+    let (app, connector) = publisher_app().await;
+    let original_page = make_artist_page(&app, connector, "original.xml", "Original").await;
+    let original_id = original_page["id"].as_i64().unwrap();
+    assert_eq!(
+        write_with_own_diff(&app, original_id).await.0,
+        StatusCode::OK
+    );
+    let page = make_artist_page(&app, connector, "page.xml", "Page").await;
+    let page_id = page["id"].as_i64().unwrap();
+    assert_eq!(write_with_own_diff(&app, page_id).await.0, StatusCode::OK);
+    let release = make_release(
+        &app,
+        connector,
+        "release.xml",
+        "Release",
+        "Original",
+        original_id,
+    )
+    .await;
+    let release_id = release["id"].as_i64().unwrap();
+    assert_eq!(
+        write_with_own_diff(&app, release_id).await.0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        write_with_own_diff(&app, original_id).await.0,
+        StatusCode::OK
+    );
+    assert_eq!(write_with_own_diff(&app, page_id).await.0, StatusCode::OK);
+
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{page_id}/links"),
+        Some(json!({ "release": release_id })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "Observation 15, add_link: {body}");
+    let release_guid = draft_model(&app, release_id).await["podcast_guid"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let page_guid = draft_model(&app, page_id).await["podcast_guid"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(
+        write_with_own_diff(&app, release_id).await.0,
+        StatusCode::OK
+    );
+    assert_eq!(write_with_own_diff(&app, page_id).await.0, StatusCode::OK);
+
+    let release_xml = std::fs::read_to_string(app.feeds.path().join("release.xml")).unwrap();
+    let page_xml = std::fs::read_to_string(app.feeds.path().join("page.xml")).unwrap();
+    assert!(
+        release_xml.contains(&page_guid),
+        "Observation 15, add_link: release XML lacks page GUID {page_guid}: {release_xml}"
+    );
+    assert!(
+        page_xml.contains(&release_guid),
+        "Observation 15, add_link: page XML lacks release GUID {release_guid}: {page_xml}"
+    );
+}
+
+#[tokio::test]
+async fn writing_only_the_release_keeps_its_link_and_leaves_the_page_file() {
+    let (app, connector) = publisher_app().await;
+    let original_page = make_artist_page(&app, connector, "original.xml", "Original").await;
+    let original_id = original_page["id"].as_i64().unwrap();
+    assert_eq!(
+        write_with_own_diff(&app, original_id).await.0,
+        StatusCode::OK
+    );
+    let page = make_artist_page(&app, connector, "page.xml", "Page").await;
+    let page_id = page["id"].as_i64().unwrap();
+    assert_eq!(write_with_own_diff(&app, page_id).await.0, StatusCode::OK);
+    let release = make_release(
+        &app,
+        connector,
+        "release.xml",
+        "Release",
+        "Original",
+        original_id,
+    )
+    .await;
+    let release_id = release["id"].as_i64().unwrap();
+    assert_eq!(
+        write_with_own_diff(&app, release_id).await.0,
+        StatusCode::OK
+    );
+    assert_eq!(
+        write_with_own_diff(&app, original_id).await.0,
+        StatusCode::OK
+    );
+    assert_eq!(write_with_own_diff(&app, page_id).await.0, StatusCode::OK);
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{page_id}/links"),
+        Some(json!({ "release": release_id })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "Observation 15, add_link: {body}");
+    let release_guid = draft_model(&app, release_id).await["podcast_guid"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let page_guid = draft_model(&app, page_id).await["podcast_guid"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(
+        write_with_own_diff(&app, release_id).await.0,
+        StatusCode::OK
+    );
+    let release_xml = std::fs::read_to_string(app.feeds.path().join("release.xml")).unwrap();
+    let page_xml = std::fs::read_to_string(app.feeds.path().join("page.xml")).unwrap();
+    assert!(
+        release_xml.contains(&page_guid),
+        "Observation 15, write_with_own_diff: release XML lacks page GUID {page_guid}: {release_xml}"
+    );
+    assert!(
+        !page_xml.contains(&release_guid),
+        "Observation 15, write_with_own_diff: page XML unexpectedly has release GUID {release_guid}: {page_xml}"
+    );
+}
+
+#[tokio::test]
 async fn an_artist_page_move_updates_its_releases_and_kept_level() {
     let (app, connector) = publisher_app().await;
     let [artist, _, label_a, hosting, release_a] = move_pages(&app, connector).await;

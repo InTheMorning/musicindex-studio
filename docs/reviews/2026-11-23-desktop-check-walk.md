@@ -175,3 +175,17 @@ Observations 6, 7, 8, 9 and 11 are in a brief for an outside design review. The 
 Observation 14 (possible defect): **Move To…** of a release to a hosting page failed with `no_guid` ("the draft of feed 1 has no podcast:guid"). The sheet showed "Studio could not finish this." The hosting page was written and had no draft. After `GET /api/v1/feeds/{id}/draft` started its draft, the same move passed. In the walk, Test Hosting was not written, so the walk did not show this fault. The cause is possibly that the move reads a draft that does not exist (inference). Examine this in an API test.
 
 Observation 15 (possible defect, possibly a fault of the harness): the harness linked a written release to an artist page with `POST /api/v1/feeds/{page}/links`. A subsequent write of the release with the test helper `write_with_own_diff` removed each link of the release, and the label page lost its child. A first write of a release made with `publisher_id` also removed its link. The helper writes one feed with its own diff, and Review of the UI writes the linked feeds together (ADR 0251 item 7). Thus the helper is possibly the cause (inference). Examine this in an API test that writes as Review does.
+
+## After The Walk: The Design Reviews
+
+Two outside reviews of the brief are in `.studio-dev/design-brief/review-astra.md` and `.studio-dev/design-brief/review-fable.md`, which Git ignores. The reviews agree on observations 7 and 9: one move entry point and the removal of the row "Find an artist that is online". The design work follows in a phase plan. The review by Fable found two more defects and two design gaps.
+
+Observation 16 (defect): the count of a hosting row shows the number of releases, not the number of pages. A hosting page has no release directly, so the count is "0". `crates/api/ui/shell.js` line 593 uses `release_ids`.
+
+Observation 17 (defect): the Move To… sheet of a page shows "Select a label or a hosting page." when no page changes. This text is an instruction, but the user already has a selection. `crates/api/ui/movepages.js` line 92 gives it.
+
+Observation 18 (design): the main pane of a hosting page says "No releases are linked yet." The page has a label page and an artist page below it, but the main pane does not show them. The text is correct for releases, because a hosting page has no release directly. Topic A of the design work owns this gap.
+
+Observation 19 (design): after a page move, Review lists the two feeds that the move writes, Riverside Hosting and Porch Songs. Review does not name Elm Street Duo, which changes its place in the panel. The file of Elm Street Duo does not change, so the feed list is correct. The user cannot see the change of place before the write. Topic E of the design work owns this gap.
+
+Task 249 corrects observation 14. The move read the GUID of a feed with no draft from the library copy, and a draft starts from the file of the connector. The move now reads the same file. An API test failed with `no_guid` before the correction and passes after it. Two API tests write a linked release and its page, and the links stay in the two files. Thus the harness caused observation 15, not Studio.

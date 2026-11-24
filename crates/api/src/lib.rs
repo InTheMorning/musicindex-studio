@@ -422,6 +422,18 @@ fn workspace_router_with_shared(workspace: Workspace) -> (Router, WorkspaceHandl
             "/feeds/{id}/links/{release}",
             delete(routes::remove_link).put(routes::set_link_roles),
         )
+        .route(
+            "/feeds/{id}/credits",
+            get(routes::release_credits).put(routes::set_release_credit),
+        )
+        .route(
+            "/feeds/{id}/credits/alias/clear",
+            post(routes::clear_release_alias),
+        )
+        .route(
+            "/feeds/{id}/credits/remove-others",
+            post(routes::remove_other_credit_pages),
+        )
         .route("/feeds/{id}/move-to", post(routes::move_release_to_pages))
         .route("/feeds/{id}/gather", post(routes::gather_pages))
         .route(

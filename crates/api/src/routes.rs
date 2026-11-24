@@ -3849,6 +3849,143 @@ fn catalog_change_set(w: &Workspace) -> Result<Option<change_set::ChangeSet>, Ap
         .find(|set| matches!(set.operation, RecipientOperation::Catalog)))
 }
 
+#[derive(Deserialize)]
+pub(crate) struct ReleaseCreditBody {
+    role: String,
+    page: Option<i64>,
+}
+
+fn credit_role(value: &str) -> Result<PublisherRole, ApiError> {
+    PublisherRole::parse(value).ok_or_else(|| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            "invalid_publisher",
+            "select an artist, label or publisher role",
+        )
+    })
+}
+
+/// Read the release credits through the core (ADR 0257).
+pub(crate) async fn release_credits(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        w.collection.feed(FeedId(id))?;
+        Ok(Json(json!(publisher::release_credits(
+            &w.collection,
+            FeedId(id)
+        )?)))
+    })
+    .await
+}
+
+fn change_release_credit(
+    w: &Workspace,
+    release: FeedId,
+    selection: Option<(PublisherRole, Option<FeedId>)>,
+    change: impl FnOnce() -> Result<(), publisher::PublisherError>,
+) -> Result<publisher::ReleaseCredits, ApiError> {
+    w.collection.feed(release)?;
+    if let Some((_, Some(page))) = selection {
+        w.collection.feed(page)?;
+    }
+    let mut started = Vec::new();
+    let result = (|| {
+        for id in publisher::release_credit_drafts(&w.collection, release, selection)? {
+            if w.collection.feed(id)?.connector_id.is_some() && w.collection.draft(id)?.is_none() {
+                started.push(id);
+                ensure_draft(w, id)?;
+            }
+        }
+        change()?;
+        Ok(())
+    })();
+    if let Err(error) = result {
+        for id in started {
+            w.collection.delete_draft(id)?;
+        }
+        return Err(error);
+    }
+    publisher::release_credits(&w.collection, release).map_err(ApiError::from)
+}
+
+fn credit_response(w: &Workspace, credits: &publisher::ReleaseCredits, notice: &str) -> ApiResult {
+    let set = catalog_change_set(w)?;
+    Ok(Json(json!({
+        "credits": credits,
+        "notice": notice,
+        "change_set_id": set.as_ref().map(|set| set.id),
+        "change_set": set.as_ref().map(|set| change_set_json(w, set)),
+    })))
+}
+
+/// Set one credit field through the core (ADR 0257 item 8).
+pub(crate) async fn set_release_credit(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(body): Json<ReleaseCreditBody>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let release = FeedId(id);
+        let role = credit_role(&body.role)?;
+        let page = body.page.map(FeedId);
+        let credits = change_release_credit(w, release, Some((role, page)), || {
+            publisher::set_release_page(&w.collection, release, role, page)
+        })?;
+        let title = pipeline::draft_model(&w.collection, release)?
+            .0
+            .title
+            .unwrap_or_default();
+        let (page, word) = match role {
+            PublisherRole::Artist => (credits.artist.as_ref(), "artist"),
+            PublisherRole::Label => (credits.label.as_ref(), "label"),
+            _ => (credits.publisher.as_ref(), "publisher"),
+        };
+        let notice = if let Some(page) = page {
+            format!("{} is now the {word} of {title}.", page.title)
+        } else if role == PublisherRole::Label {
+            format!("{title} is independent.")
+        } else {
+            format!("{title} is not published.")
+        };
+        credit_response(w, &credits, &format!("{notice} Not written yet."))
+    })
+    .await
+}
+
+/// Remove the release alias through the core (ADR 0257 item 3).
+pub(crate) async fn clear_release_alias(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let release = FeedId(id);
+        let credits = change_release_credit(w, release, None, || {
+            publisher::clear_release_alias(&w.collection, release)
+        })?;
+        credit_response(w, &credits, "Release alias cleared. Not written yet.")
+    })
+    .await
+}
+
+/// Remove the other credit pages through the core (ADR 0257 item 11).
+pub(crate) async fn remove_other_credit_pages(
+    State(shared): State<Shared>,
+    Path(id): Path<i64>,
+    Json(body): Json<ReleaseCreditBody>,
+) -> ApiResult {
+    blocking(shared, move |w| {
+        let release = FeedId(id);
+        let role = credit_role(&body.role)?;
+        let credits = change_release_credit(w, release, Some((role, None)), || {
+            publisher::remove_other_pages(&w.collection, release, role)
+        })?;
+        credit_response(w, &credits, "Other linked pages removed. Not written yet.")
+    })
+    .await
+}
+
 /// Apply a page change through the core (ADR 0254 item 26).
 pub(crate) async fn change_page(
     State(shared): State<Shared>,

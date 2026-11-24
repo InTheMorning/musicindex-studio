@@ -217,6 +217,72 @@ pub fn release_credits(
     credits(collection, &models(collection, None)?, release)
 }
 
+/// Give the drafts for a credit change, with the publisher that follows.
+/// `selection` is not supplied for an alias change.
+///
+/// # Errors
+///
+/// Gives a publisher error when the release or selected page cannot be read.
+pub fn release_credit_drafts(
+    collection: &Collection,
+    release: FeedId,
+    selection: Option<(PublisherRole, Option<FeedId>)>,
+) -> Result<Vec<FeedId>, PublisherError> {
+    check_release(collection, release)?;
+    if selection.is_none() {
+        return Ok(vec![release]);
+    }
+    let feeds = models(collection, None)?;
+    let before = credits(collection, &feeds, release)?;
+    let catalog = catalogs_with_kept(&feeds, &collection.kept_levels()?);
+    let index = feeds
+        .iter()
+        .position(|(row, _)| row.id == release)
+        .ok_or_else(|| invalid("the release is missing"))?;
+    let mut ids = vec![release];
+    ids.extend_from_slice(&catalog[index].publishers);
+    if let Some((role, page)) = selection {
+        check_role(role)?;
+        let selected = page
+            .map(|id| {
+                let row = super::check_publisher(collection, id)?;
+                let model = feeds
+                    .iter()
+                    .find(|(row, _)| row.id == id)
+                    .and_then(|(_, model)| model.as_ref());
+                let party = party_of(&row, model);
+                Ok::<_, PublisherError>(credit_page(
+                    &feeds,
+                    &RemoteItem {
+                        feed_guid: party.guid,
+                        feed_url: party.url,
+                        ..RemoteItem::default()
+                    },
+                ))
+            })
+            .transpose()?;
+        ids.extend(page);
+        if role != PublisherRole::Hosting && before.publisher_follows {
+            let artist = if role == PublisherRole::Artist {
+                selected.as_ref()
+            } else {
+                before.artist.as_ref()
+            };
+            let label = if role == PublisherRole::Label {
+                selected.as_ref()
+            } else {
+                before.label.as_ref()
+            };
+            ids.extend(
+                follows(collection, &feeds, release, artist, label)?.and_then(|page| page.id),
+            );
+        }
+    }
+    ids.sort_by_key(|id| id.0);
+    ids.dedup();
+    Ok(ids)
+}
+
 fn replace_page(
     collection: &Collection,
     release: FeedId,

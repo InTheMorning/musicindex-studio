@@ -2688,3 +2688,40 @@ fn unchanged_release_credit_fields_add_no_catalog_step() {
     }
     assert_eq!(catalog_steps(&s), 0);
 }
+
+#[test]
+fn an_outside_publisher_of_the_newest_independent_release_does_not_follow() {
+    use PublisherRole::{Artist, Hosting, Label};
+    let mut s = setup();
+    let artist = catalog_page(&mut s, "Artist", &[Artist]);
+    let label = catalog_page(&mut s, "Label", &[Label]);
+    let parent = catalog_page(&mut s, "Parent publisher", &[Hosting]);
+    let older = new_feed(&mut s, "older.xml", "Older", "music");
+    let newest = new_feed(&mut s, "newest.xml", "Newest", "music");
+    let release = new_feed(&mut s, "release.xml", "Release", "music");
+    for id in [older, newest, release] {
+        publisher::link(&s.collection, artist, id, None).unwrap();
+    }
+    pipeline::edit_draft(&s.collection, newest, |feed| {
+        feed.publisher
+            .as_mut()
+            .unwrap()
+            .remote_items
+            .push(Entry::new(remote(
+                "publisher",
+                "outside-publisher",
+                "https://outside.example/publisher.xml",
+                "Outside publisher",
+                Some("hosting"),
+            )));
+    })
+    .unwrap();
+    s.collection.add_kept_level(parent, artist).unwrap();
+    assert_eq!(credits(&s, release).follows.unwrap().id, Some(parent));
+    publisher::set_release_page(&s.collection, release, Hosting, Some(parent)).unwrap();
+    assert!(credits(&s, release).publisher_follows);
+    publisher::set_release_page(&s.collection, release, Label, Some(label)).unwrap();
+    assert_eq!(credits(&s, release).label.unwrap().id, Some(label));
+    assert_eq!(credits(&s, release).publisher, None);
+    assert!(credits(&s, release).publisher_follows);
+}

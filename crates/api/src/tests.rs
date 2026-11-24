@@ -4364,6 +4364,18 @@ async fn each_publisher_route_needs_the_token() {
             "/api/v1/feeds/1/page-change",
             Some(json!({ "action": "go_independent", "releases": [] })),
         ),
+        ("GET", "/api/v1/feeds/1/credits", None),
+        (
+            "PUT",
+            "/api/v1/feeds/1/credits",
+            Some(json!({ "role": "artist", "page": 2 })),
+        ),
+        ("POST", "/api/v1/feeds/1/credits/alias/clear", None),
+        (
+            "POST",
+            "/api/v1/feeds/1/credits/remove-others",
+            Some(json!({ "role": "artist" })),
+        ),
         ("POST", "/api/v1/catalog/undo", None),
     ];
     for (method, path, body) in routes {
@@ -21370,4 +21382,222 @@ async fn catalog_gather_and_page_change_name_a_read_only_feed() {
         );
         assert_eq!(catalog_database_rows(&app), before);
     }
+}
+
+#[tokio::test]
+async fn release_credit_routes_replace_fields_give_notices_and_undo_both_sides() {
+    let (app, connector) = publisher_app().await;
+    let [artist, other_artist, label, host, release] = move_pages(&app, connector).await;
+    let path = format!("/api/v1/feeds/{release}/credits");
+    let (status, read) = call(&app, "GET", &path, None).await;
+    assert_eq!(status, StatusCode::OK, "{read}");
+    assert!(read["artist"].is_null());
+    let ids = [artist, other_artist, label, host, release];
+    let before = move_draft_rows(&app, &ids);
+    for (role, page, notice, step) in [
+        (
+            "artist",
+            Some(artist),
+            "First is now the artist of Release. Not written yet.",
+            1,
+        ),
+        (
+            "artist",
+            Some(other_artist),
+            "Second is now the artist of Release. Not written yet.",
+            2,
+        ),
+        (
+            "label",
+            Some(label),
+            "Label is now the label of Release. Not written yet.",
+            3,
+        ),
+        (
+            "hosting",
+            Some(host),
+            "Hosting is now the publisher of Release. Not written yet.",
+            4,
+        ),
+        ("label", None, "Release is independent. Not written yet.", 5),
+        (
+            "hosting",
+            None,
+            "Release is not published. Not written yet.",
+            5,
+        ),
+    ] {
+        let (status, changed) = call(
+            &app,
+            "PUT",
+            &path,
+            Some(json!({ "role": role, "page": page })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{changed}");
+        assert_eq!(changed["notice"], notice);
+        assert_eq!(changed["change_set"]["operation"]["kind"], "catalog");
+        assert_eq!(changed["change_set"]["catalog_steps"], step);
+        assert_eq!(changed["change_set_id"], changed["change_set"]["id"]);
+        let field = if role == "hosting" { "publisher" } else { role };
+        assert_eq!(changed["credits"][field]["id"], json!(page));
+        let (status, read) = call(&app, "GET", &path, None).await;
+        assert_eq!(status, StatusCode::OK, "{read}");
+        assert_eq!(read, changed["credits"]);
+    }
+    for remaining in (0..5).rev() {
+        let (status, body) = call(&app, "POST", "/api/v1/catalog/undo", None).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        if remaining == 0 {
+            assert!(body["change_set"].is_null());
+        } else {
+            assert_eq!(body["change_set"]["catalog_steps"], remaining);
+        }
+    }
+    assert_eq!(move_draft_rows(&app, &ids), before);
+}
+
+#[tokio::test]
+async fn release_credit_routes_read_two_artists_remove_others_and_clear_the_alias() {
+    use studio_core::collection::FeedId;
+    use studio_core::feed::{Entry, RemoteItem};
+    let (app, connector) = publisher_app().await;
+    let [artist, other_artist, _, _, release] = move_pages(&app, connector).await;
+    let path = format!("/api/v1/feeds/{release}/credits");
+    let (status, body) = call(
+        &app,
+        "PUT",
+        &path,
+        Some(json!({ "role": "artist", "page": artist })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let workspace = Workspace::open(app.data.path()).unwrap();
+    let other = studio_core::pipeline::draft_model(&workspace.collection, FeedId(other_artist))
+        .unwrap()
+        .0;
+    studio_core::pipeline::edit_draft(&workspace.collection, FeedId(release), |feed| {
+        feed.author = Some("First feat. Second".into());
+        feed.publisher
+            .as_mut()
+            .unwrap()
+            .remote_items
+            .push(Entry::new(RemoteItem {
+                medium: Some("publisher".into()),
+                feed_guid: other.podcast_guid,
+                title: other.title,
+                rel: Some("artist".into()),
+                ..RemoteItem::default()
+            }));
+    })
+    .unwrap();
+    let before = move_draft_rows(&app, &[artist, other_artist, release]);
+    let (status, read) = call(&app, "GET", &path, None).await;
+    assert_eq!(status, StatusCode::OK, "{read}");
+    assert_eq!(read["artist"]["id"], artist);
+    assert_eq!(read["other_artists"][0]["id"], other_artist);
+    assert_eq!(read["alias"], "First feat. Second");
+    assert_eq!(
+        move_draft_rows(&app, &[artist, other_artist, release]),
+        before
+    );
+    let (status, removed) = call(
+        &app,
+        "POST",
+        &format!("{path}/remove-others"),
+        Some(json!({ "role": "artist" })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{removed}");
+    assert_eq!(removed["credits"]["other_artists"], json!([]));
+    assert_eq!(removed["credits"]["artist"]["id"], artist);
+    let (status, cleared) = call(&app, "POST", &format!("{path}/alias/clear"), None).await;
+    assert_eq!(status, StatusCode::OK, "{cleared}");
+    assert!(cleared["credits"]["alias"].is_null());
+    assert_eq!(
+        studio_core::pipeline::draft_model(&workspace.collection, FeedId(release))
+            .unwrap()
+            .0
+            .author
+            .as_deref(),
+        Some("First")
+    );
+    for _ in 0..2 {
+        let (status, body) = call(&app, "POST", "/api/v1/catalog/undo", None).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+    }
+    assert_eq!(
+        move_draft_rows(&app, &[artist, other_artist, release]),
+        before
+    );
+}
+
+#[tokio::test]
+async fn release_credit_routes_start_missing_drafts_and_roll_back_a_refusal() {
+    use studio_core::collection::FeedId;
+    let (app, connector) = publisher_app().await;
+    let [artist, _, label, host, release] = move_pages(&app, connector).await;
+    let workspace = Workspace::open(app.data.path()).unwrap();
+    for id in [artist, label, host, release] {
+        let id = FeedId(id);
+        let draft = workspace.collection.draft(id).unwrap().unwrap();
+        let row = workspace.collection.feed(id).unwrap();
+        std::fs::write(app.feeds.path().join(row.path.unwrap()), &draft.draft_xml).unwrap();
+        workspace.collection.record_feed_write(id, 1, None).unwrap();
+        workspace
+            .collection
+            .record_written_xml(id, &draft.draft_xml)
+            .unwrap();
+        workspace.collection.delete_draft(id).unwrap();
+    }
+    workspace
+        .collection
+        .add_kept_level(FeedId(host), FeedId(label))
+        .unwrap();
+    let path = format!("/api/v1/feeds/{release}/credits");
+    let (status, read) = call(&app, "GET", &path, None).await;
+    assert_eq!(status, StatusCode::OK, "{read}");
+    assert_eq!(
+        move_draft_rows(&app, &[artist, label, host, release]),
+        vec![None; 4]
+    );
+    let (status, refused) = call(
+        &app,
+        "PUT",
+        &path,
+        Some(json!({ "role": "artist", "page": label })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{refused}");
+    assert_eq!(
+        move_draft_rows(&app, &[artist, label, host, release]),
+        vec![None; 4]
+    );
+    for body in [
+        json!({ "role": "artist", "page": null }),
+        json!({ "role": "curator", "page": artist }),
+        json!({ "role": "label", "page": artist }),
+        json!({ "role": "label", "page": 999_999 }),
+    ] {
+        let (status, refused) = call(&app, "PUT", &path, Some(body)).await;
+        assert!(status.is_client_error(), "{refused}");
+        assert_eq!(
+            move_draft_rows(&app, &[artist, label, host, release]),
+            vec![None; 4]
+        );
+    }
+    for body in [
+        json!({ "role": "artist", "page": artist }),
+        json!({ "role": "label", "page": label }),
+    ] {
+        let (status, changed) = call(&app, "PUT", &path, Some(body)).await;
+        assert_eq!(status, StatusCode::OK, "{changed}");
+    }
+    let (_, credits) = call(&app, "GET", &path, None).await;
+    assert_eq!(credits["publisher"]["id"], host);
+    assert!(
+        move_draft_rows(&app, &[artist, label, host, release])
+            .iter()
+            .all(Option::is_some)
+    );
 }

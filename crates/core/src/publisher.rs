@@ -20,8 +20,8 @@ use crate::pipeline::{self, PipelineError};
 
 mod credits;
 pub use credits::{
-    ReleaseCredits, ReleasePage, clear_release_alias, release_credits, remove_other_pages,
-    set_release_page,
+    ReleaseCredits, ReleasePage, clear_release_alias, release_credit_drafts, release_credits,
+    remove_other_pages, set_release_page,
 };
 
 mod page_change;

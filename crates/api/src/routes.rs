@@ -2145,9 +2145,10 @@ fn validate_below_page(
     };
     let upper_id = FeedId(id);
     let upper = w.collection.feed(upper_id).map_err(|_| invalid())?;
-    // The first role gives the rank (ADR 0215 item 1).
+    // Credit roles have no level (ADR 0253 item 15).
+    let lower_rank = publisher::rank(&[role]).ok_or_else(invalid)?;
     if upper.medium.as_deref() != Some("publisher")
-        || publisher::rank(&upper.publisher_roles) <= publisher::rank(&[role])
+        || publisher::rank(&upper.publisher_roles).is_none_or(|rank| rank <= lower_rank)
     {
         return Err(invalid());
     }
@@ -2268,24 +2269,13 @@ fn link_new_release_pages(
 }
 
 fn remove_shared_kept_levels(w: &Workspace) -> Result<(), ApiError> {
-    let feeds = feed_models(w)?;
-    let catalog_feeds: Vec<_> = feeds
-        .iter()
-        .map(|(row, model)| (row.clone(), Some(model.clone())))
+    let catalog_feeds: Vec<_> = feed_models(w)?
+        .into_iter()
+        .map(|(row, model)| (row, Some(model)))
         .collect();
     let kept = w.collection.kept_levels()?;
-    let catalogs = publisher::catalogs_with_kept(&catalog_feeds, &kept);
-    for (upper, lower) in kept {
-        let upper_index = feeds.iter().position(|(row, _)| row.id == upper);
-        let lower_index = feeds.iter().position(|(row, _)| row.id == lower);
-        if let (Some(upper_index), Some(lower_index)) = (upper_index, lower_index)
-            && catalogs[upper_index]
-                .releases
-                .iter()
-                .any(|release| catalogs[lower_index].releases.contains(release))
-        {
-            w.collection.remove_kept_level(upper, lower)?;
-        }
+    for (upper, lower) in publisher::replaced_kept_levels(&catalog_feeds, &kept) {
+        w.collection.remove_kept_level(upper, lower)?;
     }
     Ok(())
 }

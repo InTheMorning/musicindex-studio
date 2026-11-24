@@ -2,7 +2,7 @@
 //! (ADR 0255).
 
 use studio_core::collection::{
-    Collection, ConnectorId, FeedId, PublisherRole, inferred_roles, rel_of, roles_from_rel,
+    Collection, ConnectorId, FeedId, FeedRow, PublisherRole, inferred_roles, rel_of, roles_from_rel,
 };
 use studio_core::connector::{self, Connector, LocalFolder};
 use studio_core::feed::{Entry, Feed, Publisher, RemoteItem};
@@ -1306,8 +1306,45 @@ fn a_role_that_the_two_sides_of_a_link_give_is_linked() {
     };
     // The album gives the first role of the artist feed. The other album
     // names the label feed, but its rel does not give "label".
+    let album_guid = model(&s, album).podcast_guid.unwrap();
+    pipeline::edit_draft(&s.collection, artist, |feed| {
+        feed.remote_items.push(Entry::new(remote(
+            "music",
+            &album_guid,
+            "https://music.example/album.xml",
+            "Album",
+            Some("artist"),
+        )));
+    })
+    .unwrap();
     name(&s, album, artist, "artist.xml", "artist label");
     name(&s, other, label, "label.xml", "artist");
+    let other_guid = model(&s, other).podcast_guid.unwrap();
+    pipeline::edit_draft(&s.collection, label, |feed| {
+        feed.remote_items.push(Entry::new(remote(
+            "music",
+            &other_guid,
+            "https://music.example/other.xml",
+            "Other",
+            Some("label"),
+        )));
+    })
+    .unwrap();
+    pipeline::edit_draft(&s.collection, album, |feed| {
+        let guid = model(&s, label).podcast_guid.unwrap();
+        feed.publisher
+            .as_mut()
+            .unwrap()
+            .remote_items
+            .push(Entry::new(remote(
+                "publisher",
+                &guid,
+                "https://music.example/label.xml",
+                "Label",
+                Some("label"),
+            )));
+    })
+    .unwrap();
 
     let feeds: Vec<_> = s
         .collection
@@ -1324,8 +1361,7 @@ fn a_role_that_the_two_sides_of_a_link_give_is_linked() {
         let index = feeds.iter().position(|(row, _)| row.id == id).unwrap();
         catalogs[index].roles_linked
     };
-    let message =
-        "ADR 0087 item 1: a role is linked when a release gives the first role of the feed";
+    let message = "ADR 0253 item 17: both sides of one link must give the first role";
     assert!(linked(artist), "{message}");
     assert!(!linked(label), "{message}");
     assert!(!linked(album), "{message}");
@@ -1339,7 +1375,11 @@ fn the_levels_follow_the_rank_and_the_shared_releases() {
         s.collection.set_publisher_roles(id, roles, true).unwrap();
         id
     };
-    let host = feed(&mut s, "host", &[PublisherRole::Hosting]);
+    let host = feed(
+        &mut s,
+        "host",
+        &[PublisherRole::Artist, PublisherRole::Hosting],
+    );
     let label_a = feed(&mut s, "label-a", &[PublisherRole::Label]);
     let label_b = feed(&mut s, "label-b", &[PublisherRole::Label]);
     let artist_x = feed(&mut s, "artist-x", &[PublisherRole::Artist]);
@@ -1361,7 +1401,17 @@ fn the_levels_follow_the_rank_and_the_shared_releases() {
             publisher::link(&s.collection, publisher, albums[n - 1], None).unwrap();
         }
     };
-    link(&s, host, &[1, 2, 3, 4, 5, 6, 7]);
+    for release in &albums {
+        publisher::link(
+            &s.collection,
+            host,
+            *release,
+            Some(&[PublisherRole::Hosting]),
+        )
+        .unwrap();
+    }
+    let own = new_feed(&mut s, "own.xml", "Own", "music");
+    publisher::link(&s.collection, host, own, None).unwrap();
     link(&s, label_a, &[1, 2, 3]);
     link(&s, label_b, &[4, 5, 6]);
     link(&s, artist_x, &[1, 2]);
@@ -1396,17 +1446,14 @@ fn the_levels_follow_the_rank_and_the_shared_releases() {
         "{message}"
     );
     assert_eq!(of(host).parents, Vec::new(), "{message}");
-    assert_eq!(
-        of(label_a).children,
-        vec![artist_x, artist_y, producer],
-        "{message}"
-    );
+    assert_eq!(of(label_a).children, vec![artist_x, artist_y], "{message}");
     assert_eq!(of(label_b).children, vec![artist_y], "{message}");
     assert_eq!(of(label_a).parents, vec![host], "{message}");
     // An artist on two labels is below each label.
     assert_eq!(of(artist_y).parents, vec![label_a, label_b], "{message}");
-    // A producer has the rank of an artist.
-    assert_eq!(of(producer).parents, vec![label_a], "{message}");
+    // Credit roles have no rank (ADR 0253 item 15).
+    assert_eq!(of(producer).parents, Vec::new(), "{message}");
+    assert_eq!(of(producer).children, Vec::new(), "{message}");
     assert_eq!(of(artist_z).parents, vec![host], "{message}");
     assert_eq!(of(albums[0]).children, Vec::new());
 }
@@ -1550,4 +1597,190 @@ fn a_release_with_two_label_items_reads_and_writes_the_same_bytes_without_an_edi
     );
     feed.write(&mut document).unwrap();
     assert_eq!(document.write().as_bytes(), bytes);
+}
+
+#[test]
+fn a_link_with_hosting_sets_the_publisher_level_and_a_credit_sets_no_level() {
+    let mut s = setup();
+    let page = new_feed(&mut s, "page.xml", "Page", "publisher");
+    let label = new_feed(&mut s, "label.xml", "Label", "publisher");
+    let artist = new_feed(&mut s, "artist.xml", "Artist", "publisher");
+    let release = new_feed(&mut s, "release.xml", "Release", "music");
+    s.collection
+        .set_publisher_roles(
+            page,
+            &[
+                PublisherRole::Label,
+                PublisherRole::Hosting,
+                PublisherRole::Producer,
+            ],
+            true,
+        )
+        .unwrap();
+    s.collection
+        .set_publisher_roles(label, &[PublisherRole::Label], true)
+        .unwrap();
+    s.collection
+        .set_publisher_roles(artist, &[PublisherRole::Artist], true)
+        .unwrap();
+    publisher::link(
+        &s.collection,
+        page,
+        release,
+        Some(&[PublisherRole::Hosting]),
+    )
+    .unwrap();
+    publisher::link(&s.collection, label, release, None).unwrap();
+    publisher::link(&s.collection, artist, release, None).unwrap();
+    let catalogs = || {
+        let feeds: Vec<_> = s
+            .collection
+            .feeds()
+            .unwrap()
+            .into_iter()
+            .map(|row| {
+                let feed = model(&s, row.id);
+                (row, Some(feed))
+            })
+            .collect();
+        let index = feeds.iter().position(|(row, _)| row.id == page).unwrap();
+        publisher::catalogs(&feeds)[index].clone()
+    };
+    assert_eq!(catalogs().children, vec![label]);
+    publisher::set_link_roles(&s.collection, page, release, &[PublisherRole::Producer]).unwrap();
+    assert_eq!(catalogs().children, Vec::new());
+}
+
+#[test]
+fn only_level_roles_have_a_rank_in_the_order_of_the_first_role() {
+    use PublisherRole::{Artist, Curator, Hosting, Label, Producer};
+    assert_eq!(publisher::rank(&[]), None);
+    assert_eq!(publisher::rank(&[Producer]), None);
+    assert_eq!(
+        publisher::rank(&[Artist, Hosting]),
+        publisher::rank(&[Artist])
+    );
+    assert_eq!(
+        publisher::rank(&[Artist, Label]),
+        publisher::rank(&[Artist])
+    );
+    assert!(publisher::rank(&[Hosting]) > publisher::rank(&[Label]));
+    assert!(publisher::rank(&[Label]) > publisher::rank(&[Curator]));
+    assert!(publisher::rank(&[Curator]) > publisher::rank(&[Artist]));
+}
+
+/// Give the catalogs of each feed of the collection.
+fn all_catalogs(s: &Setup) -> (Vec<(FeedRow, Option<Feed>)>, Vec<publisher::Catalog>) {
+    let feeds: Vec<_> = s
+        .collection
+        .feeds()
+        .unwrap()
+        .into_iter()
+        .map(|row| {
+            let feed = model(s, row.id);
+            (row, Some(feed))
+        })
+        .collect();
+    let catalogs = publisher::catalogs(&feeds);
+    (feeds, catalogs)
+}
+
+#[test]
+fn two_releases_that_connect_two_feeds_in_two_directions_give_one_level() {
+    let mut s = setup();
+    let duo = new_feed(&mut s, "duo.xml", "Duo", "publisher");
+    let label = new_feed(&mut s, "label.xml", "Label", "publisher");
+    let other = new_feed(&mut s, "other.xml", "Other", "music");
+    let own = new_feed(&mut s, "own.xml", "Own", "music");
+    s.collection
+        .set_publisher_roles(duo, &[PublisherRole::Artist, PublisherRole::Hosting], true)
+        .unwrap();
+    s.collection
+        .set_publisher_roles(label, &[PublisherRole::Label], true)
+        .unwrap();
+    // The duo publishes a release of the label, and the label has a release
+    // of the duo as artist.
+    publisher::link(&s.collection, duo, other, Some(&[PublisherRole::Hosting])).unwrap();
+    publisher::link(&s.collection, label, other, None).unwrap();
+    publisher::link(&s.collection, duo, own, Some(&[PublisherRole::Artist])).unwrap();
+    publisher::link(&s.collection, label, own, None).unwrap();
+
+    let (feeds, catalogs) = all_catalogs(&s);
+    let of = |id: FeedId| &catalogs[feeds.iter().position(|(row, _)| row.id == id).unwrap()];
+    let message =
+        "ADR 0253 item 15: two feeds are never each below the other; the rank of the feeds decides";
+    assert_eq!(of(label).children, vec![duo], "{message}");
+    assert_eq!(of(label).parents, Vec::new(), "{message}");
+    assert_eq!(of(duo).children, Vec::new(), "{message}");
+}
+
+#[test]
+fn each_level_role_of_a_link_counts_for_its_rank() {
+    let mut s = setup();
+    let page = new_feed(&mut s, "page.xml", "Page", "publisher");
+    let artist = new_feed(&mut s, "artist.xml", "Artist", "publisher");
+    let curator = new_feed(&mut s, "curator.xml", "Curator", "publisher");
+    let release = new_feed(&mut s, "release.xml", "Release", "music");
+    s.collection
+        .set_publisher_roles(page, &[PublisherRole::Label, PublisherRole::Hosting], true)
+        .unwrap();
+    s.collection
+        .set_publisher_roles(artist, &[PublisherRole::Artist], true)
+        .unwrap();
+    s.collection
+        .set_publisher_roles(curator, &[PublisherRole::Curator], true)
+        .unwrap();
+    publisher::link(&s.collection, page, release, None).unwrap();
+    publisher::link(&s.collection, artist, release, None).unwrap();
+    publisher::link(&s.collection, curator, release, None).unwrap();
+
+    let (feeds, catalogs) = all_catalogs(&s);
+    let of = |id: FeedId| &catalogs[feeds.iter().position(|(row, _)| row.id == id).unwrap()];
+    let message = "ADR 0253 item 15: the highest level role of a link gives its rank";
+    assert_eq!(of(page).children, vec![curator], "{message}");
+    assert_eq!(of(curator).children, vec![artist], "{message}");
+}
+
+#[test]
+fn a_kept_link_goes_only_when_a_shared_release_gives_the_level() {
+    let mut s = setup();
+    let label = new_feed(&mut s, "label.xml", "Label", "publisher");
+    let artist = new_feed(&mut s, "artist.xml", "Artist", "publisher");
+    let release = new_feed(&mut s, "release.xml", "Release", "music");
+    s.collection
+        .set_publisher_roles(
+            label,
+            &[PublisherRole::Label, PublisherRole::Producer],
+            true,
+        )
+        .unwrap();
+    s.collection
+        .set_publisher_roles(artist, &[PublisherRole::Artist], true)
+        .unwrap();
+    s.collection.add_kept_level(label, artist).unwrap();
+    // The label link gives only a credit, so the release gives no level.
+    publisher::link(
+        &s.collection,
+        label,
+        release,
+        Some(&[PublisherRole::Producer]),
+    )
+    .unwrap();
+    publisher::link(&s.collection, artist, release, None).unwrap();
+    let kept = s.collection.kept_levels().unwrap();
+    let message = "ADR 0254 item 41: a kept link goes when a shared release puts the lower feed below the upper feed";
+    let (feeds, _) = all_catalogs(&s);
+    assert_eq!(
+        publisher::replaced_kept_levels(&feeds, &kept),
+        Vec::new(),
+        "{message}"
+    );
+
+    publisher::set_link_roles(&s.collection, label, release, &[PublisherRole::Label]).unwrap();
+    let (feeds, _) = all_catalogs(&s);
+    assert_eq!(
+        publisher::replaced_kept_levels(&feeds, &kept),
+        vec![(label, artist)],
+        "{message}"
+    );
 }

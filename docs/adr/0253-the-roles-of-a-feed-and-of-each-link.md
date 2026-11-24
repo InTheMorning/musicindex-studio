@@ -56,7 +56,8 @@
 15. These items change ADR 0215 items 1, 1a and 2:
     - The level roles are hosting, label, curator and artist, in that rank (musicindex ADR 0097 R-ROLE-8). The other roles are credits. They show on a page and make no level.
     - The rank of a feed comes from its first level role in the sequence of item 1. A feed with the roles `artist` and `hosting` is one feed at the artist rank. A feed with the roles `artist` and `label` is also one feed at the artist rank.
-    - Feed B is below feed A when A and B link the same release of the collection, and the link of A gives a level role with a higher rank than the rank of B. A kept link (ADR 0254 item 40) also puts B below A. The role set of A alone does not put B below A.
+    - Feed B is below feed A when A and B link the same release of the collection, and the link of A to that release gives a level role with a higher rank than each level role of the link of B to it. A link with no level role puts no feed below and no feed above. A kept link (ADR 0254 item 40) also puts B below A. The role set of A alone does not put B below A.
+    - Two releases can put A below B and B below A. Then the feed with the higher rank is above, and with an equal rank neither feed is below the other.
     - Example: Elm Street Duo has the roles `artist hosting`. Its link to the EP of Harbor Lights gives `hosting`, so Harbor Lights is below Elm Street Duo. Its links to its own releases give `artist hosting`, so Elm Street Duo is one row.
 16. ADR 0215 item 4 changes: the heading of the role `hosting` is "Publishers", and the heading of the role `curator` comes after "Labels" and before "Artists".
 

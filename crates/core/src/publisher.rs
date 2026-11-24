@@ -851,10 +851,8 @@ pub struct Catalog {
     /// one is first (ADR 0255 item 9). Then come the publisher feeds that
     /// only list it.
     pub publishers: Vec<FeedId>,
-    /// For a publisher feed: true when a release of the collection gives the
-    /// first role of the feed in the `rel` of its `podcast:publisher` link.
-    /// The two sides of the link then give the role (ADR 0087 item 1,
-    /// musicindex ADR 0033 R-WORD-3 item 3).
+    /// For a publisher feed: the two sides of one link give its first role.
+    /// Each side must give the role on the same release (ADR 0253 item 17).
     pub roles_linked: bool,
     /// For a publisher feed: the publisher feeds directly below it (ADR 0215
     /// items 1 and 2), in the sequence of the collection.
@@ -864,16 +862,16 @@ pub struct Catalog {
     pub parents: Vec<FeedId>,
 }
 
-/// The rank of a publisher feed in the hierarchy (ADR 0215 item 1). The
-/// first role of the set decides: hosting, then label, then each other
-/// role at the rank of an artist. A feed with the roles artist and label
-/// is one feed at the rank of an artist.
+/// Give the rank of the first level role in the set (ADR 0253 item 15).
+/// Credit roles have no rank. The role sequence follows `PublisherRole::ALL`.
 #[must_use]
-pub fn rank(roles: &[PublisherRole]) -> u8 {
+pub fn rank(roles: &[PublisherRole]) -> Option<u8> {
     match roles.iter().min() {
-        Some(PublisherRole::Hosting) => 3,
-        Some(PublisherRole::Label) => 2,
-        _ => 1,
+        Some(PublisherRole::Hosting) => Some(4),
+        Some(PublisherRole::Label) => Some(3),
+        Some(PublisherRole::Curator) => Some(2),
+        Some(PublisherRole::Artist) => Some(1),
+        _ => None,
     }
 }
 
@@ -940,7 +938,18 @@ pub fn catalogs_with_kept(
                 };
                 let first = feeds[publisher].0.publisher_roles.iter().min();
                 let given = item.value.rel.as_deref().map(roles_from_rel);
-                if first.is_some_and(|role| given.is_some_and(|roles| roles.contains(role))) {
+                let channel_gives = |role: &PublisherRole| {
+                    feeds[publisher].1.as_ref().is_some_and(|feed| {
+                        feed.remote_items.iter().any(|item| {
+                            names(&item.value, &parties[release])
+                                && roles_from_rel(item.rel.as_deref().unwrap_or_default())
+                                    .contains(role)
+                        })
+                    })
+                };
+                if first.is_some_and(|role| {
+                    given.is_some_and(|roles| roles.contains(role)) && channel_gives(role)
+                }) {
                     result[publisher].roles_linked = true;
                 }
                 if !named.contains(&publisher) {
@@ -1007,10 +1016,8 @@ pub fn release_levels(
     Some((artist_title, label_title))
 }
 
-/// Set the feeds directly below and above each publisher feed (ADR 0215
-/// items 1 and 2). Feed B is below feed A when B has a lower rank and the
-/// two share a release. B is directly below A when no feed C is below A
-/// with B below C.
+/// Set the feeds directly below and above each publisher feed (ADR 0254 item 4).
+/// The first level role of each link gives its rank (ADR 0253 item 15).
 fn link_levels(
     feeds: &[(FeedRow, Option<Feed>)],
     result: &mut [Catalog],
@@ -1019,14 +1026,22 @@ fn link_levels(
     let publishers: Vec<usize> = (0..feeds.len())
         .filter(|&index| feeds[index].0.medium.as_deref() == Some("publisher"))
         .collect();
-    let rank_of = |index: usize| rank(&feeds[index].0.publisher_roles);
+    // Each pair that a shared release or a kept link connects.
+    let mut connected = vec![vec![false; feeds.len()]; feeds.len()];
+    for &upper in &publishers {
+        for &lower in &publishers {
+            connected[upper][lower] = lower != upper
+                && (shared_level(feeds, result, upper, lower)
+                    || (rank(&feeds[lower].0.publisher_roles).is_some_and(|lower_rank| {
+                        rank(&feeds[upper].0.publisher_roles).is_some_and(|rank| rank > lower_rank)
+                    }) && kept.contains(&(feeds[upper].0.id, feeds[lower].0.id))));
+        }
+    }
+    // Two releases can connect two feeds in the two directions. Then the
+    // rank of the feeds decides, and with an equal rank no feed is below.
+    let feed_rank = |index: usize| rank(&feeds[index].0.publisher_roles);
     let below = |lower: usize, upper: usize| {
-        rank_of(lower) < rank_of(upper)
-            && (kept.contains(&(feeds[upper].0.id, feeds[lower].0.id))
-                || result[lower]
-                    .releases
-                    .iter()
-                    .any(|release| result[upper].releases.contains(release)))
+        connected[upper][lower] && (!connected[lower][upper] || feed_rank(upper) > feed_rank(lower))
     };
     let mut links = Vec::new();
     for &upper in &publishers {
@@ -1047,6 +1062,77 @@ fn link_levels(
         result[upper].children.push(lower_id);
         result[lower].parents.push(upper_id);
     }
+}
+
+/// Give the kept links that a shared release now replaces: a release of the
+/// collection puts the lower feed below the upper feed (ADR 0254 item 41).
+#[must_use]
+pub fn replaced_kept_levels(
+    feeds: &[(FeedRow, Option<Feed>)],
+    kept: &[(FeedId, FeedId)],
+) -> Vec<(FeedId, FeedId)> {
+    let catalogs = catalogs_with_kept(feeds, kept);
+    let index = |id: FeedId| feeds.iter().position(|(row, _)| row.id == id);
+    kept.iter()
+        .copied()
+        .filter(|&(upper, lower)| match (index(upper), index(lower)) {
+            (Some(upper), Some(lower)) => shared_level(feeds, &catalogs, upper, lower),
+            _ => false,
+        })
+        .collect()
+}
+
+/// A shared release puts `lower` below `upper`: on that release, the link of
+/// `upper` gives a level role with a higher rank than the level role of the
+/// link of `lower` (ADR 0253 item 15).
+fn shared_level(
+    feeds: &[(FeedRow, Option<Feed>)],
+    catalogs: &[Catalog],
+    upper: usize,
+    lower: usize,
+) -> bool {
+    catalogs[upper].releases.iter().any(|release| {
+        catalogs[lower].releases.contains(release)
+            && match (
+                link_rank(feeds, *release, upper),
+                link_rank(feeds, *release, lower),
+            ) {
+                (Some(upper_rank), Some(lower_rank)) => upper_rank > lower_rank,
+                _ => false,
+            }
+    })
+}
+
+/// Give the highest rank of the level roles that the link between a release
+/// and a publisher feed gives. Each side of the link counts. A link with only
+/// credit roles has no rank.
+fn link_rank(feeds: &[(FeedRow, Option<Feed>)], release: FeedId, publisher: usize) -> Option<u8> {
+    let (release_row, release_model) = feeds.iter().find(|(row, _)| row.id == release)?;
+    let identity = |row: &FeedRow, model: &Option<Feed>| Party {
+        guid: model
+            .as_ref()
+            .and_then(|feed| feed.podcast_guid.clone())
+            .or_else(|| row.podcast_guid.clone()),
+        url: row.public_url.clone(),
+        title: None,
+    };
+    let release_party = identity(release_row, release_model);
+    let publisher_party = identity(&feeds[publisher].0, &feeds[publisher].1);
+    let channel = feeds[publisher]
+        .1
+        .iter()
+        .flat_map(|feed| &feed.remote_items)
+        .filter(|item| names(&item.value, &release_party));
+    let release_side = release_model
+        .iter()
+        .flat_map(|feed| &feed.publisher)
+        .flat_map(|publisher| &publisher.remote_items)
+        .filter(|item| names(&item.value, &publisher_party));
+    channel
+        .chain(release_side)
+        .flat_map(|item| roles_from_rel(item.rel.as_deref().unwrap_or_default()))
+        .filter_map(|role| rank(&[role]))
+        .max()
 }
 
 /// What a link needs from one feed.

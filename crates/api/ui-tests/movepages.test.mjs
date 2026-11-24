@@ -106,6 +106,6 @@ test('gather pages lists writable pages, their start selection, and the note (AD
 
 test('a page move with no link change has an instruction and no heading (ADR 0243 item 6)', () => {
   const artist = { ...feeds[0], release_ids: [101] };
-  assert.deepEqual(pageMoveLines(feeds, artist, { label: '10', hosting: '20' }), ['Select a label or a hosting page.'],
+  assert.deepEqual(pageMoveLines(feeds, artist, { label: '10', hosting: '20' }), ['Select a label or a publisher page.'],
     'ADR 0243 item 6: fix pageMoveLines in crates/api/ui/movepages.js.');
 });

@@ -100,7 +100,7 @@ test('ADR 0251 items 10 and 11: linked refusals give the Stop panel texts', () =
     link: 'Link and Continue', keep: 'Keep the Release', write: 'Link a page to Release first.',
   }, owner);
   assert.deepEqual(linkedRefusalView({ title: 'Show', refusal: 'no_publisher_page' }), {
-    title: 'Show has no other artist, label or hosting page.', line: 'A release needs a page.',
+    title: 'Show has no other artist, label or publisher page.', line: 'A release needs a page.',
     label: 'Page', placeholder: 'Select a page', menu: true, newChoice: 'New artist page…',
     link: 'Link and Continue', keep: 'Keep the Release', write: 'Link a page to Show first.',
   }, owner);
@@ -275,7 +275,7 @@ test('page findings use the words of ADR 0256 items 18 and 19', () => {
   const owner = 'ADR 0256 items 18 and 19: show the page finding words and Link a Page. Fix feedcheck.js.';
   assert.deepEqual(PAGE_FINDING_TEXT, {
     no_artist_page: 'This release has no artist page.',
-    no_publisher_page: 'This feed has no artist, label or hosting page.',
+    no_publisher_page: 'This feed has no artist, label or publisher page.',
   }, owner);
   const rows = checkRows(check([
     finding('no_artist_page', 'link_a_page', { title: PAGE_FINDING_TEXT.no_artist_page }),
@@ -304,7 +304,7 @@ test('the refusal panel of Review links a page (ADR 0218 items 1 to 6)', () => {
     { line: 'The link to Artist has no role.', button: 'Make It the Artist Link' }, owner);
   const show = pageRefusalView('no_publisher_page', false);
   assert.deepEqual([show.title, show.line, show.label, show.write],
-    ['This feed has no artist, label or hosting page.', 'Music Index lists each feed under its page.', 'Page', 'Link a page first.'], owner);
+    ['This feed has no artist, label or publisher page.', 'Music Index lists each feed under its page.', 'Page', 'Link a page first.'], owner);
   const none = pageRefusalView('no_artist_page', false);
   assert.deepEqual([none.menu, none.button, none.linkDisabled, none.newChoice], [true, 'Link and Continue', true, 'New artist page…'], owner);
   assert.equal(NEW_PAGE_CHOICE, 'new', owner);

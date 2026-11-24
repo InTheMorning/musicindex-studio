@@ -14,7 +14,7 @@ import { onListKey, onTreeKey } from './listkeys.js';
 import { creditPickRows, supportPickRows, creditChoices, creditFillRows, creditFillValue, creditFillNote, creditFillNoteText, CREDIT_FIELD_LABELS, fundingChoices, nostrChoices, withPersonValues, filterRows, nostrPickRows, feedWord, memberRowLine, memberSectionNote } from './people.js';
 import { withCids, STATUS } from './draft.js';
 import { roleSummary } from './roles.js';
-import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName, newFeedView, pageLevel, movedReleaseView } from './shell.js';
+import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, roleHint, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName, newFeedView, pageLevel, movedReleaseView } from './shell.js';
 import { isLiveItem, liveKey, liveDot, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner, OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning, hasBadAddress, problemGroup, setLiveStreamType, viewAfterLiveGone, withoutLive } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
 import { checkRows, unreadableRows, hasShowGrant, checkTexts, pageRefusalView, linkedRefusalView, NEW_PAGE_CHOICE, guidChangeView, repairAddresses, wrongAddressSet, OPEN_ACTIONS, COPY_SHEET_TEXT, WAYS_SHEET_TEXT } from './feedcheck.js';
@@ -4370,6 +4370,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, onMov
   // A role change writes the links, so it needs the host of the feed, as a
   // link does (ADR 0255 item 5).
   const readOnly = !feed.connector_id;
+  const roleHintText = roleHint(feed, readOnly);
   // The add row at the end of the Releases section. It does not show with a
   // first-step row (ADR 0164 item 1).
   const more = nextStep(feed) === null ? releaseAdd(feed, model.title) : null;
@@ -4442,8 +4443,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, onMov
               <option value="custom">Custom</option>
             </select>
             ${readOnly && html`<span class="hint">To change the roles, connect the folder that holds this feed in File hosts.</span>`}
-            ${roles.length > 0 && !feed.roles_confirmed && feed.roles_linked && html`<span class="hint">The feed and its releases give the same role.</span>`}
-            ${roles.length > 0 && !feed.roles_confirmed && !feed.roles_linked && html`<span class="hint">Studio found ${roles.length === 1 ? 'this role' : 'these roles'} in the feed: ${roles.map(roleWord).join(', ')}.${readOnly ? '' : ' Select the roles to confirm them.'}</span>`}
+            ${roleHintText && html`<span class="hint">${roleHintText}</span>`}
             ${choice === 'custom' && html`<div class="role-choices" role="group" aria-label="Roles">
               ${ROLES.map((role) => html`<label class="check"><input type="checkbox" id=${`pub-role-${role}`}
                 checked=${roles.includes(role)} disabled=${roleAction.busy || readOnly || (roles.length === 1 && roles[0] === role)}

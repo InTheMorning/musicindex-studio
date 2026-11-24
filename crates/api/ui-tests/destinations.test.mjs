@@ -41,7 +41,7 @@ test('a destination row of app.js shows no type dot', () => {
 
 test('no destination label is the same as a role heading', () => {
   const headings = [...shellText.matchAll(/\['[a-z]+', '([A-Za-z ]+)'\]/g)].map((m) => m[1]);
-  assert.ok(headings.includes('Hosting'),
+  assert.ok(headings.includes('Publishers'),
     'ADR 0092 item 1: this test cannot find the role headings in shell.js. Update the pattern of this test.');
   const labels = [
     ...panel({ vaultOpen: true }).top,

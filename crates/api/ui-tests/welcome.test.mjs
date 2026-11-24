@@ -22,13 +22,19 @@ test('welcomeSteps gives the two stages of each path', () => {
 });
 
 test('the Welcome page has the hosting row and the hosting path has three steps (ADR 0240 items 2 and 3)', () => {
-  const owner = 'ADR 0240 items 2 and 3: the third row and its steps. Fix WELCOME and PATHS in crates/api/ui/welcome.js.';
+  const owner = 'ADR 0253 item 12 and ADR 0254 item 45: the welcome row names music for other artists. Fix WELCOME in crates/api/ui/welcome.js.';
   assert.deepEqual(Object.keys(WELCOME.rows), ['music', 'label', 'hosting', 'online'], owner);
-  assert.equal(WELCOME.rows.hosting.title, "I'm hosting for other artists", owner);
-  assert.equal(WELCOME.rows.hosting.line, 'Start with your hosting page. The artists and labels that you host go on it.', owner);
+  assert.equal(WELCOME.rows.hosting.title, 'I publish music for other artists', owner);
+  assert.equal(WELCOME.rows.hosting.line, 'Start with your publisher page. The artists and labels that you publish go on it.', owner);
+  assert.equal(pathTexts('hosting').sheet, 'Your publisher page', owner);
+  assert.match(pathTexts('hosting').where, /your publisher page/, owner);
   assert.deepEqual(welcomeSteps('hosting'), ['Your name', 'Where it lives', 'Your first artist'], owner);
   assert.equal(welcomeBody('hosting', 'Wrathful Test', 4).role, 'hosting', owner);
-  assert.deepEqual(FIRST_STEPS.hosting.map((s) => s.title), ['Add an artist', 'Add a label', 'Find an artist that is online'], owner);
+  assert.deepEqual(FIRST_STEPS.hosting.map((s) => s.title), ['Add an artist', 'Add a label'], owner);
+  assert.deepEqual(FIRST_STEPS.hosting.map((s) => s.line), [
+    'Make a page for an artist on your publisher page. Their albums go on it.',
+    'Make a page for a label on your publisher page. Its artists go on it.',
+  ], owner);
   assert.equal(nextStep({ id: 3, medium: 'publisher', publisher_roles: ['hosting'], child_ids: [] }), 'hosting', owner);
   assert.equal(nextStep({ id: 3, medium: 'publisher', publisher_roles: ['hosting'], child_ids: [8] }), null, owner);
   assert.deepEqual(firstStart('hosting', 'publisher', { title: 'Host' }, 3, 'label'), { role: 'label', below_id: 3 }, owner);
@@ -151,7 +157,9 @@ test('the texts of ADR 0221 items 2, 5, 6 and 8 are as decided', () => {
   assert.equal(pathTexts('label').where, 'Studio does not keep your music. It puts your label page and your songs on a file host that you choose. You can move them later.');
   assert.equal(FIRST_STEPS.album.title, 'Add your first album');
   assert.equal(FIRST_STEPS.album.line, 'Drop the songs in. Studio reads their names and order, and makes the album page.');
-  assert.deepEqual(FIRST_STEPS.label.map((s) => s.title), ['Add an artist', 'Find an artist that is online']);
+  assert.deepEqual(FIRST_STEPS.label.map((s) => s.title), ['Add an artist', 'Add a release']);
+  assert.deepEqual(FIRST_STEPS.label.map((s) => s.open), ['publisher', FIRST_STEPS.album.open],
+    'ADR 0254 item 46: Add a release opens the release form. Fix FIRST_STEPS in crates/api/ui/welcome.js.');
 });
 
 test('the texts of the Welcome page, the host rows and the steps do not use the word feed', () => {

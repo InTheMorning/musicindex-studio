@@ -89,7 +89,7 @@ export function pageMoveLines(feeds, page, values) {
   ];
   return lines.length > 0
     ? [`Changes ${releaseIds.length} ${releaseIds.length === 1 ? 'release' : 'releases'}:`, ...lines]
-    : ['Select a label or a hosting page.'];
+    : ['Select a label or a publisher page.'];
 }
 
 function ancestors(feeds, page) {

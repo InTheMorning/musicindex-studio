@@ -3,15 +3,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
-import { mediumKind, relLabel, feedKind, kindGlow } from '../ui/shell.js';
+import { mediumKind, relLabel, feedKind, kindGlow, roleWord, FIRST_CLASS_ROLES } from '../ui/shell.js';
 
-const MESSAGE = `musicindex ADR 0033 R-WORD-4: most artists do not know the RSS word
-"publisher". Show the role of a publisher feed: "Artist", "Label" or
-the word of its one role. Use "Publisher" only for a feed with two or
-more roles and no artist role, or for a feed that is definitely not an
-artist and that states no role. Use "Feed" when the role is not known.
-A technical view can show the RSS name, for example \`podcast:publisher\`.
-Studio cannot make the test of R-WORD-3 item 3, so it does not use "Publisher".`;
+const MESSAGE = `ADR 0253 item 13: use "Publisher" only as the screen word of the role hosting or in "published by". Fix the text in crates/api/ui.`;
 
 const uiDir = new URL('../ui/', import.meta.url);
 const sources = readdirSync(uiDir).filter((name) => /\.(js|html)$/.test(name));
@@ -69,8 +63,10 @@ function textSegments(source, isHtml) {
 // `medium="publisher"`) can show in a technical view (R-WORD-4 items 2
 // and 3).
 function isInterfaceText(text, at) {
-  const end = at + 'publisher'.length;
-  if (text === 'publisher') return false;
+  const word = text.slice(at).match(/^publishers?/i)?.[0];
+  if (!word) return false;
+  const end = at + word.length;
+  if (text === 'publisher' || text === 'publishers') return false;
   // ADR 0250 item 5 gives this exact label to the medium repair menu.
   const repairLabel = 'Artist or label page (';
   if (text.slice(Math.max(0, at - repairLabel.length), at) === repairLabel && text[end] === ')') return false;
@@ -78,15 +74,36 @@ function isInterfaceText(text, at) {
   if (/[\w$.-]/.test(text[at - 1] ?? '') || /[\w$-]/.test(text[end] ?? '')) return false;
   if (text.slice(at - 'podcast:'.length, at) === 'podcast:') return false;
   if (/medium=["']$/.test(text.slice(Math.max(0, at - 8), at))) return false;
+  // A role label or heading uses one screen word (ADR 0253 item 13).
+  if ((word === 'Publisher' || word === 'Publishers') && text.trim() === word) return false;
+  // Only this occurrence can name the page of the role `hosting`.
+  if (word === 'publisher' && /^ pages?\b/.test(text.slice(end))) return false;
   return true;
 }
 
-test('no interface text in the UI uses the word publisher', () => {
+test('the Publisher rule permits only role labels, headings and publisher pages', () => {
+  const refused = (text) => [...text.matchAll(/publishers?/gi)]
+    .some((match) => isInterfaceText(text, match.index));
+  for (const text of ['Publisher', 'Publishers', 'Start with your publisher page.']) {
+    assert.equal(refused(text), false, text);
+  }
+  for (const text of ['publisher feed', 'Publisher feed', 'a publisher']) {
+    assert.equal(refused(text), true, text);
+  }
+  assert.equal(refused('Your publisher pages'), false);
+  assert.equal(refused('A publisher feed on your publisher page.'), true);
+  assert.equal(refused('A Publisher feed, published by Example.'), true);
+  assert.equal(refused('Your publisher pageant'), true);
+  assert.equal(refused("role === 'hosting' ? 'Publisher' : ''"), true);
+  assert.equal(refused("['hosting', 'Publisher']"), true);
+});
+
+test('the screen word Publisher names hosting and published by', () => {
   const found = [];
   for (const name of sources) {
     const source = readFileSync(new URL(name, uiDir), 'utf8');
     for (const seg of textSegments(source, name.endsWith('.html'))) {
-      for (const match of seg.text.matchAll(/publisher/gi)) {
+      for (const match of seg.text.matchAll(/publishers?/gi)) {
         if (!isInterfaceText(seg.text, match.index)) continue;
         const line = seg.line + seg.text.slice(0, match.index).split('\n').length - 1;
         found.push(`crates/api/ui/${name}:${line}`);
@@ -98,7 +115,7 @@ test('no interface text in the UI uses the word publisher', () => {
     'ADR 0250 item 5: name the value in mediumProblemView of crates/api/ui/shell.js.');
 });
 
-test('a publisher feed lists each role, or shows Feed with a hollow dot', () => {
+test('a publisher feed lists each role and names hosting Publisher', () => {
   // musicindex ADR 0037 R-WORD-7 and ADR 0033 R-WORD-3 item 3, ADR 0084.
   assert.deepEqual(mediumKind('publisher', ['artist'], true), { dot: 'artist', label: 'Artist' }, MESSAGE);
   assert.deepEqual(mediumKind('publisher', ['label'], true), { dot: 'label', label: 'Label' }, MESSAGE);
@@ -112,9 +129,11 @@ test('a publisher feed lists each role, or shows Feed with a hollow dot', () => 
   assert.deepEqual(mediumKind('publisher', ['curator', 'artist'], true), { dot: 'artist', label: 'Artist · Curator' }, MESSAGE);
   assert.deepEqual(mediumKind('publisher', ['producer', 'curator'], true), { dot: 'curator', label: 'Curator · Producer' }, MESSAGE);
   // Hosting comes before producer and host (musicindex ADR 0036 R-ROLE-1).
-  assert.deepEqual(mediumKind('publisher', ['host', 'producer', 'hosting'], true), { dot: 'hosting', label: 'Hosting · Producer · Host' }, MESSAGE);
+  assert.deepEqual(mediumKind('publisher', ['host', 'producer', 'hosting'], true), { dot: 'hosting', label: 'Publisher · Producer · Host' }, MESSAGE);
   assert.deepEqual(mediumKind('publisher', [], true), { dot: 'feed hollow', label: 'Feed' }, MESSAGE);
   assert.deepEqual(mediumKind('publisher'), { dot: 'feed hollow', label: 'Feed' }, MESSAGE);
+  assert.deepEqual(FIRST_CLASS_ROLES.map(roleWord), ['Artist', 'Label', 'Publisher'], MESSAGE);
+  assert.deepEqual(mediumKind('publisher', ['label', 'hosting'], true), { dot: 'label', label: 'Label · Publisher' }, MESSAGE);
 });
 
 test('a feed with no cover shows the logo shape in the color of its kind', () => {
@@ -139,11 +158,12 @@ test('the rel of a link shows each of its roles', () => {
 });
 
 test('a role that the two sides of a link give has a filled dot', () => {
-  const message = 'ADR 0087 item 2: a set with roles_linked has a filled dot. Use roles_linked in feedKind of crates/api/ui/shell.js.';
+  const message = 'ADR 0253 item 8: roles_linked fills the dot. A confirmed role fills it only when no link exists. Fix feedKind in crates/api/ui/shell.js.';
   const base = { id: 1, title: 'A', medium: 'publisher', publisher_roles: ['artist', 'label'], roles_confirmed: false };
   assert.equal(feedKind({ ...base, roles_linked: true }).dot, 'artist', message);
   assert.equal(feedKind({ ...base, roles_linked: false }).dot, 'artist hollow', message);
-  assert.equal(feedKind({ ...base, roles_confirmed: true }).dot, 'artist', message);
+  assert.equal(feedKind({ ...base, roles_confirmed: true, release_ids: [] }).dot, 'artist', message);
+  assert.equal(feedKind({ ...base, roles_confirmed: true, release_ids: [2] }).dot, 'artist hollow', message);
 });
 
 // ADR 0092 item 2: a UI text that names a connector says "file host". The

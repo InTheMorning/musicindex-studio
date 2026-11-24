@@ -17,7 +17,16 @@ export const ROLES = ['artist', 'label', 'hosting', 'curator', 'producer', 'host
 export const FIRST_CLASS_ROLES = ['artist', 'label', 'hosting'];
 
 // The word of a role, for example "Artist".
-export const roleWord = (role) => role.charAt(0).toUpperCase() + role.slice(1);
+export const roleWord = (role) => role === 'hosting' ? 'Publisher' : role.charAt(0).toUpperCase() + role.slice(1);
+
+// The Role hint uses the states from the feed list (ADR 0253 item 18).
+export function roleHint(feed, readOnly = false) {
+  const roles = feed.publisher_roles || [];
+  if (roles.length === 0) return null;
+  if (feed.roles_linked) return 'The feed and its releases give the same role.';
+  if (feed.roles_confirmed) return null;
+  return `Studio found ${roles.length === 1 ? 'this role' : 'these roles'} in the feed: ${roles.map(roleWord).join(', ')}.${readOnly ? '' : ' Select the roles to confirm them.'}`;
+}
 
 // The kind of a medium: its dot class and its label. A publisher feed lists
 // each of its roles, and its dot has the color of the first one (musicindex
@@ -49,7 +58,9 @@ export function relLabel(rel) {
 // a set of roles, or the core finds the first role on the two sides of a
 // link (ADR 0082 item 5, ADR 0087 item 2).
 export function feedKind(feed) {
-  const kind = mediumKind(feed.medium, feed.publisher_roles, feed.roles_confirmed === true || feed.roles_linked === true);
+  const hasLinks = ['release_ids', 'parent_ids', 'child_ids'].some((key) => (feed[key] || []).length > 0);
+  const confirmed = feed.roles_linked === true || (feed.roles_confirmed === true && !hasLinks);
+  const kind = mediumKind(feed.medium, feed.publisher_roles, confirmed);
   if ((feed.medium || '').toLowerCase() !== 'music') return kind;
   const labels = { release: 'Release', album: 'Album', ep: 'EP', single: 'Single' };
   return { ...kind, label: labels[feed.kind_shown] || 'Album' };
@@ -386,19 +397,17 @@ export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, 
 
 // ---- The levels of the hierarchy (ADR 0215) ----
 
-// The role headings of the levels, in their sequence (ADR 0215 item 4):
-// Hosting, Labels and Artists, then each other role in the sequence of
-// ROLES. A feed is below the heading of its first role, so a feed with the
-// roles artist and label is one feed in Artists.
+// The four role headings follow ADR 0253 item 16.
+// A feed with no level role goes below "No role" (ADR 0254 item 3).
 const HEADINGS = [
-  ['hosting', 'Hosting'], ['label', 'Labels'], ['artist', 'Artists'],
-  ...ROLES.filter((role) => !FIRST_CLASS_ROLES.includes(role)).map((role) => [role, `${roleWord(role)}s`]),
+  ['hosting', 'Publishers'], ['label', 'Labels'], ['curator', 'Curators'], ['artist', 'Artists'],
 ];
 
 export function headingIndex(feed) {
   const roles = feed.publisher_roles || [];
   const first = ROLES.find((role) => roles.includes(role));
-  return first ? HEADINGS.findIndex(([role]) => role === first) : HEADINGS.length;
+  const index = HEADINGS.findIndex(([role]) => role === first);
+  return index < 0 ? HEADINGS.length : index;
 }
 
 // The feeds of `list` under their role headings, A to Z in each heading.
@@ -481,7 +490,8 @@ function pageGroups(owner, feeds) {
   for (const heading of addHeadings) {
     if (!sections.some((section) => section.heading === heading)) sections.push({ heading, items: [] });
   }
-  sections.sort((a, b) => HEADINGS.findIndex((entry) => entry[1] === a.heading) - HEADINGS.findIndex((entry) => entry[1] === b.heading));
+  const headingOrder = [...HEADINGS.map(([, heading]) => heading), 'No role'];
+  sections.sort((a, b) => headingOrder.indexOf(a.heading) - headingOrder.indexOf(b.heading));
   const addRow = (role, label) => ({
     add: role,
     label,
@@ -780,7 +790,7 @@ export function releasesList({ feeds, connectors, sort, view, reversed, marked, 
     };
   } else if (group === 'none') {
     chosen = unlinkedReleases(list);
-    head = { id: null, title: 'Not linked', typeLabel: null, dot: null, note: 'These releases have no artist page, label page or hosting page.' };
+    head = { id: null, title: 'Not linked', typeLabel: null, dot: null, note: 'These releases have no artist page, label page or publisher page.' };
   } else if (group === 'other') {
     chosen = otherFeeds(list);
     head = { id: null, title: 'Other feeds', typeLabel: null, dot: null, note: 'Studio edits albums, playlists, and artist and label feeds. It shows only the facts of these feeds.' };

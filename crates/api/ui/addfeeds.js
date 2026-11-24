@@ -9,7 +9,7 @@ import { feedKind, kindGlow, publisherArt, headingIndex } from './shell.js';
 // page, the menu has no Release and no role of the same rank or a higher rank,
 // and each remaining role makes a page below the head.
 export function addMenuEntries(release, head = null) {
-  const roles = [['artist', 'Artist'], ['label', 'Label'], ['hosting', 'Hosting']];
+  const roles = [['artist', 'Artist'], ['label', 'Label'], ['hosting', 'Publisher']];
   const rank = head ? headingIndex(head) : null;
   const publisherHead = head && (head.publisher_roles || []).some((role) => ['artist', 'label', 'hosting'].includes(role));
   const appliesRank = head && (head.publisher_roles || []).some((role) => role === 'label' || role === 'hosting');
@@ -178,7 +178,7 @@ export function folderMatchReport(result = {}) {
 // The title of the sheet that makes a page or a release (ADR 0164 item 7, ADR
 // 0230 item 8). It follows the type, and the role of a publisher page. A
 // release names its parent, when it has one. It does not use the word "feed".
-const PAGE_WORDS = { artist: 'artist page', label: 'label page', hosting: 'hosting page' };
+const PAGE_WORDS = { artist: 'artist page', label: 'label page', hosting: 'publisher page' };
 
 export function makeTitle(type, role, parent) {
   if (type === 'publisher') return `Make a new ${PAGE_WORDS[role] || 'artist or label page'}`;

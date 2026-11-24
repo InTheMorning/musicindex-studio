@@ -26,17 +26,17 @@ test('the search sheet gives the two import rows and hides the folder row withou
 const artistPage = { id: 9, medium: 'publisher', connector_id: 1, publisher_roles: ['artist'] };
 
 test('the add menu of Releases has the values of ADR 0240 item 1 in their sequence', () => {
-  const owner = 'ADR 0240 item 1: the add menu has Release, Artist, Label, Hosting, Show and Playlist. Fix addMenuEntries in crates/api/ui/addfeeds.js.';
+  const owner = 'ADR 0254 item 44: the add menu has Release, Artist, Label, Publisher, Show and Playlist. Fix addMenuEntries in crates/api/ui/addfeeds.js.';
   const entries = addMenuEntries(null);
-  assert.deepEqual(entries.map((e) => e.label), ['Release', 'Artist', 'Label', 'Hosting', 'Show', 'Playlist'], owner);
+  assert.deepEqual(entries.map((e) => e.label), ['Release', 'Artist', 'Label', 'Publisher', 'Show', 'Playlist'], owner);
   assert.deepEqual(entries.map((e) => e.open), ['album', 'publisher', 'publisher', 'publisher', 'show', 'playlist'], owner);
   assert.deepEqual(entries[1].start, { role: 'artist' }, owner);
   assert.deepEqual(entries[2].start, { role: 'label' }, owner);
   assert.deepEqual(entries[3].start, { role: 'hosting' }, owner);
 });
 
-test('the add menu of a label page and a hosting page has no Release and no role of the same or a higher rank', () => {
-  const owner = 'ADR 0240 item 4: a label page or a hosting page has no Release, and its roles make a page below it. Fix addMenuEntries in crates/api/ui/addfeeds.js.';
+test('the add menu of a label page and a publisher page has no Release and no role of the same or a higher rank', () => {
+  const owner = 'ADR 0240 item 4: a label page or a publisher page has no Release, and its roles make a page below it. Fix addMenuEntries in crates/api/ui/addfeeds.js.';
   const hosting = { id: 5, medium: 'publisher', connector_id: 1, publisher_roles: ['hosting'] };
   const onHosting = addMenuEntries(releaseAdd(hosting, 'Host'), hosting);
   assert.deepEqual(onHosting.map((e) => e.label), ['Artist', 'Label', 'Show', 'Playlist'], owner);
@@ -130,6 +130,8 @@ test('the sheet title names the parent, or has no parent (ADR 0230 item 8)', () 
   assert.equal(makeTitle('album', null, 'Pixel Palace'), 'New release for Pixel Palace', owner);
   assert.equal(makeTitle('album', null, null), 'New release', owner);
   assert.equal(makeTitle('album'), 'New release', owner);
+  assert.equal(makeTitle('publisher', 'hosting'), 'Make a new publisher page',
+    'ADR 0253 item 11: name the publisher page. Fix makeTitle in crates/api/ui/addfeeds.js.');
 });
 
 test('the parent card shows the page, and no card when there is no parent (ADR 0230 items 9 and 10)', () => {

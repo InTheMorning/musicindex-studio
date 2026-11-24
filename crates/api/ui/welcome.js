@@ -12,7 +12,7 @@ export const WELCOME = {
   rows: {
     music: { icon: 'music', title: 'I make music', line: 'Start with your artist page. Your albums go on it.' },
     label: { icon: 'tag', title: 'I run a label', line: 'Start with your label page. Your artists and releases go on it.' },
-    hosting: { icon: 'users', title: "I'm hosting for other artists", line: 'Start with your hosting page. The artists and labels that you host go on it.' },
+    hosting: { icon: 'users', title: 'I publish music for other artists', line: 'Start with your publisher page. The artists and labels that you publish go on it.' },
     online: { icon: 'search', title: 'My music is online already', line: 'Find your artist or albums, and bring them into Studio.' },
   },
   mspBefore: 'Moving from MSP 2.0?',
@@ -52,10 +52,10 @@ const PATHS = {
   hosting: {
     role: 'hosting',
     steps: ['Your name', 'Where it lives', 'Your first artist'],
-    sheet: 'Your hosting page',
+    sheet: 'Your publisher page',
     nameLabel: 'Your name',
     hint: null,
-    page: 'hosting page',
+    page: 'publisher page',
   },
 };
 
@@ -189,14 +189,13 @@ export const FIRST_STEPS = {
   },
   label: [
     { icon: 'music', title: 'Add an artist', line: 'Make a page for an artist on your label. Their albums go on it.', open: 'publisher' },
-    { icon: 'search', title: 'Find an artist that is online', line: 'Link an artist page that exists already.', open: 'find' },
+    { icon: 'disc', title: 'Add a release', line: 'Make a release on your label. Drop the songs in.', open: 'album' },
   ],
   // ADR 0240 item 3: the rows of the page of a new hosting page. `role` is the
   // start role of the form that the row opens.
   hosting: [
-    { icon: 'music', title: 'Add an artist', line: 'Make a page for an artist on your hosting page. Their albums go on it.', open: 'publisher', role: 'artist' },
-    { icon: 'tag', title: 'Add a label', line: 'Make a page for a label on your hosting page. Its artists go on it.', open: 'publisher', role: 'label' },
-    { icon: 'search', title: 'Find an artist that is online', line: 'Link an artist page that exists already.', open: 'find' },
+    { icon: 'music', title: 'Add an artist', line: 'Make a page for an artist on your publisher page. Their albums go on it.', open: 'publisher', role: 'artist' },
+    { icon: 'tag', title: 'Add a label', line: 'Make a page for a label on your publisher page. Its artists go on it.', open: 'publisher', role: 'label' },
   ],
 };
 

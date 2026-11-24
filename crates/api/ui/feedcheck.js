@@ -90,7 +90,7 @@ const ACTIONS = {
 
 export const PAGE_FINDING_TEXT = {
   no_artist_page: 'This release has no artist page.',
-  no_publisher_page: 'This feed has no artist, label or hosting page.',
+  no_publisher_page: 'This feed has no artist, label or publisher page.',
 };
 
 // The line, the menu label and the write line of each refusal (ADR 0218 item 2).
@@ -126,7 +126,7 @@ export function linkedRefusalView(row) {
     },
     no_publisher_page: {
       line: 'A release needs a page.', label: 'Page',
-      title: `${row.title} has no other artist, label or hosting page.`,
+      title: `${row.title} has no other artist, label or publisher page.`,
     },
   }[row.refusal];
   if (!text) return null;

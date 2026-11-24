@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  pageTabs, tabsFit, mediumKind, feedKind, trackCountText, roleChoice, toggleRole, isEditable, isReadOnly, reviewHost, moveNote, isPublisher, isPlaylist, trackKey, isTrack,
+  pageTabs, tabsFit, mediumKind, feedKind, trackCountText, roleChoice, roleHint, toggleRole, isEditable, isReadOnly, reviewHost, moveNote, isPublisher, isPlaylist, trackKey, isTrack,
   leftPanel, releasesList, listQuery, queryText, sortLabel, sortEntries, compareNames, byName, segmentKey, levelFeedSet,
   startNav, pushNav, backNav, forwardNav, canBack, canForward, setScroll, releasesView,
   narrowStack, openFeedView, newFeedView, navAtWidth, widthNav, wideView, publisherArt, mosaicCells, otherFeedText, mediumProblemView, mediumProblemCause,
@@ -35,6 +35,38 @@ test('feedKind gives the release kind and defaults to Album', () => {
   assert.equal(feedKind({ medium: 'music', kind_shown: 'ep' }).label, 'EP', owner);
   assert.equal(feedKind({ medium: 'music', kind_shown: 'single' }).label, 'Single', owner);
   assert.equal(feedKind({ medium: 'music' }).label, 'Album', owner);
+});
+
+test('a feed with no role has a hollow dot in each state', () => {
+  const owner = 'ADR 0253 item 8: a feed with no role has a hollow dot. Fix feedKind in crates/api/ui/shell.js.';
+  for (const roles_confirmed of [false, true]) {
+    for (const roles_linked of [false, true]) {
+      const feed = { medium: 'publisher', publisher_roles: [], roles_confirmed, roles_linked };
+      assert.deepEqual(feedKind(feed), { dot: 'feed hollow', label: 'Feed' }, owner);
+      assert.equal(feedKind({ ...feed, release_ids: [7] }).dot, 'feed hollow', owner);
+    }
+  }
+});
+
+test('the Role hint shows agreement for linked roles, including confirmed roles', () => {
+  const owner = 'ADR 0253 item 18: linked roles show agreement. Fix roleHint in crates/api/ui/shell.js.';
+  for (const roles_confirmed of [false, true]) {
+    for (const readOnly of [false, true]) {
+      assert.equal(roleHint({ publisher_roles: ['hosting'], roles_linked: true, roles_confirmed }, readOnly),
+        'The feed and its releases give the same role.', owner);
+      assert.equal(roleHint({ publisher_roles: [], roles_linked: true, roles_confirmed }, readOnly), null, owner);
+    }
+  }
+});
+
+test('the Role hint shows inferred roles only when they are unconfirmed and unlinked', () => {
+  const feed = { publisher_roles: ['hosting'], roles_linked: false, roles_confirmed: false };
+  assert.equal(roleHint(feed), 'Studio found this role in the feed: Publisher. Select the roles to confirm them.');
+  assert.equal(roleHint({ ...feed, publisher_roles: ['label', 'hosting'] }, true),
+    'Studio found these roles in the feed: Label, Publisher.');
+  assert.equal(roleHint({ ...feed, roles_confirmed: true }), null);
+  assert.equal(roleHint({ ...feed, publisher_roles: [] }), null);
+  assert.equal(roleHint({}), null);
 });
 
 test('trackCountText gives a singular or plural track count', () => {
@@ -617,7 +649,7 @@ test('the narrow stack of the People area (ADR 0203 items 36 and 64)', () => {
   assert.deepEqual(narrowStack({ name: 'check', id: 4 }), [root, people, { name: 'person', id: 4 }, { name: 'check', id: 4 }]);
 });
 
-test('the Role menu gives Artist, Label or Custom for a set of roles', () => {
+test('the Role menu gives Artist, Label, Publisher or Custom for a set of roles', () => {
   // ADR 0082 item 7.
   assert.equal(roleChoice([]), '');
   assert.equal(roleChoice(['artist']), 'artist');
@@ -627,6 +659,17 @@ test('the Role menu gives Artist, Label or Custom for a set of roles', () => {
   // ADR 0083 item 2.
   assert.equal(roleChoice(['hosting']), 'hosting');
   assert.equal(roleChoice(['hosting', 'producer']), 'custom');
+});
+
+test('the role headings are Publishers, Labels, Curators, Artists and No role', () => {
+  const owner = 'ADR 0253 item 16: use four role headings before No role. Fix HEADINGS in crates/api/ui/shell.js.';
+  const feeds = ['artist', 'curator', 'label', 'hosting', null, 'producer'].map((role, i) => ({
+    id: i + 1, medium: 'publisher', title: role || 'Bare', publisher_roles: role ? [role] : [],
+  }));
+  const panel = leftPanel({ view: { name: 'releases' }, feeds, model: null, vaultOpen: true });
+  assert.deepEqual(panel.top.filter((row) => row.heading).map((row) => row.heading),
+    ['Publishers', 'Labels', 'Curators', 'Artists', 'No role'], owner);
+  assert.deepEqual(panel.top.slice(-2).map((row) => row.label), ['Bare', 'producer'], owner);
 });
 
 test('a check box adds or removes a role, and keeps one or more roles', () => {
@@ -652,7 +695,7 @@ test('the destinations below Releases are each feed with roles A to Z, then Not 
     [['releases', 'Releases', undefined], ['group-30', 'Acme', 1], ['group-20', 'Zed', 2], ['group-none', 'Not linked', 1]], message);
   assert.deepEqual(panel.top.map((e) => e.current), [false, false, false, true], message);
   assert.equal(panel.top[0].opens, true, 'ADR 0085 item 1: on a destination below Releases, the row Releases opens Releases.');
-  assert.deepEqual(panel.top.map((e) => e.dot), [undefined, 'label hollow', 'artist', null], message);
+  assert.deepEqual(panel.top.map((e) => e.dot), [undefined, 'label hollow', 'artist hollow', null], message);
   const linked = leftPanel({ view: { name: 'releases' }, feeds: [artist, first], model: null, vaultOpen: false });
   assert.deepEqual(linked.top.map((e) => e.id), ['releases', 'group-20'], 'ADR 0085 item 3: "Not linked" shows only when a release has no link.');
 });
@@ -663,7 +706,7 @@ test('the page of a feed with roles gives its releases in feed order, with a not
   assert.deepEqual(list.rows.map((r) => r.id), [22, 21], message);
   assert.equal(list.sort, 'order', message);
   assert.deepEqual(list.sorts, ['order', 'newest', 'az'], message);
-  assert.deepEqual(list.head, { id: 20, title: 'Zed', typeLabel: 'Artist', dot: 'artist' }, message);
+  assert.deepEqual(list.head, { id: 20, title: 'Zed', typeLabel: 'Artist', dot: 'artist hollow' }, message);
   assert.deepEqual(list.rows.map((r) => r.note), ['Also on Acme', null], message);
   const az = releasesList({ feeds: catalog, connectors: [], sort: 'az', view: 'rows', group: 20 });
   assert.deepEqual(az.rows.map((r) => r.id), [21, 22]);
@@ -674,7 +717,7 @@ test('Not linked gives the releases with no link, and Releases gives each releas
   assert.deepEqual(none.rows.map((r) => r.id), [23], 'ADR 0085 item 3: Not linked gives each release with no page link.');
   assert.equal(none.sort, 'newest', 'ADR 0085 item 4: "Not linked" has no feed order.');
   assert.equal(none.head.title, 'Not linked');
-  assert.equal(none.head.note, 'These releases have no artist page, label page or hosting page.');
+  assert.equal(none.head.note, 'These releases have no artist page, label page or publisher page.');
   const all = releasesList({ feeds: catalog, connectors: [], sort: 'newest', view: 'rows' });
   assert.deepEqual(all.rows.map((r) => r.id), [21, 23, 22], 'ADR 0085 item 6: Releases gives each album and playlist.');
   assert.equal(all.head, null);
@@ -686,7 +729,7 @@ test('Not linked includes a release linked only to a page of another role (ADR 0
   const release = { id: 25, title: 'Linked elsewhere', medium: 'music', publisher_ids: [24], added_at: 25, draft_state: 'none' };
   const list = releasesList({ feeds: [producer, release], connectors: [], sort: 'newest', view: 'rows', group: 'none' });
   assert.deepEqual(list.rows.map((row) => row.id), [25]);
-  assert.equal(list.head.note, 'These releases have no artist page, label page or hosting page.');
+  assert.equal(list.head.note, 'These releases have no artist page, label page or publisher page.');
 });
 
 test('a destination below Releases is a page of the root at narrow width', () => {
@@ -709,7 +752,7 @@ test('level 0 gives only the top feeds, under their role headings', () => {
   const message = 'ADR 0215 items 3 and 4: level 0 lists each feed with no feed above it, under its role heading. Use groupDestinations of crates/api/ui/shell.js.';
   const panel = leftPanel({ view: { name: 'releases' }, feeds: [...tree, { ...artistX, id: 45, title: 'Alone', parent_ids: [] }], model: null, vaultOpen: false });
   assert.deepEqual(panel.top.map((e) => [e.label, e.heading]),
-    [['Releases', undefined], ['Some Host', 'Hosting'], ['Alone', 'Artists']], message);
+    [['Releases', undefined], ['Some Host', 'Publishers'], ['Alone', 'Artists']], message);
 });
 
 test('a level gives the way up, the head, the feeds below and the releases', () => {
@@ -720,13 +763,12 @@ test('a level gives the way up, the head, the feeds below and the releases', () 
   assert.deepEqual(level.back.view, { name: 'releases', group: 40, trail: [], marked: 41 }, message);
   assert.equal(level.head.title, 'Label A', message);
   assert.deepEqual(level.sections.map((s) => [s.heading, s.items.map((i) => i.label)]),
-    [['Artists', ['Artist X']], ['Producers', ['Beat Lab']]], message);
-  // A curator feed is in "Curators", after Artists and before Producers
-  // (ADR 0215 item 4, musicindex ADR 0081 R-CURATOR-1 item 1).
+    [['Artists', ['Artist X']], ['No role', ['Beat Lab']]], message);
+  // Curators come before Artists (ADR 0253 item 16).
   const lists = { ...beatLab, id: 46, title: 'Lists', publisher_roles: ['curator', 'producer'] };
   const withCurator = leftPanel({ view: { name: 'releases', group: 41, trail: [40] },
     feeds: [...tree.map((f) => (f.id === 41 ? { ...f, child_ids: [43, 44, 46] } : f)), lists], model: null, vaultOpen: false });
-  assert.deepEqual(withCurator.sections.map((s) => s.heading), ['Artists', 'Curators', 'Producers'], message);
+  assert.deepEqual(withCurator.sections.map((s) => s.heading), ['Curators', 'Artists', 'No role'], message);
   assert.deepEqual(level.sections[0].items[0].view, { name: 'releases', group: 43, trail: [40, 41] }, message);
   assert.deepEqual(level.releases.map((r) => [r.title, r.from]), [['Album 1', { group: 41, trail: [40] }]], message);
   const top = leftPanel({ view: { name: 'releases', group: 40 }, feeds: tree, model: null, vaultOpen: false });
@@ -828,7 +870,7 @@ test('the level tile model puts the level feed before its releases (ADR 0181 ite
     id: owner.id,
     title: owner.title,
     typeLabel: 'Label',
-    dot: 'label',
+    dot: 'label hollow',
     glow: 'var(--c-label)',
     image: null,
     draftLabel: 'Saved, not written',

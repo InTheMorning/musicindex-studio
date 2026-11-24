@@ -296,6 +296,7 @@ impl From<PublisherError> for ApiError {
             PublisherErrorKind::ReadOnly => (StatusCode::CONFLICT, "read_only"),
             PublisherErrorKind::NoRole => (StatusCode::CONFLICT, "role_required"),
             PublisherErrorKind::NoGuid => (StatusCode::UNPROCESSABLE_ENTITY, "no_guid"),
+            PublisherErrorKind::NotLinked => (StatusCode::NOT_FOUND, "not_linked"),
             _ => (StatusCode::INTERNAL_SERVER_ERROR, "publisher"),
         };
         Self::new(status, code, error.to_string())

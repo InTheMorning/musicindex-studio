@@ -81,31 +81,35 @@ pub fn changed_links(
             continue;
         }
         let draft = pipeline::draft_model(collection, row.id)?.0;
-        let draft_has = if page_target {
+        let draft_link = if page_target {
             draft
                 .publisher
                 .iter()
                 .flat_map(|publisher| &publisher.remote_items)
-                .any(|item| names(&item.value, &target))
+                .find(|item| names(&item.value, &target))
+                .map(|item| item.rel.clone())
         } else {
             draft
                 .remote_items
                 .iter()
-                .any(|item| names(&item.value, &target))
+                .find(|item| names(&item.value, &target))
+                .map(|item| item.rel.clone())
         };
-        let written_has = pipeline::written_copy(collection, library, &row).is_some_and(|feed| {
+        let written_link = pipeline::written_copy(collection, library, &row).and_then(|feed| {
             if page_target {
                 feed.publisher
                     .iter()
                     .flat_map(|publisher| &publisher.remote_items)
-                    .any(|item| names(&item.value, &target))
+                    .find(|item| names(&item.value, &target))
+                    .map(|item| item.rel.clone())
             } else {
                 feed.remote_items
                     .iter()
-                    .any(|item| names(&item.value, &target))
+                    .find(|item| names(&item.value, &target))
+                    .map(|item| item.rel.clone())
             }
         });
-        if draft_has != written_has {
+        if draft_link != written_link {
             changed.push(ChangedLink {
                 feed: row.id,
                 side: if page_target {
@@ -113,7 +117,7 @@ pub fn changed_links(
                 } else {
                     LinkSide::Page
                 },
-                change: if draft_has {
+                change: if draft_link.is_some() {
                     LinkChange::Added
                 } else {
                     LinkChange::Removed
@@ -146,6 +150,8 @@ pub enum PublisherErrorKind {
     NoRole,
     /// A draft has no `podcast:guid`.
     NoGuid,
+    /// The publisher and release drafts do not contain the same link.
+    NotLinked,
     /// A draft or the collection failed. See [`PublisherError::pipeline`].
     Pipeline,
 }
@@ -323,6 +329,7 @@ pub fn link(
     collection: &Collection,
     publisher: FeedId,
     release: FeedId,
+    link_roles: Option<&[PublisherRole]>,
 ) -> Result<(), PublisherError> {
     let publisher_row = check_publisher(collection, publisher)?;
     let release_row = check_release(collection, release)?;
@@ -332,7 +339,9 @@ pub fn link(
     let release_party = party(collection, &release_row)?;
     check_named(&publisher_party, "publisher")?;
     check_named(&release_party, "release")?;
-    let rel = rel_of(&roles(collection, publisher)?);
+    let feed_roles = roles(collection, publisher)?;
+    let selected = selected_link_roles(link_roles, &feed_roles)?;
+    let rel = rel_of(&selected);
 
     // The channel item has the medium of the release (ADR 0086 item 2).
     let channel_link = RemoteItem {
@@ -340,7 +349,7 @@ pub fn link(
         feed_guid: release_party.guid.clone(),
         feed_url: release_party.url.clone(),
         title: release_party.title.clone(),
-        rel: Some(rel.clone()),
+        rel: nonempty_rel(rel.clone()),
         ..RemoteItem::default()
     };
     let publisher_base = pipeline::draft_base_model(collection, publisher)?;
@@ -360,7 +369,7 @@ pub fn link(
         feed_guid: publisher_party.guid.clone(),
         feed_url: publisher_party.url.clone(),
         title: publisher_party.title.clone(),
-        rel: Some(rel.clone()),
+        rel: nonempty_rel(rel.clone()),
         ..RemoteItem::default()
     };
     let release_base = pipeline::draft_base_model(collection, release)?;
@@ -388,6 +397,7 @@ pub fn list_on_page(
     collection: &Collection,
     publisher: FeedId,
     release: FeedId,
+    link_roles: Option<&[PublisherRole]>,
 ) -> Result<(), PublisherError> {
     let publisher_row = check_publisher(collection, publisher)?;
     let release_row = check_release(collection, release)?;
@@ -396,13 +406,15 @@ pub fn list_on_page(
     let release_party = party(collection, &release_row)?;
     check_named(&publisher_party, "publisher")?;
     check_named(&release_party, "release")?;
-    let rel = rel_of(&roles(collection, publisher)?);
+    let feed_roles = roles(collection, publisher)?;
+    let selected = selected_link_roles(link_roles, &feed_roles)?;
+    let rel = rel_of(&selected);
     let link = RemoteItem {
         medium: release_row.medium,
         feed_guid: release_party.guid.clone(),
         feed_url: release_party.url.clone(),
         title: release_party.title.clone(),
-        rel: Some(rel),
+        rel: nonempty_rel(rel),
         ..RemoteItem::default()
     };
     let publisher_base = pipeline::draft_base_model(collection, publisher)?;
@@ -417,6 +429,37 @@ pub fn list_on_page(
         );
     })?;
     Ok(())
+}
+
+fn selected_link_roles(
+    requested: Option<&[PublisherRole]>,
+    feed_roles: &[PublisherRole],
+) -> Result<Vec<PublisherRole>, PublisherError> {
+    let level_roles = [
+        PublisherRole::Hosting,
+        PublisherRole::Label,
+        PublisherRole::Curator,
+        PublisherRole::Artist,
+    ];
+    let selected = requested.map_or_else(
+        || {
+            level_roles
+                .into_iter()
+                .filter(|role| feed_roles.contains(role))
+                .collect::<Vec<_>>()
+        },
+        <[PublisherRole]>::to_vec,
+    );
+    if selected.iter().any(|role| !feed_roles.contains(role)) {
+        return Err(PublisherError::new(
+            PublisherErrorKind::NoRole,
+            "a link role is not in the roles of the publisher feed",
+        ));
+    }
+    Ok(PublisherRole::ALL
+        .into_iter()
+        .filter(|role| selected.contains(role))
+        .collect())
 }
 
 /// Remove the link between a publisher feed and a release from both
@@ -472,6 +515,7 @@ pub fn unlink(
 /// Record and confirm the roles of a publisher feed. The `rel` of each
 /// release item of its draft changes, and so does the `rel` of its link in
 /// each linked release (ADR 0255 item 11, ADR 0082 item 8).
+/// The result names each role and release that keeps its other page.
 ///
 /// # Errors
 ///
@@ -482,7 +526,7 @@ pub fn set_roles(
     collection: &Collection,
     publisher: FeedId,
     roles: &[PublisherRole],
-) -> Result<(), PublisherError> {
+) -> Result<Vec<(PublisherRole, FeedId)>, PublisherError> {
     let row = check_publisher(collection, publisher)?;
     if roles.is_empty() {
         return Err(PublisherError::new(
@@ -491,31 +535,180 @@ pub fn set_roles(
         ));
     }
     let publisher_party = party(collection, &row)?;
+    let old_roles = row.publisher_roles.clone();
     let releases = release_parties(collection)?;
+    let linked = linked_releases(collection, publisher)?;
+    let mut kept = Vec::new();
+    for release in &linked {
+        let (feed, _) = pipeline::draft_model(collection, *release)?;
+        let Some(links) = feed.publisher.as_ref() else {
+            continue;
+        };
+        for role in [
+            PublisherRole::Artist,
+            PublisherRole::Label,
+            PublisherRole::Hosting,
+        ] {
+            if old_roles.contains(&role)
+                || !roles.contains(&role)
+                || !links.remote_items.iter().any(|item| {
+                    !names(&item.value, &publisher_party)
+                        && roles_from_rel(item.value.rel.as_deref().unwrap_or_default())
+                            .contains(&role)
+                })
+            {
+                continue;
+            }
+            kept.push((role, *release));
+        }
+    }
     collection.set_publisher_roles(publisher, roles, true)?;
-    let rel = rel_of(roles);
-
     pipeline::edit_draft(collection, publisher, |feed| {
         for item in &mut feed.remote_items {
             if let Some(medium) = release_medium(&item.value, &releases) {
-                item.rel = Some(rel.clone());
+                let release = releases
+                    .iter()
+                    .find(|(_, party)| names(&item.value, party))
+                    .map(|(row, _)| row.id);
+                let kept_roles: Vec<_> = kept
+                    .iter()
+                    .filter(|(_, id)| Some(*id) == release)
+                    .map(|(role, _)| *role)
+                    .collect();
+                item.rel = change_rel_roles(item.rel.as_deref(), &old_roles, roles, &kept_roles);
                 if item.medium.is_none() {
                     item.medium = Some(medium);
                 }
             }
         }
     })?;
-    for release in linked_releases(collection, publisher)? {
+    for release in linked {
         pipeline::edit_draft(collection, release, |feed| {
             if let Some(links) = feed.publisher.as_mut() {
                 for item in &mut links.remote_items {
                     if names(&item.value, &publisher_party) {
-                        item.rel = Some(rel.clone());
+                        let kept_roles: Vec<_> = kept
+                            .iter()
+                            .filter(|(_, id)| *id == release)
+                            .map(|(role, _)| *role)
+                            .collect();
+                        item.rel =
+                            change_rel_roles(item.rel.as_deref(), &old_roles, roles, &kept_roles);
                     }
                 }
             }
         })?;
     }
+    Ok(kept)
+}
+
+/// Give `None` when a `rel` value has no words, so a link writes no empty
+/// `rel` attribute.
+fn nonempty_rel(rel: String) -> Option<String> {
+    (!rel.is_empty()).then_some(rel)
+}
+
+/// Update role words and keep other `rel` words.
+fn change_rel_roles(
+    current: Option<&str>,
+    old_roles: &[PublisherRole],
+    new_roles: &[PublisherRole],
+    kept_roles: &[PublisherRole],
+) -> Option<String> {
+    let words = current.unwrap_or_default();
+    let mut result = roles_from_rel(words);
+    result.retain(|role| !old_roles.contains(role) || new_roles.contains(role));
+    result.extend(
+        new_roles
+            .iter()
+            .copied()
+            .filter(|role| !old_roles.contains(role) && !kept_roles.contains(role)),
+    );
+    nonempty_rel(rel_with_other_words(words, &result))
+}
+
+/// Give role words and other words from a `rel` value.
+fn rel_with_other_words(current: &str, roles: &[PublisherRole]) -> String {
+    let other_words: Vec<_> = current
+        .split(|character: char| character.is_whitespace() || character == ',')
+        .filter(|word| !word.is_empty())
+        .filter(|word| PublisherRole::parse(&word.to_ascii_lowercase()).is_none())
+        .collect();
+    let mut rel = rel_of(roles);
+    for word in other_words {
+        if !rel.is_empty() {
+            rel.push(' ');
+        }
+        rel.push_str(word);
+    }
+    rel
+}
+
+/// Replace the roles of one link on both drafts.
+///
+/// # Errors
+///
+/// Gives `NoRole` for an empty role list or a role outside the publisher feed.
+/// Gives `NotLinked` when either draft does not contain this link.
+pub fn set_link_roles(
+    collection: &Collection,
+    publisher: FeedId,
+    release: FeedId,
+    link_roles: &[PublisherRole],
+) -> Result<(), PublisherError> {
+    if link_roles.is_empty() {
+        return Err(PublisherError::new(
+            PublisherErrorKind::NoRole,
+            "select one or more roles",
+        ));
+    }
+    let publisher_roles = roles(collection, publisher)?;
+    let selected = selected_link_roles(Some(link_roles), &publisher_roles)?;
+    let publisher_party = party(collection, &collection.feed(publisher)?)?;
+    let release_party = party(collection, &collection.feed(release)?)?;
+    let (publisher_feed, _) = pipeline::draft_model(collection, publisher)?;
+    let (release_feed, _) = pipeline::draft_model(collection, release)?;
+    let publisher_has_link = publisher_feed
+        .remote_items
+        .iter()
+        .any(|item| names(&item.value, &release_party));
+    let release_has_link = release_feed.publisher.as_ref().is_some_and(|links| {
+        links
+            .remote_items
+            .iter()
+            .any(|item| names(&item.value, &publisher_party))
+    });
+    if !publisher_has_link || !release_has_link {
+        return Err(PublisherError::new(
+            PublisherErrorKind::NotLinked,
+            "the publisher and release drafts do not contain this link",
+        ));
+    }
+    pipeline::edit_draft(collection, publisher, |feed| {
+        if let Some(item) = feed
+            .remote_items
+            .iter_mut()
+            .find(|item| names(&item.value, &release_party))
+        {
+            item.rel = nonempty_rel(rel_with_other_words(
+                item.rel.as_deref().unwrap_or_default(),
+                &selected,
+            ));
+        }
+    })?;
+    pipeline::edit_draft(collection, release, |feed| {
+        if let Some(links) = feed.publisher.as_mut()
+            && let Some(item) = links
+                .remote_items
+                .iter_mut()
+                .find(|item| names(&item.value, &publisher_party))
+        {
+            item.rel = nonempty_rel(rel_with_other_words(
+                item.rel.as_deref().unwrap_or_default(),
+                &selected,
+            ));
+        }
+    })?;
     Ok(())
 }
 
@@ -801,7 +994,13 @@ fn upsert(
         items.push(Entry::new(link));
         return;
     };
+    // A removed link that comes back gets the roles of the new link only. It
+    // keeps the other words of its old `rel` (ADR 0253 item 21).
     let mut restored = base[base_index].clone();
+    restored.value.rel = nonempty_rel(rel_with_other_words(
+        restored.value.rel.as_deref().unwrap_or_default(),
+        &[],
+    ));
     update_link(&mut restored.value, &link);
     let insertion = base[..base_index]
         .iter()
@@ -833,8 +1032,18 @@ fn update_link(current: &mut RemoteItem, link: &RemoteItem) {
     if current.medium != link.medium {
         current.medium.clone_from(&link.medium);
     }
-    if current.rel != link.rel {
-        current.rel.clone_from(&link.rel);
+    let mut merged = current
+        .rel
+        .as_deref()
+        .map(roles_from_rel)
+        .unwrap_or_default();
+    merged.extend(link.rel.as_deref().map(roles_from_rel).unwrap_or_default());
+    let rel = nonempty_rel(rel_with_other_words(
+        current.rel.as_deref().unwrap_or_default(),
+        &merged,
+    ));
+    if current.rel != rel {
+        current.rel = rel;
     }
     if current.title.is_some() && current.title != link.title {
         current.title.clone_from(&link.title);

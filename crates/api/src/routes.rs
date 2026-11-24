@@ -1951,8 +1951,8 @@ fn link_found_release(
     feed: Option<&Feed>,
     body: &NewAlbumFeed,
 ) -> Result<(), ApiError> {
-    let linked =
-        ensure_draft(w, release).is_ok() && publisher::link(&w.collection, page, release).is_ok();
+    let linked = ensure_draft(w, release).is_ok()
+        && publisher::link(&w.collection, page, release, None).is_ok();
     if !linked && let Some(link) = found_remote_item(role, address, feed, body) {
         pipeline::edit_draft(&w.collection, page, |feed| {
             feed.remote_items.push(Entry::new(link));
@@ -2203,7 +2203,7 @@ fn link_new_release_pages(
     // A written artist page has no draft. The link needs one (ADR 0231
     // item 11).
     ensure_draft(w, artist_id)?;
-    publisher::link(&w.collection, artist_id, release_id)?;
+    publisher::link(&w.collection, artist_id, release_id, None)?;
     let feeds = feed_models(w)?;
     let catalog_feeds: Vec<_> = feeds
         .iter()
@@ -2246,7 +2246,7 @@ fn link_new_release_pages(
             // A written label or hosting page has no draft either (ADR 0231
             // item 11).
             ensure_draft(w, *publisher_id)?;
-            publisher::link(&w.collection, *publisher_id, release_id)?;
+            publisher::link(&w.collection, *publisher_id, release_id, None)?;
         }
     }
     remove_shared_kept_levels(w)?;
@@ -3543,7 +3543,7 @@ pub(crate) async fn add_link(
         ensure_draft(w, publisher_id)?;
         ensure_draft(w, release_id)?;
         let before = before_change(w, &[publisher_id, release_id])?;
-        publisher::link(&w.collection, publisher_id, release_id)?;
+        publisher::link(&w.collection, publisher_id, release_id, None)?;
         remove_shared_kept_levels(w)?;
         changed_json(w, &before)
     })
@@ -3788,7 +3788,7 @@ pub(crate) async fn move_release_to_pages(
             ensure_draft(w, *feed)?;
         }
         for (page, _) in &selected {
-            publisher::link(&w.collection, *page, release_id)?;
+            publisher::link(&w.collection, *page, release_id, None)?;
         }
         for page in &others {
             publisher::unlink(&w.collection, *page, release_id)?;
@@ -3983,7 +3983,7 @@ pub(crate) async fn gather_pages(
                         publisher::unlink(&w.collection, *linked, *release)?;
                     }
                 }
-                publisher::link(&w.collection, parent, *release)?;
+                publisher::link(&w.collection, parent, *release, None)?;
             }
             for (upper, lower) in &kept_before {
                 if *lower == *page
@@ -4215,7 +4215,7 @@ fn move_publisher_page_to_pages(
     }
     for (release, old) in per_release {
         for (target, _) in &selected {
-            publisher::link(&w.collection, *target, release)?;
+            publisher::link(&w.collection, *target, release, None)?;
         }
         for old_page in old {
             publisher::unlink(&w.collection, old_page, release)?;
@@ -4262,7 +4262,7 @@ pub(crate) async fn list_release_on_page(
         let publisher_id = FeedId(id);
         check_mediums(w, publisher_id, None)?;
         ensure_draft(w, publisher_id)?;
-        publisher::list_on_page(&w.collection, publisher_id, FeedId(release))?;
+        publisher::list_on_page(&w.collection, publisher_id, FeedId(release), None)?;
         Ok(Json(json!({ "page_id": publisher_id.0 })))
     })
     .await

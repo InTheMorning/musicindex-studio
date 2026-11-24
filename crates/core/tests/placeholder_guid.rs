@@ -210,7 +210,7 @@ fn a_move_to_a_file_host_with_a_public_address_gives_the_real_guids_and_links() 
     let mut s = setup();
     let artist = new_artist(&mut s, "artist.xml");
     let album = new_album(&mut s, "album.xml");
-    publisher::link(&s.collection, artist, album).unwrap();
+    publisher::link(&s.collection, artist, album, None).unwrap();
     write_new(&mut s, artist);
     write_new(&mut s, album);
     start(&s, artist);
@@ -282,7 +282,7 @@ fn a_written_feed_with_no_draft_gets_its_real_guid_and_its_links() {
     let mut s = setup();
     let artist = new_artist(&mut s, "artist.xml");
     let album = new_album(&mut s, "album.xml");
-    publisher::link(&s.collection, artist, album).unwrap();
+    publisher::link(&s.collection, artist, album, None).unwrap();
     write_new(&mut s, artist);
     write_new(&mut s, album);
     assert!(s.collection.draft(artist).unwrap().is_none());
@@ -487,7 +487,7 @@ fn move_to_public_and_write(s: &mut Setup, id: FeedId) {
 fn linked_written_pages(s: &mut Setup) -> (FeedId, FeedId) {
     let artist = new_artist(s, "artist.xml");
     let album = new_album(s, "album.xml");
-    publisher::link(&s.collection, artist, album).unwrap();
+    publisher::link(&s.collection, artist, album, None).unwrap();
     s.collection.set_feed_folder(artist, "artist").unwrap();
     s.collection.set_feed_folder(album, "album").unwrap();
     write_new(s, artist);

@@ -546,7 +546,7 @@ fn each_publisher_feed_that_links_to_the_feed_is_listed() {
             true,
         )
         .unwrap();
-    publisher::link(&e.collection, label, feed).unwrap();
+    publisher::link(&e.collection, label, feed, None).unwrap();
     assert_eq!(
         publisher::publishers_linking(&e.collection, &e.library, feed).unwrap(),
         [label],

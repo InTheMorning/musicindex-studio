@@ -4,7 +4,7 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Levels And Move
 Decision: [ADR 0257](../adr/0257-a-release-has-one-artist-one-label-and-one-publisher-in-its-fields.md) items 1 to 8, 11, 13 and 16 to 20.
 Mockup: `.studio-dev/design-brief/prototype/release-fields.html` version 4 (artifact VQtbDPfkjihUGaWkwjWRuX). Git ignores it.
 
-Status: Not started. It needs task 250 and packet 251b.
+Status: Packet 252a is done. Packets 252b to 252d are not started.
 
 Technical choices of the main session (no ADR, because ADR 0257 gives the rule and this is how the code does it):
 

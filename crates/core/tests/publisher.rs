@@ -2247,3 +2247,444 @@ fn a_catalog_label_changes_publisher_and_can_be_not_published() {
     );
     assert_eq!(s.collection.kept_levels().unwrap(), []);
 }
+
+fn credits(s: &Setup, release: FeedId) -> publisher::ReleaseCredits {
+    publisher::release_credits(&s.collection, release).unwrap()
+}
+
+fn catalog_steps(s: &Setup) -> u32 {
+    studio_core::change_set::change_sets(&s.collection)
+        .unwrap()
+        .iter()
+        .filter(|set| {
+            matches!(
+                set.operation,
+                studio_core::change_set::RecipientOperation::Catalog
+            )
+        })
+        .map(|set| set.catalog_steps)
+        .sum()
+}
+
+#[test]
+fn release_label_replacement_is_one_step_and_undo_restores_both_sides() {
+    use PublisherRole::{Artist, Label};
+    let mut s = setup();
+    let artist = catalog_page(&mut s, "Artist", &[Artist]);
+    let old = catalog_page(&mut s, "Old label", &[Label]);
+    let new = catalog_page(&mut s, "New label", &[Label]);
+    let release = new_feed(&mut s, "release.xml", "Release", "music");
+    for page in [artist, old] {
+        publisher::link(&s.collection, page, release, None).unwrap();
+    }
+    let before = [artist, old, new, release].map(|id| s.collection.draft(id).unwrap());
+    publisher::set_release_page(&s.collection, release, Label, Some(new)).unwrap();
+    assert_eq!(credits(&s, release).label.unwrap().id, Some(new));
+    assert!(!page_lists_release(&s, old, release));
+    assert!(page_lists_release(&s, new, release));
+    assert_eq!(catalog_steps(&s), 1);
+    studio_core::change_set::undo_catalog_step(&s.collection).unwrap();
+    for (id, draft) in [artist, old, new, release].into_iter().zip(before) {
+        assert_eq!(s.collection.draft(id).unwrap(), draft);
+    }
+}
+
+#[test]
+fn release_artist_and_publisher_share_one_link_and_author_follows_without_alias() {
+    use PublisherRole::{Artist, Hosting};
+    let mut s = setup();
+    let old = catalog_page(&mut s, "Artist", &[Artist]);
+    let page = catalog_page(&mut s, "New artist", &[Artist, Hosting]);
+    let release = new_feed(&mut s, "release.xml", "Release", "music");
+    publisher::link(&s.collection, old, release, None).unwrap();
+    publisher::set_release_page(&s.collection, release, Artist, Some(page)).unwrap();
+    assert_eq!(model(&s, release).author.as_deref(), Some("New artist"));
+    publisher::set_release_page(&s.collection, release, Hosting, Some(page)).unwrap();
+    let feed = model(&s, release);
+    let links = &feed.publisher.as_ref().unwrap().remote_items;
+    assert_eq!(links.len(), 1);
+    assert_eq!(links[0].rel.as_deref(), Some("artist hosting"));
+    assert_eq!(
+        model(&s, page).remote_items[0].rel.as_deref(),
+        Some("artist hosting")
+    );
+    assert_eq!(credits(&s, release).alias, None);
+    assert_eq!(catalog_steps(&s), 2);
+}
+
+#[test]
+fn release_publisher_follows_label_in_one_step_but_keeps_a_selected_publisher() {
+    use PublisherRole::{Artist, Hosting, Label};
+    let mut s = setup();
+    let artist = catalog_page(&mut s, "Artist", &[Artist]);
+    let old_label = catalog_page(&mut s, "Old label", &[Label]);
+    let new_label = catalog_page(&mut s, "New label", &[Label]);
+    let old_host = catalog_page(&mut s, "Old publisher", &[Hosting]);
+    let alpha = catalog_page(&mut s, "Alpha publisher", &[Hosting]);
+    let zulu = catalog_page(&mut s, "Zulu publisher", &[Hosting]);
+    let release = new_feed(&mut s, "release.xml", "Release", "music");
+    for page in [artist, old_label, old_host] {
+        publisher::link(&s.collection, page, release, None).unwrap();
+    }
+    s.collection.add_kept_level(old_host, old_label).unwrap();
+    s.collection.add_kept_level(zulu, new_label).unwrap();
+    s.collection.add_kept_level(alpha, new_label).unwrap();
+    assert!(credits(&s, release).publisher_follows);
+    publisher::set_release_page(&s.collection, release, Label, Some(new_label)).unwrap();
+    assert_eq!(credits(&s, release).publisher.unwrap().id, Some(alpha));
+    assert_eq!(catalog_steps(&s), 1);
+    studio_core::change_set::undo_catalog_step(&s.collection).unwrap();
+    assert_eq!(credits(&s, release).label.unwrap().id, Some(old_label));
+    assert_eq!(credits(&s, release).publisher.unwrap().id, Some(old_host));
+    publisher::set_release_page(&s.collection, release, Hosting, Some(zulu)).unwrap();
+    assert!(!credits(&s, release).publisher_follows);
+    publisher::set_release_page(&s.collection, release, Label, Some(new_label)).unwrap();
+    assert_eq!(credits(&s, release).publisher.unwrap().id, Some(zulu));
+}
+
+#[test]
+fn release_alias_stays_after_artist_change_and_clear_writes_the_page_title() {
+    use PublisherRole::Artist;
+    let mut s = setup();
+    let old = catalog_page(&mut s, "Artist", &[Artist]);
+    let new = catalog_page(&mut s, "New artist", &[Artist]);
+    let release = new_feed(&mut s, "release.xml", "Release", "music");
+    publisher::link(&s.collection, old, release, None).unwrap();
+    pipeline::edit_draft(&s.collection, release, |feed| {
+        feed.author = Some("Artist feat. Guest".into());
+    })
+    .unwrap();
+    publisher::set_release_page(&s.collection, release, Artist, Some(new)).unwrap();
+    assert_eq!(
+        credits(&s, release).alias.as_deref(),
+        Some("Artist feat. Guest")
+    );
+    publisher::clear_release_alias(&s.collection, release).unwrap();
+    assert_eq!(model(&s, release).author.as_deref(), Some("New artist"));
+    assert_eq!(credits(&s, release).alias, None);
+    assert_eq!(catalog_steps(&s), 2);
+    studio_core::change_set::undo_catalog_step(&s.collection).unwrap();
+    assert_eq!(
+        credits(&s, release).alias.as_deref(),
+        Some("Artist feat. Guest")
+    );
+    pipeline::edit_draft(&s.collection, release, |feed| {
+        feed.author = Some(String::new());
+    })
+    .unwrap();
+    publisher::set_release_page(&s.collection, release, Artist, Some(old)).unwrap();
+    assert_eq!(model(&s, release).author.as_deref(), Some("Artist"));
+}
+
+#[test]
+fn release_credits_keep_file_sequence_and_remove_other_label_roles_in_one_step() {
+    use PublisherRole::{Artist, Curator, Label};
+    let mut s = setup();
+    let artist = catalog_page(&mut s, "Artist", &[Artist]);
+    let first = catalog_page(&mut s, "Zulu label", &[Label]);
+    let second = catalog_page(&mut s, "Alpha label", &[Label, Curator]);
+    let release = new_feed(&mut s, "release.xml", "Release", "music");
+    publisher::link(&s.collection, artist, release, None).unwrap();
+    publisher::link(&s.collection, first, release, None).unwrap();
+    let second_party = model(&s, second);
+    pipeline::edit_draft(&s.collection, second, |feed| {
+        feed.remote_items.push(Entry::new(remote(
+            "music",
+            model(&s, release).podcast_guid.as_deref().unwrap(),
+            "",
+            "Release",
+            Some("label curator"),
+        )));
+    })
+    .unwrap();
+    pipeline::edit_draft(&s.collection, release, |feed| {
+        feed.publisher.as_mut().unwrap().remote_items.insert(
+            1,
+            Entry::new(remote(
+                "publisher",
+                second_party.podcast_guid.as_deref().unwrap(),
+                "",
+                "Alpha label",
+                Some("label curator"),
+            )),
+        );
+    })
+    .unwrap();
+    let before = [first, second, release].map(|id| s.collection.draft(id).unwrap());
+    assert_eq!(credits(&s, release).label.unwrap().id, Some(first));
+    assert_eq!(credits(&s, release).other_labels[0].id, Some(second));
+    publisher::remove_other_pages(&s.collection, release, Label).unwrap();
+    assert_eq!(credits(&s, release).other_labels, []);
+    assert_eq!(
+        release_link_roles(&s, release, second).as_deref(),
+        Some("curator")
+    );
+    assert_eq!(
+        model(&s, second).remote_items[0].rel.as_deref(),
+        Some("curator")
+    );
+    assert_eq!(catalog_steps(&s), 1);
+    studio_core::change_set::undo_catalog_step(&s.collection).unwrap();
+    for (id, draft) in [first, second, release].into_iter().zip(before) {
+        assert_eq!(s.collection.draft(id).unwrap(), draft);
+    }
+}
+
+#[test]
+fn release_credit_links_are_written_in_publisher_label_artist_sequence() {
+    use PublisherRole::{Artist, Hosting, Label};
+    let mut s = setup();
+    let artist = catalog_page(&mut s, "Artist", &[Artist]);
+    let label = catalog_page(&mut s, "Label", &[Label]);
+    let host = catalog_page(&mut s, "Publisher", &[Hosting]);
+    let release = new_feed(&mut s, "release.xml", "Release", "music");
+    publisher::set_release_page(&s.collection, release, Artist, Some(artist)).unwrap();
+    publisher::set_release_page(&s.collection, release, Label, Some(label)).unwrap();
+    publisher::set_release_page(&s.collection, release, Hosting, Some(host)).unwrap();
+    let xml = s.collection.draft(release).unwrap().unwrap().draft_xml;
+    let doc = studio_core::xml::Document::parse_bytes(&xml).unwrap();
+    let feed = Feed::read(&doc).unwrap();
+    let roles: Vec<_> = feed
+        .publisher
+        .unwrap()
+        .remote_items
+        .into_iter()
+        .map(|item| item.rel.clone().unwrap())
+        .collect();
+    assert_eq!(roles, ["hosting", "label", "artist"]);
+}
+
+#[test]
+fn release_independent_publisher_uses_newest_independent_release_then_artist_parent() {
+    use PublisherRole::{Artist, Hosting, Label};
+    let mut s = setup();
+    let artist = catalog_page(&mut s, "Artist", &[Artist]);
+    let label = catalog_page(&mut s, "Label", &[Label]);
+    let older_host = catalog_page(&mut s, "Older publisher", &[Hosting]);
+    let newest_host = catalog_page(&mut s, "Newest publisher", &[Hosting]);
+    let parent = catalog_page(&mut s, "Parent publisher", &[Hosting]);
+    let older = new_feed(&mut s, "older.xml", "Older", "music");
+    let newest = new_feed(&mut s, "newest.xml", "Newest", "music");
+    let signed = new_feed(&mut s, "signed.xml", "Signed", "music");
+    let release = new_feed(&mut s, "release.xml", "Release", "music");
+    for (id, host) in [(older, older_host), (newest, newest_host), (signed, parent)] {
+        publisher::link(&s.collection, artist, id, Some(&[Artist])).unwrap();
+        publisher::link(&s.collection, host, id, Some(&[Hosting])).unwrap();
+    }
+    publisher::link(&s.collection, label, signed, None).unwrap();
+    publisher::link(&s.collection, artist, release, None).unwrap();
+    s.collection.add_kept_level(parent, artist).unwrap();
+    assert_eq!(credits(&s, release).follows.unwrap().id, Some(newest_host));
+    publisher::unlink(&s.collection, newest_host, newest).unwrap();
+    publisher::unlink(&s.collection, artist, older).unwrap();
+    publisher::unlink(&s.collection, artist, signed).unwrap();
+    let follows = credits(&s, release).follows.unwrap();
+    assert_eq!(follows.id, Some(parent));
+    publisher::unlink(&s.collection, artist, newest).unwrap();
+    s.collection.remove_kept_level(parent, artist).unwrap();
+    assert_eq!(credits(&s, release).follows, None);
+    assert!(credits(&s, release).publisher_follows);
+}
+
+#[test]
+fn release_credit_change_rolls_back_when_a_required_draft_is_missing() {
+    use PublisherRole::{Artist, Hosting, Label};
+    let mut s = setup();
+    let artist = catalog_page(&mut s, "Artist", &[Artist]);
+    let label = catalog_page(&mut s, "Label", &[Label]);
+    let host = catalog_page(&mut s, "Publisher", &[Hosting]);
+    let release = new_feed(&mut s, "release.xml", "Release", "music");
+    publisher::link(&s.collection, artist, release, None).unwrap();
+    s.collection.add_kept_level(host, label).unwrap();
+    remember_written(&s, host);
+    s.collection.delete_draft(host).unwrap();
+    let before = [artist, label, host, release].map(|id| s.collection.draft(id).unwrap());
+    assert!(publisher::set_release_page(&s.collection, release, Label, Some(label)).is_err());
+    for (id, draft) in [artist, label, host, release].into_iter().zip(before) {
+        assert_eq!(s.collection.draft(id).unwrap(), draft);
+    }
+    assert_eq!(catalog_steps(&s), 0);
+    assert_eq!(s.collection.kept_levels().unwrap(), [(host, label)]);
+}
+
+#[test]
+fn release_credit_changes_reject_invalid_roles_and_an_empty_artist() {
+    use PublisherRole::{Artist, Curator, Label};
+    let mut s = setup();
+    let label = catalog_page(&mut s, "Label", &[Label]);
+    let release = new_feed(&mut s, "release.xml", "Release", "music");
+    for (role, page) in [
+        (Artist, None),
+        (Artist, Some(label)),
+        (Curator, Some(label)),
+    ] {
+        assert_eq!(
+            publisher::set_release_page(&s.collection, release, role, page)
+                .unwrap_err()
+                .kind(),
+            PublisherErrorKind::InvalidAction
+        );
+    }
+    assert_eq!(catalog_steps(&s), 0);
+    publisher::set_release_page(&s.collection, release, Label, None).unwrap();
+    publisher::remove_other_pages(&s.collection, release, Label).unwrap();
+    assert_eq!(catalog_steps(&s), 0);
+}
+
+#[test]
+fn release_credits_keep_an_outside_first_page_and_remove_other_outside_roles() {
+    use PublisherRole::Label;
+    let mut s = setup();
+    let local = catalog_page(&mut s, "Local label", &[Label]);
+    let release = new_feed(&mut s, "release.xml", "Release", "music");
+    publisher::link(&s.collection, local, release, None).unwrap();
+    pipeline::edit_draft(&s.collection, release, |feed| {
+        let links = &mut feed.publisher.as_mut().unwrap().remote_items;
+        links.insert(
+            0,
+            Entry::new(remote(
+                "publisher",
+                "outside-first",
+                "https://outside.example/first.xml",
+                "Outside first",
+                Some("label"),
+            )),
+        );
+        links.push(Entry::new(remote(
+            "publisher",
+            "outside-second",
+            "https://outside.example/second.xml",
+            "Outside second",
+            Some("label curator custom"),
+        )));
+    })
+    .unwrap();
+    assert_eq!(credits(&s, release).label.unwrap().id, None);
+    assert_eq!(credits(&s, release).other_labels.len(), 2);
+    publisher::remove_other_pages(&s.collection, release, Label).unwrap();
+    assert_eq!(credits(&s, release).label.unwrap().title, "Outside first");
+    assert_eq!(credits(&s, release).other_labels, []);
+    assert!(!page_lists_release(&s, local, release));
+    let feed = model(&s, release);
+    assert_eq!(
+        feed.publisher.unwrap().remote_items[1].rel.as_deref(),
+        Some("curator custom")
+    );
+    assert_eq!(catalog_steps(&s), 1);
+}
+
+#[test]
+fn release_publisher_follows_an_artist_change_and_can_be_not_published() {
+    use PublisherRole::{Artist, Hosting, Label};
+    let mut s = setup();
+    let old = catalog_page(&mut s, "Artist", &[Artist]);
+    let new = catalog_page(&mut s, "New artist", &[Artist]);
+    let label = catalog_page(&mut s, "Unpublished label", &[Label]);
+    let host = catalog_page(&mut s, "Publisher", &[Hosting]);
+    let release = new_feed(&mut s, "release.xml", "Release", "music");
+    publisher::link(&s.collection, old, release, None).unwrap();
+    s.collection.add_kept_level(host, new).unwrap();
+    assert!(credits(&s, release).publisher_follows);
+    publisher::set_release_page(&s.collection, release, Artist, Some(new)).unwrap();
+    assert_eq!(credits(&s, release).publisher.unwrap().id, Some(host));
+    assert_eq!(catalog_steps(&s), 1);
+    publisher::set_release_page(&s.collection, release, Label, Some(label)).unwrap();
+    assert_eq!(credits(&s, release).publisher, None);
+    assert_eq!(credits(&s, release).follows, None);
+    assert!(credits(&s, release).publisher_follows);
+    assert!(!page_lists_release(&s, host, release));
+    assert_eq!(catalog_steps(&s), 2);
+    studio_core::change_set::undo_catalog_step(&s.collection).unwrap();
+    assert_eq!(credits(&s, release).publisher.unwrap().id, Some(host));
+    assert_eq!(credits(&s, release).label, None);
+}
+
+#[test]
+fn remove_other_credit_pages_keeps_duplicate_roles_that_were_not_selected() {
+    use PublisherRole::{Artist, Label};
+    let mut s = setup();
+    let first = catalog_page(&mut s, "First page", &[Artist, Label]);
+    let second = catalog_page(&mut s, "Second page", &[Artist, Label]);
+    let release = new_feed(&mut s, "release.xml", "Release", "music");
+    publisher::link(&s.collection, first, release, None).unwrap();
+    let page = model(&s, second);
+    let release_guid = model(&s, release).podcast_guid.unwrap();
+    pipeline::edit_draft(&s.collection, second, |feed| {
+        feed.remote_items.push(Entry::new(remote(
+            "music",
+            &release_guid,
+            "",
+            "Release",
+            Some("artist label"),
+        )));
+    })
+    .unwrap();
+    pipeline::edit_draft(&s.collection, release, |feed| {
+        feed.publisher
+            .as_mut()
+            .unwrap()
+            .remote_items
+            .push(Entry::new(remote(
+                "publisher",
+                page.podcast_guid.as_deref().unwrap(),
+                "",
+                "Second page",
+                Some("artist label"),
+            )));
+    })
+    .unwrap();
+    publisher::remove_other_pages(&s.collection, release, Label).unwrap();
+    assert_eq!(
+        release_link_roles(&s, release, first).as_deref(),
+        Some("artist label")
+    );
+    assert_eq!(
+        release_link_roles(&s, release, second).as_deref(),
+        Some("artist")
+    );
+    assert_eq!(credits(&s, release).other_artists.len(), 1);
+    assert_eq!(credits(&s, release).other_labels, []);
+    assert_eq!(catalog_steps(&s), 1);
+}
+
+#[test]
+fn release_credits_read_written_models_without_starting_drafts() {
+    use PublisherRole::Artist;
+    let mut s = setup();
+    let artist = catalog_page(&mut s, "Artist", &[Artist]);
+    let release = new_feed(&mut s, "release.xml", "Release", "music");
+    publisher::link(&s.collection, artist, release, None).unwrap();
+    for id in [artist, release] {
+        remember_written(&s, id);
+        s.collection.delete_draft(id).unwrap();
+    }
+    let read = credits(&s, release);
+    assert_eq!(read.artist.unwrap().id, Some(artist));
+    assert_eq!(read.alias, None);
+    for id in [artist, release] {
+        assert_eq!(s.collection.draft(id).unwrap(), None);
+    }
+    assert_eq!(catalog_steps(&s), 0);
+}
+
+#[test]
+fn unchanged_release_credit_fields_add_no_catalog_step() {
+    use PublisherRole::{Artist, Label};
+    let mut s = setup();
+    let artist = catalog_page(&mut s, "Artist", &[Artist]);
+    let label = catalog_page(&mut s, "Label", &[Label]);
+    let release = new_feed(&mut s, "release.xml", "Release", "music");
+    for page in [artist, label] {
+        publisher::link(&s.collection, page, release, None).unwrap();
+    }
+    let before =
+        [artist, label, release].map(|id| s.collection.draft(id).unwrap().unwrap().draft_xml);
+    publisher::set_release_page(&s.collection, release, Label, Some(label)).unwrap();
+    publisher::set_release_page(&s.collection, release, Artist, Some(artist)).unwrap();
+    publisher::clear_release_alias(&s.collection, release).unwrap();
+    publisher::remove_other_pages(&s.collection, release, Artist).unwrap();
+    for (id, xml) in [artist, label, release].into_iter().zip(before) {
+        assert_eq!(s.collection.draft(id).unwrap().unwrap().draft_xml, xml);
+    }
+    assert_eq!(catalog_steps(&s), 0);
+}

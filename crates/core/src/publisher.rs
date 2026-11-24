@@ -18,6 +18,12 @@ use crate::feed::{Entry, Feed, Publisher, RemoteItem};
 use crate::library::Library;
 use crate::pipeline::{self, PipelineError};
 
+mod credits;
+pub use credits::{
+    ReleaseCredits, ReleasePage, clear_release_alias, release_credits, remove_other_pages,
+    set_release_page,
+};
+
 mod page_change;
 pub use page_change::{
     PageAction, PageChangePreview, PageChangeRequest, PageChangeResult, change_page,
@@ -810,6 +816,18 @@ pub fn set_link_roles(
         ));
     }
     check_role_available(collection, release, Some(publisher), &selected)?;
+    write_link_roles(collection, publisher, release, &selected)
+}
+
+/// Update existing link roles without adding a role to a different page.
+fn write_link_roles(
+    collection: &Collection,
+    publisher: FeedId,
+    release: FeedId,
+    selected: &[PublisherRole],
+) -> Result<(), PublisherError> {
+    let publisher_party = party(collection, &collection.feed(publisher)?)?;
+    let release_party = party(collection, &collection.feed(release)?)?;
     pipeline::edit_draft(collection, publisher, |feed| {
         if let Some(item) = feed
             .remote_items
@@ -818,7 +836,7 @@ pub fn set_link_roles(
         {
             item.rel = nonempty_rel(rel_with_other_words(
                 item.rel.as_deref().unwrap_or_default(),
-                &selected,
+                selected,
             ));
         }
     })?;
@@ -831,7 +849,7 @@ pub fn set_link_roles(
         {
             item.rel = nonempty_rel(rel_with_other_words(
                 item.rel.as_deref().unwrap_or_default(),
-                &selected,
+                selected,
             ));
         }
         if let Some(links) = feed.publisher.as_mut() {

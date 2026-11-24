@@ -6,7 +6,7 @@ use super::{
     Catalog, Collection, Feed, FeedId, FeedRow, Library, PublisherError, PublisherErrorKind,
     PublisherRole, catalogs, catalogs_with_kept, check_connector, check_publisher, check_release,
     link, names, nonempty_rel, party, party_of, pipeline, rank, rel_with_other_words,
-    replaced_kept_levels, roles, roles_from_rel, set_link_roles, sort_publisher_links, unlink,
+    replaced_kept_levels, roles, roles_from_rel, sort_publisher_links, unlink, write_link_roles,
 };
 
 /// A change of a page in the Catalog (ADR 0254 items 23 and 39).
@@ -97,6 +97,23 @@ pub fn change_page(
     selected_page: Option<FeedId>,
     selected_releases: &[FeedId],
 ) -> Result<PageChangeResult, PublisherError> {
+    catalog_change(collection, || {
+        change_page_inner(
+            collection,
+            library,
+            page,
+            action,
+            selected_page,
+            selected_releases,
+        )
+    })
+}
+
+/// Keep a Catalog change and its Undo record in one transaction.
+pub(super) fn catalog_change<T>(
+    collection: &Collection,
+    change: impl FnOnce() -> Result<T, PublisherError>,
+) -> Result<T, PublisherError> {
     collection.catalog_transaction(|| {
         let before = collection
             .feeds()?
@@ -104,28 +121,33 @@ pub fn change_page(
             .map(|row| Ok((row.id, collection.draft(row.id)?)))
             .collect::<Result<Vec<_>, crate::collection::CollectionError>>()?;
         let kept_before = collection.kept_levels()?;
-        let result = change_page_inner(
-            collection,
-            library,
-            page,
-            action,
-            selected_page,
-            selected_releases,
-        )?;
-        if !result.nothing_changes {
+        let result = change()?;
+        let kept_after = collection.kept_levels()?;
+        let changed = before.iter().try_fold(false, |changed, (id, draft)| {
+            let after = collection.draft(*id)?;
+            Ok::<_, crate::collection::CollectionError>(
+                changed
+                    || match (draft, after) {
+                        (Some(before), Some(after)) => before.draft_xml != after.draft_xml,
+                        (None, None) => false,
+                        _ => true,
+                    },
+            )
+        })?;
+        if changed || kept_before != kept_after {
             crate::change_set::record_page_move_change_set(
                 collection,
                 &crate::change_set::RecipientOperation::Catalog,
                 &before,
                 &kept_before,
-                &collection.kept_levels()?,
+                &kept_after,
             )?;
         }
         Ok(result)
     })
 }
 
-fn models(
+pub(super) fn models(
     collection: &Collection,
     library: Option<&Library>,
 ) -> Result<Vec<(FeedRow, Option<Feed>)>, PublisherError> {
@@ -251,7 +273,20 @@ fn change_release_pages(
         release,
         action.removed_roles(),
         additions,
+        None,
     )?;
+    changed |= add_release_pages(collection, release, additions)?;
+    let after = pipeline::draft_model(collection, release)?.0;
+    Ok(before.publisher != after.publisher || changed)
+}
+
+pub(super) fn add_release_pages(
+    collection: &Collection,
+    release: FeedId,
+    additions: &[(FeedId, PublisherRole)],
+) -> Result<bool, PublisherError> {
+    let release_row = check_release(collection, release)?;
+    let mut changed = false;
     for &(target, role) in additions {
         let target_party = party(collection, &collection.feed(target)?)?;
         let current = pipeline::draft_model(collection, release)?.0;
@@ -275,8 +310,7 @@ fn change_release_pages(
             changed = true;
         }
     }
-    let after = pipeline::draft_model(collection, release)?.0;
-    Ok(before.publisher != after.publisher || changed)
+    Ok(changed)
 }
 
 fn page_additions(
@@ -309,40 +343,47 @@ fn page_additions(
             return Err(invalid("the selected page has the wrong role"));
         }
         additions.push((target, role));
-        if role == Label {
-            let target_index = feeds
-                .iter()
-                .position(|(row, _)| row.id == target)
-                .ok_or_else(|| invalid("the selected page is missing"))?;
-            let follows = catalog[target_index]
-                .parents
-                .iter()
-                .filter_map(|id| feeds.iter().find(|(row, _)| row.id == *id))
-                .filter(|(row, _)| row.publisher_roles.contains(&Hosting))
-                .min_by_key(|(row, model)| (title(row, model.as_ref()).to_lowercase(), row.id.0));
-            if let Some((row, _)) = follows {
-                check_connector(row)?;
-                additions.push((row.id, Hosting));
-            }
+        if role == Label
+            && let Some(target) = publisher_above(feeds, catalog, target)
+        {
+            check_connector(&collection.feed(target)?)?;
+            additions.push((target, Hosting));
         }
     }
     Ok(additions)
 }
 
-fn title(row: &FeedRow, model: Option<&Feed>) -> String {
+/// Give the first publisher directly above a page, from A to Z.
+pub(super) fn publisher_above(
+    feeds: &[(FeedRow, Option<Feed>)],
+    catalog: &[Catalog],
+    page: FeedId,
+) -> Option<FeedId> {
+    let index = feeds.iter().position(|(row, _)| row.id == page)?;
+    catalog[index]
+        .parents
+        .iter()
+        .filter_map(|id| feeds.iter().find(|(row, _)| row.id == *id))
+        .filter(|(row, _)| row.publisher_roles.contains(&PublisherRole::Hosting))
+        .min_by_key(|(row, model)| (title(row, model.as_ref()).to_lowercase(), row.id.0))
+        .map(|(row, _)| row.id)
+}
+
+pub(super) fn title(row: &FeedRow, model: Option<&Feed>) -> String {
     model
         .and_then(|feed| feed.title.clone())
         .or_else(|| row.title.clone())
         .unwrap_or_else(|| format!("Feed {}", row.id.0))
 }
 
-fn remove_page_roles(
+pub(super) fn remove_page_roles(
     collection: &Collection,
     feeds: &[(FeedRow, Option<Feed>)],
     page: FeedId,
     release: FeedId,
     removed: &[PublisherRole],
     additions: &[(FeedId, PublisherRole)],
+    kept_item: Option<&crate::feed::RemoteItem>,
 ) -> Result<bool, PublisherError> {
     let release_party = party(collection, &collection.feed(release)?)?;
     let release_feed = pipeline::draft_model(collection, release)?.0;
@@ -382,10 +423,11 @@ fn remove_page_roles(
         if remaining.is_empty() {
             unlink(collection, row.id, release)?;
         } else {
+            // Make the missing side of a link that has one side only (ADR 0251).
             if channel.is_none() || reverse.is_none() {
                 link(collection, row.id, release, Some(&remaining))?;
             }
-            set_link_roles(collection, row.id, release, &remaining)?;
+            write_link_roles(collection, row.id, release, &remaining)?;
         }
         changed = true;
     }
@@ -395,21 +437,25 @@ fn remove_page_roles(
         .iter()
         .flat_map(|links| &links.remote_items)
         .any(|item| {
-            !feeds.iter().any(|(row, model)| {
-                row.medium.as_deref() == Some("publisher")
-                    && names(&item.value, &party_of(row, model.as_ref()))
-            }) && roles_from_rel(item.rel.as_deref().unwrap_or_default())
-                .iter()
-                .any(|role| removed.contains(role))
+            !kept_item.is_some_and(|kept| super::same_name(&item.value, kept))
+                && !feeds.iter().any(|(row, model)| {
+                    row.medium.as_deref() == Some("publisher")
+                        && names(&item.value, &party_of(row, model.as_ref()))
+                })
+                && roles_from_rel(item.rel.as_deref().unwrap_or_default())
+                    .iter()
+                    .any(|role| removed.contains(role))
         });
     if outside_changes {
         pipeline::edit_draft(collection, release, |feed| {
             if let Some(links) = feed.publisher.as_mut() {
                 links.remote_items.retain_mut(|item| {
-                    if feeds.iter().any(|(row, model)| {
-                        row.medium.as_deref() == Some("publisher")
-                            && names(&item.value, &party_of(row, model.as_ref()))
-                    }) {
+                    if kept_item.is_some_and(|kept| super::same_name(&item.value, kept))
+                        || feeds.iter().any(|(row, model)| {
+                            row.medium.as_deref() == Some("publisher")
+                                && names(&item.value, &party_of(row, model.as_ref()))
+                        })
+                    {
                         return true;
                     }
                     let current = roles_from_rel(item.rel.as_deref().unwrap_or_default());

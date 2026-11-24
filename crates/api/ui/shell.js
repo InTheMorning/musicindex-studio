@@ -258,7 +258,7 @@ function outlineItems(feed, view, model, narrow, feeds) {
       (feed.release_ids || []).map((id) => byId.get(id)).filter(Boolean).forEach((release) => items.push({
         id: `release:${release.id}`,
         label: displayTitle(release),
-        move: true,
+        move: false,
         target: openFeedView(release.id, narrow, level),
       }));
       if (groups.releaseAdd) items.push({ id: 'add-release', label: groups.releaseAdd.label, action: 'add-feed', open: groups.releaseAdd.open, start: groups.releaseAdd.start, from: level });
@@ -579,7 +579,7 @@ function feedLevel(owner, view, feeds) {
       ? (owner.release_ids || []).map((id) => byId.get(id)).filter(Boolean).map((feed) => ({
         id: feed.id,
         title: displayTitle(feed),
-        move: true,
+        move: false,
         from,
       }))
       : null,

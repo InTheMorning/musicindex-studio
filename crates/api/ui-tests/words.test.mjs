@@ -66,6 +66,9 @@ function isInterfaceText(text, at) {
   const word = text.slice(at).match(/^publishers?/i)?.[0];
   if (!word) return false;
   const end = at + word.length;
+  // ADR 0257 item 5 gives these hints for the Publisher field.
+  if (text === 'A release has one publisher. A music file calls the label "Publisher". Here the label goes in Label.'
+    || text === 'You selected the publisher.') return false;
   if (text === 'publisher' || text === 'publishers') return false;
   // ADR 0250 item 5 gives this exact label to the medium repair menu.
   const repairLabel = 'Artist or label page (';

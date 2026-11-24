@@ -15,9 +15,9 @@ const FEED_FIELDS = ['title', 'author', 'nostr', 'artwork', 'description', 'link
 
 const PAGES = {
   album: ({ release = false } = {}) => [
-    { id: 'album', tier: 'identity', fields: [...FEED_FIELDS.slice(0, 1), ...(release ? ['kind'] : []), ...FEED_FIELDS.slice(1)] },
+    { id: 'album', tier: 'identity', fields: [...FEED_FIELDS.slice(0, 1), ...(release ? ['kind', 'release-credits'] : ['author']), ...FEED_FIELDS.slice(2)] },
     { id: 'tracks', tier: 'content' },
-    { id: 'publishers', tier: 'details' },
+    ...(release ? [] : [{ id: 'publishers', tier: 'details' }]),
     { id: 'feed', tier: 'setup', rows: ['facts'] },
   ],
   publisher: () => [

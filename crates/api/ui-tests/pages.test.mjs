@@ -46,7 +46,7 @@ test('the page settings gives op3 after locked for an album only', () => {
 
 test('the release kind field follows Title in the first tab', () => {
   const owner = 'ADR 0256 item 13: put Kind between Title and Artist on the first tab of a release. Fix pages.js.';
-  assert.deepEqual(pageSequence('album', { release: true })[0].fields.slice(0, 3), ['title', 'kind', 'author'], owner);
+  assert.deepEqual(pageSequence('album', { release: true })[0].fields.slice(0, 3), ['title', 'kind', 'release-credits'], owner);
   assert.ok(!pageSequence('album', { release: false })[0].fields.includes('kind'), owner);
 });
 
@@ -183,4 +183,15 @@ test('a tab change of Settings or of one person page does not ask the leave ques
     `ADR 0116 item 8: a different person is a leave. ${fix}`);
   assert.equal(isTabChange({ name: 'person', id: 4, tab: 'feeds' }, { name: 'people' }), false, fix);
   assert.equal(isTabChange({ name: 'person', id: 4, tab: 'feeds' }, undefined), false, fix);
+});
+
+test('release credits replace the author field and the linked pages section', () => {
+  const release = pageSequence('album', { release: true });
+  assert.ok(!release[0].fields.includes('author'));
+  assert.ok(!release.some(({ id }) => id === 'publishers'));
+  for (const name of ['album', 'playlist']) {
+    const page = pageSequence(name);
+    assert.ok(page[0].fields.includes('author'));
+    assert.ok(page.some(({ id }) => id === 'publishers'));
+  }
 });

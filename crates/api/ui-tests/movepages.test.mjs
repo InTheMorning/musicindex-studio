@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  NEW_PAGE_PREFIX, moveTitle, moveMenus, moveStart, moveForArtist, moveReady, moveBody, hasArtistPage, NEEDS_ARTIST_LINE,
+  NEW_PAGE_PREFIX, releaseCreditFields,
   movePageTitle, pageMoveRoles, pageMoveBody, pageMoveMenus, pageMoveStart, pageMoveLines, gatherPagesModel,
 } from '../ui/movepages.js';
 
@@ -14,47 +14,6 @@ const feeds = [
   page(30, 'Read Only', ['artist'], { connector_id: null }),
 ];
 const owner = 'ADR 0240 items 12 to 17: the model of the sheet. Fix crates/api/ui/movepages.js.';
-
-test('the menus: artist has no None, label and hosting start with None, each ends with a new page', () => {
-  const menus = moveMenus(feeds, {});
-  assert.deepEqual(menus.map((menu) => menu.role), ['artist', 'label', 'hosting'], owner);
-  assert.deepEqual(menus[0].options.map((o) => o[1]), ['Amy', 'Zed', 'New Artist Page…'], `${owner} A page with no connector is not a value.`);
-  assert.deepEqual(menus[1].options[0], ['', 'None'], owner);
-  assert.deepEqual(menus[2].options[0], ['', 'None'], owner);
-  for (const menu of menus) {
-    assert.equal(menu.options.at(-1)[0], `${NEW_PAGE_PREFIX}${menu.role}`, owner);
-  }
-});
-
-test('an artist menu with no artist page says so', () => {
-  const menu = moveMenus([], {})[0];
-  assert.deepEqual(menu.options[0], ['', 'No artist page yet'], owner);
-});
-
-test('the start values follow the links, then the pages above the artist (item 15)', () => {
-  assert.deepEqual(moveStart(feeds, { publisher_ids: [] }), { artist: '2', label: '', hosting: '' }, owner);
-  assert.deepEqual(moveStart(feeds, { publisher_ids: [1] }), { artist: '1', label: '10', hosting: '20' }, owner);
-  assert.deepEqual(moveStart(feeds, { publisher_ids: [1, 20] }), { artist: '1', label: '10', hosting: '20' }, owner);
-  assert.deepEqual(moveForArtist(feeds, 1), { artist: '1', label: '10', hosting: '20' }, owner);
-  assert.deepEqual(moveForArtist(feeds, 2), { artist: '2', label: '', hosting: '' }, owner);
-});
-
-test('hosting above label above artist gives the hosting menu start value (ADR 0240 item 15)', () => {
-  assert.deepEqual(moveForArtist(feeds, 1), { artist: '1', label: '10', hosting: '20' }, owner);
-});
-
-test('the body, the ready check and the title', () => {
-  assert.deepEqual(moveBody({ artist: '1', label: '', hosting: '20' }), { artist_id: 1, label_id: null, hosting_id: 20 }, owner);
-  assert.equal(moveReady({ artist: '' }), false, owner);
-  assert.equal(moveReady({ artist: '3' }), true, owner);
-  assert.equal(moveTitle({ title: 'Night' }), 'Move Night', owner);
-});
-
-test('a release needs an artist page', () => {
-  assert.equal(hasArtistPage(feeds, { publisher_ids: [10] }), false, owner);
-  assert.equal(hasArtistPage(feeds, { publisher_ids: [1] }), true, owner);
-  assert.equal(NEEDS_ARTIST_LINE, 'A release needs an artist page.', owner);
-});
 
 test('page moves show the allowed roles, current parent, and changed page lines', () => {
   const artist = { ...feeds[0], release_ids: [101, 102] };
@@ -108,4 +67,66 @@ test('a page move with no link change has an instruction and no heading (ADR 024
   const artist = { ...feeds[0], release_ids: [101] };
   assert.deepEqual(pageMoveLines(feeds, artist, { label: '10', hosting: '20' }), ['Select a label or a publisher page.'],
     'ADR 0243 item 6: fix pageMoveLines in crates/api/ui/movepages.js.');
+});
+
+const credit = (id, title) => ({ id, title });
+const credits = {
+  artist: credit(1, 'Zed'), label: credit(10, 'Label A'), publisher: credit(20, 'Host A'),
+  follows: credit(20, 'Host A'), publisher_follows: true,
+  other_artists: [], other_labels: [], other_publishers: [], alias: null,
+};
+
+test('release menus use writable pages and core selections without parent defaults', () => {
+  const view = releaseCreditFields(credits, feeds);
+  assert.deepEqual(view.menus.map(({ role, value }) => [role, value]), [['artist', '1'], ['label', '10'], ['hosting', '20']]);
+  assert.deepEqual(view.menus[0].options.map((option) => option[1]), ['Amy', 'Zed', 'New Artist Page…']);
+  assert.deepEqual(view.menus[1].options.at(-2), ['', 'Independent (no label)']);
+  assert.deepEqual(view.menus[2].options.at(-2), ['', 'Not published']);
+  for (const menu of view.menus) assert.equal(menu.options.at(-1)[0], `${NEW_PAGE_PREFIX}${menu.role}`);
+  const empty = releaseCreditFields({ ...credits, artist: null, label: null, publisher: null, follows: null }, feeds);
+  assert.equal(empty.menus[0].placeholder, 'Select an artist page');
+  assert.equal(empty.menus[0].value, '');
+  assert.ok(!empty.menus[0].options.some(([value]) => value === ''));
+  assert.equal(empty.menus[1].value, '');
+  assert.equal(empty.menus[2].value, '');
+});
+
+test('the core gives the publisher that follows even when the feed tree differs', () => {
+  const view = releaseCreditFields({ ...credits, follows: credit(999, 'Other publisher') }, feeds);
+  assert.equal(view.follows, 999);
+  assert.match(view.menus[2].hint, /^Follows the label\./);
+  assert.match(view.menus[2].hint, /Here the label goes in Label\./);
+  assert.equal(view.followLabel, null);
+  const independent = releaseCreditFields({ ...credits, label: null, follows: null }, feeds);
+  assert.match(independent.menus[2].hint, /^Follows the artist page\./);
+  assert.equal(independent.follows, null);
+});
+
+test('a selected publisher uses the core flag and offers the correct follow button', () => {
+  const view = releaseCreditFields({ ...credits, publisher_follows: false }, feeds);
+  assert.equal(view.menus[2].hint, 'You selected the publisher.');
+  assert.equal(view.followLabel, 'Follow the Label Again');
+  assert.equal(releaseCreditFields({ ...credits, label: null, publisher_follows: false }, feeds).followLabel, 'Follow the Artist Page Again');
+});
+
+test('other linked pages keep their file sequence and names in the hint', () => {
+  const view = releaseCreditFields({ ...credits, other_artists: [credit(2, 'Amy'), credit(null, 'Outside artist')] }, feeds);
+  assert.equal(view.menus[0].otherHint, 'Also linked in the file: Amy, Outside artist.');
+  assert.equal(view.menus[1].otherHint, null);
+  const outside = releaseCreditFields({ ...credits, artist: credit(null, 'Outside artist') }, feeds);
+  assert.deepEqual(outside.menus[0].options[0], ['external', 'Outside artist', true]);
+  assert.equal(outside.menus[0].value, 'external');
+  const readOnly = releaseCreditFields({ ...credits, artist: credit(30, 'Read Only') }, feeds);
+  assert.deepEqual(readOnly.menus[0].options[0], ['30', 'Read Only', true]);
+});
+
+test('the alias section and its hint use the alias that the core gives', () => {
+  const view = releaseCreditFields(credits, feeds);
+  assert.equal(view.aliasOpen, false);
+  assert.equal(view.aliasPlaceholder, 'Zed');
+  assert.match(view.aliasHint, /“Zed”/);
+  const alias = releaseCreditFields({ ...credits, alias: 'Zed feat. Amy' }, feeds);
+  assert.equal(alias.aliasOpen, true);
+  assert.equal(alias.alias, 'Zed feat. Amy');
+  assert.equal(alias.aliasHint, 'The artist name of this release in podcast apps and music files: “Zed feat. Amy”. The release stays in the catalog of the artist page above.');
 });

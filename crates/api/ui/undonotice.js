@@ -99,3 +99,26 @@ export function DeleteUndoProvider({ api, children }) {
   const value = { model, ...actions.current };
   return html`<${DeleteUndoContext.Provider} value=${value}>${children}<//>`;
 }
+
+// Show the Catalog step with Undo and Review (ADR 0257 item 8).
+export function CatalogUndoNotice({ answer, api, prepare, onUndone, onReview }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const undo = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      if (prepare && !(await prepare())) return;
+      await api('/catalog/undo', { method: 'POST' });
+      await onUndone();
+    } catch (failure) {
+      setError(failure);
+    } finally { setBusy(false); }
+  };
+  return html`<div class="notice" role="status"><span>${answer.notice}</span>
+    <div class="actions"><button class="button" type="button" disabled=${busy} onClick=${undo}>Undo</button>
+      <button class="button action" type="button" disabled=${busy || answer.change_set_id == null} onClick=${() => onReview(answer.change_set_id)}>Review</button></div>
+    ${error && html`<div class="error" role="alert">Studio could not undo the change. Try Undo again.
+      <details class="disclosure"><summary>Details</summary><pre>${error.message}</pre></details></div>`}
+  </div>`;
+}

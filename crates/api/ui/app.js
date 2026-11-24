@@ -510,15 +510,16 @@ function title(error) {
 // A labelled input. `error` is a line of red text below the field (ADR 0018).
 // The label and the input sit in one body div, so that a field in a group
 // can put the label at the left at a wide width (ADR 0029, task 014c).
-export function Field({ id, label, hint, error, children, rootProps, select = false, ...input }) {
+export function Field({ id, label, hint, error, children, rootProps, select = false, hintAfter = false, labelHidden = false, ...input }) {
   const described = [hint && `${id}-hint`, error && `${id}-error`].filter(Boolean).join(' ');
   return html`<div class="field" ...${rootProps}>
-    <label for=${id}>${label}</label>
+    <label for=${id} class=${labelHidden ? 'visually-hidden' : undefined}>${label}</label>
     <div class="field-body">
-      ${hint && html`<span class="hint" id=${`${id}-hint`}>${hint}</span>`}
+      ${hint && !hintAfter && html`<span class="hint" id=${`${id}-hint`}>${hint}</span>`}
       ${select
         ? html`<select id=${id} aria-invalid=${error ? 'true' : undefined} aria-describedby=${described || undefined} ...${input}>${children}</select>`
         : html`<input id=${id} aria-invalid=${error ? 'true' : undefined} aria-describedby=${described || undefined} ...${input} />`}
+      ${hint && hintAfter && html`<span class="hint" id=${`${id}-hint`}>${hint}</span>`}
       ${error && html`<span class="field-error" id=${`${id}-error`}>${error}</span>`}
       ${!select && children}
     </div>
@@ -1344,18 +1345,20 @@ function BlossomHostForm({ onAdded }) {
 }
 
 // One setting with a small number of values, as a select menu in one row.
-// `options` is a list of [value, label] pairs.
+// Each menu entry has a value, a label, and an optional disabled flag.
 // A `placeholder` adds a first entry with an empty value, for a setting that
 // has no value yet.
-export function ChoiceSelect({ id, label, value, options, placeholder, hint, onChange, pending = false }) {
+export function ChoiceSelect({ id, label, value, options, placeholder, hint, onChange, pending = false, disabled = false, hintAfter = false, placeholderDisabled = false, children }) {
   return html`<div class="field">
     <label for=${id}>${label}</label>
     <div class="field-body">
-      ${hint && html`<span class="hint" id=${`${id}-hint`}>${hint}</span>`}
-      <select id=${id} value=${value} class=${pending ? 'pending' : undefined} aria-describedby=${hint ? `${id}-hint` : undefined} onChange=${(e) => onChange(e.target.value)}>
-        ${placeholder && html`<option value="">${placeholder}</option>`}
-        ${options.map(([option, text]) => html`<option value=${option}>${text}</option>`)}
+      ${hint && !hintAfter && html`<span class="hint" id=${`${id}-hint`}>${hint}</span>`}
+      <select id=${id} value=${value} disabled=${disabled} class=${pending ? 'pending' : undefined} aria-describedby=${hint ? `${id}-hint` : undefined} onChange=${(e) => onChange(e.target.value)}>
+        ${placeholder && html`<option value="" disabled=${placeholderDisabled}>${placeholder}</option>`}
+        ${options.map(([option, text, unavailable]) => html`<option value=${option} disabled=${unavailable}>${text}</option>`)}
       </select>
+      ${hint && hintAfter && html`<span class="hint" id=${`${id}-hint`}>${hint}</span>`}
+      ${children}
     </div>
   </div>`;
 }
@@ -3949,9 +3952,6 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
   const headFeed = inGroup && head && head.id !== null ? feeds.find((f) => f.id === head.id) : null;
   const more = releaseAdd(headFeed, headFeed && headFeed.title);
   const [adding, setAdding] = useState(null);
-  // The ID of the release in the sheet "Move {title}" (ADR 0240 item 10).
-  const [moving, setMoving] = useState(null);
-  const movingFeed = moving === null ? null : feeds.find((f) => f.id === moving);
   // The groups "Not linked" and "Other" have no add menu (ADR 0230 item 2
   // names the top page and the pages of a publisher).
   const hideAdd = inGroup && !headFeed;
@@ -4005,8 +4005,6 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
                   ${releases.view === 'rows' && html`<span class="sub">${row.draftLabel}</span>`}
                 </span>
               </button>
-              ${group === 'none' && feeds.some((f) => f.id === row.id && f.connector_id) && html`<div class="actions"><button class="button" type="button"
-                aria-label=${`Move ${row.title} to pages`} onClick=${() => setMoving(row.id)}>Move To…</button></div>`}
             </li>`)}
           <//>`
         : query.trim()
@@ -4020,12 +4018,6 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
     </section>
     ${adding && html`<${AddFeedRowSheet} open=${adding.open} connectors=${connectors} feeds=${feeds}
       start=${adding.start} onAdded=${addedRelease} onConnect=${onConnect} onClose=${() => setAdding(null)} />`}
-    ${movingFeed && html`<${MoveSheet} release=${movingFeed} feeds=${feeds} connectors=${connectors} onListChanged=${onListChanged}
-      onMoved=${async (answer, body) => { setMoving(null); await onListChanged(); onGo(answer.change_set_id != null
-        ? changeSetView({ id: answer.change_set_id, operation: { kind: 'move_pages' } }) : movedReleaseView(body.artist_id)); }}
-      onAddHost=${() => { setMoving(null); onGo({ name: 'hosts', add: true }); }}
-      onOpenChanges=${(id) => { setMoving(null); onGo({ name: 'change-set', id }); }}
-      onClose=${() => setMoving(null)} />`}
   </div>`;
 }
 
@@ -4625,8 +4617,7 @@ function Shell({ vault, onLock, version }) {
       start=${addingFeed.start} onAdded=${(f, info) => { setAddingFeed(null); addedFeed(f, info, addingFeed.from); }}
       onConnect=${() => go({ name: 'hosts' })}
       onClose=${() => setAddingFeed(null)} />`}
-    ${movingFeed && html`<${MoveSheet} key=${moveId} release=${movingPage ? undefined : movingFeed}
-      page=${movingPage ? { ...movingFeed, parent_ids: movingFeed.parent_ids || [], release_ids: movingFeed.release_ids || [] } : undefined}
+    ${movingPage && html`<${MoveSheet} key=${moveId} page=${movingPage ? { ...movingFeed, parent_ids: movingFeed.parent_ids || [], release_ids: movingFeed.release_ids || [] } : undefined}
       feeds=${feeds} connectors=${connectors} onListChanged=${load}
       prepare=${selected && selected.id === moveId && draftFeedId === moveId ? () => draft.flush() : undefined}
       onMoved=${openMoveReview}

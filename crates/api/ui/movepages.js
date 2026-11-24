@@ -1,6 +1,6 @@
 // The model of the sheet "Move {title}" (ADR 0240 items 12 to 17). The
 // functions have no Preact and no browser state. `editor.js` shows the sheet.
-import { isPublisher, FIRST_CLASS_ROLES, roleWord } from './shell.js';
+import { isPublisher, roleWord } from './shell.js';
 
 // The prefix of the value that opens the form of a new page (ADR 0240 item
 // 14). The rest of the value is the role of the new page.
@@ -19,11 +19,6 @@ function pagesOf(feeds, role) {
 
 function pageTitle(feed) {
   return feed.title || feed.path || 'Untitled page';
-}
-
-// The title of the sheet (ADR 0240 item 12).
-export function moveTitle(release) {
-  return `Move ${release.title || release.path || 'Untitled release'}`;
 }
 
 // The title of the sheet for a publisher page (ADR 0240 item 21).
@@ -131,83 +126,39 @@ export function gatherPagesModel(feeds, level, role, selected = null) {
   };
 }
 
-// The three menus of the sheet (ADR 0240 items 13 and 14). `values` holds the
-// selected value of each menu, as a string. The artist menu has no "None".
-// Label and Hosting start with "None". Each menu ends with "New … Page…". An
-// artist menu with no artist page starts with a line that says so, because
-// no value can be selected.
-export function moveMenus(feeds, values) {
-  return FIRST_CLASS_ROLES.map((role) => {
-    const pages = pagesOf(feeds, role).map((feed) => [String(feed.id), pageTitle(feed)]);
-    const lead = role !== 'artist' ? [['', 'None']] : pages.length === 0 ? [['', 'No artist page yet']] : [];
+// Map the core credits to field words (ADR 0257). No link rule runs here.
+export function releaseCreditFields(credits, feeds) {
+  const followsLabel = credits.label !== null;
+  const source = followsLabel ? 'label' : 'artist page';
+  const followLabel = followsLabel ? 'Follow the Label Again' : 'Follow the Artist Page Again';
+  const publisherHint = 'A release has one publisher. A music file calls the label "Publisher". Here the label goes in Label.';
+  const menus = ['artist', 'label', 'hosting'].map((role) => {
+    const key = role === 'hosting' ? 'publisher' : role;
+    const selected = credits[key];
+    const pages = pagesOf(feeds, role).map((page) => [String(page.id), pageTitle(page)]);
+    const value = selected ? (selected.id === null ? 'external' : String(selected.id)) : '';
+    if (selected && !pages.some(([id]) => id === value)) pages.unshift([value, selected.title, true]);
+    const others = credits[`other_${key}s`] || [];
     return {
-      role,
-      label: roleWord(role),
-      options: [...lead, ...pages, [`${NEW_PAGE_PREFIX}${role}`, `New ${roleWord(role)} Page…`]],
-      value: values[role] ?? '',
+      role, label: roleWord(role), value,
+      placeholder: role === 'artist' && !selected ? 'Select an artist page' : null,
+      options: [...pages, ...(role === 'artist' ? [] : [['', role === 'label' ? 'Independent (no label)' : 'Not published']]),
+        [`${NEW_PAGE_PREFIX}${role}`, `New ${roleWord(role)} Page…`]],
+      hint: role === 'artist' ? 'One artist page. A second artist goes in the release alias, for now.'
+        : role === 'hosting' ? (credits.publisher_follows
+          ? `Follows the ${source}. ${publisherHint}`
+          : 'You selected the publisher.') : null,
+      otherHint: others.length ? `Also linked in the file: ${others.map((page) => page.title).join(', ')}.` : null,
     };
   });
-}
-
-// The first page of `role` among the pages above an artist page (ADR 0240
-// item 15, ADR 0215 item 2), or ''.
-function parentOf(feeds, artistId, role) {
-  const artist = (feeds || []).find((feed) => String(feed.id) === String(artistId));
-  const byId = new Map((feeds || []).map((feed) => [feed.id, feed]));
-  const above = new Set();
-  const pending = [...((artist && artist.parent_ids) || [])];
-  while (pending.length > 0) {
-    const id = pending.shift();
-    if (above.has(id)) continue;
-    above.add(id);
-    pending.push(...((byId.get(id) && byId.get(id).parent_ids) || []));
-  }
-  const page = pagesOf(feeds, role).find((feed) => above.has(feed.id));
-  return page ? String(page.id) : '';
-}
-
-// The start values of the menus (ADR 0240 item 15). Each menu starts with
-// the page of its role that the release links to. Then the artist page gives
-// the label page and the hosting page above it. With no linked artist page,
-// the first artist page is selected.
-export function moveStart(feeds, release) {
-  const linked = new Set((release && release.publisher_ids) || []);
-  const first = (role) => {
-    const page = pagesOf(feeds, role).find((feed) => linked.has(feed.id));
-    return page ? String(page.id) : '';
-  };
-  const artists = pagesOf(feeds, 'artist');
-  const artist = first('artist') || (artists.length > 0 ? String(artists[0].id) : '');
   return {
-    artist,
-    label: first('label') || parentOf(feeds, artist, 'label'),
-    hosting: first('hosting') || parentOf(feeds, artist, 'hosting'),
+    menus,
+    follows: credits.follows?.id ?? null,
+    followLabel: credits.publisher_follows ? null : followLabel,
+    followDisabled: credits.follows !== null && credits.follows.id === null,
+    alias: credits.alias || '',
+    aliasOpen: credits.alias !== null,
+    aliasPlaceholder: credits.artist?.title || '',
+    aliasHint: `The artist name of this release in podcast apps and music files: “${credits.alias ?? credits.artist?.title ?? ''}”. The release stays in the catalog of the artist page above.`,
   };
 }
-
-// The values after the user selects an artist page (ADR 0240 item 15): the
-// label page and the hosting page above that artist page, or "None".
-export function moveForArtist(feeds, artistId) {
-  return { artist: String(artistId), label: parentOf(feeds, artistId, 'label'), hosting: parentOf(feeds, artistId, 'hosting') };
-}
-
-// Can the user press Move? The artist page is necessary (ADR 0240 item 13).
-export function moveReady(values) {
-  return /^\d+$/.test(values.artist || '');
-}
-
-// The body of `POST /feeds/{id}/move-to` (ADR 0240 item 18).
-export function moveBody(values) {
-  const id = (value) => (/^\d+$/.test(value || '') ? Number(value) : null);
-  return { artist_id: id(values.artist), label_id: id(values.label), hosting_id: id(values.hosting) };
-}
-
-// Does the release have a linked artist page? The section "Linked artist and
-// label pages" says "A release needs an artist page." when it has none
-// (ADR 0240 item 11).
-export function hasArtistPage(feeds, release) {
-  const linked = new Set((release && release.publisher_ids) || []);
-  return (feeds || []).some((feed) => linked.has(feed.id) && (feed.publisher_roles || []).includes('artist'));
-}
-
-export const NEEDS_ARTIST_LINE = 'A release needs an artist page.';

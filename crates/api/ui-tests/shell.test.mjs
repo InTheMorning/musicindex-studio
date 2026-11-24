@@ -133,13 +133,13 @@ test('level and outline rows offer page moves and omit hosting moves', () => {
     return [...level.sections.flatMap((section) => section.items), ...(level.releases || [])].filter((item) => item.move).map((item) => item.id);
   };
   assert.deepEqual(levelMoves(1), [2], owner);
-  assert.deepEqual(levelMoves(2), [3, 11], owner);
-  assert.deepEqual(levelMoves(3), [11], owner);
+  assert.deepEqual(levelMoves(2), [3], owner);
+  assert.deepEqual(levelMoves(3), [], owner);
   const outlineMoves = (id) => leftPanel({ view: { name: 'outline', id }, feeds, model: null, vaultOpen: true })
     .items.filter((item) => item.move).map((item) => item.id);
   assert.deepEqual(outlineMoves(1), ['page:2'], owner);
-  assert.deepEqual(outlineMoves(2), ['page:3', 'release:11'], owner);
-  assert.deepEqual(outlineMoves(3), ['release:11'], owner);
+  assert.deepEqual(outlineMoves(2), ['page:3'], owner);
+  assert.deepEqual(outlineMoves(3), [], owner);
 });
 
 test('reviewHost gives host, choose and move', () => {

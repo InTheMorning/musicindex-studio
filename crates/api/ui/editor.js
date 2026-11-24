@@ -3,7 +3,7 @@
 // edits the typed model of the draft. Each list entry carries its key, and
 // the draft saves automatically.
 import { html, useState, useEffect, useRef, createContext, useContext } from './vendor/htm-preact-standalone.module.js';
-import { useDeleteUndo, undoNoticeText } from './undonotice.js';
+import { useDeleteUndo, undoNoticeText, CatalogUndoNotice } from './undonotice.js';
 import { CONFIRMS } from './confirms.js';
 import { VIEWS, VIEW_LABELS, VIEW_HINTS, normalizeView, shownLines, localTimeNote, runs, commonIndent, stripIndent, moreLabel, fieldRows, guardRow, changeKeys, MERGE_TITLE, MERGE_INTRO, MERGE_HEADINGS, mergeRows, mergeReady, showsExamine, streamProblemRows } from './review.js';
 import { LoadErrorNotice, FeedCheckRow, onSegmentKey, dropAreaClass, useFileDrop, api, saveTicket, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ChoiceSelect, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext, Icon, AddFeedRowSheet, inDesktopApp, NavContext } from './app.js';
@@ -14,7 +14,7 @@ import { onListKey, onTreeKey } from './listkeys.js';
 import { creditPickRows, supportPickRows, creditChoices, creditFillRows, creditFillValue, creditFillNote, creditFillNoteText, CREDIT_FIELD_LABELS, fundingChoices, nostrChoices, withPersonValues, filterRows, nostrPickRows, feedWord, memberRowLine, memberSectionNote } from './people.js';
 import { withCids, STATUS } from './draft.js';
 import { roleSummary } from './roles.js';
-import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, roleHint, keptRoleFolds, relLabel, linkRoleChoices, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName, newFeedView, pageLevel, movedReleaseView } from './shell.js';
+import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, roleHint, keptRoleFolds, relLabel, linkRoleChoices, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName, newFeedView, pageLevel } from './shell.js';
 import { isLiveItem, liveKey, liveDot, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner, OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning, hasBadAddress, problemGroup, setLiveStreamType, viewAfterLiveGone, withoutLive } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
 import { checkRows, unreadableRows, hasShowGrant, checkTexts, pageRefusalView, linkedRefusalView, NEW_PAGE_CHOICE, guidChangeView, repairAddresses, wrongAddressSet, OPEN_ACTIONS, COPY_SHEET_TEXT, WAYS_SHEET_TEXT } from './feedcheck.js';
@@ -34,7 +34,7 @@ import { platformBlocks } from './listing.js';
 import { deleteWrite } from './feeddelete.js';
 import { pageSequence } from './pages.js';
 import { releaseKindOptions, shouldAddTracksAfterNewRelease } from './addfeeds.js';
-import { moveTitle, moveMenus, moveStart, moveForArtist, moveReady, moveBody, hasArtistPage, NEEDS_ARTIST_LINE, NEW_PAGE_PREFIX,
+import { releaseCreditFields, NEW_PAGE_PREFIX,
   movePageTitle, pageMoveBody, pageMoveMenus, pageMoveStart, pageMoveLines, gatherPagesModel } from './movepages.js';
 import { nextStep, firstStart, releaseAdd, releaseArtistChoices, FIRST_STEPS, HOST_STEP } from './welcome.js';
 import {
@@ -2918,18 +2918,16 @@ function MoveRefusal({ error, feeds, onAddHost, onOpenChanges }) {
 
 // The move sheet opens the change set review after Move (ADR 0243 item 3).
 // `prepare` runs before the call, and false stops the move.
-export function MoveSheet({ release, page, feeds, connectors, prepare, onMoved, onListChanged, onAddHost, onOpenChanges, onClose }) {
+export function MoveSheet({ page, feeds, connectors, prepare, onMoved, onListChanged, onAddHost, onOpenChanges, onClose }) {
   const ref = useSheet(true);
   const { busy, error, run } = useAction();
-  const movingPage = Boolean(page);
-  const item = page || release;
-  const [values, setValues] = useState(() => movingPage ? pageMoveStart(feeds, page) : moveStart(feeds, release));
+  const item = page;
+  const [values, setValues] = useState(() => pageMoveStart(feeds, page));
   // The role of the page that the user makes, or null.
   const [making, setMaking] = useState(null);
   const select = (role) => (value) => {
     if (value.startsWith(NEW_PAGE_PREFIX)) { setMaking(value.slice(NEW_PAGE_PREFIX.length)); return; }
-    // A new artist page gives its label page and hosting page (ADR 0240 item 15).
-    setValues((current) => (!movingPage && role === 'artist' && value !== '' ? moveForArtist(feeds, value) : { ...current, [role]: value }));
+    setValues((current) => ({ ...current, [role]: value }));
   };
   const made = async (page) => {
     const role = making;
@@ -2939,22 +2937,22 @@ export function MoveSheet({ release, page, feeds, connectors, prepare, onMoved, 
   };
   const move = () => run(async () => {
     if (prepare && !(await prepare())) return;
-    const body = movingPage ? pageMoveBody(page, values) : moveBody(values);
+    const body = pageMoveBody(page, values);
     const answer = await api(`/feeds/${item.id}/move-to`, { method: 'POST', body });
     if (ref.current) ref.current.close();
     await onMoved(answer, body, values);
   });
   return html`<dialog ref=${ref} class="sheet small" aria-labelledby="move-pages-title" onClose=${onClose}>
-    <header><h2 id="move-pages-title">${movingPage ? movePageTitle(page) : moveTitle(release)}</h2>
+    <header><h2 id="move-pages-title">${movePageTitle(page)}</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button></header>
     <div class="body"><div class="form">
-      ${(movingPage ? pageMoveMenus(feeds, page, values) : moveMenus(feeds, values)).map((menu) => html`<${ChoiceSelect} key=${menu.role} id=${`move-${menu.role}`} label=${menu.label}
+      ${pageMoveMenus(feeds, page, values).map((menu) => html`<${ChoiceSelect} key=${menu.role} id=${`move-${menu.role}`} label=${menu.label}
         value=${menu.value} options=${menu.options} onChange=${select(menu.role)} />`)}
-      ${movingPage && (() => { const [head, ...lines] = pageMoveLines(feeds, page, values);
+      ${(() => { const [head, ...lines] = pageMoveLines(feeds, page, values);
         return html`<div class="move-changes"><strong>${head}</strong>${lines.map((line) => html`<span>${line}</span>`)}</div>`; })()}
       <${MoveRefusal} error=${error} feeds=${feeds} onAddHost=${onAddHost} onOpenChanges=${onOpenChanges} />
       <div class="actions"><button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
-        <button class="button primary" type="button" disabled=${busy || (!movingPage && !moveReady(values))} onClick=${move}>Move</button></div>
+        <button class="button primary" type="button" disabled=${busy} onClick=${move}>Move</button></div>
     </div></div>
   </dialog>
   ${making && html`<${AddFeedRowSheet} open=${ARTIST_PAGE_FORM} connectors=${connectors} feeds=${feeds} start=${{ role: making }}
@@ -2994,7 +2992,6 @@ export function GatherPagesSheet({ page, role, feeds, onMoved, onAddHost, onOpen
 // feeds, in the sequence of `podcast:publisher` (ADR 0255 item 9, ADR 0086
 // item 4). Each link changes this draft and the draft of the other feed.
 function ArtistsAndLabels({ feed, feeds, model, update, draft, go, onListChanged }) {
-  const { connectors = [] } = useContext(PickerContext) || {};
   const linkAction = useAction();
   // The feeds whose draft the last link change altered.
   const [changed, setChanged] = useState([]);
@@ -3026,28 +3023,10 @@ function ArtistsAndLabels({ feed, feeds, model, update, draft, go, onListChanged
     const done = await twoDrafts(linkAction, () => linkPublisherPage(chosen, feed.id));
     if (done) setChosen('');
   };
-  // ADR 0240 item 11: **Move To…** opens the sheet of the release. The sheet
-  // saves the page first, then loads the drafts again.
-  const [moving, setMoving] = useState(false);
-  const listed = (feeds || []).find((f) => f.id === feed.id) || feed;
-  const reload = async (named, body) => {
-    await draft.load();
-    await onListChanged();
-    setChanged(named.filter((c) => c.id !== feed.id));
-    go(movedReleaseView(body.artist_id));
-  };
   return html`<section id="linked-artist-and-label-pages" class="page-section"><h2>Linked artist and label pages</h2>
     <div class="group">
       <${ChangedNotices} changed=${changed} go=${go} />
       ${rows.length === 0 && html`<p class="hint">Not linked to an artist or label page yet.</p>`}
-      ${!hasArtistPage(feeds, listed) && html`<p class="hint">${NEEDS_ARTIST_LINE}</p>`}
-      ${!feed.host_deleted && feed.connector_id && html`<div class="actions"><button class="button" type="button" disabled=${linkAction.busy}
-        onClick=${() => setMoving(true)}>Move To…</button></div>`}
-      ${moving && html`<${MoveSheet} release=${listed} feeds=${feeds} connectors=${connectors} prepare=${() => draft.flush()}
-        onMoved=${async (answer, body) => { setMoving(false); await reload(); if (answer.change_set_id != null) go({ name: 'change-set', id: answer.change_set_id, area: 'releases' }); else go(movedReleaseView(body.artist_id)); }}
-        onAddHost=${() => { setMoving(false); go({ name: 'hosts', add: true }); }}
-        onOpenChanges=${(id) => { setMoving(false); go({ name: 'change-set', id }); }}
-        onListChanged=${onListChanged} onClose=${() => setMoving(false)} />`}
       ${rows.map((row) => html`<div class="release-row" key=${row.entry._cid}>
         <span class="title">${row.entry.title || row.entry.feed_url}</span>
         <span class="sub">${publisherLine(row.entry, row.match, row.index)}</span>
@@ -3144,11 +3123,94 @@ function FeedKeyRow({ feedId, model, update, bad }) {
     onSet=${(npub) => update((m) => withFeedKey(m, npub))} />`;
 }
 
-function ChannelFields({ feedId, draft, model, update, bad, artistLabel, onArtwork, fields, kindField = null }) {
+// The core supplies each credit and the publisher that follows (ADR 0065).
+function ReleaseCreditFields({ feed, feeds, draft, model, update, go, onListChanged }) {
+  const { connectors = [] } = useContext(PickerContext) || {};
+  const action = useAction();
+  const [credits, setCredits] = useState(null);
+  const [alias, setAlias] = useState('');
+  const [aliasOpen, setAliasOpen] = useState(false);
+  const [making, setMaking] = useState(null);
+  const [notice, setNotice] = useState(null);
+  const changing = useRef(false);
+  const [readError, setReadError] = useState(null);
+  const accept = (value) => {
+    setCredits(value);
+    setAlias(value.alias || '');
+    if (value.alias !== null) setAliasOpen(true);
+  };
+  useEffect(() => {
+    if (draft.status !== 'saved') return;
+    let active = true;
+    api(`/feeds/${feed.id}/credits`).then((value) => {
+      if (active) { accept(value); setReadError(null); }
+    }, (error) => { if (active) setReadError(error); });
+    return () => { active = false; };
+  }, [feed.id, draft.status, model.author, feeds]);
+  const reload = async () => {
+    await draft.load();
+    await onListChanged();
+  };
+  const change = (suffix, method, body) => {
+    if (changing.current) return;
+    changing.current = true;
+    return action.run(async () => {
+      try {
+        if (!(await draft.flush())) return;
+        const answer = await api(`/feeds/${feed.id}/credits${suffix}`, { method, body });
+        accept(answer.credits);
+        setNotice(answer);
+        await reload();
+      } finally { changing.current = false; }
+    });
+  };
+  const select = (role, value) => {
+    if (value.startsWith(NEW_PAGE_PREFIX)) { setMaking(role); return; }
+    return change('', 'PUT', { role, page: value === '' ? null : Number(value) });
+  };
+  const made = async (page) => {
+    const role = making;
+    setMaking(null);
+    await onListChanged();
+    await select(role, String(page.id));
+  };
+  const editAlias = (value) => {
+    setAlias(value || '');
+    if (value) update((current) => set(current, 'author', value));
+    else change('/alias/clear', 'POST');
+  };
+  const view = credits ? releaseCreditFields(credits, feeds) : null;
+  return html`<div class="field"><div class="section-head"><h2>Credits</h2></div></div>
+    <${ErrorNotice} error=${readError || action.error} />
+    ${!view && !readError && html`<p class="hint">Loading credits…</p>`}
+    ${view && view.menus.map((menu) => html`<${ChoiceSelect} key=${menu.role} id=${`release-${menu.role}`} label=${menu.label}
+      value=${menu.value} options=${menu.options} placeholder=${menu.placeholder} placeholderDisabled=${true} hint=${menu.hint} hintAfter=${true}
+      disabled=${action.busy || draft.status === 'loading' || !feed.connector_id || feed.host_deleted}
+      onChange=${(value) => select(menu.role, value)}>
+      ${menu.otherHint && html`<div class="hint">${menu.otherHint}
+        <button class="button action" type="button" disabled=${action.busy || !feed.connector_id || feed.host_deleted}
+          onClick=${() => change('/remove-others', 'POST', { role: menu.role })}>Remove the Others</button></div>`}
+      ${menu.role === 'artist' && html`<details class="disclosure" open=${aliasOpen} onToggle=${(event) => setAliasOpen(event.currentTarget.open)}>
+        <summary>Release alias</summary>
+        <${TextField} id="release-alias" label="Release alias" labelHidden=${true} value=${alias} hintAfter=${true} placeholder=${view.aliasPlaceholder}
+          disabled=${action.busy || !feed.connector_id || feed.host_deleted} onChange=${editAlias} hint=${view.aliasHint} />
+      </details>`}
+      ${menu.role === 'hosting' && view.followLabel && html`<div class="actions"><button class="button action" type="button"
+        disabled=${action.busy || view.followDisabled || !feed.connector_id || feed.host_deleted}
+        onClick=${() => change('', 'PUT', { role: 'hosting', page: view.follows })}>${view.followLabel}</button></div>`}
+    <//>`)}
+    ${notice && html`<${CatalogUndoNotice} key=${notice.notice} answer=${notice} api=${api} prepare=${() => draft.flush()}
+      onUndone=${async () => { setNotice(null); await reload(); }} onReview=${(id) => go({ name: 'change-set', id })} />`}
+    ${making && html`<${AddFeedRowSheet} open=${ARTIST_PAGE_FORM} connectors=${connectors} feeds=${feeds} start=${{ role: making }}
+      onAdded=${made} onConnect=${() => go({ name: 'hosts' })} onClose=${() => setMaking(null)} />`}`;
+}
+
+function ChannelFields({ feedId, draft, model, update, bad, artistLabel, onArtwork, fields, kindField = null, creditsField = null }) {
   const field = (name) => (value) => update((m) => set(m, name, value));
   const shown = {
     title: () => html`<${TextField} id="ch-title" label="Title" value=${model.title} onChange=${field('title')} />`,
     kind: () => kindField,
+    'release-credits': () => creditsField,
     author: () => html`<${TextField} id="ch-author" label=${artistLabel} hint="The artist name that podcast apps show." value=${model.author} onChange=${field('author')} />`,
     nostr: () => html`<${FeedKeyRow} feedId=${feedId} model=${model} update=${update} bad=${bad} />`,
     description: () => html`<${TextArea} id="ch-description" label="Description" value=${model.description} onChange=${field('description')} />`,
@@ -3339,6 +3401,7 @@ function AlbumPage({ feed, feeds, model, update, bad, draft, go, onAdding, onImp
     album: (s) => html`<section class="page-section"><h2>${release ? feedKind(feed).label : 'Album'}</h2>
       <div class="group">
         <${ChannelFields} feedId=${feed.id} draft=${draft} model=${model} update=${update} bad=${bad} artistLabel="Artist" onArtwork=${onArtwork} fields=${s.fields}
+          creditsField=${release ? html`<${ReleaseCreditFields} key=${feed.id} feed=${feed} feeds=${feeds} draft=${draft} model=${model} update=${update} go=${go} onListChanged=${onListChanged} />` : null}
           kindField=${release ? html`<${ReleaseKindField} feed=${feed} draft=${draft} onListChanged=${onListChanged} />` : null} />
       </div>
     </section>`,

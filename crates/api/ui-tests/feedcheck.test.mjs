@@ -227,6 +227,18 @@ test('stop findings come first and stop the write', () => {
   assert.deepEqual([rows[0].level, rows[0].stop, rows[0].button], ['Stops the write', true, 'Link a Page']);
 });
 
+test('a no-role artist link gives the repair and the page-link action', () => {
+  const owner = 'ADR 0252 item 2: show both link repairs. Fix checkRows in feedcheck.js.';
+  const row = checkRows(check([finding('no_artist_page', 'make_it_the_artist_link', {
+    level: 'stop', second_repair: 'link_a_page', url: 'https://artist.example/feed.xml',
+  })]))[0];
+  assert.deepEqual([row.button, row.action, row.body, row.secondButton, row.secondAction], [
+    'Make It the Artist Link', 'repair',
+    { kind: 'no_artist_page', entry: null, url: 'https://artist.example/feed.xml' },
+    'Link a Page', 'open-pages',
+  ], owner);
+});
+
 test('read-only index findings keep their two sheet actions', () => {
   const rows = checkRows(check([
     finding('no_self_link', null),
@@ -274,7 +286,7 @@ test('page findings use the words of ADR 0213 items 18 and 19', () => {
 });
 
 test('the refusal panel of Review links a page (ADR 0218 items 1 to 6)', () => {
-  const owner = 'ADR 0251 items 10 and 13: the refusal panel gives its menu and new artist choice. Fix pageRefusalView in feedcheck.js.';
+  const owner = 'ADR 0252 item 2: show the no-role line and repair in Review. Fix pageRefusalView in feedcheck.js.';
   assert.deepEqual(pageRefusalView('no_artist_page', false), {
     title: 'This release has no artist page.',
     line: 'Music Index lists each release under its artist.',
@@ -285,8 +297,11 @@ test('the refusal panel of Review links a page (ADR 0218 items 1 to 6)', () => {
     menu: true,
     linkDisabled: true,
     newChoice: 'New artist page…',
+    noRole: null,
   }, owner);
   assert.equal(pageRefusalView('no_artist_page', true).linkDisabled, false, owner);
+  assert.deepEqual(pageRefusalView('no_artist_page', false, 'Artist').noRole,
+    { line: 'The link to Artist has no role.', button: 'Make It the Artist Link' }, owner);
   const show = pageRefusalView('no_publisher_page', false);
   assert.deepEqual([show.title, show.line, show.label, show.write],
     ['This feed has no artist, label or hosting page.', 'Music Index lists each feed under its page.', 'Page', 'Link a page first.'], owner);

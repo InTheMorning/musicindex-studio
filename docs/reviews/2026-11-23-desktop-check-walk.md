@@ -165,3 +165,5 @@ Task 245 corrects observations 4 and 5. A link back puts the written element bac
 Task 246 corrects observations 10 and 13. The title of a release move names the first page that the move adds. **Find Other Feeds** marks a file as in the collection when a feed of the collection has the same GUID. API tests prove the two corrections. The screenshot harness did not show them.
 
 Observation 1: the link of the release has no `rel`. ADR 0252 gives the decision, and task 247 builds it.
+
+Task 247 builds ADR 0252. In the screenshot harness, a written release had its artist link with no `rel`. **Issues** showed "The link to Big Sky Choir has no role." with **Make It the Artist Link** and **Link a Page**. The refusal panel of Review showed the line and the button at 1100 px and 390 px. After a click on the button, the panel went, and the write wrote `rel="artist"` into the file. An API test proves the Notice on a read-only feed. The human check on Elijah Lied stays open.

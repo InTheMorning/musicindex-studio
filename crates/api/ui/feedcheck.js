@@ -56,6 +56,7 @@ const REPAIRS = {
   open_the_track: 'Open the Track',
   select_a_language: 'Select a Language',
   link_a_page: 'Link a Page',
+  make_it_the_artist_link: 'Make It the Artist Link',
   add_tracks: 'Add Tracks',
   add_a_cover: 'Add a Cover',
   add_a_recipient: 'Add a Recipient',
@@ -76,6 +77,7 @@ const ACTIONS = {
   open_the_track: 'open-track',
   select_a_language: 'open-language',
   link_a_page: 'open-pages',
+  make_it_the_artist_link: 'repair',
   add_tracks: 'open-tracks',
   add_a_cover: 'open-cover',
   add_a_recipient: 'open-recipient',
@@ -101,13 +103,17 @@ export const NEW_PAGE_CHOICE = 'new';
 // The refusal panel of Review (ADR 0218 items 1 to 6). `selected` is true
 // after a selection in the menu. The last choice of the menu makes an artist
 // page (ADR 0251 item 13).
-export function pageRefusalView(reason, selected = false) {
+export function pageRefusalView(reason, selected = false, noRoleTitle = null) {
   const title = PAGE_FINDING_TEXT[reason];
   if (!title) return null;
   return {
     title, ...PAGE_REFUSAL_TEXT[reason], placeholder: 'Select a page',
     button: 'Link and Continue', menu: true, linkDisabled: !selected,
     newChoice: 'New artist page…',
+    noRole: noRoleTitle ? {
+      line: `The link to ${noRoleTitle} has no role.`,
+      button: REPAIRS.make_it_the_artist_link,
+    } : null,
   };
 }
 

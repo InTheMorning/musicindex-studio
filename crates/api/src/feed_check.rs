@@ -11,7 +11,7 @@ use axum::http::StatusCode;
 use serde::Deserialize;
 use serde_json::json;
 use studio_core::collection::FeedId;
-use studio_core::feed_check::{self, FindingKind, RepairKind};
+use studio_core::feed_check::{self, FindingKind, FindingLevel, RepairKind};
 use studio_core::feed_reads::{self, NetworkFacts};
 use studio_core::pipeline::{self, PipelineError};
 
@@ -99,6 +99,15 @@ fn check_json(w: &Workspace, id: FeedId) -> ApiResult {
         for finding in &mut result.findings {
             finding.repair = None;
             finding.second_repair = None;
+            if matches!(
+                finding.kind,
+                FindingKind::NoArtistPage | FindingKind::NoPublisherPage
+            ) {
+                finding.level = FindingLevel::Notice;
+                finding.reason = finding
+                    .reason
+                    .replace(" Studio cannot write it before the link.", "");
+            }
         }
     }
     let guid = inputs.links.feed.podcast_guid.as_deref();
@@ -253,7 +262,7 @@ pub(crate) async fn repair(
             .find(|f| {
                 f.kind == body.kind
                     && f.entry == body.entry
-                    && f.url == body.url
+                    && (f.url == body.url || body.repair == Some(RepairKind::MakeItTheArtistLink))
                     && f.field == body.field
                     && body
                         .repair

@@ -170,6 +170,75 @@ fn add_the_link_with_a_body_that_has_another_guid_changes_no_draft_and_gives_the
     assert_eq!(e.text(), before);
 }
 
+#[test]
+fn make_it_the_artist_link_changes_only_the_first_link_with_no_role() {
+    let xml = feed_xml(None, None).replace(
+        "  </channel>",
+        "    <podcast:publisher>\n      <podcast:remoteItem medium=\"publisher\" feedGuid=\"artist-guid\" feedUrl=\"https://artist.example/feed.xml\" title=\"Artist\"/>\n      <podcast:remoteItem medium=\"publisher\" rel=\"label\" feedGuid=\"label-guid\"/>\n    </podcast:publisher>\n  </channel>",
+    );
+    let e = env(&xml);
+    let finding = e.finding(&none(), FindingKind::NoArtistPage, None);
+    assert_eq!(
+        finding.repair,
+        Some(RepairKind::MakeItTheArtistLink),
+        "ADR 0252 item 3: offer the repair; fix check"
+    );
+    e.repair(
+        &none(),
+        &finding,
+        &ScriptedReader::empty(),
+        &ScriptedFileReads::empty(),
+    )
+    .unwrap_or_else(|error| {
+        panic!("ADR 0252 item 4: apply the artist-link repair; fix apply_check_repair. {error}")
+    });
+    let repaired = studio_core::feed::Feed::read(
+        &studio_core::xml::Document::parse_bytes(e.text().as_bytes()).unwrap_or_else(|error| {
+            panic!("ADR 0252 item 4: parse the repaired draft; fix ArtistLink::apply. {error}")
+        }),
+    )
+    .unwrap_or_else(|error| {
+        panic!("ADR 0252 item 4: read the repaired feed; fix ArtistLink::apply. {error}")
+    });
+    let links = &repaired.publisher.as_ref().unwrap().remote_items;
+    assert_eq!(
+        links[0].value.rel.as_deref(),
+        Some("artist"),
+        "ADR 0252 item 4: add the artist role; fix ArtistLink::apply"
+    );
+    assert_eq!(
+        links[1].value.rel.as_deref(),
+        Some("label"),
+        "ADR 0252 item 4: preserve the second link; fix ArtistLink::apply"
+    );
+    assert_eq!(
+        studio_core::feed_check::page_refusal(&repaired),
+        None,
+        "ADR 0252 item 4: clear page_refusal; fix ArtistLink::apply"
+    );
+    let inputs = pipeline::check_inputs(&e.collection, &e.hosts, e.feed).unwrap();
+    let error = pipeline::apply_check_repair(
+        &e.collection,
+        &e.hosts,
+        e.feed,
+        &finding,
+        &inputs.revision,
+        &Proof::Nothing,
+    )
+    .unwrap_err();
+    assert_eq!(
+        error.kind(),
+        PipelineErrorKind::InvalidOperation,
+        "ADR 0252 item 4: refuse a repair with no no-role link; fix plan_of"
+    );
+    assert!(
+        error
+            .to_string()
+            .contains("this repair does not apply to the draft"),
+        "ADR 0252 item 4: give the repair refusal; fix plan_of. {error}"
+    );
+}
+
 fn guid_change_env() -> (Env, Finding, String) {
     let mut e = env(&feed_xml(Some(URL), None));
     e.collection.set_known_guid(e.feed, GUID).unwrap();

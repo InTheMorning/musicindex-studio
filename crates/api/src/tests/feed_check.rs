@@ -203,6 +203,85 @@ async fn page_refusal_is_in_the_diff_and_blocks_release_and_playlist_writes() {
 }
 
 #[tokio::test]
+async fn a_no_role_publisher_link_has_a_named_repair_and_diff_title() {
+    let xml = feed_xml(
+        "<podcast:publisher><podcast:remoteItem medium=\"publisher\" feedUrl=\"https://artist.example/feed.xml\" title=\"Artist Page\"/><podcast:remoteItem medium=\"publisher\" rel=\"label\"/></podcast:publisher>",
+    );
+    let (app, id) = app_with_scripted_index(
+        ScriptedReader::empty(),
+        ScriptedFileReads::empty(),
+        "http://127.0.0.1:9",
+        &xml,
+    )
+    .await;
+    let path = format!("/api/v1/feeds/{id}");
+    let (status, check) = call(&app, "GET", &format!("{path}/check"), None).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0252 item 3: read the page finding; fix check_json. {check}"
+    );
+    let no_artist = finding(&check, "no_artist_page", None);
+    assert_eq!(
+        no_artist["reason"],
+        "The link to Artist Page has no role. Studio cannot write it before the link.",
+        "ADR 0252 item 3: name the link in the finding; fix check"
+    );
+    assert_eq!(
+        no_artist["repair"], "make_it_the_artist_link",
+        "ADR 0252 item 3: offer the role repair; fix check"
+    );
+    assert_eq!(
+        no_artist["second_repair"], "link_a_page",
+        "ADR 0252 item 3: retain the page repair; fix check"
+    );
+    let (status, diff) = call(&app, "GET", &format!("{path}/diff"), None).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0252 item 5: read the review diff; fix diff_json_with_streams. {diff}"
+    );
+    assert_eq!(
+        diff["page_refusal_link"], "Artist Page",
+        "ADR 0252 item 5: name the link in Review; fix diff_json_with_streams"
+    );
+    let (status, repaired) = call(
+        &app,
+        "POST",
+        &format!("{path}/check/repair"),
+        Some(json!({
+            "kind": "no_artist_page",
+            "repair": "make_it_the_artist_link",
+            "revision": check["revision"],
+        })),
+    )
+    .await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0252 item 4: apply the Review repair; fix repair. {repaired}"
+    );
+    assert!(
+        draft_bytes(&app, id).contains("title=\"Artist Page\""),
+        "ADR 0252 item 4: preserve the link title; fix ArtistLink::apply"
+    );
+    assert!(
+        draft_bytes(&app, id).contains("rel=\"artist\""),
+        "ADR 0252 item 4: add the artist role; fix ArtistLink::apply"
+    );
+    let (status, after) = call(&app, "GET", &format!("{path}/diff"), None).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0252 item 4: read the repaired diff; fix diff_json_with_streams. {after}"
+    );
+    assert!(
+        after["page_refusal"].is_null(),
+        "ADR 0252 item 4: clear the page refusal; fix ArtistLink::apply. {after}"
+    );
+}
+
+#[tokio::test]
 async fn hidden_feed_has_no_page_refusal_and_can_be_written() {
     let (app, id) = app_with_feed(ScriptedReader::empty(), ScriptedFileReads::empty()).await;
     let (status, _) = call(
@@ -356,7 +435,6 @@ async fn a_read_only_feed_gives_its_findings_with_no_repair_and_the_repair_route
     let found = check["findings"].as_array().unwrap();
     assert!(found.iter().any(|f| f["kind"] == "no_self_link"), "{check}");
     assert!(found.iter().all(|f| f["repair"].is_null()), "{check}");
-
     let (status, body) = call(
         &app,
         "POST",
@@ -366,6 +444,51 @@ async fn a_read_only_feed_gives_its_findings_with_no_repair_and_the_repair_route
     .await;
     assert_eq!(status, StatusCode::CONFLICT, "{body}");
     assert_eq!(body["error"]["code"], "read_only");
+}
+
+#[tokio::test]
+async fn a_read_only_release_without_an_artist_page_is_a_notice_without_a_repair() {
+    let server = web_feeds();
+    let xml = feed_xml("");
+    server.set("/plain.xml", 200, xml.as_bytes().to_vec());
+    let app = app_with_index(&server.url(""));
+    set_library_root(&app);
+    let mut collection =
+        studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+            .unwrap();
+    let address = server.url("/plain.xml");
+    let id = collection.add_feed(Some(&address), None).unwrap();
+    let policy = studio_core::net::NetPolicy::Open;
+    let web = studio_core::web::Web::with_policy(&policy);
+    studio_core::pipeline::refresh_public(&mut collection, &web, id).unwrap();
+    collection.set_feed_folder(id, "plain").unwrap();
+    let library = studio_core::library::Library::open(app.data.path().join("library")).unwrap();
+    library
+        .write_feed_xml("plain", "plain.xml", xml.as_bytes())
+        .unwrap();
+
+    let (status, check) = call(&app, "GET", &format!("/api/v1/feeds/{}/check", id.0), None).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0252 item 6: read the read-only check; fix check_json. {check}"
+    );
+    let no_artist = finding(&check, "no_artist_page", None);
+    assert_eq!(
+        no_artist["level"], "notice",
+        "ADR 0252 item 6: make read-only page findings a Notice; fix check_json"
+    );
+    assert!(
+        no_artist["repair"].is_null(),
+        "ADR 0252 item 6: remove page repairs on read-only feeds; fix check_json"
+    );
+    assert!(
+        !no_artist["reason"]
+            .as_str()
+            .unwrap()
+            .contains("Studio cannot write it before the link."),
+        "ADR 0252 item 6: remove the write refusal from read-only reason; fix check_json"
+    );
 }
 
 #[tokio::test]

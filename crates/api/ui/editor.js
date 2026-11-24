@@ -2318,11 +2318,24 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
   const deletion = diff && deleteWrite(diff);
   // The pages of the menu "Link to an artist or label page" (ADR 0218 item 3).
   const pageCandidates = pageLinkCandidates(feeds, draft.model);
-  const pageRefusal = diff && pageRefusalView(diff.page_refusal, Boolean(selectedPage));
+  const pageRefusal = diff && pageRefusalView(diff.page_refusal, Boolean(selectedPage), diff.page_refusal_link);
   const guid = diff && guidChangeView(diff.guid_change, guidText);
   const keepKnownGuid = () => run(async () => {
     draft.show(await api(`/feeds/${feedId}/keep-known-guid`, { method: 'POST' }));
     setGuidText('');
+    setDiff(await api(`/feeds/${feedId}/diff`));
+  });
+  const makeArtistLink = () => run(async () => {
+    const current = await api(`/feeds/${feedId}/draft`);
+    const repaired = await api(`/feeds/${feedId}/check/repair`, {
+      method: 'POST',
+      body: {
+        kind: 'no_artist_page',
+        repair: 'make_it_the_artist_link',
+        revision: current.revision,
+      },
+    });
+    draft.show(repaired.draft);
     setDiff(await api(`/feeds/${feedId}/diff`));
   });
   // The link of the section, then a new diff (ADR 0218 item 4).
@@ -2411,6 +2424,8 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
       </div>`}
       ${refusal && html`<${LinkRefusal} refusal=${refusal} busy=${busy} onRepair=${repair} />`}
       ${pageRefusal && html`<div class="notice error" role="alert"><strong>${pageRefusal.title}</strong><p>${pageRefusal.line}</p>
+        ${pageRefusal.noRole && html`<p>${pageRefusal.noRole.line}</p><div class="actions">
+          <button class="button action" type="button" disabled=${busy} onClick=${makeArtistLink}>${pageRefusal.noRole.button}</button></div>`}
         ${pageRefusal.menu && html`<div class="group rows"><${ChoiceSelect} id="review-page" label=${pageRefusal.label} value=${selectedPage}
           placeholder=${pageRefusal.placeholder} options=${[...pageCandidates.map((c) => [String(c.id), c.title || 'Untitled feed']), [NEW_PAGE_CHOICE, pageRefusal.newChoice]]}
           onChange=${setSelectedPage} /></div>`}

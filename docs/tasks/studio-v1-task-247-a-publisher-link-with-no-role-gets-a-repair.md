@@ -2,7 +2,7 @@
 
 Decision: [ADR 0252](../adr/0252-a-publisher-link-with-no-role-gets-a-repair.md) items 1 to 6.
 
-Status: Open.
+Status: Done.
 
 ## Problem
 

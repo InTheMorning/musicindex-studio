@@ -110,6 +110,8 @@ pub enum RepairKind {
     SelectALanguage,
     /// **Link a Page** (ADR 0213 item 19).
     LinkAPage,
+    /// **Make It the Artist Link** (ADR 0252 item 4).
+    MakeItTheArtistLink,
     /// **Add Tracks**.
     AddTracks,
     /// **Add a Cover**.
@@ -178,6 +180,45 @@ pub fn page_refusal(feed: &Feed) -> Option<PageRefusal> {
     } else {
         (!has_publisher).then_some(PageRefusal::NoPublisherPage)
     }
+}
+
+/// Give the first publisher link with no role (ADR 0252 item 1).
+///
+/// # Examples
+///
+/// ```
+/// let feed = studio_core::feed::Feed::default();
+/// assert!(studio_core::feed_check::link_with_no_role(&feed).is_none());
+/// ```
+#[must_use]
+pub fn link_with_no_role(feed: &Feed) -> Option<&RemoteItem> {
+    feed.publisher
+        .as_ref()?
+        .remote_items
+        .iter()
+        .map(|entry| &entry.value)
+        .find(|link| link.medium.as_deref() == Some("publisher") && link.rel.is_none())
+}
+
+/// Give the title of a publisher link (ADR 0252 item 3).
+///
+/// # Examples
+///
+/// ```
+/// let link = studio_core::feed::RemoteItem::default();
+/// assert_eq!(studio_core::feed_check::no_role_link_title(&link, &[]), None);
+/// ```
+#[must_use]
+pub fn no_role_link_title(link: &RemoteItem, targets: &[LinkTarget]) -> Option<String> {
+    targets
+        .iter()
+        .find(|target| {
+            link.feed_guid.as_deref() == Some(target.guid.as_str())
+                || link.feed_url.as_deref() == Some(target.url.as_str())
+        })
+        .and_then(|target| target.title.clone())
+        .or_else(|| link.title.clone())
+        .or_else(|| link.feed_url.clone())
 }
 
 /// One finding of the check.
@@ -406,31 +447,49 @@ pub fn check(feed: &Feed, facts: &Facts) -> Vec<Finding> {
         });
     }
     if let Some(refusal) = page_refusal(feed) {
-        let (kind, title, reason) = match refusal {
-            PageRefusal::NoArtistPage => (
-                FindingKind::NoArtistPage,
-                "No artist page",
-                "This release has no artist page. Studio cannot write it before the link.",
-            ),
-            PageRefusal::NoPublisherPage => (
-                FindingKind::NoPublisherPage,
-                "No linked page",
-                "This feed has no artist, label or hosting page. Studio cannot write it before the link.",
-            ),
+        let (kind, title) = match refusal {
+            PageRefusal::NoArtistPage => (FindingKind::NoArtistPage, "No artist page"),
+            PageRefusal::NoPublisherPage => (FindingKind::NoPublisherPage, "No linked page"),
+        };
+        let no_role_link = (kind == FindingKind::NoArtistPage)
+            .then(|| link_with_no_role(feed))
+            .flatten();
+        let (reason, repair, second_repair, url, target_title) = if let Some(link) = no_role_link {
+            let target_title = no_role_link_title(link, &facts.link_targets);
+            let title = target_title.as_deref().unwrap_or_default();
+            (
+                format!("The link to {title} has no role. Studio cannot write it before the link."),
+                Some(RepairKind::MakeItTheArtistLink),
+                Some(RepairKind::LinkAPage),
+                link.feed_url.clone(),
+                target_title,
+            )
+        } else {
+            (
+                match kind {
+                    FindingKind::NoArtistPage => "This release has no artist page. Studio cannot write it before the link.",
+                    FindingKind::NoPublisherPage => "This feed has no artist, label or hosting page. Studio cannot write it before the link.",
+                    _ => unreachable!(),
+                }.to_owned(),
+                Some(RepairKind::LinkAPage),
+                None,
+                None,
+                None,
+            )
         };
         found.push(Finding {
             kind,
             level: FindingLevel::Stop,
             title: title.to_owned(),
-            reason: reason.to_owned(),
+            reason,
             entry: None,
-            repair: Some(RepairKind::LinkAPage),
-            second_repair: None,
+            repair,
+            second_repair,
             known_short: None,
-            url: None,
+            url,
             field: None,
             place: None,
-            target_title: None,
+            target_title,
         });
     }
     check_old_links(feed, facts, &mut found);
@@ -1237,6 +1296,84 @@ mod tests {
             page_refusal(&publisher_feed),
             None,
             "ADR 0213 item 17: publisher feeds get no page finding"
+        );
+    }
+
+    #[test]
+    fn a_publisher_link_with_no_role_gets_its_title_and_artist_repair() {
+        let mut feed = clean();
+        feed.medium = Some("music".to_owned());
+        feed.items.push(track("One", Some("1"), Some("1")));
+        feed.publisher = Some(Publisher {
+            remote_items: vec![
+                Entry::new(RemoteItem {
+                    medium: Some("publisher".to_owned()),
+                    feed_guid: Some("target-guid".to_owned()),
+                    feed_url: Some("https://artist.example/feed.xml".to_owned()),
+                    title: Some("Source title".to_owned()),
+                    ..RemoteItem::default()
+                }),
+                publisher_link("label"),
+            ],
+        });
+        let facts = Facts {
+            link_targets: vec![LinkTarget {
+                guid: "target-guid".to_owned(),
+                url: "https://artist.example/feed.xml".to_owned(),
+                title: Some("Collection title".to_owned()),
+            }],
+            ..Facts::default()
+        };
+        let finding = check(&feed, &facts)
+            .into_iter()
+            .find(|finding| finding.kind == FindingKind::NoArtistPage)
+            .expect("ADR 0252 item 2: find the no-role artist page; fix check");
+        assert_eq!(
+            finding.reason,
+            "The link to Collection title has no role. Studio cannot write it before the link.",
+            "ADR 0252 item 3: use the collection title; fix check"
+        );
+        assert_eq!(
+            finding.repair,
+            Some(RepairKind::MakeItTheArtistLink),
+            "ADR 0252 item 3: offer the artist-link repair; fix check"
+        );
+        assert_eq!(
+            finding.second_repair,
+            Some(RepairKind::LinkAPage),
+            "ADR 0252 item 3: retain Link a Page; fix check"
+        );
+        assert_eq!(
+            finding.url.as_deref(),
+            Some("https://artist.example/feed.xml"),
+            "ADR 0252 item 3: give the link address; fix check"
+        );
+        assert_eq!(
+            finding.target_title.as_deref(),
+            Some("Collection title"),
+            "ADR 0252 item 3: give the target title; fix check"
+        );
+    }
+
+    #[test]
+    fn a_no_role_link_title_uses_the_source_title_then_the_feed_url() {
+        let link = RemoteItem {
+            medium: Some("publisher".to_owned()),
+            title: Some("Source title".to_owned()),
+            feed_url: Some("https://artist.example/feed.xml".to_owned()),
+            ..RemoteItem::default()
+        };
+        assert_eq!(
+            no_role_link_title(&link, &[]).as_deref(),
+            Some("Source title"),
+            "ADR 0252 item 3: use the link title; fix no_role_link_title"
+        );
+        let mut no_title = link.clone();
+        no_title.title = None;
+        assert_eq!(
+            no_role_link_title(&no_title, &[]).as_deref(),
+            Some("https://artist.example/feed.xml"),
+            "ADR 0252 item 3: use the link address; fix no_role_link_title"
         );
     }
 

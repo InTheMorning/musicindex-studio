@@ -221,7 +221,8 @@ pub fn repair_step(inputs: &CheckInputs, finding: &Finding) -> Result<Step, Pipe
             | RepairKind::AddHttps
             | RepairKind::UseTheGuidOf
             | RepairKind::PutBackGuid
-            | RepairKind::KeepNewGuid,
+            | RepairKind::KeepNewGuid
+            | RepairKind::MakeItTheArtistLink,
         ) => Ok(Step::Nothing),
         Some(RepairKind::ReadTheSize) => {
             let url = item_of(&links.feed, finding.entry.as_deref())
@@ -378,6 +379,8 @@ enum Plan {
     },
     /// Restore the GUID that Studio keeps (ADR 0249 item 6).
     FeedGuid { guid: String },
+    /// Add the artist role to the first publisher link with no role (ADR 0252 item 4).
+    ArtistLink,
 }
 
 impl Plan {
@@ -459,6 +462,16 @@ impl Plan {
                 }
             }
             Self::FeedGuid { guid } => feed.podcast_guid = Some(guid.clone()),
+            Self::ArtistLink => {
+                if let Some(link) = feed.publisher.as_mut().and_then(|publisher| {
+                    publisher.remote_items.iter_mut().find(|entry| {
+                        entry.value.medium.as_deref() == Some("publisher")
+                            && entry.value.rel.is_none()
+                    })
+                }) {
+                    link.value.rel = Some("artist".to_owned());
+                }
+            }
         }
     }
 }
@@ -473,6 +486,7 @@ fn plan_of(
 ) -> Result<Plan, PipelineError> {
     match finding.repair {
         Some(RepairKind::PutBackGuid) => put_back_guid_plan(feed, known_guid),
+        Some(RepairKind::MakeItTheArtistLink) => artist_link_plan(feed),
         Some(RepairKind::AddTheLink) => {
             let address = confirmed(proof, url)?;
             if feed.self_url().is_some() {
@@ -569,6 +583,13 @@ fn plan_of(
         Some(RepairKind::AddHttps) => full_address_plan(feed, finding),
         _ => Err(invalid("this finding has no repair that changes the draft")),
     }
+}
+
+fn artist_link_plan(feed: &Feed) -> Result<Plan, PipelineError> {
+    if feed_check::link_with_no_role(feed).is_none() {
+        return Err(invalid("this repair does not apply to the draft"));
+    }
+    Ok(Plan::ArtistLink)
 }
 
 /// The plan of the repair `AddHttps`. It refuses when the field of the draft

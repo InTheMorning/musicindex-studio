@@ -4989,6 +4989,14 @@ fn diff_json_with_streams(
     let build_date = pipeline::set_build_date(&w.collection, id, checked)?;
     let diff = pipeline::diff_checked(&w.collection, &hosts, &library, streams, id)?;
     let page_refusal = feed_page_refusal(w, id)?;
+    let page_refusal_link = if page_refusal == Some("no_artist_page") {
+        let (feed, _) = pipeline::draft_model(&w.collection, id)?;
+        let targets = studio_core::feed_check::link_targets(&w.collection)?;
+        studio_core::feed_check::link_with_no_role(&feed)
+            .and_then(|link| studio_core::feed_check::no_role_link_title(link, &targets))
+    } else {
+        None
+    };
     let (index_at_address, index_unread) = index_at_draft_address(w, id)?;
     let guid_change = pipeline::guid_change_at(&w.collection, id, &index_at_address)?;
     let also_write = linked_feeds_to_write(w, &library, id)?;
@@ -5016,6 +5024,7 @@ fn diff_json_with_streams(
         "grant_apps": grant_apps,
         "build_date": build_date,
         "page_refusal": page_refusal,
+        "page_refusal_link": page_refusal_link,
         "also_write": also_write,
         "apps": review_apps(w)?,
         "events": diff

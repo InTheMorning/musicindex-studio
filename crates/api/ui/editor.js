@@ -14,7 +14,7 @@ import { onListKey, onTreeKey } from './listkeys.js';
 import { creditPickRows, supportPickRows, creditChoices, creditFillRows, creditFillValue, creditFillNote, creditFillNoteText, CREDIT_FIELD_LABELS, fundingChoices, nostrChoices, withPersonValues, filterRows, nostrPickRows, feedWord, memberRowLine, memberSectionNote } from './people.js';
 import { withCids, STATUS } from './draft.js';
 import { roleSummary } from './roles.js';
-import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, roleHint, keptRoleFolds, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName, newFeedView, pageLevel, movedReleaseView } from './shell.js';
+import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, roleHint, keptRoleFolds, relLabel, linkRoleChoices, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName, newFeedView, pageLevel, movedReleaseView } from './shell.js';
 import { isLiveItem, liveKey, liveDot, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner, OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning, hasBadAddress, problemGroup, setLiveStreamType, viewAfterLiveGone, withoutLive } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
 import { checkRows, unreadableRows, hasShowGrant, checkTexts, pageRefusalView, linkedRefusalView, NEW_PAGE_CHOICE, guidChangeView, repairAddresses, wrongAddressSet, OPEN_ACTIONS, COPY_SHEET_TEXT, WAYS_SHEET_TEXT } from './feedcheck.js';
@@ -4320,6 +4320,40 @@ function ChangedNotices({ changed, go }) {
 
 const PUBLISHER_ROLE_TEXT = 'Select the role of this feed first.';
 
+// The sheet changes the roles of one release link (ADR 0253 item 21).
+function LinkRolesSheet({ row, pageRoles, onSave, onClose }) {
+  const ref = useSheet(true);
+  const action = useAction();
+  const [choices, setChoices] = useState(() => linkRoleChoices(pageRoles, row.entry.rel));
+  const selected = choices.filter((choice) => choice.checked).map((choice) => choice.role);
+  const title = row.entry.title || row.match.title || 'Untitled release';
+  const save = async () => {
+    if (action.busy || selected.length === 0) return;
+    const done = await onSave(action, selected);
+    if (done && ref.current) ref.current.close();
+  };
+  return html`<dialog ref=${ref} class="sheet small" aria-labelledby="link-roles-title" onClose=${onClose}
+    onCancel=${(event) => { if (action.busy) event.preventDefault(); }}>
+    <header><h2 id="link-roles-title">Roles on ${title}</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" disabled=${action.busy}
+        onClick=${() => ref.current.close()}>✕</button></header>
+    <div class="body"><div class="form">
+      <div class="role-choices" role="group" aria-label="Roles">
+        ${choices.map((choice) => html`<label class="check" key=${choice.role}>
+          <input type="checkbox" checked=${choice.checked} disabled=${action.busy}
+            onChange=${(event) => {
+              const checked = event.target.checked;
+              setChoices((current) => current.map((item) => item.role === choice.role ? { ...item, checked } : item));
+            }} /> ${choice.label}</label>`)}
+      </div>
+      <${ErrorNotice} error=${action.error} action="Studio could not change the roles." />
+      <div class="actions"><button class="button" type="button" disabled=${action.busy}
+        onClick=${() => ref.current.close()}>Cancel</button>
+        <button class="button primary" type="button" disabled=${action.busy || selected.length === 0} onClick=${save}>Save</button></div>
+    </div></div>
+  </dialog>`;
+}
+
 // The publisher page: the fields, the role and the releases (ADR 0255 item
 // 3). Each link changes the draft of this feed and the draft of the release,
 // so the page loads both drafts and names each release that changed.
@@ -4328,6 +4362,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, onMov
   const nav = useContext(NavContext);
   const roleAction = useAction();
   const linkAction = useAction();
+  const [linkRolesRow, setLinkRolesRow] = useState(null);
   // The feeds whose draft the last link or role change altered.
   const [changed, setChanged] = useState([]);
   const [chosen, setChosen] = useState('');
@@ -4478,11 +4513,15 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, onMov
             <span class="title">${row.entry.title || row.entry.feed_url}</span>
           </div>
           <span class="sub">${row.match ? 'In the collection' : 'Not in the collection'}</span>
+          <span class="sub">${relLabel(row.entry.rel)}</span>
           ${hasSpace(row.entry.feed_url) && html`<span class="sub">${ROW_SPACE_NOTE}</span>`}
           <div class="actions">
             <button class="button destructive" type="button" disabled=${linkAction.busy}
               aria-label=${`Remove ${row.entry.title || 'this release'}`}
               onClick=${() => removeRow(row)}>Remove</button>
+            ${row.match && !readOnly && html`<button class="button" type="button" disabled=${linkAction.busy || roleAction.busy}
+              aria-label=${`Change the roles on ${row.entry.title || row.match.title || 'Untitled release'}`}
+              onClick=${() => setLinkRolesRow(row)}>Change…</button>`}
           </div>
         </div>`)}
         ${more && html`<button class="link-row add" type="button" onClick=${() => { setReleaseStart(more.start); setAddOpen('release-form'); }}>
@@ -4532,6 +4571,10 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, onMov
     go(f ? newFeedView(f.id, from) : { name: 'releases' });
   };
   return html`<${ChangedNotices} changed=${changed} go=${go} />
+    ${linkRolesRow && html`<${LinkRolesSheet} row=${linkRolesRow} pageRoles=${roles}
+      onSave=${(action, selected) => twoDrafts(action, async () => (await api(`/feeds/${feed.id}/links/${linkRolesRow.match.id}`, {
+        method: 'PUT', body: { roles: selected },
+      })).changed)} onClose=${() => setLinkRolesRow(null)} />`}
     ${first === 'album' && html`<div class="group first-step">
       <div class="link-row static first-step-row">
         <span class="step-icon" aria-hidden="true"><${Icon} name=${FIRST_STEPS.album.icon} /></span>

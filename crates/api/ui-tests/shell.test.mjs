@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  pageTabs, tabsFit, mediumKind, feedKind, trackCountText, roleChoice, roleHint, keptRoleFolds, toggleRole, isEditable, isReadOnly, reviewHost, moveNote, isPublisher, isPlaylist, trackKey, isTrack,
+  pageTabs, tabsFit, mediumKind, feedKind, trackCountText, roleChoice, roleHint, keptRoleFolds, linkRoleChoices, toggleRole, isEditable, isReadOnly, reviewHost, moveNote, isPublisher, isPlaylist, trackKey, isTrack,
   leftPanel, releasesList, listQuery, queryText, sortLabel, sortEntries, compareNames, byName, segmentKey, levelFeedSet,
   startNav, pushNav, backNav, forwardNav, canBack, canForward, setScroll, releasesView,
   narrowStack, openFeedView, newFeedView, navAtWidth, widthNav, wideView, publisherArt, mosaicCells, otherFeedText, mediumProblemView, mediumProblemCause,
@@ -20,6 +20,25 @@ const model = {
   ],
 };
 const labels = (items) => items.map((item) => item.label);
+
+test('link role choices show only page roles in the sequence of ROLES', () => {
+  assert.deepEqual(linkRoleChoices(['hosting', 'artist', 'label'], 'hosting artist curator'), [
+    { role: 'artist', label: 'Artist', checked: true },
+    { role: 'label', label: 'Label', checked: false },
+    { role: 'hosting', label: 'Publisher', checked: true },
+  ]);
+});
+
+test('link role choices allow no selected role and no page roles', () => {
+  assert.deepEqual(linkRoleChoices(['hosting'], 'artist'), [
+    { role: 'hosting', label: 'Publisher', checked: false },
+  ]);
+  assert.deepEqual(linkRoleChoices(['artist'], null), [
+    { role: 'artist', label: 'Artist', checked: false },
+  ]);
+  assert.deepEqual(linkRoleChoices([], 'artist'), []);
+  assert.deepEqual(linkRoleChoices(undefined, undefined), []);
+});
 
 test('the medium kind gives the dot and the label', () => {
   assert.deepEqual(mediumKind('publisher', ['label'], true), { dot: 'label', label: 'Label' });

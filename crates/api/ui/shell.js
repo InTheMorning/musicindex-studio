@@ -68,6 +68,13 @@ export function relLabel(rel) {
   return own.length > 0 ? own.map(roleWord).join(' · ') : 'No role';
 }
 
+// The check boxes show the roles of the page in the sequence of ROLES.
+export function linkRoleChoices(pageRoles, rel) {
+  const words = String(rel || '').toLowerCase().split(/\s+/);
+  return ROLES.filter((role) => (pageRoles || []).includes(role))
+    .map((role) => ({ role, label: roleWord(role), checked: words.includes(role) }));
+}
+
 // The kind of a feed of the collection or of a discovery. The user confirms
 // a set of roles, or the core finds the first role on the two sides of a
 // link (ADR 0082 item 5, ADR 0087 item 2).

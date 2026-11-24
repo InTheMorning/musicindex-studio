@@ -3,7 +3,7 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Levels And Moves".
 Decisions: [ADR 0253](../adr/0253-the-roles-of-a-feed-and-of-each-link.md) item 21, [ADR 0251](../adr/0251-review-writes-the-two-sides-of-a-changed-link.md), ADR 0065.
 
-Status: Not started. Task 250 gives the route.
+Status: Done. Screenshots in Light, Dark and at 390 px passed.
 
 Operator choice, 2026-11-24 (from three drawings): on a publisher page, each release row shows the roles of its link in one line. The row also has a **Change…** button. The button opens a sheet "Roles on {release}" with one check box for each role of the page, and **Cancel** and **Save**. The other two drawings were check boxes in each row, and an item only in the ••• menu of the Catalog.
 

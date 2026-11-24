@@ -110,6 +110,26 @@ export function pageRefusalView(reason, selected = false, candidates = 1) {
   };
 }
 
+// The Stop panel for a linked release (ADR 0251 items 10 and 11).
+export function linkedRefusalView(row, candidates) {
+  const text = {
+    no_artist_page: {
+      line: 'A release needs an artist page.', label: 'Artist page',
+      title: `${row.title} has no other artist page.`,
+    },
+    no_publisher_page: {
+      line: 'A release needs a page.', label: 'Page',
+      title: `${row.title} has no other artist, label or hosting page.`,
+    },
+  }[row.refusal];
+  if (!text) return null;
+  return {
+    ...text, placeholder: 'Select a page', menu: candidates > 0,
+    link: 'Link and Continue', keep: 'Keep the Release',
+    write: `Link a page to ${row.title} first.`,
+  };
+}
+
 // The GUID change panel model (ADR 0249 item 3).
 export function guidChangeView(change, typed = '') {
   if (!change) return null;

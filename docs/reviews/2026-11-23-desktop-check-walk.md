@@ -147,3 +147,11 @@ Defects to correct:
 - Observation 13: **Find Other Feeds** does not compare the GUID.
 
 Observation 1 needs an examination of the two findings. Observations 3, 6, 7, 8, 9 and 11 need a design with mockups.
+
+## After The Walk: Observation 2
+
+A temporary API test confirmed observation 2. A written release links to a written artist page, and the page is its only artist page. After `DELETE /api/v1/feeds/{page}/links/{release}`, the diff of the page gives the release in `also_write` with `change` `removed`, and `page_refusal` of the page is `null`. The diff of the release gives `page_refusal` `no_artist_page`, and the write of the release gives 409 `no_artist_page`. Review of the page writes the release first (ADR 0251 item 7), and a failed first write stops each write after it. Thus the page is not written, and Review of the page gives no Stop before the write. This is a defect of ADR 0251, and the commits after rc.32 contain it.
+
+Task 243 corrects observation 2 with ADR 0251 items 9 to 11. The screenshot harness showed the Stop panel at 1100 px and 390 px, with the write off. **Keep the Release** removed the panel and the row. **Link and Continue** with HeyCitizen removed the panel, and the write of the page and the release passed. The fit check gave no finding.
+
+Open point: after **Link and Continue**, the draft of the new page (HeyCitizen) has the new link, but Review of the first page does not write it. The new page stays "Saved, not written" until its own Review writes it.

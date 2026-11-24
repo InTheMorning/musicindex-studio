@@ -17,7 +17,7 @@ import { roleSummary } from './roles.js';
 import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, relLabel, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName, newFeedView, pageLevel, movedReleaseView } from './shell.js';
 import { isLiveItem, liveKey, liveDot, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner, OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning, hasBadAddress, problemGroup, setLiveStreamType, viewAfterLiveGone, withoutLive } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
-import { checkRows, unreadableRows, hasShowGrant, checkTexts, pageRefusalView, guidChangeView, repairAddresses, wrongAddressSet, OPEN_ACTIONS, COPY_SHEET_TEXT, WAYS_SHEET_TEXT } from './feedcheck.js';
+import { checkRows, unreadableRows, hasShowGrant, checkTexts, pageRefusalView, linkedRefusalView, guidChangeView, repairAddresses, wrongAddressSet, OPEN_ACTIONS, COPY_SHEET_TEXT, WAYS_SHEET_TEXT } from './feedcheck.js';
 import { addressParts } from './breaks.js';
 import { buildDateNotices } from './builddate.js';
 import { versionLabel, LOCK_HELP, hasSpace, spaceNotice, ROW_SPACE_NOTE, newFeedAddress, newFeedAddressLine, libraryFolderRow } from './feedfacts.js';
@@ -2023,6 +2023,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
   const [result, setResult] = useState(null);
   const [resultHostId, setResultHostId] = useState(null);
   const [selectedPage, setSelectedPage] = useState('');
+  const [selectedLinkedPages, setSelectedLinkedPages] = useState({});
   const [guidText, setGuidText] = useState('');
   const [discarding, setDiscarding] = useState(false);
   const deleteUndo = useDeleteUndo();
@@ -2126,6 +2127,9 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
   const [alsoDiffs, setAlsoDiffs] = useState(null);
   const [alsoError, setAlsoError] = useState(null);
   const [alsoOff, setAlsoOff] = useState(() => new Set());
+  // A link from a Stop panel changes the release but not this feed, so the
+  // diffs of the linked feeds load again (ADR 0251 item 10).
+  const [alsoReload, setAlsoReload] = useState(0);
   const alsoList = (diff && diff.also_write) || [];
   const alsoKey = alsoList.map((page) => page.id).join(',');
   useEffect(() => {
@@ -2137,10 +2141,16 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
       .then((entries) => { if (current) setAlsoDiffs(Object.fromEntries(entries)); },
         (e) => { if (current) { setAlsoDiffs({}); setAlsoError(e); } });
     return () => { current = false; };
-  }, [alsoKey, diff && diff.id]);
+  }, [alsoKey, diff && diff.id, alsoReload]);
   // The write waits until Review has the diff of each page.
   const alsoPending = alsoList.length > 0 && alsoDiffs === null;
   const alsoShown = alsoRows(alsoList, alsoDiffs, alsoOff, draft.model && draft.model.title);
+  const linkedStops = alsoList.filter((row) => row.refusal);
+  const linkedStopViews = linkedStops.map((row) => {
+    const candidates = pageLinkCandidates(feeds, null).filter((page) => page.id !== feedId);
+    return { row, candidates, view: linkedRefusalView(row, candidates.length) };
+  }).filter((entry) => entry.view);
+  const linkedStop = linkedStopViews.length > 0;
   const toggleAlso = (id, on) => setAlsoOff((prev) => {
     const next = new Set(prev);
     if (on) next.delete(id); else next.add(id);
@@ -2326,6 +2336,23 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
     await onListChanged?.();
     await refreshDiff();
   });
+  const resolveLinkedStop = (row, pageId) => run(async () => {
+    if (!pageId || !(await draft.flush())) return;
+    await linkPublisherPage(pageId, row.id);
+    setSelectedLinkedPages((selected) => ({ ...selected, [row.id]: '' }));
+    await draft.load();
+    await onListChanged?.();
+    await refreshDiff();
+    setAlsoReload((n) => n + 1);
+  });
+  const keepLinkedRelease = (row) => run(async () => {
+    if (!(await draft.flush())) return;
+    await linkPublisherPage(feedId, row.id);
+    await draft.load();
+    await onListChanged?.();
+    await refreshDiff();
+    setAlsoReload((n) => n + 1);
+  });
   // The error of a write shows in the footer, directly above the check box
   // "Send a podping" (ADR 0228 item 16).
   const writeError = pageFailure
@@ -2342,7 +2369,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
         : signErrorText(error && error.code)
           ? html`<div class="notice error" role="alert"><strong>${signErrorText(error.code)}</strong></div>`
           : html`<${ErrorNotice} error=${error} action=${discarding ? discardFailureTitle() : isPublisher(feeds.find((f) => f.id === feedId) || {}) ? 'Studio could not write the page.' : 'Studio could not write the release.'} onRetry=${retry} />`;
-  const hasWork = !pageRefusal && !addressPanel && diff && (diff.changed || diff.operations.length > 0 || diff.blocked.length > 0 || !!diff.feed_move || diff.grants.length > 0);
+  const hasWork = !pageRefusal && !linkedStop && !addressPanel && diff && (diff.changed || diff.operations.length > 0 || diff.blocked.length > 0 || !!diff.feed_move || diff.grants.length > 0);
   return html`<dialog ref=${ref} class="sheet" aria-labelledby="review-title" onClose=${onClose}>
     <header>
       <h2 id="review-title" ref=${result ? resultTitle : undefined} tabIndex=${result ? -1 : undefined}>${result ? result.title : 'Review changes'}</h2>
@@ -2389,6 +2416,18 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
         <div class="actions"><button class="button action" type="button" disabled=${busy || pageRefusal.linkDisabled}
           onClick=${pageRefusal.menu ? linkAndContinue : () => { ref.current.close(); onMakeArtist(); }}>${pageRefusal.button}</button></div>
       </div>`}
+      ${linkedStopViews.map(({ row: linkedRow, candidates, view }) => html`<div class="notice error" role="alert" key=${`linked-stop-${linkedRow.id}`}>
+        <strong>${view.title}</strong><p>${view.line}</p>
+        ${view.menu && html`<div class="group rows"><${ChoiceSelect} id=${`review-linked-page-${linkedRow.id}`} label=${view.label}
+          value=${selectedLinkedPages[linkedRow.id] || ''} placeholder=${view.placeholder}
+          options=${candidates.map((candidate) => [String(candidate.id), candidate.title || 'Untitled feed'])}
+          onChange=${(value) => setSelectedLinkedPages((selected) => ({ ...selected, [linkedRow.id]: value }))} /></div>`}
+        <div class="actions">
+          ${view.menu && html`<button class="button action" type="button" disabled=${busy || !selectedLinkedPages[linkedRow.id]}
+            onClick=${() => resolveLinkedStop(linkedRow, selectedLinkedPages[linkedRow.id])}>${view.link}</button>`}
+          <button class="button" type="button" disabled=${busy} onClick=${() => keepLinkedRelease(linkedRow)}>${view.keep}</button>
+        </div>
+      </div>`)}
       ${diff && diff.index_unread && html`<p class="notice" role="status">Studio could not ask Music Index about this address.</p>`}
       ${guid && html`<div class="notice error" role="alert"><strong>${guid.title}</strong>${guid.guids && html`<p class="mono">${guid.guids}</p>`}
         ${guid.lines.map((line) => html`<p>${line}</p>`)}
@@ -2403,7 +2442,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
         : html`<p class="field-warning" role="status" key=${problem.guid + problem.text}><strong>${problem.title}:</strong> ${problem.text}</p>`)}
       ${diff && (diff.changed
         ? html`<${DiffView} diff=${diff} />`
-        : !hasWork && !pageRefusal && !addressPanel && html`<p>The draft is the same as the hosted file.</p>`)}
+        : !hasWork && !pageRefusal && !linkedStop && !addressPanel && html`<p>The draft is the same as the hosted file.</p>`)}
       ${diff && alsoShown.length > 0 && html`<div class="group also-write">
         ${alsoShown.map((row) => html`<div key=${row.id} class="also-write-row">
           <label class="check"><input type="checkbox" checked=${row.checked} disabled=${busy || row.locked}
@@ -2454,6 +2493,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
       </div>`}
       `}
       ${!result && pageRefusal && html`<p class="hint" role="status">${pageRefusal.write}</p>`}
+      ${!result && linkedStopViews.map(({ row, view }) => html`<p class="hint" role="status" key=${row.id}>${view.write}</p>`)}
       ${!result && addressPanel && html`<p class="hint" role="status">${addressPanel.write}</p>`}
     </div>
     <footer>
@@ -2463,7 +2503,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
       ${deletion && diff && hasWork && !addressesBlocked && !choosing && html`<button class="button destructive" type="button" disabled=${busy || waiting || needsSigner || streamRefusal || alsoPending || blocksWrite(links)} onClick=${write}>
         ${progress ? signProgressLabel(progress) : busy ? 'Writing…' : deletion.label}</button>`}
       <button class=${`button${deletion ? '' : ' destructive'}`} type="button" disabled=${busy || (!deletion && !draft.changed)} onClick=${discard}>${deletion && deletion.cancel ? deletion.cancel : reviewRemoveLabel((feeds.find((f) => f.id === feedId) || {}).draft_state)}</button>
-      ${!deletion && diff && (pageRefusal || addressPanel) && html`<button class="button primary" type="button" disabled>${busy ? 'Writing…' : 'Write to the File Host'}</button>`}
+      ${!deletion && diff && (pageRefusal || linkedStop || addressPanel) && html`<button class="button primary" type="button" disabled>${busy ? 'Writing…' : 'Write to the File Host'}</button>`}
       ${!deletion && diff && hasWork && !addressesBlocked && !choosing && html`<button class="button primary" type="button" disabled=${busy || waiting || needsSigner || streamRefusal || alsoPending || blocksWrite(links) || (guid && !guid.confirmed)} onClick=${write}>
         ${progress ? signProgressLabel(progress) : busy ? 'Writing…' : 'Write to the File Host'}</button>`}
       `}

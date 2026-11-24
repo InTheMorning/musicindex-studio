@@ -5066,6 +5066,7 @@ fn linked_feeds_to_write(
             "side": changed.side,
             "artist": artist,
             "change": changed.change,
+            "refusal": feed_page_refusal(w, changed.feed)?,
         }));
     }
     Ok(linked)

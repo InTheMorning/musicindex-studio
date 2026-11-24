@@ -4,6 +4,7 @@
 - Date: 2026-11-23
 - Owner: operator
 - Accepted: 2026-11-23 by the operator, from drawings in the questionnaire. The check box of a linked feed is on and locked. The rule applies from the two sides of a link: the review of a page and the review of a release.
+- Changed: 2026-11-23, items 10 and 11 added after observation 2 of [the desktop check walk of 2026-11-23](../reviews/2026-11-23-desktop-check-walk.md). The operator selected the Stop in Review from drawings in the questionnaire. Item 9 gets the field `refusal`.
 - Technical choices: the main session selected the condition of item 2 and the removed link in item 3. It also selected the order of item 7, the API field of item 9 and the texts.
 - Changes: [ADR 0231](0231-a-new-release-writes-its-artist-page-and-the-files-of-a-restored-release.md) item 7. The rows are not only in Review of a new release.
 - Changes: [ADR 0234](0234-a-new-release-is-written-with-its-pages-and-a-one-sided-link-is-reported.md) item 3. The locked check box is not only for the first write of a new release.
@@ -53,7 +54,19 @@
 
 ### The API
 
-9. The diff route gives `also_write` for each review, with the feeds of item 2. Each entry has `id`, `title`, `side` (`page` or `release`), `artist` and `change` (`added` or `removed`). The UI uses `side` for the order of item 7 and `artist` and `change` for the text of item 5.
+9. The diff route gives `also_write` for each review, with the feeds of item 2. Each entry has `id`, `title`, `side` (`page` or `release`), `artist`, `change` (`added` or `removed`) and `refusal`. `refusal` is the page refusal code of the draft of B (`no_artist_page` or `no_publisher_page`, ADR 0218), or `null`. The UI uses `side` for the order of item 7 and `artist` and `change` for the text of item 5.
+
+### A Linked Release With No Page
+
+10. A row with a `refusal` stops the review before the write, because the write of B fails (ADR 0213 item 18). The usual cause is the removal of the only artist page of a release from that page. Review shows a Stop panel above the changes, one for each such row:
+
+    - The title is "{release} has no other artist page." for `no_artist_page`, and "{release} has no other artist, label or hosting page." for `no_publisher_page`.
+    - The line is "A release needs an artist page." or "A release needs a page."
+    - The select menu **Artist page** (or **Page**) lists the pages of the collection that the release can link, except A. **Link and Continue** links the selected page to the release and loads the diff again.
+    - **Keep the Release** links A to the release again and loads the diff again.
+    - With no page in the menu, the panel has only **Keep the Release**.
+
+11. While a Stop panel of item 10 shows, **Write to the File Host** is off, and the line above it is "Link a page to {release} first." Review of a release has no such panel, because a page has no page refusal.
 
 ## Item Map
 
@@ -87,10 +100,14 @@ Mechanical:
 - UI test (`crates/api/ui-tests/`): `alsoRows` gives each row locked, with the text of item 5 for each line of the table.
 - UI test: the write order gives the release rows before the page, and the page rows after the release.
 - UI test: a failed write of a release row writes no page, and names the release.
+- API test: after the removal of the only artist page of a written release from the page, the diff of the page gives the release with `refusal` `no_artist_page`.
+- UI test: the view model of Review gives the Stop panel of item 10 and the write off for a row with a `refusal`.
 
 Visual, by the main session with screenshots at 1100 px and 390 px:
 
 - Review of an artist page with one linked written release.
 - Review of a written release with its artist page.
+
+Visual, by the main session: the Stop panel of item 10 in Review of an artist page at 1100 px and at 390 px.
 
 Human check: the next desktop check adds an existing release on an artist page. It writes the two feeds in one review and reads the two written files.

@@ -1703,7 +1703,7 @@ async fn the_diff_of_a_new_release_names_its_artist_page_and_two_writes_leave_no
     assert_eq!(status, StatusCode::OK, "{diff}");
     assert_eq!(
         diff["also_write"],
-        json!([{ "id": artist_id, "title": "Artist", "side": "page", "artist": true, "change": "added" }]),
+        json!([{ "id": artist_id, "title": "Artist", "side": "page", "artist": true, "change": "added", "refusal": null }]),
         "ADR 0251 item 9: linked_feeds_to_write must include the page side"
     );
     let (_, lonely_diff) = call(
@@ -1724,7 +1724,7 @@ async fn the_diff_of_a_new_release_names_its_artist_page_and_two_writes_leave_no
     assert_eq!(artist_diff["changed"], true, "{artist_diff}");
     assert_eq!(
         artist_diff["also_write"],
-        json!([{ "id": release_id, "title": "Release", "side": "release", "artist": false, "change": "added" }]),
+        json!([{ "id": release_id, "title": "Release", "side": "release", "artist": false, "change": "added", "refusal": null }]),
         "ADR 0251 item 9: linked_feeds_to_write must include the release side"
     );
 
@@ -1792,12 +1792,12 @@ async fn a_changed_link_of_two_written_feeds_gives_a_row_on_each_side() {
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(
         also(&diff_of(second_id).await),
-        json!([{ "id": release_id, "title": "Release", "side": "release", "artist": false, "change": "added" }]),
+        json!([{ "id": release_id, "title": "Release", "side": "release", "artist": false, "change": "added", "refusal": null }]),
         "ADR 0251 item 2: Review of the page must offer the written release. Fix linked_feeds_to_write or changed_links."
     );
     assert_eq!(
         also(&diff_of(release_id).await),
-        json!([{ "id": second_id, "title": "Second", "side": "page", "artist": true, "change": "added" }]),
+        json!([{ "id": second_id, "title": "Second", "side": "page", "artist": true, "change": "added", "refusal": null }]),
         "ADR 0251 item 2: Review of the release must offer the written page. Fix linked_feeds_to_write or changed_links."
     );
 
@@ -1827,8 +1827,53 @@ async fn a_changed_link_of_two_written_feeds_gives_a_row_on_each_side() {
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(
         also(&diff_of(second_id).await),
-        json!([{ "id": release_id, "title": "Release", "side": "release", "artist": false, "change": "removed" }]),
+        json!([{ "id": release_id, "title": "Release", "side": "release", "artist": false, "change": "removed", "refusal": null }]),
         "ADR 0251 item 3: an unlink must give a removed row. Fix changed_links."
+    );
+}
+
+#[tokio::test]
+async fn a_linked_release_refusal_is_in_the_page_review_until_the_link_returns() {
+    let (app, connector) = publisher_app().await;
+    let artist = make_artist_page(&app, connector, "artist.xml", "Artist").await;
+    let page_id = artist["id"].as_i64().unwrap();
+    assert_eq!(write_with_own_diff(&app, page_id).await.0, StatusCode::OK);
+    let release = make_release(&app, connector, "release.xml", "Release", "Artist", page_id).await;
+    let release_id = release["id"].as_i64().unwrap();
+    assert_eq!(
+        write_with_own_diff(&app, release_id).await.0,
+        StatusCode::OK
+    );
+    assert_eq!(write_with_own_diff(&app, page_id).await.0, StatusCode::OK);
+
+    let (status, body) = call(
+        &app,
+        "DELETE",
+        &format!("/api/v1/feeds/{page_id}/links/{release_id}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, diff) = call(&app, "GET", &format!("/api/v1/feeds/{page_id}/diff"), None).await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    assert_eq!(
+        diff["also_write"][0]["refusal"], "no_artist_page",
+        "ADR 0251 item 9: include the linked release refusal. Fix linked_feeds_to_write."
+    );
+
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{page_id}/links"),
+        Some(json!({ "release": release_id })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (_, diff) = call(&app, "GET", &format!("/api/v1/feeds/{page_id}/diff"), None).await;
+    assert!(
+        diff["also_write"].as_array().unwrap().is_empty()
+            || diff["also_write"][0]["refusal"].is_null(),
+        "ADR 0251 item 9: remove the refusal after the page link returns. Fix linked_feeds_to_write. {diff}"
     );
 }
 

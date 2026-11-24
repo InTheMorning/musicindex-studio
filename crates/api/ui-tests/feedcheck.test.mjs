@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   tabLabel, checkCount, checkRows, unreadableRows, repairLabel, hasShowGrant, checkTexts,
-  PAGE_FINDING_TEXT, pageRefusalView, guidChangeView,
+  PAGE_FINDING_TEXT, pageRefusalView, linkedRefusalView, guidChangeView,
   addressPanelView, repairAddresses, peoplePanelView, ADDRESS_WRITE_LINE,
   releaseChecklist, wrongAddressSet,
   CHECK_LEAD, CHECK_NONE, CHECK_GRANT, CHECK_READ_ONLY, CHECK_UNREADABLE,
@@ -90,6 +90,21 @@ test('the payment page address mark uses wrong address findings', () => {
     finding('no_cover', 'add_a_cover'),
   ]))], ['name@example.com'], owner);
   assert.equal(wrongAddressSet(null).size, 0, owner);
+});
+
+test('ADR 0251 items 10 and 11: linked refusals give the Stop panel texts', () => {
+  const owner = 'ADR 0251 items 10 and 11: fix linkedRefusalView in feedcheck.js.';
+  assert.deepEqual(linkedRefusalView({ title: 'Release', refusal: 'no_artist_page' }, 2), {
+    title: 'Release has no other artist page.', line: 'A release needs an artist page.',
+    label: 'Artist page', placeholder: 'Select a page', menu: true,
+    link: 'Link and Continue', keep: 'Keep the Release', write: 'Link a page to Release first.',
+  }, owner);
+  assert.deepEqual(linkedRefusalView({ title: 'Show', refusal: 'no_publisher_page' }, 0), {
+    title: 'Show has no other artist, label or hosting page.', line: 'A release needs a page.',
+    label: 'Page', placeholder: 'Select a page', menu: false,
+    link: 'Link and Continue', keep: 'Keep the Release', write: 'Link a page to Show first.',
+  }, owner);
+  assert.equal(linkedRefusalView({ title: 'Release', refusal: 'unknown' }, 1), null, owner);
 });
 
 test('an old link GUID uses the target title and the repair route', () => {

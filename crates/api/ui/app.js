@@ -55,7 +55,7 @@ import {
   mediumKind, feedKind, FIRST_CLASS_ROLES, roleWord, kindGlow, isEditable, isReadOnly, isPublisher, trackKey, isTrack,
   leftPanel, releasesList, listQuery, queryText, sortLabel, sortEntries, mosaicCells, otherFeedText, mediumProblemView, mediumProblemCause, feedCover,
   startNav, pushNav, backNav, forwardNav, releasesView, canBack, canForward, setScroll,
-  isFeedView, openFeedView, newFeedView, navAtWidth, toggleRow, revealRows, pageTabs, tabsFit, showsRootButtons, rootNav, segmentKey, levelFeedSet, isTabChange, movedReleaseView } from './shell.js';
+  isFeedView, openFeedView, newFeedView, navAtWidth, toggleRow, revealRows, pageTabs, tabsFit, showsRootButtons, rootNav, segmentKey, isTabChange, movedReleaseView } from './shell.js';
 import {
   eventsToSign, signErrorText,
   npubOf, addressLines, linesText, invalidConfigField, blossomDefaultName, siteAddress, siteNameFromGuid, isNsec,
@@ -3601,8 +3601,11 @@ const currentAttr = (item) => (item.current ? 'page' : undefined);
 
 // One destination row. A row below Releases shows the state mark of the
 // feeds that it covers, between the name and the count (ADR 0165 items 1 to 4).
-// A tree row of a feed shows its depth, the button before its title when rows
-// are below it, and the second line (ADR 0254 items 5 to 8).
+// A tree row of a feed shows the open button before its title when rows are
+// below it, the second line, and the button "More" at its end (ADR 0254 items
+// 5 to 8). Each depth adds 16 px. A row with no open button keeps its space,
+// so the titles of one depth line up. The buttons are not inside the row
+// button.
 function DestinationRow({ item, open }) {
   const { feeds } = useContext(OutsideContext);
   const onToggle = useContext(CatalogContext);
@@ -3621,11 +3624,18 @@ function DestinationRow({ item, open }) {
     <${StateMark} mark=${mark} />
     ${item.group !== undefined && html`<span class="count" aria-hidden="true">${item.countText ?? item.count}</span>`}
   </button>`;
-  if (item.depth === undefined) return row;
-  return html`<div style=${`display:flex;align-items:center;margin-left:${item.depth * 16}px`}>
-    ${item.expandable && html`<button class="button quiet icon-button" type="button" aria-expanded=${item.open ? 'true' : 'false'}
-      aria-label=${`${item.open ? 'Close' : 'Open'} ${item.label}`} onClick=${() => onToggle(item.key)}><span aria-hidden="true">${item.open ? '▾' : '▸'}</span></button>`}
-    ${row}</div>`;
+  if (item.group === undefined) return row;
+  const feed = item.key !== undefined;
+  return html`<div class=${`tree-row${feed ? ' panel-row-with-menu' : ''}`} style=${`--depth:${item.depth || 0}`}>
+    ${item.expandable
+      ? html`<button class="tree-toggle" type="button" aria-expanded=${item.open ? 'true' : 'false'}
+        aria-label=${`${item.open ? 'Close' : 'Open'} ${item.label}`} onClick=${() => onToggle(item.key)}><span aria-hidden="true">${item.open ? '▾' : '▸'}</span></button>`
+      : html`<span class="tree-toggle" aria-hidden="true"></span>`}
+    ${row}
+    ${feed && html`<${MenuControl} row=${true} Icon=${Icon} buttonLabel="More"
+      accessibleName=${`More for ${item.label}`} menuLabel=${`More for ${item.label}`} items=${[{ label: 'Open' }]}
+      onSelect=${() => open(item, true)} />`}
+  </div>`;
 }
 
 // The destination rows: Releases, then the tree of the feeds with roles, then
@@ -3633,40 +3643,21 @@ function DestinationRow({ item, open }) {
 // opens its destination when `opens` is true. A tree row opens the page of its
 // feed.
 function destinationRows(top, go) {
-  const open = (item) => {
-    if (!item.opens) return;
+  const open = (item, force = false) => {
+    if (!item.opens && !force) return;
     go(item.view || (item.group === undefined ? { name: item.id } : { name: 'releases', group: item.group }));
   };
   const row = (item) => html`<${DestinationRow} key=${item.id} item=${item} open=${open} />`;
   const groups = top.filter((item) => item.group !== undefined);
+  // The heading of a role is a level below the heading "Catalog".
   return html`${top.filter((item) => item.group === undefined).map(row)}
-    ${groups.length > 0 && html`<div class="destination-group">${groups.map((item) => html`
-      ${item.heading && html`<h2 class="panel-heading">${item.heading}</h2>`}${row(item)}`)}</div>`}`;
+    ${groups.length > 0 && html`<section class="destination-group catalog-tree" aria-labelledby="catalog-heading">
+      <h2 class="panel-heading" id="catalog-heading">Catalog</h2>${groups.map((item) => html`
+      ${item.heading && html`<h3 class="panel-heading">${item.heading}</h3>`}${row(item)}`)}</section>`}`;
 }
 
-// A section row or a release row of a level. A section row covers its feed
-// and its releases. A release row covers its feed only (ADR 0165 item 3).
-// `count` is given for a section row, which shows art and a number.
-function LevelRow({ item, set, label, count, attrs, onOpen, onMove }) {
-  const mark = useStateMark(set);
-  const click = useOpenAndCheck(set, mark, onOpen);
-  const section = count !== undefined;
-  const base = section ? `${label}, ${count} ${count === 1 ? 'release' : 'releases'}` : label;
-  const row = html`<button class="row" type="button" ...${attrs} aria-label=${mark ? `${base}, ${mark.text}` : (section ? base : undefined)} onClick=${click}>
-    ${section && html`<${FeedArt} art=${item.art} glow=${item.glow} dot=${item.dot} />`}
-    <span class="row-label">${label}</span>
-    <${StateMark} mark=${mark} />
-    ${section && html`<span class="count" aria-hidden="true">${count}</span>`}
-  </button>`;
-  return item.move ? html`<div class="panel-row-with-menu">${row}<${MenuControl} row=${true} Icon=${Icon} buttonLabel="More"
-    accessibleName=${`More for ${label}`} menuLabel=${`More for ${label}`} items=${[{ label: 'Move To…' }]}
-    onSelect=${() => onMove(item.id)} /></div>` : row;
-}
-
-// One level of the hierarchy (ADR 0215 item 5): "‹" to the level above when
-// `back` is true, the head of the feed, the feeds directly below it under
-// their role headings, then its releases. The head opens the feed page, and
-// a release opens its outline at narrow width.
+// An add row of the outline of an open feed. It is a button, or a button
+// with a menu.
 function AddTreeRow({ item, attrs, onAdd }) {
   // A menu row is not a tree item: the arrow keys skip it, and Tab reaches
   // it. Its button has `aria-expanded`, and a tree item with no child rows
@@ -3678,60 +3669,6 @@ function AddTreeRow({ item, attrs, onAdd }) {
       : item)} /></div>`;
   return html`<button class="row node add" type="button" ...${attrs} onClick=${() => onAdd(item)}>
     <span class="num">＋</span><span class="row-label">${item.label}</span></button>`;
-}
-
-// An add row with no menu is a tree item and takes a row number.
-const treeAdd = (item) => Boolean(item && !item.menu);
-
-function Level({ panel, go, back, onAddFeedRow = () => {}, onMove = () => {} }) {
-  const narrow = useNarrow();
-  const [current, setCurrent] = useState(null);
-  const { feeds } = useContext(OutsideContext);
-  const head = panel.head;
-  const headSet = levelFeedSet(feeds, head.id);
-  const headMark = useStateMark(headSet);
-  const openHead = useOpenAndCheck(headSet, headMark, () => go({ name: 'feed', id: head.id, page: 'album', from: head.from }));
-  let cursor = back ? 1 : 0;
-  const headIndex = cursor++;
-  // A different level can have fewer rows, so the current row stays in range.
-  const total = cursor + panel.sections.reduce((n, section) => n + section.items.length + (treeAdd(section.add) ? 1 : 0), 0)
-    + (panel.releases ? panel.releases.length + (treeAdd(panel.releaseAdd) ? 1 : 0) : 0);
-  const currentIndex = current === null || current >= total ? (back ? 0 : headIndex) : current;
-  // A row with no child rows has no `aria-expanded` (musicindex ADR 0061
-  // R-LISTKEY-2 item 1).
-  const rowAttrs = (index, parent, kind = 'page') => ({
-    role: 'treeitem', tabindex: index === currentIndex ? 0 : -1,
-    'data-list-kind': kind, 'data-list-parent': parent === null ? undefined : String(parent),
-  });
-  return html`<div role="tree" aria-label=${head.title} onKeyDown=${(event) => onTreeKey(event, currentIndex, setCurrent)}>
-    ${back && html`<button class="row" type="button" ...${rowAttrs(0, null)} onClick=${() => go(panel.back.view)}><${Chevron} direction="back" />${panel.back.label}</button>`}
-    <button class="outline-feed" type="button" ...${rowAttrs(headIndex, null, 'tree')} aria-expanded="true" aria-label=${`${head.title}, ${head.typeLabel}${headMark ? `, ${headMark.text}` : ''}`}
-      onClick=${openHead}>
-      <${ArtWithDot} dot=${head.dot}><${FeedArt} art=${head.art} glow=${head.glow} className="outline-cover" /><//>
-      <div class="text"><span class="title">${head.title}</span><span class="sub">${head.typeLabel}</span></div>
-      <${StateMark} mark=${headMark} />
-    </button>
-    ${panel.sections.map((section) => html`<div class="destination-group">
-      <h2 class="panel-heading">${section.heading}</h2>
-      ${section.items.map((item) => { const index = cursor++; return html`<${LevelRow} item=${item} set=${panelSet(feeds, item.id)} label=${item.label} count=${item.count}
-        attrs=${rowAttrs(index, headIndex)} onOpen=${() => go(item.view)} onMove=${onMove} />`; })}
-      ${section.add && html`<${AddTreeRow} item=${section.add} attrs=${treeAdd(section.add) ? rowAttrs(cursor++, headIndex) : {}} onAdd=${onAddFeedRow} />`}
-    </div>`)}
-    ${panel.releases && html`<div class="destination-group">
-      <h2 class="panel-heading">Releases</h2>
-      ${panel.releases.map((item) => { const index = cursor++; return html`<${LevelRow} item=${item} set=${feeds.filter((feed) => feed.id === item.id)} label=${item.title}
-        attrs=${rowAttrs(index, headIndex)} onOpen=${() => go(openFeedView(item.id, narrow, item.from))} onMove=${onMove} />`; })}
-      ${panel.releaseAdd && html`<${AddTreeRow} item=${panel.releaseAdd} attrs=${treeAdd(panel.releaseAdd) ? rowAttrs(cursor++, headIndex) : {}} onAdd=${onAddFeedRow} />`}
-    </div>`}</div>`;
-}
-
-// A level as a page of a narrow window (ADR 0215 item 7). Back opens the
-// page below it in the stack.
-function LevelPage({ panel, go, onAddFeedRow, onMove }) {
-  return html`<div class="panel-page">
-    <${Bar}><span class="bar-title">${panel.head.title}</span><//>
-    <section class="section outline-page"><${Level} panel=${panel} go=${go} back=${false} onAddFeedRow=${onAddFeedRow} onMove=${onMove} /></section>
-  </div>`;
 }
 
 // The outline of an open feed (ADR 0206 item 7): the cover, the title and the

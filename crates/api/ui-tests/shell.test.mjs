@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   pageTabs, tabsFit, mediumKind, feedKind, trackCountText, roleChoice, roleHint, keptRoleFolds, linkRoleChoices, toggleRole, isEditable, isReadOnly, reviewHost, moveNote, isPublisher, isPlaylist, trackKey, isTrack,
-  leftPanel, groupDestinations, releasesList, listQuery, queryText, sortLabel, sortEntries, compareNames, byName, segmentKey, levelFeedSet,
+  leftPanel, groupDestinations, releasesList, listQuery, queryText, sortLabel, sortEntries, compareNames, byName, segmentKey,
   startNav, pushNav, backNav, forwardNav, canBack, canForward, setScroll, releasesView,
   narrowStack, openFeedView, newFeedView, navAtWidth, rowPath, pagePath, toggleRow, revealRows, widthNav, wideView, publisherArt, mosaicCells, otherFeedText, mediumProblemView, mediumProblemCause,
 } from '../ui/shell.js';
@@ -868,17 +868,6 @@ test('a new feed keeps the view of its source level', () => {
   assert.deepEqual(newFeedView(91, { group: 40, trail: [] }), { name: 'feed', id: 91, from: { group: 40, trail: [] } });
   assert.deepEqual(newFeedView(92, { group: 41, trail: [40] }), { name: 'feed', id: 92, from: { group: 41, trail: [40] } });
   assert.deepEqual(newFeedView(93), { name: 'feed', id: 93 });
-});
-
-test('the head row mark uses the level feed and not its releases (ADR 0181 item 1)', () => {
-  const owner = { ...labelA, draft_state: 'none' };
-  const release = { ...album1, draft_state: 'changed' };
-  const headFeeds = levelFeedSet([owner, release], owner.id);
-  const results = { [owner.id]: { read: true }, [release.id]: { read: true } };
-  assert.deepEqual(headFeeds, [owner]);
-  assert.equal(stateMark(headFeeds, results), null);
-  assert.equal(stateMark([release], results).kind, 'pending');
-  assert.deepEqual(levelFeedSet([owner, release], 999), []);
 });
 
 test('the level tile model puts the level feed before its releases (ADR 0181 items 2 and 3)', () => {

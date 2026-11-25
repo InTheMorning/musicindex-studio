@@ -4,7 +4,7 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Levels And Move
 Decisions: [ADR 0253](../adr/0253-the-roles-of-a-feed-and-of-each-link.md) items 7 to 14, 16 and 18. [ADR 0254](../adr/0254-the-catalog-is-a-tree-and-each-change-uses-music-words.md) items 1 to 17 and 43 to 46.
 Prototype: `.studio-dev/design-brief/prototype/structure.html`. Git ignores it. Its words "Hosting" and "Catalog" follow the ADRs, not the prototype, where the two are different.
 
-Status: Packets 253a and 253b are done. Packets 253c and 253d are not started.
+Status: Packets 253a to 253c are done. Packet 253d is not started.
 
 Operator choice (main session, packet 253b): a feed with no level role shows the number of its releases. A feed with only the role `hosting` shows the number of the pages below it.
 

@@ -508,13 +508,6 @@ export function revealRows(open, from) {
   return next;
 }
 
-// The feed set of an open level's head row (ADR 0181 item 1).
-export function levelFeedSet(feeds, id) {
-  if (!Array.isArray(feeds)) return [];
-  const feed = feeds.find((item) => item.id === id && isPublisher(item));
-  return feed ? [feed] : [];
-}
-
 // The start values of a new release of a publisher feed (ADR 0164 items 1
 // and 2, ADR 0232 item 4). Only a writable artist page is the start parent.
 // Other feeds give null.

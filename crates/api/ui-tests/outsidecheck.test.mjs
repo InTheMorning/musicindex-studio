@@ -278,7 +278,7 @@ test('A single-feed mark shows outside changes and hides an up-to-date feed (ADR
 test('The open feed outline uses its single-feed state mark (ADR 0165 items 2 and 6)', () => {
   const source = readFileSync(new URL('../ui/app.js', import.meta.url), 'utf8');
   const start = source.indexOf('function Outline');
-  const end = source.indexOf('function LevelPage', start);
+  const end = source.indexOf('function LeftPanelFooter', start);
   const outline = source.slice(start, end);
   const fix = 'ADR 0165 items 2 and 6: the open feed outline shows its state mark. Fix Outline in crates/api/ui/app.js.';
   assert.match(outline, /useStateMark\(feeds\.filter\(\(item\) => item\.id === feed\.id\)\)/, fix);
@@ -359,7 +359,7 @@ test('The outline head checks a feed, and a write checks the written feed (task 
   const app = readFileSync(new URL('../ui/app.js', import.meta.url), 'utf8');
   const editor = readFileSync(new URL('../ui/editor.js', import.meta.url), 'utf8');
   const start = app.indexOf('function Outline');
-  const outline = app.slice(start, app.indexOf('function LevelPage', start));
+  const outline = app.slice(start, app.indexOf('function LeftPanelFooter', start));
   assert.match(outline, /useOpenAndCheck\(/, 'Task 210 item 2: the head box of Outline checks a feed that is not checked. Use useOpenAndCheck in Outline in crates/api/ui/app.js.');
   const fix = 'Task 210 item 3: a write sends OUTSIDE_RECHECK and useOutsideChecks listens for it. Fix ReviewSheet in editor.js and useOutsideChecks in app.js.';
   assert.match(editor, /new CustomEvent\(OUTSIDE_RECHECK, \{ detail: \{ id: feed\.id \} \}\)/, fix);

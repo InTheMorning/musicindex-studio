@@ -6,7 +6,7 @@ import { html, useState, useEffect, useRef, createContext, useContext } from './
 import { useDeleteUndo, undoNoticeText, CatalogUndoNotice } from './undonotice.js';
 import { CONFIRMS } from './confirms.js';
 import { VIEWS, VIEW_LABELS, VIEW_HINTS, normalizeView, shownLines, localTimeNote, runs, commonIndent, stripIndent, moreLabel, fieldRows, guardRow, changeKeys, MERGE_TITLE, MERGE_INTRO, MERGE_HEADINGS, mergeRows, mergeReady, showsExamine, streamProblemRows } from './review.js';
-import { LoadErrorNotice, FeedCheckRow, onSegmentKey, dropAreaClass, useFileDrop, api, saveTicket, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ChoiceSelect, SearchField, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext, Icon, AddFeedRowSheet, inDesktopApp, NavContext } from './app.js';
+import { LoadErrorNotice, FeedCheckRow, ArtWithDot, onSegmentKey, dropAreaClass, useFileDrop, api, saveTicket, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ChoiceSelect, SearchField, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext, Icon, AddFeedRowSheet, inDesktopApp, NavContext } from './app.js';
 import { AlbumPayments, TrackPayments } from './values.js';
 import { PickerLayout, PickFillRow, FindOneSheet, PickFold, TakenTag, useFieldList } from './pickers.js';
 import { PersonArt, useProfiles, useReviewFindings, ReviewPanels, ReviewCorrectSheet } from './peoplepages.js';
@@ -14,7 +14,7 @@ import { onListKey, onTreeKey } from './listkeys.js';
 import { creditPickRows, supportPickRows, creditChoices, creditFillRows, creditFillValue, creditFillNote, creditFillNoteText, CREDIT_FIELD_LABELS, fundingChoices, nostrChoices, withPersonValues, filterRows, nostrPickRows, feedWord, memberRowLine, memberSectionNote } from './people.js';
 import { withCids, STATUS } from './draft.js';
 import { roleSummary } from './roles.js';
-import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, roleHint, keptRoleFolds, relLabel, linkRoleChoices, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName, newFeedView, pageLevel, pagePath, publisherGroups, pageSort, pageSortLabel, PAGE_SORTS } from './shell.js';
+import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, roleHint, keptRoleFolds, relLabel, linkRoleChoices, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName, newFeedView, pageLevel, pagePath, publisherGroups, entryFeed, isReleaseEntry, moveRelease, moveTarget } from './shell.js';
 import { MenuControl } from './menu.js';
 import { isLiveItem, liveKey, liveDot, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner, OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning, hasBadAddress, problemGroup, setLiveStreamType, viewAfterLiveGone, withoutLive } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
@@ -3074,7 +3074,7 @@ function ArtistsAndLabels({ feed, feeds, model, update, draft, go, onListChanged
   // The publisher feeds of this release, in the sequence of
   // `podcast:publisher` (ADR 0255 item 9). The first one is the primary.
   const publishers = model.publisher ? model.publisher.remote_items : [];
-  const rows = publishers.map((entry, index) => ({ index, entry, match: linkedFeed(feeds, entry) }));
+  const rows = publishers.map((entry, index) => ({ index, entry, match: entryFeed(feeds, entry) }));
   const candidates = pageLinkCandidates(feeds, model);
   const twoDrafts = (action, call) => changeTwoDrafts(action, { feedId: feed.id, draft, onListChanged, setChanged, call });
   // Swap this publisher feed with the one above or below it. No other feed
@@ -3137,7 +3137,7 @@ function ArtistsAndLabels({ feed, feeds, model, update, draft, go, onListChanged
 // feed has no link to. The section and Review use it (ADR 0218 item 3).
 export function pageLinkCandidates(feeds, model) {
   const publisher = model?.publisher?.remote_items || [];
-  const linkedIds = new Set(publisher.map((entry) => linkedFeed(feeds || [], entry)?.id).filter(Boolean));
+  const linkedIds = new Set(publisher.map((entry) => entryFeed(feeds || [], entry)?.id).filter(Boolean));
   return (feeds || []).filter((candidate) => candidate.connector_id && mediumOf(candidate) === 'publisher' && !linkedIds.has(candidate.id));
 }
 
@@ -4415,13 +4415,6 @@ function mediumOf(feed) {
   return (feed.medium || '').toLowerCase();
 }
 
-// The feed of the list that a release entry names, by its feed GUID or its
-// public address (ADR 0255, the releases of a publisher feed).
-function linkedFeed(feeds, entry) {
-  return feeds.find((f) => (f.podcast_guid && f.podcast_guid === entry.feed_guid)
-    || (f.public_url && f.public_url === entry.feed_url)) || null;
-}
-
 // The text of an error of a publisher change. A missing role has its own
 // text, and each page gives that text (ADR 0255 item 4).
 function publisherError(error, roleText) {
@@ -4508,28 +4501,91 @@ export function PublisherPath({ feeds, feed, from, go }) {
 }
 
 // One group of the page of a publisher feed (ADR 0254 items 13 to 16). A row
-// opens its page. The group Releases has a select menu of its sorts.
-function PageGroup({ group, sort, onSort, onOpen, onAddRelease, onAddPage }) {
+// opens its page. The group Releases has one sequence, the sequence of the
+// feed, and no sort (ADR 0263 items 12 to 17). A release row that can move
+// has a drag handle and a menu with the moves (ADR 0263 items 12, 13 and
+// 13a). `onMove` gets the slots of the group, the position of the row and the
+// new position. The state of a drag starts in the next task, because WebKit
+// stops a drag when the page changes during `dragstart` (task 254). The
+// position of the drag stays in a reference, which changes no element.
+function PageGroup({ group, busy, onMove, onOpen, onAddRelease, onAddPage }) {
   const headingId = `page-group-${group.id}`;
+  const dragFrom = useRef(null);
+  // `from` is the position of the row in the drag. `at` is the place of the
+  // insertion line: 0 is before the first channel row.
+  const [drag, setDrag] = useState(null);
+  const channel = group.rows.filter((row) => row.position !== null && row.position !== undefined);
+  const anyHandle = group.rows.some((row) => row.draggable);
+  const endDrag = () => { dragFrom.current = null; setDrag(null); };
+  const placeOf = (event, row) => {
+    const box = event.currentTarget.getBoundingClientRect();
+    return event.clientY < box.top + box.height / 2 ? row.position : row.position + 1;
+  };
+  // An insertion line before or after the row that the drop does not leave
+  // in place.
+  const markOf = (row) => {
+    if (!drag || drag.at === null || row.position === null || row.position === undefined) return '';
+    if (drag.at === drag.from || drag.at === drag.from + 1) return '';
+    if (drag.at === row.position) return ' drop-before';
+    return drag.at === channel.length && row.position === channel.length - 1 ? ' drop-after' : '';
+  };
+  const dropTargets = (row) => (row.position === null || row.position === undefined ? {} : {
+    onDragOver: (event) => {
+      if (dragFrom.current === null) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      const at = placeOf(event, row);
+      if (!drag || drag.at !== at) setDrag({ from: dragFrom.current, at });
+    },
+    onDrop: (event) => {
+      if (dragFrom.current === null) return;
+      event.preventDefault();
+      const from = dragFrom.current;
+      const at = placeOf(event, row);
+      endDrag();
+      const to = at > from ? at - 1 : at;
+      if (to !== from && !busy) onMove(group.slots, from, to);
+    },
+  });
   return html`<section class="page-section page-group" aria-labelledby=${headingId}>
     <h2 id=${headingId}>${group.heading}</h2>
-    ${group.sorts && group.rows.length > 1 && html`<div class="field page-sort">
-      <label for="page-sort">Sort</label>
-      <div class="field-body"><select id="page-sort" value=${sort} onChange=${(e) => onSort(e.target.value)}>
-        ${PAGE_SORTS.map((key) => html`<option value=${key}>${pageSortLabel(key)}</option>`)}
-      </select></div>
-    </div>`}
     <div class="group">
       ${group.rows.length === 0 && html`<p class="hint">${group.empty}</p>`}
-      ${group.rows.map((row) => html`<div class="panel-row-with-menu page-group-row" key=${row.id}>
-        <button class="link-row" type="button" onClick=${() => onOpen(row.view)}>
-          <span class=${`dot ${row.dot}`} aria-hidden="true"></span>
-          <span class="text"><span class="label">${row.title}</span>
-            <span class="summary">${[row.typeLabel, row.countText].filter(Boolean).join(' · ')}</span></span>
-          <span class="go" aria-hidden="true">›</span></button>
-        <${MenuControl} row=${true} Icon=${Icon} buttonLabel="More" accessibleName=${`More for ${row.title}`}
-          menuLabel=${`More for ${row.title}`} items=${[{ label: 'Open' }]} onSelect=${() => onOpen(row.view)} />
-      </div>`)}
+      ${group.rows.map((row) => {
+        const isRelease = row.summary !== undefined;
+        const moves = row.moves || [];
+        return html`<div class=${`panel-row-with-menu page-group-row${drag && drag.from === row.position ? ' dragging' : ''}${markOf(row)}`} key=${row.id} ...${dropTargets(row)}>
+          ${anyHandle && html`<span class=${`drag-handle${row.draggable ? '' : ' drag-handle-space'}`} aria-hidden="true"
+            draggable=${row.draggable && !busy ? 'true' : undefined} title=${row.draggable ? `Drag ${row.title}` : undefined}
+            onDragStart=${(event) => {
+              if (!row.draggable || busy) { event.preventDefault(); return; }
+              event.stopPropagation();
+              event.dataTransfer.effectAllowed = 'move';
+              event.dataTransfer.setData('application/x-studio-release', String(row.position));
+              dragFrom.current = row.position;
+              const from = row.position;
+              setTimeout(() => { if (dragFrom.current === from) setDrag({ from, at: null }); }, 0);
+            }}
+            onDragEnd=${endDrag}>${row.draggable && html`<${Icon} name="grip" />`}</span>`}
+          <button class="link-row" type="button" onClick=${() => onOpen(row.view)}>
+            ${isRelease
+              ? html`<${ArtWithDot} dot=${row.dot}><${ImageThumb} url=${row.image} glow=${row.glow} className="releases-cover" always /><//>`
+              : html`<span class=${`dot ${row.dot}`} aria-hidden="true"></span>`}
+            <span class="text"><span class="label">${row.title}</span>
+              <span class="summary">${isRelease ? row.summary : [row.typeLabel, row.countText].filter(Boolean).join(' · ')}</span>
+              ${isRelease && row.note && html`<span class="summary">${row.note}</span>`}
+              ${isRelease && row.unlistedLine && html`<span class="summary">${row.unlistedLine}</span>`}
+              ${isRelease && html`<span class="summary">${row.draftLabel}</span>`}</span>
+            <span class="go" aria-hidden="true">›</span></button>
+          ${(!isRelease || moves.length > 0) && html`<${MenuControl} row=${true} Icon=${Icon} buttonLabel="More" accessibleName=${`More for ${row.title}`}
+            menuLabel=${`More for ${row.title}`} items=${isRelease ? moves : [{ label: 'Open' }]}
+            onSelect=${(entry) => {
+              if (!isRelease) { onOpen(row.view); return; }
+              const to = moveTarget(entry.id, row.position, channel.length);
+              if (to !== null && !busy) onMove(group.slots, row.position, to);
+            }} />`}
+        </div>`;
+      })}
       ${group.add.map((add) => html`<button class="link-row add" type="button" key=${add.id} disabled=${!add.ready}
         onClick=${add.id === 'add-release' ? onAddRelease : () => onAddPage(add)}>
         <span class="title">${add.label}</span></button>`)}
@@ -4573,8 +4629,8 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, view,
   const items = model.remote_items;
   // The releases in the sequence of the model (ADR 0255 item 10).
   const rows = items
-    .map((entry, index) => ({ index, entry, match: linkedFeed(feeds, entry) }))
-    .filter((row) => row.entry.medium === 'music' || row.entry.medium === 'musicL');
+    .map((entry, index) => ({ index, entry, match: entryFeed(feeds, entry) }))
+    .filter((row) => isReleaseEntry(row.entry));
   const linkedIds = new Set(rows.filter((row) => row.match).map((row) => row.match.id));
   const spaced = rows.filter((row) => hasSpace(row.entry.feed_url)).length;
   // The core corrects each address in the draft, and Review shows the change
@@ -4602,11 +4658,15 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, view,
   // 0254 item 15).
   const closeAdd = () => { setAddOpen(null); setAddStart(null); };
   const openReleaseForm = (start) => { setAddStart(start || {}); setAddOpen('release-form'); };
-  // The groups of the page (ADR 0254 item 13). The sort is in the view, which
-  // is the navigation record of the session (item 13a).
-  const sort = pageSort(view);
-  const groups = publisherGroups(feed, feeds, { sort, from: view && view.from });
-  const setSort = (next) => go({ ...view, sort: next }, { replace: true });
+  // The groups of the page (ADR 0254 item 13). The group Releases has the
+  // sequence of the draft of this feed (ADR 0263 item 12).
+  const groups = publisherGroups(feed, feeds, { items, from: view && view.from });
+  // A move in the group Releases is one edit of the draft of this feed. The
+  // history of the draft records it, so that the Undo of the bar removes it
+  // (ADR 0263 items 13b and 14). `slots` are the entries that the group shows.
+  const moveInGroup = (slots, from, to) => {
+    update((m) => set(m, 'remote_items', moveRelease(m.remote_items, slots, from, to)));
+  };
   // The menu ＋ Add of the page head (ADR 0254 item 17). `addMenuEntries`
   // leaves out the values that this page cannot add.
   const headAdd = addMenuEntries(releaseAdd(feed, model.title), feed);
@@ -4815,7 +4875,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, view,
       start=${addStart || firstStart(first, addOpen, model, feed.id, addRole)} onAdded=${addedFeed} onClose=${closeAdd} />`}
     <div class="page-tools"><${MenuControl} className="add-menu" buttonLabel="＋ Add" accessibleName="Add" menuLabel="Add"
       items=${headAdd} onSelect=${pickAdd} /></div>
-    ${groups.map((group) => html`<${PageGroup} key=${group.id} group=${group} sort=${sort} onSort=${setSort}
+    ${groups.map((group) => html`<${PageGroup} key=${group.id} group=${group} busy=${linkAction.busy} onMove=${moveInGroup}
       onOpen=${(target) => go(target)} onAddRelease=${() => openReleaseForm(more && more.start)}
       onAddPage=${(add) => nav.addCatalogPage({ id: feed.id, role: add.id === 'publish-label' ? 'label' : 'artist' })} />`)}
     ${showSections(pageSequence('publisher'), shown)}`;

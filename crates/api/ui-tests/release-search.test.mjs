@@ -14,8 +14,6 @@ const feeds = [
 const list = (query, extra = {}) => releasesList({
   feeds,
   connectors: [],
-  sort: 'newest',
-  view: 'rows',
   group: 'none',
   query,
   ...extra,
@@ -37,16 +35,15 @@ test('release search ignores letter case', () => {
   assert.deepEqual(list('NIGHT').rows, list('night').rows);
 });
 
-test('an unmatched release search gives no rows or letter groups', () => {
-  const result = list('no match', { sort: 'az' });
+test('an unmatched release search gives no rows', () => {
+  const result = list('no match');
   assert.deepEqual(result.rows, []);
-  assert.equal(result.letters, null);
 });
 
 test('People and Releases use the shared SearchField', () => {
   const people = readFileSync(new URL('../ui/peoplepages.js', import.meta.url), 'utf8');
   const app = readFileSync(new URL('../ui/app.js', import.meta.url), 'utf8');
-  const page = app.slice(app.indexOf('function OverviewPage('), app.indexOf('// The feed of an open level'));
+  const page = app.slice(app.indexOf('function OverviewPage('), app.indexOf('// The add menu of Overview'));
   assert.match(people, /<\$\{SearchField/);
   assert.doesNotMatch(people, /class="field search-field"/);
   assert.match(page, /<\$\{SearchField/);

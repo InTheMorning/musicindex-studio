@@ -1604,7 +1604,7 @@ test('a move pages change set has one or many page titles and returns to its tar
   assert.equal(changeTitle(many), 'Move 3 artists to Host A', 'ADR 0243 item 3: fix changeTitle in crates/api/ui/people.js.');
   assert.equal(changeRow({ operation: one, feeds: [] }).title, 'Move Artist A to Host A',
     'ADR 0243 item 4: fix changeRow in crates/api/ui/people.js.');
-  assert.deepEqual(afterDiscard({ operation: one }, [{ id: 40, title: 'Host A' }]), { name: 'releases', group: 40 },
+  assert.deepEqual(afterDiscard({ operation: one }, [{ id: 40, title: 'Host A' }]), { name: 'feed', id: 40 },
     'ADR 0243 item 3: fix afterDiscard in crates/api/ui/people.js.');
 });
 

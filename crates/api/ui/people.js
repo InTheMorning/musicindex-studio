@@ -424,7 +424,7 @@ export function afterDiscard(set, feeds = []) {
   if (set && set.operation && set.operation.kind === 'move_releases') return { name: 'hosts' };
   if (set && set.operation && set.operation.kind === 'move_pages') {
     const target = feeds.find((feed) => (feed.title || feed.path || `Page ${feed.id}`) === set.operation.target_name);
-    return target ? { name: 'releases', group: target.id } : { name: 'overview' };
+    return target ? { name: 'feed', id: target.id } : { name: 'overview' };
   }
   return set && set.person_id != null ? { name: 'person', id: set.person_id } : { name: 'people' };
 }

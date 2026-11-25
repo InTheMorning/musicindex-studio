@@ -76,7 +76,6 @@ test('no label of an add control has the word "feed" except "feed file"', () => 
   for (const label of labels) assert.doesNotMatch(label.replace(/feed file/gi, ''), /feed/i, `${owner} Label: ${label}`);
   const source = readFileSync(new URL('../ui/app.js', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /＋ Add a Feed|>Add a Feed<|Open the Feed/, owner);
-  assert.match(source, /\$\{head\.typeLabel\} Page/, 'ADR 0261 item 7: the head button is {Type} Page.');
 });
 
 test('makeFields gives the fields of each type', () => {

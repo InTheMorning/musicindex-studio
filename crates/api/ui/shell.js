@@ -6,6 +6,7 @@
 import { liveKey, isLiveItem, statusLabel } from './live.js';
 import { coverOf } from './cover.js';
 import { tabLabel } from './feedcheck.js';
+import { moveAmong } from './order.js';
 
 // The nine roles of a publisher feed, in the sequence of musicindex ADR
 // 0081 R-CURATOR-1 item 1 (ADR 0083 item 1).
@@ -496,18 +497,6 @@ export function pagePath(feeds, id, from = undefined) {
 
 // ---- The page of a publisher feed (ADR 0254 items 11 to 17) ----
 
-// The sorts of the group Releases, the default first (ADR 0254 item 13a).
-export const PAGE_SORTS = ['order', 'newest', 'az'];
-
-// The name of a sort of the group Releases. "Feed order" is the sequence of
-// ADR 0254 item 4a.
-export const pageSortLabel = (sort) => (sort === 'order' ? 'Feed order' : sortLabel(sort, false));
-
-// The sort of the page in a view. A view with no sort, or with a sort that
-// is not known, gives the default. The view is the navigation record of the
-// session (ADR 0254 item 13a).
-export const pageSort = (view) => (view && PAGE_SORTS.includes(view.sort) ? view.sort : PAGE_SORTS[0]);
-
 // The state text of the feed of a page, as a release tile gives it (ADR 0254
 // item 11a). A release with a draft does not change it.
 export const draftLabel = (feed) => DRAFT_LABELS[feed.draft_state] || 'No changes';
@@ -542,19 +531,126 @@ export function placeText(feed, feeds) {
 // The text of a count: "1 release", "3 pages below".
 const countWords = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
+// ---- The release list of a page (ADR 0263 items 12 to 16) ----
+
+// A release entry of a channel: a link with the medium music or musicL.
+export const isReleaseEntry = (entry) => entry.medium === 'music' || entry.medium === 'musicL';
+
+// The feed of the list that a release entry names, by its feed GUID or its
+// public address (ADR 0255), or null.
+export function entryFeed(feeds, entry) {
+  return (feeds || []).find((f) => (f.podcast_guid && f.podcast_guid === entry.feed_guid)
+    || (f.public_url && f.public_url === entry.feed_url)) || null;
+}
+
+// The moves of a release row, in the sequence of the menu (ADR 0263 item 13).
+const RELEASE_MOVES = [['up', 'Move up'], ['down', 'Move down'], ['top', 'Move to the top']];
+
+// The position that move `kind` gives to the row at `position` among `count`
+// rows, or null when the move does not move the row.
+export function moveTarget(kind, position, count) {
+  const to = { top: 0, up: position - 1, down: position + 1 }[kind];
+  return Number.isInteger(to) && to >= 0 && to < count && to !== position ? to : null;
+}
+
+// The moves that the menu of the row at `position` offers. A move that does
+// not move the row is not available (ADR 0263 item 13).
+export function releaseMoves(position, count) {
+  return RELEASE_MOVES.filter(([kind]) => moveTarget(kind, position, count) !== null)
+    .map(([id, label]) => ({ id, label }));
+}
+
+// The new `remote_items` after the release entry at slot `from` moves to slot
+// `to`. `slots` are the indices of the release entries that the group shows.
+// Only these entries change their sequence. Each other entry keeps its index
+// (ADR 0263 item 13b, ADR 0081 item 5).
+export function moveRelease(items, slots, from, to) {
+  return moveAmong(items, slots, from, to);
+}
+
+// The rows of the group Releases of a page and the slots of its entries.
+// The sequence is the sequence of the channel in `items`. Then come the
+// releases that only name the page, in the sequence of `release_ids` (ADR
+// 0254 item 4a, ADR 0263 items 12 and 13a). A row has the fields of ADR 0263
+// item 16, and:
+// - `position` and `slot`: the place among the channel rows, and the index of
+//   its entry in `items`. A release that only names the page has neither.
+// - `moves`: the moves of its menu. The list is empty with no `items`, with
+//   no host for the page feed (ADR 0263 item 13a), with fewer than two
+//   channel rows, and for a release that only names the page.
+// - `draggable`: the row has a drag handle. It is true when `moves` has an
+//   entry.
+export function releaseRows(feed, feeds, { items, from = undefined } = {}) {
+  const list = Array.isArray(feeds) ? feeds : [];
+  const byId = new Map(list.map((f) => [f.id, f]));
+  const channel = [];
+  const seen = new Set();
+  (Array.isArray(items) ? items : []).forEach((entry, index) => {
+    const release = isReleaseEntry(entry) ? entryFeed(list, entry) : null;
+    if (release && !seen.has(release.id)) { seen.add(release.id); channel.push({ release, index }); }
+  });
+  const named = (feed.release_ids || []).map((id) => byId.get(id)).filter((r) => r && !seen.has(r.id));
+  const canMove = !isReadOnly(feed) && channel.length > 1;
+  // A release of two pages names the other pages. A page above or below this
+  // page is in the tree already, so the note leaves it out (ADR 0254 item 9).
+  const related = relatedLevels(list, feed);
+  const noteOf = (release) => {
+    const others = (release.publisher_ids || [])
+      .filter((id) => id !== feed.id && !related.has(id))
+      .map((id) => byId.get(id)).filter(Boolean).map(displayTitle);
+    return others.length > 0 ? `Also on ${others.join(', ')}` : null;
+  };
+  const row = (release, place) => {
+    const kind = feedKind(release);
+    const moves = canMove && place ? releaseMoves(place.position, channel.length) : [];
+    const date = dateText(release.release_date);
+    const countText = trackCountText(release.track_count);
+    return {
+      id: release.id,
+      title: displayTitle(release),
+      typeLabel: kind.label,
+      dot: kind.dot,
+      glow: kindGlow(kind),
+      image: feedCover(release),
+      countText,
+      date,
+      summary: [kind.label, countText, date].filter(Boolean).join(' · '),
+      draftLabel: draftLabel(release),
+      note: noteOf(release),
+      // A release that names this page, but the page does not list it (task
+      // 220). It has no place in the sequence (ADR 0263 item 13a).
+      unlistedLine: place ? null : `⚠ ${displayTitle(feed)} does not list it yet`,
+      view: openFeedView(release.id, false, from),
+      position: place ? place.position : null,
+      slot: place ? place.index : null,
+      moves,
+      draggable: moves.length > 0,
+    };
+  };
+  return {
+    slots: channel.map((c) => c.index),
+    rows: [
+      ...channel.map((c, position) => row(c.release, { position, index: c.index })),
+      ...named.map((release) => row(release, null)),
+    ],
+  };
+}
+
 // The groups of the page of publisher feed `feed` (ADR 0254 items 6b and 13
-// to 16). `from` is the `from` of the view of the page. `sort` is a sort of
-// `PAGE_SORTS`. The groups go from the highest rank of the level roles of the
-// feed. A group of a different role heading shows only when it has rows, and
+// to 16). `from` is the `from` of the view of the page. `items` are the
+// `remote_items` of the draft of the page. The group Releases needs them
+// for its sequence (ADR 0263 items 12 to 16). The groups go from the
+// highest rank of the level roles of the feed. A group of a different role heading shows only when it has rows, and
 // it has no add row. Each group gives:
 // - `id`, `heading` and `empty`: the title and the text of an empty group.
 // - `add`: the add rows. A row has `id`, `label` and `ready`. A row with
 //   `ready` false does nothing until task 254 (ADR 0254 items 18 to 21).
 // - `rows`: the rows of the pages below or of the releases, each with the
 //   `view` that a selection opens.
-// - `sorts` and `sort`: only the group Releases has them (item 13a).
+// - `slots`: only the group Releases has them. These are the indices of the
+//   release entries that the rows show, in `items` (ADR 0263 item 13b).
 // The function lists the feed list fields as they are (ADR 0065).
-export function publisherGroups(feed, feeds, { sort = PAGE_SORTS[0], from = undefined } = {}) {
+export function publisherGroups(feed, feeds, { items = undefined, from = undefined } = {}) {
   const list = Array.isArray(feeds) ? feeds : [];
   const byId = new Map(list.map((f) => [f.id, f]));
   const roles = feed.publisher_roles || [];
@@ -604,25 +700,13 @@ export function publisherGroups(feed, feeds, { sort = PAGE_SORTS[0], from = unde
   }
   const hasReleases = levels.some((role) => ['label', 'curator', 'artist'].includes(role)) || levels.length === 0;
   if (hasReleases) {
-    const key = PAGE_SORTS.includes(sort) ? sort : PAGE_SORTS[0];
-    const releases = (feed.release_ids || []).map((id) => byId.get(id)).filter(Boolean);
-    const sorted = key === 'order' ? releases : releases.slice().sort(key === 'az' ? compareAz : compareNewest);
     const start = roles.includes('artist') ? releaseStart(feed, displayTitle(feed)) : null;
+    const sequence = releaseRows(feed, list, { items, from: childFrom });
     groups.push({
       id: 'releases', heading: 'Releases', empty: 'No releases on this page.',
       add: roles.includes('artist') ? [{ id: 'add-release', label: '＋ Add release', ready: start !== null }] : [],
-      sorts: PAGE_SORTS, sort: key,
-      rows: sorted.map((release) => {
-        const kind = feedKind(release);
-        return {
-          id: release.id,
-          title: displayTitle(release),
-          typeLabel: kind.label,
-          dot: kind.dot,
-          countText: trackCountText(release.track_count),
-          view: openFeedView(release.id, false, childFrom),
-        };
-      }),
+      slots: sequence.slots,
+      rows: sequence.rows,
     });
   }
   // A child of a different role heading shows only when it has rows.
@@ -871,12 +955,6 @@ function letterOf(title) {
   return /^[A-Z]/i.test(title) ? title[0].toUpperCase() : '#';
 }
 
-// Newest first. The feed that joined the collection last comes first. Two
-// feeds that joined at the same time keep the greater ID first.
-function compareNewest(a, b) {
-  return (b.added_at ?? 0) - (a.added_at ?? 0) || Number(b.id) - Number(a.id);
-}
-
 // The order of two names in the language of the reader. A number in a name
 // counts as a number, so "2.mp3" comes before "15.mp3" (musicindex ADR 0053
 // R-LIST-12 item 1).
@@ -913,15 +991,10 @@ export function letterGroups(rows) {
   return groups;
 }
 
-// The sorts of each list (ADR 0258 item 3, ADR 0085 item 4). The first
-// sort is the default.
-const ALL_SORTS = ['newest', 'az'];
-const GROUP_SORTS = ['order', 'newest', 'az'];
-
 // The names of each sort (ADR 0258 item 3, ADR 0085 item 4). A reversed list
 // names its reversed order (musicindex ADR 0043 R-LIST-7 item 5).
-const SORT_LABELS = { order: 'Page Order', newest: 'Newest', az: 'A to Z' };
-const REVERSED_SORT_LABELS = { order: 'Page Order, Reversed', newest: 'Oldest', az: 'Z to A' };
+const SORT_LABELS = { newest: 'Newest', az: 'A to Z' };
+const REVERSED_SORT_LABELS = { newest: 'Oldest', az: 'Z to A' };
 
 // The name of a sort, in the usual order or in the reversed order.
 export function sortLabel(sort, reversed) {
@@ -1174,34 +1247,19 @@ export function overviewModel({ feeds, filter = 'all', query = '', marked = null
   };
 }
 
-// The list of one group below the Catalog (ADR 0258 items 2 and 3).
-// `marked` is the ID of the feed that the last Back selection left marked.
-// `group` is the ID of a feed with roles, and the list is the releases of that
-// feed. Then `head` gives the feed. The group 'none' gives the releases with no
-// link (ADR 0085 items 3 and 4). The group 'no-curator' gives the playlists
-// with no curator page (ADR 0263 item 11). The group 'other' gives the feeds
-// that Studio does not edit. These three groups are list pages (ADR 0263 item
-// 9a): the sequence of Overview, the search, no sort and no letters, and a row
-// with the release date and the artist or curator. Overview has its own
-// model, `overviewModel`. Packet 256d replaces the sort of the group of a page.
-export function releasesList({ feeds, connectors, sort, view, reversed, marked, group, query = '' }) {
+// The list page of one group below the Catalog (ADR 0263 item 9a). `marked`
+// is the ID of the feed that the last Back selection left marked. The group
+// 'none' gives the releases with no artist page (ADR 0085 items 3 and 4). The
+// group 'no-curator' gives the playlists with no curator page (ADR 0263 item
+// 11). The group 'other' gives the feeds that Studio does not edit. A list
+// page has the sequence of Overview, the search, no sort and no letters, and
+// a row with the release date and the artist or curator. Overview has its own
+// model, `overviewModel`. The release list of a page is `releaseRows`.
+export function releasesList({ feeds, connectors, marked, group, query = '' }) {
   const list = Array.isArray(feeds) ? feeds : [];
-  const listPage = group === 'none' || group === 'no-curator' || group === 'other';
-  const owner = group === undefined || listPage
-    ? null
-    : list.find((feed) => feed.id === group && isPublisher(feed)) || null;
   let chosen = [];
   let head = null;
-  if (owner) {
-    const byId = new Map(list.map((feed) => [feed.id, feed]));
-    chosen = (owner.release_ids || []).map((id) => byId.get(id)).filter(Boolean);
-    head = {
-      id: owner.id,
-      title: displayTitle(owner),
-      typeLabel: feedKind(owner).label,
-      dot: feedKind(owner).dot,
-    };
-  } else if (group === 'none') {
+  if (group === 'none') {
     chosen = unlinkedReleases(list);
     head = { id: null, title: 'No artist yet', typeLabel: null, dot: null, note: 'These releases have no artist page.' };
   } else if (group === 'no-curator') {
@@ -1211,19 +1269,7 @@ export function releasesList({ feeds, connectors, sort, view, reversed, marked, 
     chosen = otherFeeds(list);
     head = { id: null, title: 'Other feeds', typeLabel: null, dot: null, note: 'Studio edits albums, playlists, and artist and label feeds. It shows only the facts of these feeds.' };
   }
-  // A list page has one sequence and no sort (ADR 0263 items 5 and 9a).
-  const sorts = listPage ? [] : owner ? GROUP_SORTS : ALL_SORTS;
-  const sortKey = listPage ? null : sorts.includes(sort) ? sort : sorts[0];
-  const viewKey = view === 'tiles' && !listPage ? 'tiles' : 'rows';
-  const sorted = listPage
-    ? chosen.slice().sort(compareTiles)
-    : sortKey === 'order'
-      ? chosen.slice()
-      : chosen.slice().sort(sortKey === 'az' ? compareAz : compareNewest);
-  // Studio holds each row of this list, so the whole list reverses
-  // (musicindex ADR 0043 R-LIST-7 item 9). The letters follow the rows.
-  const isReversed = reversed === true && !listPage;
-  if (isReversed) sorted.reverse();
+  const sorted = chosen.slice().sort(compareTiles);
   const search = typeof query === 'string' ? query.trim().toLowerCase() : '';
   const matches = (feed) => {
     if (!search) return true;
@@ -1231,20 +1277,6 @@ export function releasesList({ feeds, connectors, sort, view, reversed, marked, 
     return titles.some((title) => title.toLowerCase().includes(search));
   };
   const filtered = search ? sorted.filter(matches) : sorted;
-  const titleOf = (id) => {
-    const feed = list.find((f) => f.id === id);
-    return feed ? displayTitle(feed) : null;
-  };
-  // A release of two feeds names the other feeds (ADR 0085 item 5). A feed
-  // above or below the owner is in the tree already, so the note leaves it
-  // out (ADR 0254 item 9).
-  const related = owner ? relatedLevels(list, owner) : new Set();
-  const noteOf = (feed) => {
-    if (!owner) return null;
-    const others = (feed.publisher_ids || []).filter((id) => id !== owner.id && !related.has(id)).map(titleOf).filter(Boolean);
-    return others.length > 0 ? `Also on ${others.join(', ')}` : null;
-  };
-  const artistLevel = owner && (owner.publisher_roles || []).includes('artist');
   const rows = filtered.map((feed) => ({
     id: feed.id,
     title: displayTitle(feed),
@@ -1258,38 +1290,11 @@ export function releasesList({ feeds, connectors, sort, view, reversed, marked, 
     // A feed that apps do not list (ADR 0063).
     hidden: feed.hidden === true,
     marked: feed.id === marked,
-    note: noteOf(feed),
-    artistLine: listPage ? (typeof feed.author === 'string' && feed.author.trim()
-      ? `${isPlaylist(feed) ? 'Curator' : 'Artist'}: ${feed.author.trim()}` : null) : artistLevel && typeof feed.author === 'string' && feed.author.trim().toLowerCase() !== displayTitle(owner).trim().toLowerCase()
-      ? `Artist: ${feed.author}` : null,
-    // A list page row shows the release date and the artist or curator (ADR
-    // 0263 item 9a with item 7).
-    date: listPage ? dateText(feed.release_date) : null,
-    unlistedLine: owner && (feed.unlisted_by || []).includes(owner.id)
-      ? `⚠ ${displayTitle(owner)} does not list it yet` : null,
+    artistLine: typeof feed.author === 'string' && feed.author.trim()
+      ? `${isPlaylist(feed) ? 'Curator' : 'Artist'}: ${feed.author.trim()}` : null,
+    date: dateText(feed.release_date),
   }));
-  const levelTile = head && head.id !== null ? {
-    id: head.id,
-    title: head.title,
-    typeLabel: head.typeLabel,
-    dot: head.dot,
-    glow: kindGlow(feedKind(owner)),
-    image: feedCover(owner),
-    draftLabel: DRAFT_LABELS[owner.draft_state] || 'No changes',
-  } : null;
-  return {
-    sort: sortKey,
-    sorts,
-    reversed: isReversed,
-    view: viewKey,
-    head,
-    levelTile,
-    // The release rows have an indent below the level tile (ADR 0228 item 19).
-    nested: levelTile !== null && viewKey === 'rows',
-    rows,
-    letters: search ? null : sortKey === 'az' ? letterGroups(rows) : null,
-    listPage,
-  };
+  return { head, rows };
 }
 
 // ---- Navigation (musicindex ADR 0080 R-NAV-2) ----
@@ -1425,9 +1430,14 @@ export function wideView(view) {
 
 // The view that an old record gives. A view `releases` with no group was the
 // page Releases, and it opens Overview now. It keeps its marked feed and its
-// scroll, and it drops `sort`, `reversed` and `view` (ADR 0263 item 8).
+// scroll, and it drops `sort`, `reversed` and `view` (ADR 0263 item 8). A
+// view `releases` with the ID of a publisher feed was the old group page of
+// that feed. It opens the page of the feed, where the group Releases has the
+// sequence of the feed (ADR 0263 item 12).
 export function legacyView(view) {
-  if (!view || view.name !== 'releases' || view.group !== undefined) return view;
+  if (!view || view.name !== 'releases') return view;
+  if (typeof view.group === 'number') return { name: 'feed', id: view.group };
+  if (view.group !== undefined) return view;
   const next = { name: 'overview' };
   if (view.marked !== undefined) next.marked = view.marked;
   if (view.scroll !== undefined) next.scroll = view.scroll;

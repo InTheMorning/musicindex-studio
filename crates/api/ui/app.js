@@ -388,7 +388,7 @@ export function ImageThumb({ url, glow = 'var(--c-feed)', className, always = fa
 
 // Art with its type dot on the bottom right corner (musicindex ADR 0204
 // R-DOT-3 and R-DOT-4). The art is the child.
-function ArtWithDot({ dot, children }) {
+export function ArtWithDot({ dot, children }) {
   return html`<span class="art-dot">${children}<span class=${`dot ${dot}`} aria-hidden="true"></span></span>`;
 }
 
@@ -4000,70 +4000,40 @@ export function LetterBar({ letters, idOf }) {
   </nav>`;
 }
 
-// The page of one group below the Catalog (ADR 0258 items 2 to 4, musicindex
-// ADR 0080 R-LIST-1): the releases of a feed with roles, "No artist yet", "No
-// curator yet" or "Other feeds". `marked` is the feed that the last Back
-// selection left marked. The sort of the page is `groupSort` (ADR 0085 items
-// 4 to 6). The list pages and the release list of a page replace this page in
-// packets 256c and 256d of task 256.
-function GroupPage({ feeds, connectors, marked, group, groupSort, groupReversed, changedFeeds, onGroupSort, onOpen, onAddedFeed, onConnect, from }) {
+// The list page of "No artist yet", "No curator yet" or "Other feeds" (ADR
+// 0263 item 9a, musicindex ADR 0080 R-LIST-1). `marked` is the feed that the
+// last Back selection left marked. The page has the sequence of Overview, the
+// search and no sort.
+function GroupPage({ feeds, connectors, marked, group, changedFeeds, onOpen }) {
   // The search text stays in the page and not in the address (ADR 0223
   // item 6). A different feed group starts with no text.
   const [query, setQuery] = useState('');
   useEffect(() => { setQuery(''); }, [group]);
-  const releaseArgs = { feeds, connectors, sort: groupSort, reversed: groupReversed, view: 'rows', marked, group };
-  const allReleases = releasesList(releaseArgs);
-  const releases = releasesList({ ...releaseArgs, query });
+  const all = releasesList({ feeds, connectors, marked, group });
+  const releases = releasesList({ feeds, connectors, marked, group, query });
   const { results: outside } = useContext(OutsideContext);
   const head = releases.head;
   const title = head ? head.title : 'Releases';
-  // The add action of the group of a publisher feed (ADR 0164 item 6). A new
-  // album or playlist becomes a release of that feed before its page opens.
-  // When the link fails, the group stays and shows the error.
-  const headFeed = head && head.id !== null ? feeds.find((f) => f.id === head.id) : null;
-  const more = releaseAdd(headFeed, headFeed && headFeed.title);
-  const [adding, setAdding] = useState(null);
-  // The groups "Not linked" and "Other" have no add menu (ADR 0261 item 2
-  // names the top page and the pages of a publisher).
-  const hideAdd = !headFeed;
-  const addedRelease = (f, makeInfo) => {
-    setAdding(null);
-    onAddedFeed(f, makeInfo, (adding && adding.from) || from);
-  };
-  // A feed group keeps its own sort and direction (ADR 0085 item 8).
-  const pickSort = (id, reversed) => onGroupSort(id, reversed);
   const hasRows = releases.rows.length > 0;
-  const hasUnfilteredRows = allReleases.rows.length > 0;
   return html`<div>
     <${Bar}><span class="bar-title">${title}</span><${DeleteUndoBar} /><//>
     <section class="releases">
       <div class="releases-head">
         <h1>${title}</h1>
-        ${(hasUnfilteredRows || (head && head.id !== null)) && html`<div class="releases-tools">
-          ${hasUnfilteredRows && releases.sorts.length > 0 && html`<${SortMenu} sorts=${releases.sorts} sort=${releases.sort} reversed=${releases.reversed} onSort=${pickSort} />`}
-          ${!hideAdd && html`<${AddMenu} release=${more} head=${headFeed} from=${from} onOpenForm=${setAdding} />`}
-          ${head && head.id !== null && html`<button class="button" type="button" onClick=${() => onOpen(head.id)}>${head.typeLabel} Page</button>`}
-        </div>`}
       </div>
-      ${hasUnfilteredRows && html`<${SearchField} label="Search releases" value=${query} onInput=${(e) => setQuery(e.target.value)} />`}
-      ${head && head.id !== null && html`<p class="releases-roles"><span class=${`dot ${head.dot}`} aria-hidden="true"></span>${head.typeLabel}</p>`}
-      ${head && head.id === null && html`<p class="hint releases-roles">${head.note}</p>`}
-      ${releases.levelTile && html`<${LevelFeedTile} tile=${releases.levelTile} view=${releases.view}
-        outside=${outside[releases.levelTile.id]} onOpen=${onOpen} />`}
-      ${releases.letters && html`<${LetterBar} letters=${releases.letters} idOf=${(id) => `release-${id}`} />`}
+      ${all.rows.length > 0 && html`<${SearchField} label="Search releases" value=${query} onInput=${(e) => setQuery(e.target.value)} />`}
+      ${head && html`<p class="hint releases-roles">${head.note}</p>`}
       ${hasRows
-        ? html`<${RowList} as="ul" className=${`releases-list ${releases.view}${releases.nested ? ' nested' : ''}`} mode=${releases.view === 'tiles' ? 'grid' : 'list'} selector=":scope > li > button">
+        ? html`<${RowList} as="ul" className="releases-list rows" mode="list" selector=":scope > li > button">
             ${releases.rows.map((row) => html`<li id=${`release-${row.id}`} data-marked=${row.marked ? 'true' : 'false'}>
-              <button class=${releases.view === 'tiles' ? 'releases-tile' : 'releases-row'} type="button" onClick=${() => onOpen(row.id)}>
+              <button class="releases-row" type="button" onClick=${() => onOpen(row.id)}>
                 <${ArtWithDot} dot=${row.dot}><${ImageThumb} url=${row.image} glow=${row.glow} className="releases-cover" always /><//>
                 <span class="releases-text">
                   <span class="title">${row.title}${changedFeeds.has(row.id) && html`<span class="change-mark"><span class="visually-hidden"> Changes in the library folder</span></span>`}</span>
                   ${row.artistLine && html`<span class="sub">${row.artistLine}</span>`}
-                  <span class="sub">${[row.typeLabel, row.countText, row.date, row.hidden ? 'Hidden from apps' : null, releases.view === 'rows' ? row.host : null].filter(Boolean).join(' · ')}</span>
-                  ${row.unlistedLine && html`<span class="sub">${row.unlistedLine}</span>`}
-                  ${row.note && html`<span class="sub">${row.note}</span>`}
+                  <span class="sub">${[row.typeLabel, row.countText, row.date, row.hidden ? 'Hidden from apps' : null, row.host].filter(Boolean).join(' · ')}</span>
                   ${outsideMark(outside[row.id]) && html`<span class=${`sub outside-mark ${outsideMark(outside[row.id]).tone}`}><${Icon} name="alert" />${outsideMark(outside[row.id]).text}</span>`}
-                  ${releases.view === 'rows' && html`<span class="sub">${row.draftLabel}</span>`}
+                  <span class="sub">${row.draftLabel}</span>
                 </span>
               </button>
             </li>`)}
@@ -4072,8 +4042,6 @@ function GroupPage({ feeds, connectors, marked, group, groupSort, groupReversed,
         ? html`<p class="hint">No release has “${query.trim()}”.</p>`
         : html`<div class="empty-releases"><p class="empty">No releases are linked yet.</p></div>`}
     </section>
-    ${adding && html`<${AddFeedRowSheet} open=${adding.open} connectors=${connectors} feeds=${feeds}
-      start=${adding.start} onAdded=${addedRelease} onConnect=${onConnect} onClose=${() => setAdding(null)} />`}
   </div>`;
 }
 
@@ -4157,24 +4125,6 @@ function AddMenu({ release, head, from, onOpenForm }) {
   const items = addMenuEntries(release, head);
   return html`<${MenuControl} className="add-menu" buttonLabel="＋ Add" accessibleName="Add" menuLabel="Add" items=${items}
     onSelect=${(entry) => onOpenForm({ open: entry.open, start: entry.start, from })} />`;
-}
-
-// The feed of an open level comes before its releases, in the same view
-// (ADR 0181 item 2). It stays outside the release RowList, so the list keeps
-// its ADR 0172 keyboard model.
-function LevelFeedTile({ tile, view, outside, onOpen }) {
-  const changed = outsideMark(outside);
-  const label = `${tile.title}, ${tile.typeLabel}, ${tile.draftLabel}`;
-  return html`<ul class=${`releases-list ${view}`}><li>
-    <button class=${view === 'tiles' ? 'releases-tile' : 'releases-row'} type="button" aria-label=${label} onClick=${() => onOpen(tile.id)}>
-    <${ArtWithDot} dot=${tile.dot}><${ImageThumb} url=${tile.image} glow=${tile.glow} className="releases-cover" always /><//>
-    <span class="releases-text">
-      <span class="title">${tile.title}</span>
-      <span class="sub">${tile.typeLabel}</span>
-      ${changed && html`<span class=${`sub outside-mark ${changed.tone}`}><${Icon} name="alert" />${changed.text}</span>`}
-      <span class="sub">${tile.draftLabel}</span>
-    </span>
-  </button></li></ul>`;
 }
 
 // The Welcome page of a collection with no feed (ADR 0260 items 1 to 3). Each
@@ -4826,15 +4776,9 @@ function Shell({ vault, onLock, version }) {
       onRemoved=${async () => { await load(); go({ name: 'overview' }, { replace: true }); }} connectors=${connectors}
       differences=${differences.filter((d) => d.feed_id === selected.id)} onRescan=${rescan} />`;
   } else if (view.name === 'releases' && view.group !== undefined) {
-    // A release of a level goes back to that level (ADR 0215 item 6).
-    const from = typeof view.group === 'number'
-      ? { group: view.group, trail: view.trail || [] } : undefined;
     main = html`<${GroupPage} feeds=${feeds} connectors=${connectors} marked=${view.marked}
-      group=${view.group} groupSort=${view.sort} groupReversed=${view.reversed === true}
-      onGroupSort=${(sort, reversed) => go({ ...view, sort, reversed }, { replace: true })}
-      changedFeeds=${changedFeeds}
-      onOpen=${(id) => go(openFeedView(id, narrow, from))}
-      onAddedFeed=${addedFeed} onConnect=${() => go({ name: 'hosts' })} from=${from} />`;
+      group=${view.group} changedFeeds=${changedFeeds}
+      onOpen=${(id) => go(openFeedView(id, narrow, undefined))} />`;
   } else {
     main = html`<${OverviewPage} feeds=${feeds} connectors=${connectors} marked=${view.marked}
       filter=${overviewFilter(view)} query=${typeof view.query === 'string' ? view.query : ''}

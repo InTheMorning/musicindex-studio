@@ -4,7 +4,7 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Levels And Move
 Decisions: [ADR 0263](../adr/0263-overview-is-the-start-page-and-each-page-keeps-the-sequence-of-its-feed.md) items 1 to 18. [ADR 0264](../adr/0264-overview-groups-the-releases-below-label-artist-and-curator-headings.md) items 1 to 8 replace ADR 0263 items 5 and 7 on Overview.
 Mockup: `.studio-dev/design-brief/prototype/overview.html`. Git ignores it.
 
-Status: Packets 256a, 256b and 256c are built. Packet 256d is not started.
+Status: Packets 256a to 256d are built. The visual checks of the operator are open.
 
 Operator choices (the main session, in the approved ADR 0263):
 
@@ -15,7 +15,13 @@ Operator choices (the main session, in the approved ADR 0263):
 - Packet 256b: the group page of a Catalog row (`GroupPage`) keeps its sort until packets 256c and 256d replace it, so the old sort code stays until then.
 - Packet 256b: Overview tiles have a minimum width of 140 px, so a phone shows two tiles on each line.
 - Packet 256c: the count of a row is the number of its playlists only when the first level role of the feed is curator (ADR 0253 item 15). A page with the roles `artist curator` keeps its release count.
-- Packet 256c: the playlist rows below a curator row come before its child page rows. A playlist row is not the current row at any time, because a playlist opens its release page.
+- Packet 256c: the playlist rows below a curator row come before its child page rows. A playlist row does not become the current row, because a playlist opens its release page.
+
+- Packet 256d: the group Releases is `PageGroup` on the page of the feed (`editor.js`). The old group page of an owner (`GroupPage` with a page head) is removed, because no Catalog row opens it (ADR 0263 item 9). An old address of that page opens the page of the feed.
+- Packet 256d: the button **{Type} Page** of ADR 0261 item 7 was only in the head of the old group page, so it is removed with that page. ADR 0261 item 7 is open until the operator confirms this.
+- Packet 256d: the "Also on" note (ADR 0254 item 9) and the line "⚠ {page} does not list it yet" (task 220) move to the rows of the group Releases.
+- Packet 256d: **Move to the top** puts the release before the other release entries that the group shows. A release entry that is not in the collection keeps its position (ADR 0263 item 13b).
+- Packet 256d: the People list keeps `SortMenu` and `LetterBar`. The rest of the `rg` matches are the view name of the list pages, the filter `releases` of Overview and count nouns.
 
 ## Goal
 

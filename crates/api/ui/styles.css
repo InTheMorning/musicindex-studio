@@ -1531,9 +1531,6 @@ select option { background: var(--level-3); color: var(--text); }
    button does not cover text (ADR 0177 item 9). */
 @media (max-width: 760px) {
   .link-row:has(> .actions) { flex-direction: column; align-items: stretch; }
-  .releases-list.rows li:has(> .actions) { flex-wrap: wrap; }
-  .releases-list.rows li:has(> .actions) > .releases-row { flex-basis: 100%; }
-  .releases-list.rows li:has(> .actions) > .actions { margin-inline-start: calc(var(--target) + var(--target) + var(--target-min) / 2); }
 }
 /* The check boxes of the custom roles of a publisher feed (ADR 0082 item 7),
    in the field body below the Role menu. */
@@ -1661,7 +1658,7 @@ select.position:focus { background: var(--fill); }
    and the weight of a selected segment. */
 .page-tabs-host { position: relative; }
 .page-tab-menu { display: block; width: auto; max-width: calc(100% - 64px); margin: 0 32px 8px; }
-/* The row of the button "‹ Overview" and the menu (ADR 0228 item 11). */
+/* The row of the button "‹ Sections" and the menu (ADR 0228 item 11). */
 .page-tab-row { display: flex; align-items: center; gap: 8px; margin: 0 32px 8px; }
 .page-tab-row .button:not(.page-tab-menu) { flex: none; }
 .page-tab-row .page-tab-menu { min-width: 0; margin: 0; max-width: none; }
@@ -2056,13 +2053,7 @@ button.outline-feed {
 }
 .letters .letter { min-width: var(--target); padding: 0 6px; }
 .releases-list { list-style: none; display: grid; gap: 2px; }
-/* In the rows view of a group, the release rows have an indent below the
-   row of the artist or label (ADR 0228 item 19). */
-.releases-list.rows.nested { padding-left: 32px; }
 .releases-list li { min-width: 0; scroll-margin-top: calc(var(--bar-h) + 12px); }
-.releases-list.rows li:has(> .actions) { display: flex; align-items: center; }
-.releases-list.rows li:has(> .actions) > .releases-row { flex: 1; width: auto; }
-.releases-list.rows li:has(> .actions) > .actions { flex: none; margin-inline-start: auto; }
 .releases-list li[data-marked="true"] > button { background: var(--level-3); }
 .releases-row, .releases-tile {
   display: flex;
@@ -2705,7 +2696,17 @@ button.outline-feed {
 .page-tools { display: flex; justify-content: flex-end; }
 .page-tools .add-menu .sort-menu { left: auto; right: 0; }
 .page-group > .group { overflow: visible; }
-.page-group .page-sort { max-width: 20em; }
+/* The group Releases (ADR 0263 items 12 and 16). The insertion line is an
+   inset shadow in the accent color, so that no row moves during a drag
+   (musicindex ADR 0080 R-LIST-3 item 4.4). The handle needs a wide window. */
+.page-group-row { position: relative; }
+.page-group-row.dragging { opacity: .45; }
+.page-group-row.drop-before { box-shadow: inset 0 2px 0 var(--accent); }
+.page-group-row.drop-after { box-shadow: inset 0 -2px 0 var(--accent); }
+.page-group-row .releases-cover { width: 40px; height: 40px; }
+@media (max-width: 760px) {
+  .page-group-row > .drag-handle { display: none; }
+}
 .page-group-row > .link-row { flex: 1 1 0; min-width: 0; width: auto; }
 .page-group-row > .row-menu-wrap { margin-inline-end: 8px; }
 .link-row.add:disabled { color: var(--muted); cursor: default; }

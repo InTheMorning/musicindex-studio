@@ -24,7 +24,7 @@
 - Uses: [ADR 0253](0253-the-roles-of-a-feed-and-of-each-link.md) items 7, 11, 15, 16 and 20 to 23 for the roles, the levels and the word "Publisher". [ADR 0207](0207-recipients-change-sets-and-wallets.md) items 24 to 33 for a change set. [ADR 0227](0227-undo-and-redo.md) for Undo.
 - Uses: [ADR 0233](0233-each-add-form-finds-on-music-index-and-copies-the-found-feed.md) items 2 to 14 for a search on Music Index. [ADR 0230](0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 1 to 5 for the menu **＋ Add** and the forms.
 - Uses: [ADR 0089](0089-the-left-panel-shows-the-art-of-each-publisher-feed.md) for the art of a row, and [ADR 0165](0165-the-left-panel-marks-the-state-of-each-feed.md) items 1, 2 and 4 for the marks. [ADR 0090](0090-studio-names-the-feeds-that-it-does-not-edit.md) item 2 for "Other feeds". [ADR 0065](0065-the-core-applies-each-feed-rule.md) for the rules that the core applies.
-- Uses: musicindex ADR 0080 R-LIST-2 and R-LIST-3 for the drag handle and the drop color of item 38.
+- Uses: musicindex ADR 0080 R-LIST-2 and R-LIST-3 items 1 to 4 for the drag handle and the drop marks of item 38.
 - Uses: Stophammer ADR 0069 §"A direct link between a label feed and an artist feed" (rejected).
 - Source: observations 6 to 9, 11 and 14 to 19 of the [desktop walk of 2026-11-23](../reviews/2026-11-23-desktop-check-walk.md). The design brief and its two reviews are in `.studio-dev/design-brief/`. The roles are in the [note of 2026-11-24](../notes/2026-11-24-roles-levels-and-words.md).
 
@@ -137,7 +137,7 @@
 
 ### Drag And Drop On The Desktop
 
-38. Wider than 760 px, a tree row of an artist or of a label can move with drag and drop. The row has a drag handle at its left side, and the drag starts only from the handle (musicindex ADR 0080 R-LIST-2). The cursor is `grab` on the handle (R-LIST-3). A row of a higher level rank (ADR 0253 item 15) takes the drop. During a drag, each row that takes the drop shows the drop color, and the top of the tree shows the area "Drop here: no label and no publisher".
+38. Wider than 760 px, a tree row of an artist or of a label can move with drag and drop. The row has a drag handle at its left side, and the drag starts only from the handle (musicindex ADR 0080 R-LIST-2). The cursor is `grab` on the handle (R-LIST-3). A row of a higher level rank (ADR 0253 item 15) takes the drop. During a drag, each row that takes the drop shows the drop color, and the top of the tree shows the area "Drop here: no label and no publisher". Each place that takes the drop has the quiet mark, and the place below the pointer has the strong mark (R-LIST-3 item 4).
 39. A drop on a row does the change "Change label…" or "Change publisher…" of item 26, with the dragged page and the row of the drop as the selected page:
     - The page above is the parent of the dragged row in the tree.
     - When the start selection of item 28 holds each release of the page, the change occurs at once, and the notice of item 35 shows.

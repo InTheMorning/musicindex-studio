@@ -768,9 +768,9 @@ button.tree-toggle:hover { background: var(--fill-soft); }
 .catalog-drop-target { outline: 1px dashed var(--accent); outline-offset: -2px; border-radius: 10px; }
 /* The top area covers the heading "Catalog", so no row moves during a drag. */
 .catalog-tree { position: relative; }
-.catalog-drop-top { position: absolute; inset-inline: 0; top: 0; z-index: 1; box-sizing: border-box; min-height: 28px; display: flex; align-items: center; padding: 4px 10px; border: 1px dashed var(--muted); border-radius: 10px; background: var(--sidebar); color: var(--muted); font-size: var(--text-footnote); }
-.catalog-drop-top.catalog-drop-over { background: linear-gradient(var(--accent-tint), var(--accent-tint)), var(--sidebar); }
-.catalog-drop-over { background: var(--accent-tint); outline: 2px dashed var(--accent); outline-offset: -2px; }
+.catalog-drop-top { position: absolute; inset-inline: 0; top: 0; z-index: 1; box-sizing: border-box; min-height: 28px; display: flex; align-items: center; padding: 4px 10px; outline: 1px dashed var(--accent); outline-offset: -1px; border-radius: 10px; background: var(--sidebar); color: var(--muted); font-size: var(--text-footnote); }
+/* musicindex ADR 0080 R-LIST-3 item 4: a 1 px dashed quiet mark on each place that accepts the drop, a 2 px solid strong mark under the pointer. An outline does not move the rows. */
+.catalog-drop-over { outline: 2px solid var(--accent); outline-offset: -2px; }
 .catalog-drop-over > .row, .catalog-drop-over > .row:hover { background: transparent; }
 @media (max-width: 760px) {
   .catalog-drop-top { display: none; }

@@ -2605,7 +2605,13 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
   const openFinding = (row) => {
     if (row.action === 'open-pages') {
       go({ name: 'feed', id: feed.id, page: 'album' });
-      setTimeout(() => document.getElementById('linked-artist-and-label-pages')?.scrollIntoView({ block: 'center' }), 50);
+      // A release has the field Artist on the first tab (ADR 0257 item 18).
+      // Each other feed has the section of linked pages.
+      if ((feed.medium || '').toLowerCase() === 'music') {
+        setTimeout(() => document.getElementById('release-artist')?.focus(), 50);
+      } else {
+        setTimeout(() => document.getElementById('linked-artist-and-label-pages')?.scrollIntoView({ block: 'center' }), 50);
+      }
     } else if (row.action === 'open-tracks') {
       // The import sheet "Add tracks", as in the outline (ADR 0219 item 3).
       go({ name: 'feed', id: feed.id, page: 'album' });

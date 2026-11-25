@@ -17,7 +17,7 @@ import { roleSummary } from './roles.js';
 import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, roleHint, keptRoleFolds, relLabel, linkRoleChoices, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName, newFeedView, pageLevel } from './shell.js';
 import { isLiveItem, liveKey, liveDot, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner, OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning, hasBadAddress, problemGroup, setLiveStreamType, viewAfterLiveGone, withoutLive } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
-import { checkRows, unreadableRows, hasShowGrant, checkTexts, pageRefusalView, linkedRefusalView, NEW_PAGE_CHOICE, guidChangeView, repairAddresses, wrongAddressSet, OPEN_ACTIONS, COPY_SHEET_TEXT, WAYS_SHEET_TEXT } from './feedcheck.js';
+import { checkRows, unreadableRows, hasShowGrant, checkTexts, pageRefusalView, refusalPageCandidates, linkedRefusalView, NEW_PAGE_CHOICE, guidChangeView, repairAddresses, wrongAddressSet, OPEN_ACTIONS, COPY_SHEET_TEXT, WAYS_SHEET_TEXT } from './feedcheck.js';
 import { addressParts } from './breaks.js';
 import { buildDateNotices } from './builddate.js';
 import { versionLabel, LOCK_HELP, hasSpace, spaceNotice, ROW_SPACE_NOTE, newFeedAddress, newFeedAddressLine, libraryFolderRow } from './feedfacts.js';
@@ -2317,7 +2317,9 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
   const streamRefusal = streamRows.some((problem) => problem.blocksWrite);
   const deletion = diff && deleteWrite(diff);
   // The pages of the menu "Link to an artist or label page" (ADR 0218 item 3).
-  const pageCandidates = pageLinkCandidates(feeds, draft.model);
+  const thisFeed = feeds.find((f) => f.id === feedId) || {};
+  const isRelease = mediumOf(thisFeed) === 'music';
+  const pageCandidates = refusalPageCandidates(feeds, thisFeed.medium, pageLinkCandidates(feeds, draft.model));
   const pageRefusal = diff && pageRefusalView(diff.page_refusal, Boolean(selectedPage), diff.page_refusal_link);
   const guid = diff && guidChangeView(diff.guid_change, guidText);
   const keepKnownGuid = () => run(async () => {
@@ -2341,8 +2343,14 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
   // The link of the section, then a new diff (ADR 0218 item 4).
   const linkAndContinue = () => run(async () => {
     if (!selectedPage || !(await draft.flush())) return;
-    const changed = await linkPublisherPage(selectedPage, feedId);
-    const page = changed.find((item) => item.id !== feedId);
+    let page;
+    if (isRelease) {
+      // A release links its artist page through the credits route (ADR 0257 item 19).
+      await api(`/feeds/${feedId}/credits`, { method: 'PUT', body: { role: 'artist', page: Number(selectedPage) } });
+      page = pageCandidates.find((item) => String(item.id) === selectedPage);
+    } else {
+      page = (await linkPublisherPage(selectedPage, feedId)).find((item) => item.id !== feedId);
+    }
     if (page) setLinkedPage({ id: page.id, title: page.title || 'Untitled feed' });
     setSelectedPage('');
     await draft.load();
@@ -2603,7 +2611,9 @@ export function DraftToolbar({ feedId, feedConnectorId, draft, onWritten, connec
     if (!page || !(await draft.flush())) return;
     if (request?.release) await linkPublisherPage(page.id, request.release);
     else {
-      await linkPublisherPage(page.id, feedId);
+      // A new artist page of a release goes in the field Artist (ADR 0257 item 19).
+      if (mediumOf(feeds.find((f) => f.id === feedId) || {}) === 'music') await api(`/feeds/${feedId}/credits`, { method: 'PUT', body: { role: 'artist', page: page.id } });
+      else await linkPublisherPage(page.id, feedId);
       setLinkedPage({ id: page.id, title: page.title || 'Untitled feed' });
     }
     await draft.load();

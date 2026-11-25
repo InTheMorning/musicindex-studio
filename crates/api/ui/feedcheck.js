@@ -3,6 +3,7 @@
 // only turns the answer of the API into labels and rows.
 
 import { grantActive } from './live.js';
+import { writablePages } from './movepages.js';
 
 // The text above the rows of findings (item 19).
 export const CHECK_LEAD = 'Studio does not change the feed until you select a button. Each change goes to the draft, and you review it before the write.';
@@ -115,6 +116,13 @@ export function pageRefusalView(reason, selected = false, noRoleTitle = null) {
       button: REPAIRS.make_it_the_artist_link,
     } : null,
   };
+}
+
+// The pages in the menu of the refusal panel (ADR 0257 item 19). A release
+// gets the artist pages only. Each other feed keeps the pages in `others`.
+export function refusalPageCandidates(feeds, medium, others) {
+  if ((medium || '').toLowerCase() !== 'music') return others;
+  return writablePages(feeds, 'artist');
 }
 
 // The Stop panel for a linked release (ADR 0251 items 10 and 11).

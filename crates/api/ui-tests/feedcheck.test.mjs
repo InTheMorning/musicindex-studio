@@ -4,7 +4,7 @@ import {
   tabLabel, checkCount, checkRows, unreadableRows, repairLabel, hasShowGrant, checkTexts,
   PAGE_FINDING_TEXT, pageRefusalView, linkedRefusalView, NEW_PAGE_CHOICE, guidChangeView,
   addressPanelView, repairAddresses, peoplePanelView, ADDRESS_WRITE_LINE,
-  releaseChecklist, wrongAddressSet,
+  releaseChecklist, wrongAddressSet, refusalPageCandidates,
   CHECK_LEAD, CHECK_NONE, CHECK_GRANT, CHECK_READ_ONLY, CHECK_UNREADABLE,
   COPY_SHEET_TEXT, WAYS_SHEET_TEXT,
 } from '../ui/feedcheck.js';
@@ -435,4 +435,14 @@ test('the People button names People for two feeds of The Doerfels', () => {
     ],
   }]));
   assert.equal(view.groups[0].button, 'Use the People Values in 2 Feeds', owner);
+});
+
+test('ADR 0257 item 19: a release links artist pages only in the refusal panel', () => {
+  const owner = 'ADR 0257 item 19: fix refusalPageCandidates in feedcheck.js.';
+  const page = (id, roles, connector = 1) => ({ id, medium: 'publisher', connector_id: connector, publisher_roles: roles });
+  const feeds = [page(1, ['artist']), page(2, ['label']), page(3, ['artist'], null), page(4, ['artist', 'label'])];
+  const others = [feeds[0], feeds[1]];
+  assert.deepEqual(refusalPageCandidates(feeds, 'music', others).map((f) => f.id), [1, 4], owner);
+  assert.deepEqual(refusalPageCandidates(feeds, 'musicL', others), others, owner);
+  assert.deepEqual(refusalPageCandidates(feeds, 'podcast', others), others, owner);
 });

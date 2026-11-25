@@ -108,3 +108,56 @@ test('ADR 0228 item 5: a failed operation step leaves the history', async () => 
   assert.equal(history.canUndo, false);
   assert.equal(history.canRedo, false);
 });
+
+test('ADR 0254 item 37: a Catalog operation has Undo and no Redo', async () => {
+  const history = makeHistory();
+  let calls = 0;
+  history.recordOperation({ undo: async () => { calls += 1; } });
+  const step = history.undo(null);
+  await history.perform(step, 'undo');
+  assert.equal(calls, 1);
+  assert.equal(history.canUndo, false);
+  assert.equal(history.canRedo, false);
+  assert.equal(history.redo(null), null);
+});
+
+test('ADR 0254 item 37: edits around a Catalog operation keep their Redo rules', async () => {
+  const history = makeHistory();
+  history.record('before', null, 0);
+  history.recordOperation({ undo: async () => {} });
+  history.record('after Catalog', null, 1);
+  assert.equal(history.undo('after edit'), 'after Catalog');
+  assert.equal(history.canRedo, true);
+  await history.perform(history.undo(null), 'undo');
+  assert.equal(history.canRedo, true);
+  assert.equal(history.redo('after Catalog'), 'after edit');
+  assert.equal(history.undo('after edit'), 'after Catalog');
+  assert.equal(history.undo('after Catalog'), 'before');
+  assert.equal(history.redo('before'), 'after Catalog');
+  history.record('new edit', null, 2);
+  assert.equal(history.canRedo, false);
+});
+
+test('ADR 0254 item 37: notice Undo removes the same step from the page history', async () => {
+  const page = makeHistory();
+  const catalog = makeHistory();
+  let calls = 0;
+  let pageStep;
+  let catalogStep;
+  const operation = { undo: async () => {
+    calls += 1;
+    page.forgetOperation(pageStep);
+    catalog.forgetOperation(catalogStep);
+  } };
+  page.record('before edit', null, 0);
+  pageStep = page.recordOperation(operation);
+  catalogStep = catalog.recordOperation(operation);
+  await catalog.perform(catalog.undo(null), 'undo');
+  assert.equal(calls, 1);
+  assert.equal(catalog.canUndo, false);
+  assert.equal(page.canUndo, true);
+  assert.equal(page.undo('after edit'), 'before edit');
+  assert.equal(page.canRedo, true);
+  assert.equal(page.redo('before edit'), 'after edit');
+  assert.equal(calls, 1);
+});

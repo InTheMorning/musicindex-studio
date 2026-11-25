@@ -3014,7 +3014,7 @@ export function PageChangeSheet({ page, action, above, feeds, prepare, onChanged
 }
 
 // The Add sheet signs or publishes pages (ADR 0254 items 18 to 21).
-export function GatherPagesSheet({ page, role, feeds, onMoved, onMake, renderSearch, onAddHost, onOpenChanges, onClose }) {
+export function GatherPagesSheet({ page, role, feeds, prepare, onMoved, onMake, renderSearch, onAddHost, onOpenChanges, onClose }) {
   const ref = useSheet(true);
   const { busy, error, run } = useAction();
   const [selected, setSelected] = useState([]);
@@ -3026,9 +3026,10 @@ export function GatherPagesSheet({ page, role, feeds, onMoved, onMake, renderSea
     return before.includes(id) ? before.filter((value) => value !== id) : [...before, id];
   });
   const move = () => run(async () => {
+    if (prepare && !(await prepare())) return;
     const answer = await api(`/feeds/${page.id}/gather`, { method: 'POST', body: { role, page_ids: selectedIds } });
     if (ref.current) ref.current.close();
-    await onMoved(answer);
+    await onMoved(answer, selectedIds);
   });
   return html`<dialog ref=${ref} class="sheet small" aria-labelledby="gather-pages-title" onClose=${onClose}>
     <header><h2 id="gather-pages-title">${view.title}</h2>

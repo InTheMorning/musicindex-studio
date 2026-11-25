@@ -306,10 +306,19 @@ export function useDraft(feedId) {
   const recordOperation = useCallback((step) => {
     if (history === null) return;
     setStepError(null);
-    history.recordOperation(step);
+    const recorded = history.recordOperation(step);
     setCanUndo(history.canUndo);
     setCanRedo(history.canRedo);
+    return recorded;
   }, [history]);
+
+  // A Catalog control can complete the same operation from a different page.
+  const forgetOperation = useCallback((step) => {
+    history.forgetOperation(step);
+    if (active.current !== feedId) return;
+    setCanUndo(history.canUndo);
+    setCanRedo(history.canRedo);
+  }, [feedId, history]);
 
   // Runs one side of an operation step. A failure removes the step and gives
   // its error text to the bar (ADR 0228 item 5).
@@ -330,7 +339,7 @@ export function useDraft(feedId) {
   const undo = useCallback(() => {
     const previous = history.undo(current.current);
     if (previous === null) return;
-    if (isOperationStep(previous)) { runStep(previous, 'undo'); return; }
+    if (isOperationStep(previous)) return runStep(previous, 'undo');
     current.current = previous;
     setModel(previous);
     setCanUndo(history.canUndo);
@@ -356,5 +365,5 @@ export function useDraft(feedId) {
     timer.current = setTimeout(flush, SAVE_DELAY);
   }, [flush, history, runStep]);
 
-  return { model, changed, hidden, op3Tracks, grantBlocked, liveProblems, streamTypes, hasHost, draftState, bad, status, error, edits, update, flush, load, show, undo, redo, canUndo, canRedo, recordOperation, stepError };
+  return { model, changed, hidden, op3Tracks, grantBlocked, liveProblems, streamTypes, hasHost, draftState, bad, status, error, edits, update, flush, load, show, undo, redo, canUndo, canRedo, recordOperation, forgetOperation, stepError };
 }

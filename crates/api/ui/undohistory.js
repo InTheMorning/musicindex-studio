@@ -5,6 +5,8 @@
 // route (ADR 0228 items 2, 3 and 7). Such a step holds the functions `undo`
 // and `redo`. `undo` and `redo` of the history give that step as it is, and
 // the page runs it with `perform`.
+//
+// A Catalog step has no `redo` (ADR 0254 item 37).
 class OperationStep {
   constructor(undo, redo) {
     this.undo = undo;
@@ -35,12 +37,23 @@ export function makeHistory({ limit = 100, pause = 1000 } = {}) {
     },
     recordOperation({ undo, redo }) {
       redoSteps.length = 0;
-      undoSteps.push(new OperationStep(undo, redo));
+      const step = new OperationStep(undo, redo);
+      undoSteps.push(step);
       if (undoSteps.length > limit) undoSteps.shift();
       lastField = null;
       lastTime = null;
       canUndo = true;
       canRedo = false;
+      return step;
+    },
+    // Remove an operation that a different control completed.
+    forgetOperation(step) {
+      for (const steps of [undoSteps, redoSteps]) {
+        const at = steps.indexOf(step);
+        if (at >= 0) steps.splice(at, 1);
+      }
+      canUndo = undoSteps.length > 0;
+      canRedo = redoSteps.length > 0;
     },
     // Runs one side of an operation step. When the route fails, the step
     // goes from the history and the error goes to the caller (ADR 0228 item 5).
@@ -63,9 +76,11 @@ export function makeHistory({ limit = 100, pause = 1000 } = {}) {
       lastField = null;
       lastTime = null;
       const previous = undoSteps.pop();
-      redoSteps.push(isOperationStep(previous) ? previous : current);
+      if (!isOperationStep(previous) || previous.redo) {
+        redoSteps.push(isOperationStep(previous) ? previous : current);
+      }
       canUndo = undoSteps.length > 0;
-      canRedo = true;
+      canRedo = redoSteps.length > 0;
       return previous;
     },
     redo(current) {

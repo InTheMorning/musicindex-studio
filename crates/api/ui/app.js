@@ -28,7 +28,7 @@ import { CONFIRMS, confirmButtons } from './confirms.js';
 import { changeTitle, afterDiscard, changeLine, changeSetView, openLabel } from './people.js';
 import { makeSettingsDraft, changeSetting, settingsDraftView, discardSettings, saveSettings, asksSettingsLeave, lockStartMenu } from './settingsdraft.js';
 import { makeHistory } from './undohistory.js';
-import { DeleteUndoProvider, useDeleteUndo, undoNoticeText, UNDO_COMPLETE } from './undonotice.js';
+import { DeleteUndoProvider, useDeleteUndo, undoNoticeText, UNDO_COMPLETE, CatalogUndoNotice } from './undonotice.js';
 
 // The undo history of the Settings draft. It stays when the user opens a
 // different page and comes back (ADR 0227 item 7).
@@ -56,7 +56,7 @@ import {
   placeText, draftLabel, leftPanel, releasesList, listQuery, queryText, sortLabel, sortEntries, mosaicCells, otherFeedText, mediumProblemView, mediumProblemCause, feedCover,
   startNav, pushNav, backNav, forwardNav, releasesView, canBack, canForward, setScroll,
   isFeedView, openFeedView, newFeedView, navAtWidth, toggleRow, revealRows, pageTabs, tabsFit, showsRootButtons, rootNav, segmentKey, isTabChange } from './shell.js';
-import { pageActions, pageChangeNotice } from './movepages.js';
+import { pageActions, pageChangeNotice, catalogChangeCount, catalogReview, gatherChangeNotice } from './movepages.js';
 import {
   eventsToSign, signErrorText,
   npubOf, addressLines, linesText, invalidConfigField, blossomDefaultName, siteAddress, siteNameFromGuid, isNsec,
@@ -3476,9 +3476,15 @@ function ChangeSetPage({ id, go, onChanged, feeds }) {
     const again = () => api(`/change-sets/${id}`).then((loaded) => {
       setSet(loaded);
       setStatuses((before) => refreshedStatuses(before, loaded));
-    }, () => {});
+      setDiffs({});
+      writableIds(loaded).forEach((feedId) => loadDiff(feedId));
+    }, (error) => { if (error.status === 404) go({ name: 'releases' }, { replace: true }); });
     window.addEventListener(UNLOCKED, again);
-    return () => window.removeEventListener(UNLOCKED, again);
+    window.addEventListener(UNDO_COMPLETE, again);
+    return () => {
+      window.removeEventListener(UNLOCKED, again);
+      window.removeEventListener(UNDO_COMPLETE, again);
+    };
   }, [id]);
   // A feed opens its diff in a closed entry. One entry is open at a time.
   const loadDiff = (feedId) => api(`/feeds/${feedId}/diff`).then(
@@ -3489,6 +3495,7 @@ function ChangeSetPage({ id, go, onChanged, feeds }) {
     setOpenId((current) => (isOpen ? feedId : current === feedId ? null : current));
     if (isOpen && !diffs[feedId]) loadDiff(feedId);
   };
+  const catalog = catalogReview(set);
   const order = set ? writableIds(set) : [];
   // The address panel and the People panel of the review (ADR 0245 items 5
   // to 7 and 11 to 13). A change of `reviewTick` reads the findings again.
@@ -3546,10 +3553,11 @@ function ChangeSetPage({ id, go, onChanged, feeds }) {
     // The core also refuses an unconfirmed GUID change (ADR 0249 item 4). Thus a diff that is not loaded does not block the button.
     return Boolean(shown && shown.diff && shown.diff.guid_change && !guidChangeView(shown.diff.guid_change, guidTexts[feedId] || '').confirmed);
   });
+  const controls = set && html`<div class="draft-toolbar"><button class="button destructive" type="button" disabled=${writing || busy} onClick=${discard}>Discard</button>
+      ${(pendingWrite || catalog) && html`<button class="button primary" type="button" disabled=${writing || busy || addressBlocked || guidBlocked || !pendingWrite} onClick=${writeAll}>
+        ${writing ? 'Writing…' : catalog ? 'Write' : writeLabel(pending)}</button>`}</div>`;
   return html`<div><${Bar}><span class="bar-title">Review the changes</span>
-    ${set && html`<div class="draft-toolbar"><button class="button destructive" type="button" disabled=${writing || busy} onClick=${discard}>Discard</button>
-      ${pendingWrite && html`<button class="button primary" type="button" disabled=${writing || busy || addressBlocked || guidBlocked} onClick=${writeAll}>
-        ${writing ? 'Writing…' : writeLabel(pending)}</button>`}</div>`}<//><section class="section">
+    ${!catalog && controls}<//><section class="section">
     ${notFound
       ? html`<div class="notice" role="status"><strong>Studio did not find these changes.</strong>It is written or discarded.
           <div class="actions"><button class="button" type="button" onClick=${() => go({ name: 'people' })}>Open People</button></div></div>`
@@ -3557,10 +3565,15 @@ function ChangeSetPage({ id, go, onChanged, feeds }) {
     ${set === null && !error && html`<p class="empty" role="status">Loading the changes…</p>`}
     ${set && html`<header class="recipient-head"><h1>${changeTitle(set.operation)}</h1>
       <p class="hint">${set.person_id != null ? changeLine(set, personName) : operationLine(set.operation, nameOf(known, set.recipient))}</p></header>
+      ${catalog && html`<section class="page-section"><h2>${catalog.title}</h2><div class="group rows">
+        ${catalog.rows.map((row) => html`<div class="link-row static" key=${row.id}><span class="text">
+          <span class="label">${row.title}</span><span class="summary">${row.now}</span><span class="summary">${row.after}</span>
+        </span></div>`)}
+      </div></section>`}
       <${ReviewPanels} findings=${findings} feeds=${feeds} busy=${busy || writing} onRepair=${repairShortAddresses}
         onUse=${(group) => setCorrecting({ personId: group.personId, feedIds: group.feedIds })} />
       <${AnnounceChoice} />
-      <section class="page-section"><h2>Feeds</h2><div class="group">${set.feeds.map((feed) => {
+      <section class="page-section"><h2>${catalog ? catalog.feedsTitle : 'Feeds'}</h2><div class="group">${set.feeds.map((feed) => {
         const outcome = outcomeText(feed.outcome, set.operation);
         const blocked = blockedText(feed.blocked);
         const status = statuses[feed.feed_id];
@@ -3598,9 +3611,17 @@ function ChangeSetPage({ id, go, onChanged, feeds }) {
           </div>
         </details>`, openFeed];
       })}</div></section>
+      ${catalog && controls}
       ${addressBlocked && html`<p class="hint" role="status">${findings.address.write}</p>`}
       <${ReviewCorrectSheet} target=${correcting} feeds=${feeds} onApplied=${() => findings.act(readAgain)} onClose=${() => setCorrecting(null)} />`}
   </section></div>`;
+}
+
+// The open Catalog change set has one count in each panel width.
+function CatalogChangeCount({ set, go }) {
+  const text = catalogChangeCount(set);
+  return text && html`<div class="notice" role="status"><span>${text}</span>
+    <div class="actions"><button class="button action" type="button" onClick=${() => go({ name: 'change-set', id: set.id })}>Review</button></div></div>`;
 }
 
 // The left panel (ADR 0206 items 1, 6 and 7). It shows the destinations, or
@@ -3610,14 +3631,15 @@ function ChangeSetPage({ id, go, onChanged, feeds }) {
 // At 760 px or less the left panel is not shown: its content is the root
 // page and the outline page of the stack (ADR 0206 item 13, musicindex ADR
 // 0030 R-SHELL-2).
-function LeftPanel({ panel, draft, changedFeeds, go, showReleases, onAdding, onImporting, onAddFeedRow, onLock, collections }) {
+function LeftPanel({ panel, draft, changedFeeds, go, showReleases, onAdding, onImporting, onAddFeedRow, onLock, collections, catalogSet }) {
   if (panel.kind === 'destinations') {
     return html`<header><${Brand} /><${ThemeToggle} /></header>
-      <div class="sidebar-scroll">${destinationRows(panel.top, go)}</div>
+      <div class="sidebar-scroll"><${CatalogChangeCount} set=${catalogSet} go=${go} />${destinationRows(panel.top, go)}</div>
       <${LeftPanelFooter} panel=${panel} go=${go} onLock=${onLock} collections=${collections} />`;
   }
   return html`<header><${Brand} /><${ThemeToggle} /></header>
     <div class="sidebar-scroll">
+      <${CatalogChangeCount} set=${catalogSet} go=${go} />
       <${Outline} panel=${panel} draft=${draft} changedFeeds=${changedFeeds} go=${go} showReleases=${showReleases}
         onAdding=${onAdding} onImporting=${onImporting} onAddFeedRow=${onAddFeedRow} />
     </div>
@@ -3861,11 +3883,12 @@ function SwitchCollectionSheet({ open, collections, go, onClose, onDone }) {
 
 // ADR 0241 item 3: the narrow root page uses the same footer order.
 // The page has no Back control (ADR 0226 items 7 and 8).
-function RootPage({ panel, go, onLock, collections }) {
+function RootPage({ panel, go, onLock, collections, catalogSet }) {
   return html`<div class="panel-page">
     <${Bar} back=${false}><span class="bar-title">Studio</span><//>
     <div class="stack-page">
       <header><${Brand} /><${ThemeToggle} /></header>
+      <${CatalogChangeCount} set=${catalogSet} go=${go} />
       ${destinationRows(panel.top, go)}
       <${LeftPanelFooter} panel=${panel} go=${go} onLock=${onLock} collections=${collections} />
     </div>
@@ -4211,6 +4234,14 @@ function Shell({ vault, onLock, version }) {
   // The keys of the open rows of the Catalog tree (ADR 0254 item 7).
   const [openRows, setOpenRows] = useState(() => new Set());
   const toggleOpenRow = (key) => setOpenRows((open) => toggleRow(open, key));
+  const [catalogSet, setCatalogSet] = useState(null);
+  const [catalogNotice, setCatalogNotice] = useState(null);
+  const catalogHistory = useRef(makeHistory());
+  const catalogRecords = useRef(new Set());
+  const catalogDraft = useRef(null);
+  const [, setCatalogBusy] = useState(false);
+  const catalogWorking = useRef(false);
+  const [catalogError, setCatalogError] = useState(null);
   const [connectors, setConnectors] = useState([]);
   // At 760 px or less the window is one stack (musicindex ADR 0080 R-SHELL-2).
   const narrow = useNarrow();
@@ -4233,6 +4264,7 @@ function Shell({ vault, onLock, version }) {
   // The scroll area of the page. Each new view starts at its own scroll.
   const mainRef = useRef(null);
   const view = nav.entries[nav.index];
+  useEffect(() => { setCatalogNotice(null); }, [view]);
 
   // Saves the scroll of the page into the current entry.
   const withScroll = () => {
@@ -4413,7 +4445,14 @@ function Shell({ vault, onLock, version }) {
 
   const load = useCallback(async () => {
     try {
-      const [f, c] = await Promise.all([api('/feeds'), api('/connectors')]);
+      const [f, c, sets] = await Promise.all([api('/feeds'), api('/connectors'), api('/change-sets')]);
+      const catalog = sets.find((set) => set.operation.kind === 'catalog') || null;
+      setCatalogSet(catalog);
+      if (!catalog || catalog.feeds.some((feed) => feed.written_at != null)) {
+        for (const forget of catalogRecords.current) forget();
+        catalogHistory.current.clear();
+        setCatalogNotice(null);
+      }
       setFeeds(f);
       setConnectors(c);
       setError(null);
@@ -4475,6 +4514,22 @@ function Shell({ vault, onLock, version }) {
   // A feed with no connector, or a feed that is not an album, needs no draft.
   const draftFeedId = selected && isEditable(selected) ? selected.id : null;
   const draft = useDraft(draftFeedId);
+  catalogDraft.current = { id: draftFeedId, draft };
+  useEffect(() => { setCatalogNotice(null); }, [draft.edits]);
+  const undoCatalog = async () => {
+    if (catalogWorking.current) return;
+    const history = catalogHistory.current;
+    const step = history.undo(null);
+    if (!step) return;
+    catalogWorking.current = true;
+    setCatalogBusy(true);
+    setCatalogError(null);
+    try { await history.perform(step, 'undo'); }
+    catch (error) { setCatalogError(error); }
+    finally { catalogWorking.current = false; setCatalogBusy(false); }
+  };
+  useUndoKeys(undoCatalog, () => {}, draftFeedId === null && ['root', 'releases', 'change-set'].includes(view.name) && catalogHistory.current.canUndo);
+
   // Each draft answer gives the state of its feed. The row of that feed in
   // the list takes it, with no new read of the list (ADR 0165 item 9).
   useEffect(() => {
@@ -4525,19 +4580,56 @@ function Shell({ vault, onLock, version }) {
     setAddingFeed({ open: 'publisher', start: { role: gather.role, below_id: gather.id, title, pick }, from: view });
     setGather(null);
   };
-  const gatherFoundPage = async (id) => {
-    await api(`/feeds/${gather.id}/gather`, { method: 'POST', body: { role: gather.role, page_ids: [id] } });
-    setGather(null);
-    await load();
-  };
   const openChangeSet = (id) => go({ name: 'change-set', id });
-  // After a change, the sheet is closed. The notice gives the result. The
-  // change set does not open by itself (ADR 0254 item 35).
+  // Record each Catalog change with no Redo (ADR 0254 item 37).
+  const catalogChanged = async (answer, notice) => {
+    if (answer.nothing_changes || answer.change_set_id == null) return;
+    await load();
+    if (draftFeedId !== null) await draft.load(true);
+    let pageStep = null;
+    let catalogStep = null;
+    const pageOwner = draftFeedId !== null ? draft : null;
+    const forget = () => {
+      if (pageStep) pageOwner.forgetOperation(pageStep);
+      if (catalogStep) catalogHistory.current.forgetOperation(catalogStep);
+      catalogRecords.current.delete(forget);
+    };
+    const operation = { undo: async () => {
+      try {
+        const active = catalogDraft.current;
+        if (active.id !== null && !(await active.draft.flush())) throw new Error('Studio could not save the edits. Save them before Undo.');
+        const sets = await api('/change-sets');
+        const current = sets.find((set) => set.id === answer.change_set_id);
+        if (!current || current.catalog_steps !== answer.change_set.catalog_steps || current.feeds.some((feed) => feed.written_at != null)) {
+          throw new Error('Studio cannot undo this Catalog change. Open Review to check the changes.');
+        }
+        await api('/catalog/undo', { method: 'POST' });
+        forget();
+        window.dispatchEvent(new Event(UNDO_COMPLETE));
+        await load();
+        const shown = catalogDraft.current;
+        if (shown.id !== null) await shown.draft.load(true);
+      } finally { forget(); setCatalogNotice(null); }
+    } };
+    catalogStep = catalogHistory.current.recordOperation(operation);
+    if (pageOwner) pageStep = pageOwner.recordOperation(operation);
+    catalogRecords.current.add(forget);
+    setCatalogNotice({ ...answer, notice, undo: undoCatalog });
+  };
+  const gathered = async (answer, ids) => {
+    setGather(null);
+    await catalogChanged(answer, gatherChangeNotice(answer, ids));
+  };
+  const gatherFoundPage = async (id) => {
+    if (draftFeedId !== null && !(await draft.flush())) return;
+    const answer = await api(`/feeds/${gather.id}/gather`, { method: 'POST', body: { role: gather.role, page_ids: [id] } });
+    await gathered(answer, [id]);
+  };
+  // The change closes the sheet and keeps the current page open.
   const pageChanged = async (answer) => {
     const changed = sheetFeed;
     setPageSheet(null);
-    await load();
-    if (changed) setCopyNotice(pageChangeNotice(changed, answer));
+    await catalogChanged(answer, pageChangeNotice(changed, answer));
   };
   let main;
   // A screen with no bar of its own gets one.
@@ -4547,7 +4639,7 @@ function Shell({ vault, onLock, version }) {
   } else if (feeds === null) {
     main = withBar(html`<section class="section"><p class="empty" role="status">Loading your collection…</p></section>`);
   } else if (view.name === 'root') {
-    main = html`<${RootPage} panel=${panel} go=${go} onLock=${lock} collections=${collectionState.collections} />`;
+    main = html`<${RootPage} catalogSet=${catalogSet} panel=${panel} go=${go} onLock=${lock} collections=${collectionState.collections} />`;
   } else if (view.name === 'hosts') {
     main = html`<${Hosts} connectors=${connectors} feeds=${feeds} view=${view} onChanged=${() => load()}
       onOpen=${(id) => go({ name: 'feed', id })} onMoved=${async (id) => { await load(); go({ name: 'change-set', id, area: 'hosts' }); }} />`;
@@ -4593,13 +4685,16 @@ function Shell({ vault, onLock, version }) {
     // A new release opens with the import sheet "Add tracks" (ADR 0224 item 7).
     addTracksNext: setPendingAddTracks };
   const panelProps = { panel, draft, changedFeeds, go, showReleases, onAdding: setAdding, onImporting: setImporting, onAddFeedRow: openAddFeedRow,
-    collections: collectionState.collections,
+    collections: collectionState.collections, catalogSet,
     onLock: lock };
   return html`<${NavContext.Provider} value=${navValue}><${OutsideContext.Provider} value=${outsideValue}><${CatalogContext.Provider} value=${toggleOpenRow}><${PageActionContext.Provider} value=${setPageSheet}><div class="shell">
     ${!narrow && html`<nav class="sidebar" aria-label="Collection">
       <${LeftPanel} ...${panelProps} />
     </nav>`}
     <main class="main" ref=${mainRef}>
+      ${catalogNotice && html`<${CatalogUndoNotice} key=${`${catalogNotice.change_set_id}-${catalogNotice.change_set.catalog_steps}`} answer=${catalogNotice} onUndo=${catalogNotice.undo}
+        onReview=${openChangeSet} onClose=${() => setCatalogNotice(null)} />`}
+      <${ErrorNotice} error=${catalogError} />
       ${copyNotice && html`<div class="notice" role="status"><span>${copyNotice}</span>
         <button class="button quiet icon-button" type="button" aria-label="Dismiss" onClick=${() => setCopyNotice(null)}>✕</button></div>`}
       ${differences.length > 0 && !noticeClosed && html`<div class="notice scan-notice" role="status">
@@ -4619,13 +4714,13 @@ function Shell({ vault, onLock, version }) {
     ${pageSheet && sheetFeed && html`<${PageChangeSheet} key=${`${pageSheet.id}-${pageSheet.action}`}
       page=${{ ...sheetFeed, parent_ids: sheetFeed.parent_ids || [], release_ids: sheetFeed.release_ids || [] }}
       action=${pageSheet.action} above=${pageSheet.above} feeds=${feeds}
-      prepare=${selected && selected.id === pageSheet.id && draftFeedId === pageSheet.id ? () => draft.flush() : undefined}
+      prepare=${draftFeedId !== null ? () => draft.flush() : undefined}
       onChanged=${pageChanged}
       onAddHost=${() => { setPageSheet(null); go({ name: 'hosts', add: true }); }}
       onOpenChanges=${(id) => { setPageSheet(null); openChangeSet(id); }}
       onClose=${() => setPageSheet(null)} />`}
     ${gather && feeds.find((feed) => feed.id === gather.id) && html`<${GatherPagesSheet} page=${feeds.find((feed) => feed.id === gather.id)} role=${gather.role}
-      feeds=${feeds} onMoved=${async () => { setGather(null); await load(); }}
+      feeds=${feeds} prepare=${draftFeedId !== null ? () => draft.flush() : undefined} onMoved=${gathered}
       onMake=${(title) => makeCatalogPage(title)}
       renderSearch=${(query) => html`<${AddFindSheet} open=${true} embedded=${true} query=${query}
         type=${'publisher'} role=${gather.role} connectors=${connectors}

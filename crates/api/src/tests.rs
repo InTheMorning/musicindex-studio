@@ -21173,6 +21173,116 @@ async fn catalog_routes_add_two_steps_and_undo_each_step() {
 }
 
 #[tokio::test]
+async fn catalog_review_gives_saved_and_current_places_after_two_changes() {
+    let (app, connector) = publisher_app().await;
+    let [artist, _, label, host, release] = move_pages(&app, connector).await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{artist}/links"),
+        Some(json!({ "release": release })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    for id in [artist, label, host, release] {
+        let (status, body) = write_with_own_diff(&app, id).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+    }
+    let mut set_id = Value::Null;
+    for (action, page) in [("sign_to_label", label), ("change_publisher", host)] {
+        let (status, body) = call(
+            &app,
+            "POST",
+            &format!("/api/v1/feeds/{artist}/page-change"),
+            Some(json!({ "action": action, "page": page, "releases": [release] })),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        set_id = body["change_set_id"].clone();
+    }
+    let before_read = move_draft_rows(&app, &[artist, label, host, release]);
+    let (status, review) = call(&app, "GET", &format!("/api/v1/change-sets/{set_id}"), None).await;
+    assert_eq!(status, StatusCode::OK, "{review}");
+    assert_eq!(review["catalog_steps"], 2);
+    let rows = review["catalog_changes"].as_array().unwrap();
+    for (id, now, after) in [
+        (
+            artist,
+            "Independent, not published",
+            "On Label, published by Hosting",
+        ),
+        (
+            release,
+            "Independent, not published",
+            "On Label, published by Hosting",
+        ),
+        (label, "Not published", "Published by Hosting"),
+        (host, "Not published", "Published by Hosting"),
+    ] {
+        let row = rows.iter().find(|row| row["feed_id"] == id).unwrap();
+        assert_eq!(row["now"], now, "{review}");
+        assert_eq!(row["after"], after, "{review}");
+    }
+    assert_eq!(
+        move_draft_rows(&app, &[artist, label, host, release]),
+        before_read
+    );
+    let (status, body) = call(&app, "POST", "/api/v1/catalog/undo", None).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (_, review) = call(&app, "GET", &format!("/api/v1/change-sets/{set_id}"), None).await;
+    let row = review["catalog_changes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["feed_id"] == artist)
+        .unwrap();
+    assert_eq!(row["now"], "Independent, not published");
+    assert_eq!(row["after"], "On Label, not published");
+}
+
+#[tokio::test]
+async fn catalog_review_gives_kept_places_for_gather_with_no_release() {
+    let (app, connector) = publisher_app().await;
+    let [artist, other, label, _, _] = move_pages(&app, connector).await;
+    let (status, body) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{label}/gather"),
+        Some(json!({ "role": "artist", "page_ids": [artist, other] })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let rows = body["change_set"]["catalog_changes"].as_array().unwrap();
+    for id in [artist, other] {
+        let row = rows.iter().find(|row| row["feed_id"] == id).unwrap();
+        assert_eq!(row["now"], "Independent, not published");
+        assert_eq!(row["after"], "On Label, not published");
+    }
+    let (status, review) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/change-sets/{}", body["change_set_id"]),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{review}");
+    assert_eq!(
+        review["catalog_changes"],
+        body["change_set"]["catalog_changes"]
+    );
+    let (status, body) = call(
+        &app,
+        "DELETE",
+        &format!("/api/v1/change-sets/{}", body["change_set_id"]),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
+    let workspace = Workspace::open(app.data.path()).unwrap();
+    assert_eq!(workspace.collection.kept_levels().unwrap(), Vec::new());
+}
+
+#[tokio::test]
 async fn catalog_no_change_and_invalid_selection_leave_no_change_set() {
     let (app, connector) = publisher_app().await;
     let [artist, _, label, host, release] = move_pages(&app, connector).await;

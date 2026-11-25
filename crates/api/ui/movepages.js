@@ -277,3 +277,25 @@ export function releaseCreditFields(credits, feeds) {
     aliasHint: `The artist name of this release in podcast apps and music files: “${credits.alias ?? credits.artist?.title ?? ''}”. The release stays in the catalog of the artist page above.`,
   };
 }
+
+// The Catalog count and Review lines use only the values of the API.
+export function catalogChangeCount(set) {
+  return set?.open && set.operation?.kind === 'catalog' ? `${countWords(set.catalog_steps, 'change', 'changes')} not written` : null;
+}
+
+export function catalogReview(set) {
+  if (set?.operation?.kind !== 'catalog') return null;
+  return {
+    title: 'What changes',
+    feedsTitle: 'Feeds that Studio writes',
+    rows: (set.catalog_changes || []).map((row) => ({
+      id: row.feed_id, title: row.title || 'Untitled feed', now: `Now: ${row.now}`, after: `After: ${row.after}`,
+    })),
+  };
+}
+
+// The Add notice uses the places of the API for the selected pages.
+export function gatherChangeNotice(answer, ids) {
+  return (answer.change_set?.catalog_changes || []).filter((row) => ids.includes(row.feed_id))
+    .map((row) => pageChangeNotice({ title: row.title }, { place: row.after })).join(' ');
+}

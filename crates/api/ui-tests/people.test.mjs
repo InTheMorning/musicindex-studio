@@ -1600,6 +1600,7 @@ test('a move pages change set has one or many page titles and returns to its tar
   const one = { kind: 'move_pages', page_names: ['Artist A'], target_name: 'Host A', role: 'artist' };
   const many = { kind: 'move_pages', page_names: ['A', 'B', 'C'], target_name: 'Host A', role: 'artist' };
   assert.equal(changeTitle(one), 'Move Artist A to Host A', 'ADR 0243 item 3: fix changeTitle in crates/api/ui/people.js.');
+  assert.equal(changeTitle({ kind: 'catalog' }), 'Changes in the Catalog', 'ADR 0254 item 34: fix changeTitle in crates/api/ui/people.js.');
   assert.equal(changeTitle(many), 'Move 3 artists to Host A', 'ADR 0243 item 3: fix changeTitle in crates/api/ui/people.js.');
   assert.equal(changeRow({ operation: one, feeds: [] }).title, 'Move Artist A to Host A',
     'ADR 0243 item 4: fix changeRow in crates/api/ui/people.js.');

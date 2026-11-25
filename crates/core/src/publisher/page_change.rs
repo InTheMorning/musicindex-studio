@@ -246,7 +246,7 @@ fn change_page_inner(
         }
     }
     let after_kept = collection.kept_levels()?;
-    let place = place(&after_feeds, &after_kept, page);
+    let place = catalog_place(&after_feeds, &after_kept, page);
     Ok(PageChangeResult {
         place,
         changed_releases,
@@ -516,11 +516,40 @@ fn remove_outside_roles(
     Ok(outside_changes)
 }
 
-fn place(feeds: &[(FeedRow, Option<Feed>)], kept: &[(FeedId, FeedId)], page: FeedId) -> String {
+/// The place of a page or a release in music words, for example
+/// "On Harbor Records, published by Northwind" (ADR 0254 items 25 and 36).
+#[must_use]
+pub fn catalog_place(
+    feeds: &[(FeedRow, Option<Feed>)],
+    kept: &[(FeedId, FeedId)],
+    page: FeedId,
+) -> String {
     let catalogs = catalogs_with_kept(feeds, kept);
     let mut above = vec![page];
     let mut labels = Vec::new();
     let mut publishers = Vec::new();
+    // A release has no parents. The roles of its own links give its place
+    // (ADR 0253: each link has its own roles).
+    if feeds
+        .iter()
+        .find(|(row, _)| row.id == page)
+        .is_some_and(|(row, _)| row.medium.as_deref() != Some("publisher"))
+    {
+        for (index, (row, model)) in feeds.iter().enumerate() {
+            if !catalogs[index].releases.contains(&page) {
+                continue;
+            }
+            let roles = super::link_roles(feeds, page, index);
+            let name = title(row, model.as_ref());
+            if roles.contains(&PublisherRole::Label) && !labels.contains(&name) {
+                labels.push(name.clone());
+            }
+            if roles.contains(&PublisherRole::Hosting) && !publishers.contains(&name) {
+                publishers.push(name);
+            }
+        }
+        above.clear();
+    }
     // The own links of the page can give the role hosting, so a page can
     // publish its own releases (ADR 0253).
     if let Some(page_index) = feeds.iter().position(|(row, _)| row.id == page)
@@ -567,12 +596,15 @@ fn place(feeds: &[(FeedRow, Option<Feed>)], kept: &[(FeedId, FeedId)], page: Fee
     }
     labels.sort_by_key(|title| title.to_lowercase());
     publishers.sort_by_key(|title| title.to_lowercase());
-    // A label page is not on a label, so its place names only its publishers.
-    let is_label = feeds
-        .iter()
-        .find(|(row, _)| row.id == page)
-        .and_then(|(row, _)| row.publisher_roles.iter().min())
-        == Some(&PublisherRole::Label);
+    // A label page or a publisher page is not on a label, so its place names
+    // only its publishers.
+    let is_label = matches!(
+        feeds
+            .iter()
+            .find(|(row, _)| row.id == page)
+            .and_then(|(row, _)| row.publisher_roles.iter().min()),
+        Some(PublisherRole::Label | PublisherRole::Hosting)
+    );
     if is_label {
         return if publishers.is_empty() {
             "Not published".to_owned()
@@ -645,7 +677,7 @@ where
     let start_selection = page_change_selection(&feeds, request.page, request.above);
     let selected = request.releases.as_ref().unwrap_or(&start_selection);
     let kept = collection.kept_levels()?;
-    let now = place(&feeds, &kept, request.page);
+    let now = catalog_place(&feeds, &kept, request.page);
     // A sheet opens before the user selects a label. The preview then gives
     // the start selection and the place now, and it changes nothing
     // (ADR 0254 item 28).

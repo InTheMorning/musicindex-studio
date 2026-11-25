@@ -367,6 +367,8 @@ export function changeTitle(operation) {
       const moved = operation.release_title || (names.length === 1 ? names[0] : `${names.length} ${role}`);
       return `Move ${moved} to ${operation.target_name}`;
     }
+    // The change set of the Catalog (ADR 0254 item 34).
+    case 'catalog': return 'Changes in the Catalog';
     case 'move_releases': return 'Move All Releases';
     case 'change_address': return 'Change address';
     case 'rename': return 'Rename';

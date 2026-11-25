@@ -3822,7 +3822,7 @@ pub(crate) async fn gather_pages(
             |id| ensure_draft(w, id),
         )?;
         Ok(Json(
-            json!({ "change_set_id": set.id, "change_set": change_set_json(w, &set) }),
+            json!({ "change_set_id": set.id, "change_set": catalog_review_json(w, &set)? }),
         ))
     })
     .await
@@ -8887,6 +8887,63 @@ fn change_blocked(w: &Workspace, id: FeedId) -> Option<&'static str> {
     (connector.secret_ref.is_some() && w.vault.is_none()).then_some("vault_locked")
 }
 
+// The place of each feed in music words, from the core (ADR 0254 item 36).
+fn catalog_places(feeds: &[(FeedRow, Option<Feed>)], kept: &[(FeedId, FeedId)]) -> Vec<String> {
+    feeds
+        .iter()
+        .map(|(row, _)| publisher::catalog_place(feeds, kept, row.id))
+        .collect()
+}
+
+// Add the saved and current places to Catalog Review (ADR 0254 item 36).
+fn catalog_review_json(w: &Workspace, set: &change_set::ChangeSet) -> Result<Value, ApiError> {
+    let mut value = change_set_json(w, set);
+    if !matches!(set.operation, RecipientOperation::Catalog) {
+        return Ok(value);
+    }
+    let after: Vec<_> = w
+        .collection
+        .feeds()?
+        .into_iter()
+        .map(|row| {
+            let model = files_feed(w, row.id)?;
+            Ok((row, model))
+        })
+        .collect::<Result<_, ApiError>>()?;
+    let mut before = after.clone();
+    let library = w.library().ok();
+    for saved in w.collection.change_set_feed_rows(set.id)? {
+        if let Some((row, model)) = before.iter_mut().find(|(row, _)| row.id == saved.feed_id) {
+            *model = if let Some(draft) = saved.before {
+                let document = studio_core::xml::Document::parse_bytes(&draft.draft_xml)
+                    .map_err(|error| ApiError::internal(error.to_string()))?;
+                Some(Feed::read(&document).map_err(|error| ApiError::internal(error.to_string()))?)
+            } else {
+                pipeline::written_copy(&w.collection, library.as_ref(), row)
+            };
+        }
+    }
+    let after_kept = w.collection.kept_levels()?;
+    let mut before_kept = after_kept.clone();
+    for (upper, lower, present) in w.collection.change_set_kept_levels(set.id)? {
+        before_kept.retain(|pair| *pair != (upper, lower));
+        if present {
+            before_kept.push((upper, lower));
+        }
+    }
+    let now = catalog_places(&before, &before_kept);
+    let after_places = catalog_places(&after, &after_kept);
+    value["catalog_changes"] = json!(after.iter().enumerate().filter(|(index, (row, _))| {
+        now[*index] != after_places[*index] || set.feeds.iter().any(|feed| feed.feed_id == row.id)
+    }).map(|(index, (row, model))| json!({
+        "feed_id": row.id.0,
+        "title": model.as_ref().and_then(|feed| feed.title.clone()).or_else(|| row.title.clone()),
+        "now": now[index],
+        "after": after_places[index],
+    })).collect::<Vec<_>>());
+    Ok(value)
+}
+
 /// The JSON of a change set: the operation, the recipient and each feed
 /// with its outcome. `blocked` is the cause why Studio cannot write a
 /// changed feed now, or null.
@@ -9149,7 +9206,7 @@ fn existing_change_set(w: &Workspace, id: i64) -> Result<change_set::ChangeSet, 
 pub(crate) async fn get_change_set(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
     blocking(shared, move |w| {
         let set = existing_change_set(w, id)?;
-        Ok(Json(change_set_json(w, &set)))
+        Ok(Json(catalog_review_json(w, &set)?))
     })
     .await
 }

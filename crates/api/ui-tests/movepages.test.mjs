@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   NEW_PAGE_PREFIX, releaseCreditFields,
   pageActions, pageSheet, pageNow, pageChoiceRows, pageReleaseRows, previewPath, pageChangeBody,
-  startSelection, pageSheetResult, pageChangeNotice, gatherPagesModel,
+  startSelection, pageSheetResult, pageChangeNotice, gatherPagesModel, catalogChangeCount, catalogReview, gatherChangeNotice,
 } from '../ui/movepages.js';
 
 const page = (id, title, roles, extra = {}) => ({ id, title, medium: 'publisher', publisher_roles: roles, connector_id: 'c', ...extra });
@@ -253,4 +253,37 @@ test('the alias section and its hint use the alias that the core gives', () => {
   assert.equal(alias.aliasOpen, true);
   assert.equal(alias.alias, 'Zed feat. Amy');
   assert.equal(alias.aliasHint, 'The artist name of this release in podcast apps and music files: “Zed feat. Amy”. The release stays in the catalog of the artist page above.');
+});
+
+test('ADR 0254 items 35 and 36: Catalog notices and the count use API values', () => {
+  const answer = { change_set_id: 7, change_set: { id: 7, open: true, operation: { kind: 'catalog' }, catalog_steps: 2,
+    catalog_changes: [
+      { feed_id: 1, title: 'First', now: 'Independent, not published', after: 'On Label, published by Publisher' },
+      { feed_id: 2, title: 'Second', now: 'Independent, not published', after: 'On Label, not published' },
+    ],
+  } };
+  assert.equal(pageChangeNotice({ title: 'First' }, { place: 'On Label, published by Publisher' }),
+    'First is now on Label, published by Publisher. Not written yet.');
+  assert.equal(gatherChangeNotice(answer, [1, 2]),
+    'First is now on Label, published by Publisher. Not written yet. Second is now on Label, not published. Not written yet.');
+  assert.equal(gatherChangeNotice(answer, [2]), 'Second is now on Label, not published. Not written yet.');
+  assert.equal(catalogChangeCount(answer.change_set), '2 changes not written');
+  assert.equal(catalogChangeCount({ ...answer.change_set, catalog_steps: 1 }), '1 change not written');
+  assert.equal(catalogChangeCount({ ...answer.change_set, open: false }), null);
+  assert.equal(catalogChangeCount({ operation: { kind: 'move_pages' }, open: true }), null);
+  assert.equal(catalogChangeCount(null), null);
+});
+
+test('ADR 0254 item 36: What changes shows the API places without a feed rule', () => {
+  const view = catalogReview({ operation: { kind: 'catalog' }, catalog_changes: [
+    { feed_id: 1, title: 'Artist', now: 'On Old, not published', after: 'On New, published by Publisher' },
+    { feed_id: 2, title: 'Release', now: 'By Artist, on Old, not published', after: 'By Artist, on New, published by Publisher' },
+  ] });
+  assert.equal(view.title, 'What changes');
+  assert.equal(view.feedsTitle, 'Feeds that Studio writes');
+  assert.deepEqual(view.rows, [
+    { id: 1, title: 'Artist', now: 'Now: On Old, not published', after: 'After: On New, published by Publisher' },
+    { id: 2, title: 'Release', now: 'Now: By Artist, on Old, not published', after: 'After: By Artist, on New, published by Publisher' },
+  ]);
+  assert.equal(catalogReview({ operation: { kind: 'add' } }), null);
 });

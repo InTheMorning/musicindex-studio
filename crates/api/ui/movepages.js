@@ -171,6 +171,32 @@ export function startSelection(preview) {
   return [...(preview?.start_selection || [])];
 }
 
+// The drop targets follow the row rank (ADR 0254 items 38 and 39).
+// The parent row and each page below the dragged page take no drop.
+export function pageDropRows(feeds, page, above = null) {
+  const rank = headingIndex(page);
+  if (!isPublisher(page) || ![ARTIST_RANK, LABEL_RANK].includes(rank)) return [];
+  const labelAction = pageActions(page, feeds).find((entry) => ['change_label', 'sign_to_label'].includes(entry.id))?.id;
+  const actions = [...(labelAction ? [labelAction] : []), 'change_publisher'];
+  return actions.flatMap((action) => pageChoiceRows(feeds, page, action)
+    .filter((row) => row.id !== null && row.id !== above)
+    .filter((row) => headingIndex(feeds.find((feed) => feed.id === row.id)) === (action === 'change_publisher' ? 0 : LABEL_RANK))
+    .map((row) => ({ id: row.id, action })));
+}
+
+// A drop changes immediately only if the preview selects each release and shows a change.
+// The core gives the selection and decides if anything changes (ADR 0065).
+export function pageDropDecision(page, preview) {
+  const selected = new Set(startSelection(preview));
+  return preview?.result?.nothing_changes === false && (page.release_ids || []).every((id) => selected.has(id))
+    ? 'change' : 'sheet';
+}
+
+// The top area removes the label and publisher with each release selected.
+export function leaveAllBody(page) {
+  return pageChangeBody('leave_all', null, [...(page.release_ids || [])]);
+}
+
 function lowerFirst(text) {
   return text ? `${text[0].toLowerCase()}${text.slice(1)}` : text;
 }

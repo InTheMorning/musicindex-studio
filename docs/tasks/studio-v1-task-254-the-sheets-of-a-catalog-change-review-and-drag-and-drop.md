@@ -4,7 +4,7 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Levels And Move
 Decisions: [ADR 0254](../adr/0254-the-catalog-is-a-tree-and-each-change-uses-music-words.md) items 18 to 28 and 34 to 39. [ADR 0257](../adr/0257-a-release-has-one-artist-one-label-and-one-publisher-in-its-fields.md) items 14 and 15.
 Prototype: `.studio-dev/design-brief/prototype/structure.html`. Git ignores it.
 
-Status: In progress. Packets 254a, 254b and 254c are done.
+Status: Built. Packets 254a, 254b, 254c and 254d are done. The visual checks of the operator are open.
 
 Operator choices (the main session, in the approved ADR 0254):
 
@@ -15,6 +15,10 @@ Operator choices (the main session, in the approved ADR 0254):
 - Packet 254c: the API gives "Now" and "After" with the core function `catalog_place`. The main session made that function public and extended it for a release and for a publisher page. A release gets its place from the roles of its own links. A publisher page gets "Published by" or "Not published", as a label page does.
 - Packet 254c: the title of Review for the change set of the Catalog is "Changes in the Catalog".
 - Packet 254c: in Review, a page that is only a publisher shows its name with no "Now" and no "After". The core function `has_catalog_place` gives this rule (ADR 0254, operator choice of 2026-11-25).
+- Packet 254d: a label row takes the drop of an artist row. A publisher row takes the drop of an artist row or a label row. A curator row takes no drop, because item 39 gives no change to a curator. The parent row of the dragged row and each page below the dragged page take no drop.
+- Packet 254d: a drop on a label row uses the label action that the menu **⋯** of the dragged row gives: "Change label…" or "Sign to a label…". A drop on a publisher row uses "Change publisher…".
+- Packet 254d: the drop asks the preview route with the dropped row and the page above. When its start selection holds each release of the page, the change occurs immediately with that selection. When the preview says that nothing changes, the sheet opens and shows its hint.
+- Packet 254d: a drop on the top area sends `leave_all` with each release of the page immediately. It has no sheet.
 
 ## Goal
 

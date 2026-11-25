@@ -2910,7 +2910,7 @@ function FeedDelete({ feed, draft, onListChanged }) {
 }
 
 // The refusal of a move names each feed that stops it.
-function MoveRefusal({ error, feeds, onAddHost, onOpenChanges }) {
+export function MoveRefusal({ error, feeds, onAddHost, onOpenChanges }) {
   if (!error || !['read_only', 'in_change_set'].includes(error.code)) return html`<${ErrorNotice} error=${error} />`;
   const rows = error.details?.feeds || [];
   const isReadOnly = error.code === 'read_only';
@@ -2934,13 +2934,13 @@ function MoveRefusal({ error, feeds, onAddHost, onOpenChanges }) {
 // `PAGE_ACTION_NAMES`, and `above` is the page above the tree row that opened
 // the sheet, or null. `prepare` runs before the call, and false stops the
 // change.
-export function PageChangeSheet({ page, action, above, feeds, prepare, onChanged, onAddHost, onOpenChanges, onClose }) {
+export function PageChangeSheet({ page, action, above, startSelected, feeds, prepare, onChanged, onAddHost, onOpenChanges, onClose }) {
   const ref = useSheet(true);
   const { busy, error, run } = useAction();
   const sheet = pageSheet(page, action);
   const [query, setQuery] = useState('');
   // `undefined` is no selected row, and `null` is the row "Not published".
-  const [selected, setSelected] = useState(undefined);
+  const [selected, setSelected] = useState(startSelected);
   // The checked releases. `null` is the time before the start selection.
   const [checked, setChecked] = useState(null);
   const [preview, setPreview] = useState(null);
@@ -2951,8 +2951,8 @@ export function PageChangeSheet({ page, action, above, feeds, prepare, onChanged
   const checkedKey = checked === null ? null : checked.join(',');
   useEffect(() => {
     let current = true;
-    // The first preview names no page and gives the start selection (ADR
-    // 0254 item 28). After it, a question with a list needs a selected row.
+    // The first preview gives the start selection (ADR 0254 item 28).
+    // A drop supplies the selected page before the first preview.
     let target;
     if (sheet.role === null) target = null;
     else if (selected !== undefined) target = selected;

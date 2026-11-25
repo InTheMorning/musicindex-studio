@@ -4,6 +4,7 @@ import {
   NEW_PAGE_PREFIX, releaseCreditFields,
   pageActions, pageSheet, pageNow, pageChoiceRows, pageReleaseRows, previewPath, pageChangeBody,
   startSelection, pageSheetResult, pageChangeNotice, gatherPagesModel, catalogChangeCount, catalogReview, gatherChangeNotice,
+  pageDropRows, pageDropDecision, leaveAllBody,
 } from '../ui/movepages.js';
 
 const page = (id, title, roles, extra = {}) => ({ id, title, medium: 'publisher', publisher_roles: roles, connector_id: 'c', ...extra });
@@ -191,6 +192,72 @@ test('the hints and the result texts come from the preview (ADR 0254 item 25)', 
   assert.equal(two.keeps, 'A, B and C keep their publisher.', owner254);
   assert.equal(pageSheetResult(zed, 'change_label', 11, null).ready, false, owner254);
   assert.equal(pageChangeNotice(zed, { place: 'On Label B, not published' }), 'Zed is now on Label B, not published. Not written yet.', owner254);
+});
+
+const ownerDrop = 'ADR 0254 items 38 and 39: desktop drops use the row rank and the core preview.';
+test('an artist drops on labels and publishers, with the label action of its menu', () => {
+  assert.deepEqual(pageDropRows(tree, byId(1), 10), [
+    { id: 11, action: 'change_label' },
+    { id: 20, action: 'change_publisher' }, { id: 21, action: 'change_publisher' },
+  ], ownerDrop);
+  assert.deepEqual(pageDropRows(tree, byId(2)), [
+    { id: 10, action: 'sign_to_label' }, { id: 11, action: 'sign_to_label' },
+    { id: 20, action: 'change_publisher' }, { id: 21, action: 'change_publisher' },
+  ], ownerDrop);
+  assert.ok(!pageDropRows(tree, byId(3), 20).some((row) => row.id === 20), ownerDrop);
+});
+
+test('a label drops only on publishers, and publishers and curators do not drag', () => {
+  const curator = page(40, 'Curator', ['curator']);
+  const noRole = page(41, 'No role', []);
+  const all = [...tree, curator, noRole];
+  assert.deepEqual(pageDropRows(all, byId(10), 20), [{ id: 21, action: 'change_publisher' }], ownerDrop);
+  for (const source of [byId(20), curator, noRole, { id: 200, medium: 'music' }]) {
+    assert.deepEqual(pageDropRows(all, source), [], ownerDrop);
+  }
+  assert.ok(!pageDropRows(all, byId(2)).some((row) => [40, 41].includes(row.id)), ownerDrop);
+});
+
+test('drop targets exclude the source, descendants at each depth, and read-only pages', () => {
+  const source = page(50, 'Artist publisher', ['artist', 'hosting']);
+  const all = [source,
+    page(51, 'Child label', ['label'], { parent_ids: [50] }),
+    page(52, 'Deeper publisher', ['hosting'], { parent_ids: [51] }),
+    page(53, 'Read only label', ['label'], { connector_id: null }),
+    page(54, 'Read only publisher', ['hosting'], { connector_id: null }),
+    page(55, 'Other artist publisher', ['artist', 'hosting']),
+    page(56, 'Other label publisher', ['label', 'hosting']),
+    page(57, 'Other publisher', ['hosting']),
+    page(58, 'Curator publisher', ['curator', 'hosting']),
+  ];
+  assert.deepEqual(pageDropRows(all, source), [
+    { id: 56, action: 'sign_to_label' }, { id: 58, action: 'change_publisher' }, { id: 57, action: 'change_publisher' },
+  ], ownerDrop);
+  const labelPublisher = all.find((feed) => feed.id === 56);
+  assert.deepEqual(pageDropRows(all, labelPublisher), [
+    { id: 58, action: 'change_publisher' }, { id: 52, action: 'change_publisher' }, { id: 57, action: 'change_publisher' },
+  ], ownerDrop);
+});
+
+test('a drop changes immediately only when the preview selects each release and changes something', () => {
+  const answer = (selection, nothing = false) => ({ start_selection: selection, result: { nothing_changes: nothing } });
+  assert.equal(pageDropDecision(byId(1), answer([102, 101])), 'change', ownerDrop);
+  assert.equal(pageDropDecision(byId(1), answer([101])), 'sheet', ownerDrop);
+  assert.equal(pageDropDecision(byId(1), answer([999, 101])), 'sheet', ownerDrop);
+  assert.equal(pageDropDecision(byId(1), answer([101, 101])), 'sheet', ownerDrop);
+  assert.equal(pageDropDecision(byId(1), answer([101, 102], true)), 'sheet', ownerDrop);
+  assert.equal(pageDropDecision(byId(1), null), 'sheet', ownerDrop);
+  const empty = page(50, 'Empty artist', ['artist']);
+  assert.equal(pageDropDecision(empty, answer([])), 'change', ownerDrop);
+  assert.equal(pageDropDecision(empty, answer([], true)), 'sheet', ownerDrop);
+});
+
+test('the top area sends leave_all with each release and no selected page', () => {
+  const source = byId(1);
+  const body = leaveAllBody(source);
+  assert.deepEqual(body, { action: 'leave_all', page: null, releases: [101, 102] }, ownerDrop);
+  assert.notEqual(body.releases, source.release_ids, ownerDrop);
+  assert.deepEqual(leaveAllBody(page(50, 'Empty label', ['label'])), { action: 'leave_all', page: null, releases: [] }, ownerDrop);
 });
 
 const credit = (id, title) => ({ id, title });

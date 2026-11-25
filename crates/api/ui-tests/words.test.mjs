@@ -73,6 +73,8 @@ function isInterfaceText(text, at) {
   // ADR 0254 items 23 to 25 give these exact texts to the sheet of a page action.
   if (['Change Publisher', 'Search for a publisher', 'Releases that change publisher', 'Select a publisher.',
     'Change publisher…', 'Choose a publisher…', 'No publisher matches.'].includes(text)) return false;
+  // ADR 0254 item 38 gives the text of the top drop area.
+  if (text === 'Drop here: no label and no publisher') return false;
   // ADR 0250 item 5 gives this exact label to the medium repair menu.
   const repairLabel = 'Artist or label page (';
   if (text.slice(Math.max(0, at - repairLabel.length), at) === repairLabel && text[end] === ')') return false;
@@ -90,7 +92,7 @@ function isInterfaceText(text, at) {
 test('the Publisher rule permits only role labels, headings and publisher pages', () => {
   const refused = (text) => [...text.matchAll(/publishers?/gi)]
     .some((match) => isInterfaceText(text, match.index));
-  for (const text of ['Publisher', 'Publishers', 'Start with your publisher page.']) {
+  for (const text of ['Publisher', 'Publishers', 'Start with your publisher page.', 'Drop here: no label and no publisher']) {
     assert.equal(refused(text), false, text);
   }
   for (const text of ['publisher feed', 'Publisher feed', 'a publisher']) {

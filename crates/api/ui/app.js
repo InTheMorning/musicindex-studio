@@ -7,7 +7,7 @@ import { UI_SCALES, SCALE_KEY, normalizeScale, measureWindowUnits } from './uisc
 import { LOCK_HINT, START_HINT, lockChoiceText } from './vaultlock.js';
 import { serverFilesRows, sizeText, SERVER_FILES_NOTE } from './assets.js';
 import { failedLine } from './failures.js';
-import { OPEN_REVIEW, OPEN_MERGE, OPEN_FEED_MOVE, PublisherPath, MoveAllSheet, PageChangeSheet, GatherPagesSheet, AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, OUTSIDE_RECHECK, restoreDeletedFile, checkDeletedAgain, AnnounceChoice, UndoButtons, useUndoKeys, DeleteUndoBar, removeFeedFromCollection } from './editor.js';
+import { OPEN_REVIEW, OPEN_MERGE, OPEN_FEED_MOVE, PublisherPath, MoveAllSheet, MoveRefusal, PageChangeSheet, GatherPagesSheet, AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, OUTSIDE_RECHECK, restoreDeletedFile, checkDeletedAgain, AnnounceChoice, UndoButtons, useUndoKeys, DeleteUndoBar, removeFeedFromCollection } from './editor.js';
 import {
   recipientKey,
   outcomeText, blockedText, operationLine, nameOf, writableIds, firstOpenId, initialStatuses, refreshedStatuses, startWrite,
@@ -56,7 +56,8 @@ import {
   placeText, draftLabel, leftPanel, releasesList, listQuery, queryText, sortLabel, sortEntries, mosaicCells, otherFeedText, mediumProblemView, mediumProblemCause, feedCover,
   startNav, pushNav, backNav, forwardNav, releasesView, canBack, canForward, setScroll,
   isFeedView, openFeedView, newFeedView, navAtWidth, toggleRow, revealRows, pageTabs, tabsFit, showsRootButtons, rootNav, segmentKey, isTabChange } from './shell.js';
-import { pageActions, pageChangeNotice, catalogChangeCount, catalogReview, gatherChangeNotice } from './movepages.js';
+import { pageActions, pageChangeNotice, catalogChangeCount, catalogReview, gatherChangeNotice,
+  pageDropRows, pageDropDecision, leaveAllBody, previewPath, startSelection, pageChangeBody } from './movepages.js';
 import {
   eventsToSign, signErrorText,
   npubOf, addressLines, linesText, invalidConfigField, blossomDefaultName, siteAddress, siteNameFromGuid, isNsec,
@@ -2193,6 +2194,9 @@ export function Icon({ name, mirrored = false }) {
 const CatalogContext = createContext(() => {});
 // The function that opens the sheet of a page action: `({ id, action, above })`.
 const PageActionContext = createContext(() => {});
+// The drag of a Catalog row (ADR 0254 item 38). Without a provider, no row
+// can move.
+const CatalogDragContext = createContext({ narrow: true, busy: false, page: null, key: null, over: null, targets: [] });
 const OutsideContext = createContext({ feeds: [], results: {}, running: new Set(), check: () => {} });
 
 // The state mark of a row of the left panel, for the feeds that `ids` covers
@@ -3656,6 +3660,34 @@ const aboveOf = (key) => {
   return path.length > 1 ? Number(path[path.length - 2]) : null;
 };
 
+// Only a Catalog drag can use these drop handlers.
+function catalogDropHandlers(drag, key, selected) {
+  return {
+    onDragOver: (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      event.dataTransfer.dropEffect = 'move';
+      drag.setOver(key);
+    },
+    onDragLeave: (event) => {
+      if (!event.currentTarget.contains(event.relatedTarget)) drag.setOver(null);
+    },
+    onDrop: (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      drag.drop(selected);
+    },
+  };
+}
+
+// The top area exists only during a desktop Catalog drag (ADR 0254 item 38).
+function CatalogDropTop() {
+  const drag = useContext(CatalogDragContext);
+  if (!drag?.page) return null;
+  return html`<div class=${`catalog-drop-top${drag.over === 'top' ? ' catalog-drop-over' : ''}`}
+    ...${catalogDropHandlers(drag, 'top', null)}>${'Drop here: no label and no publisher'}</div>`;
+}
+
 // One destination row. A row below Releases shows the state mark of the
 // feeds that it covers, between the name and the count (ADR 0165 items 1 to 4).
 // A tree row of a feed shows the open button before its title when rows are
@@ -3667,6 +3699,7 @@ function DestinationRow({ item, open }) {
   const { feeds } = useContext(OutsideContext);
   const onToggle = useContext(CatalogContext);
   const onPageAction = useContext(PageActionContext);
+  const drag = useContext(CatalogDragContext);
   const set = item.group === undefined ? [] : panelSet(feeds, item.group);
   const mark = useStateMark(set);
   const click = useOpenAndCheck(set, mark, () => open(item));
@@ -3684,9 +3717,22 @@ function DestinationRow({ item, open }) {
   </button>`;
   if (item.group === undefined) return row;
   const feed = item.key !== undefined;
+  const page = feed ? (feeds || []).find((f) => f.id === item.group) : null;
+  const draggable = !!(page && !drag.narrow && !drag.busy && pageActions(page, feeds).length);
+  const target = feed && drag.targets.find((target) => target.id === item.group);
   // The actions of ADR 0254 item 23 for the rank of the feed, then "Open".
-  const rowMenu = feed ? [...pageActions((feeds || []).find((f) => f.id === item.group) || {}, feeds), { label: 'Open' }] : [];
-  return html`<div class=${`tree-row${feed ? ' panel-row-with-menu' : ''}`} style=${`--depth:${item.depth || 0}`}>
+  const rowMenu = feed ? [...pageActions(page || {}, feeds), { label: 'Open' }] : [];
+  return html`<div class=${`tree-row${feed ? ' panel-row-with-menu' : ''}${drag.page && drag.key === item.key ? ' catalog-dragging' : ''}${target ? ' catalog-drop-target' : ''}${target && drag.over === item.key ? ' catalog-drop-over' : ''}`}
+    style=${`--depth:${item.depth || 0}`} draggable=${draggable}
+    onDragStart=${(event) => {
+      if (!draggable) { event.preventDefault(); return; }
+      event.stopPropagation();
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('application/x-studio-catalog-page', String(page.id));
+      drag.start({ page, key: item.key, above: aboveOf(item.key) });
+    }}
+    onDragEnd=${drag.end}
+    ...${target ? catalogDropHandlers(drag, item.key, target.id) : {}}>
     ${item.expandable
       ? html`<button class="tree-toggle" type="button" aria-expanded=${item.open ? 'true' : 'false'}
         aria-label=${`${item.open ? 'Close' : 'Open'} ${item.label}`} onClick=${() => onToggle(item.key)}><span aria-hidden="true">${item.open ? '▾' : '▸'}</span></button>`
@@ -3712,7 +3758,7 @@ function destinationRows(top, go) {
   // The heading of a role is a level below the heading "Catalog".
   return html`${top.filter((item) => item.group === undefined).map(row)}
     ${groups.length > 0 && html`<section class="destination-group catalog-tree" aria-labelledby="catalog-heading">
-      <h2 class="panel-heading" id="catalog-heading">Catalog</h2>${groups.map((item) => html`
+      <h2 class="panel-heading" id="catalog-heading">Catalog</h2><${CatalogDropTop} />${groups.map((item) => html`
       ${item.heading && html`<h3 class="panel-heading">${item.heading}</h3>`}${row(item)}`)}</section>`}`;
 }
 
@@ -4239,12 +4285,15 @@ function Shell({ vault, onLock, version }) {
   const catalogHistory = useRef(makeHistory());
   const catalogRecords = useRef(new Set());
   const catalogDraft = useRef(null);
-  const [, setCatalogBusy] = useState(false);
+  const [catalogBusy, setCatalogBusy] = useState(false);
+  const [catalogDrag, setCatalogDrag] = useState(null);
+  const [catalogOver, setCatalogOver] = useState(null);
   const catalogWorking = useRef(false);
   const [catalogError, setCatalogError] = useState(null);
   const [connectors, setConnectors] = useState([]);
   // At 760 px or less the window is one stack (musicindex ADR 0080 R-SHELL-2).
   const narrow = useNarrow();
+  useEffect(() => { if (narrow) { setCatalogDrag(null); setCatalogOver(null); } }, [narrow]);
   const [nav, setNavState] = useState(() => navAtWidth(readNav(), narrow));
   // The newest state. A scroll change saves here, without a new render.
   const navRef = useRef(nav);
@@ -4626,10 +4675,39 @@ function Shell({ vault, onLock, version }) {
     await gathered(answer, [id]);
   };
   // The change closes the sheet and keeps the current page open.
-  const pageChanged = async (answer) => {
-    const changed = sheetFeed;
+  const pageChanged = async (answer, changed = sheetFeed) => {
     setPageSheet(null);
     await catalogChanged(answer, pageChangeNotice(changed, answer));
+  };
+  const endCatalogDrag = () => { setCatalogDrag(null); setCatalogOver(null); };
+  const dropTargets = !narrow && catalogDrag ? pageDropRows(feeds, catalogDrag.page, catalogDrag.above) : [];
+  const dropCatalogPage = async (selected) => {
+    const dragged = catalogDrag;
+    endCatalogDrag();
+    if (narrow || !dragged || catalogWorking.current) return;
+    const target = selected === null ? null : dropTargets.find((row) => row.id === selected);
+    if (selected !== null && !target) return;
+    catalogWorking.current = true;
+    setCatalogBusy(true);
+    setCatalogError(null);
+    try {
+      if (draftFeedId !== null && !(await draft.flush())) return;
+      const { page, above } = dragged;
+      let body;
+      if (selected === null) body = leaveAllBody(page);
+      else {
+        const action = target.action;
+        const preview = await api(previewPath(page, action, { selected, above }));
+        if (pageDropDecision(page, preview) === 'sheet') {
+          setPageSheet({ id: page.id, action, above, selected });
+          return;
+        }
+        body = pageChangeBody(action, selected, startSelection(preview));
+      }
+      const answer = await api(`/feeds/${page.id}/page-change`, { method: 'POST', body });
+      await pageChanged(answer, page);
+    } catch (error) { setCatalogError(error); }
+    finally { catalogWorking.current = false; setCatalogBusy(false); }
   };
   let main;
   // A screen with no bar of its own gets one.
@@ -4687,14 +4765,18 @@ function Shell({ vault, onLock, version }) {
   const panelProps = { panel, draft, changedFeeds, go, showReleases, onAdding: setAdding, onImporting: setImporting, onAddFeedRow: openAddFeedRow,
     collections: collectionState.collections, catalogSet,
     onLock: lock };
-  return html`<${NavContext.Provider} value=${navValue}><${OutsideContext.Provider} value=${outsideValue}><${CatalogContext.Provider} value=${toggleOpenRow}><${PageActionContext.Provider} value=${setPageSheet}><div class="shell">
+  const dragValue = { narrow, busy: catalogBusy, page: narrow ? null : catalogDrag?.page, key: catalogDrag?.key,
+    over: catalogOver, targets: dropTargets, start: setCatalogDrag, end: endCatalogDrag, setOver: setCatalogOver, drop: dropCatalogPage };
+  return html`<${NavContext.Provider} value=${navValue}><${OutsideContext.Provider} value=${outsideValue}><${CatalogContext.Provider} value=${toggleOpenRow}><${PageActionContext.Provider} value=${setPageSheet}><${CatalogDragContext.Provider} value=${dragValue}><div class="shell">
     ${!narrow && html`<nav class="sidebar" aria-label="Collection">
       <${LeftPanel} ...${panelProps} />
     </nav>`}
     <main class="main" ref=${mainRef}>
       ${catalogNotice && html`<${CatalogUndoNotice} key=${`${catalogNotice.change_set_id}-${catalogNotice.change_set.catalog_steps}`} answer=${catalogNotice} onUndo=${catalogNotice.undo}
         onReview=${openChangeSet} onClose=${() => setCatalogNotice(null)} />`}
-      <${ErrorNotice} error=${catalogError} />
+      <${MoveRefusal} error=${catalogError} feeds=${feeds}
+        onAddHost=${() => { setCatalogError(null); go({ name: 'hosts', add: true }); }}
+        onOpenChanges=${(id) => { setCatalogError(null); openChangeSet(id); }} />
       ${copyNotice && html`<div class="notice" role="status"><span>${copyNotice}</span>
         <button class="button quiet icon-button" type="button" aria-label="Dismiss" onClick=${() => setCopyNotice(null)}>✕</button></div>`}
       ${differences.length > 0 && !noticeClosed && html`<div class="notice scan-notice" role="status">
@@ -4713,7 +4795,7 @@ function Shell({ vault, onLock, version }) {
       onClose=${() => setAddingFeed(null)} />`}
     ${pageSheet && sheetFeed && html`<${PageChangeSheet} key=${`${pageSheet.id}-${pageSheet.action}`}
       page=${{ ...sheetFeed, parent_ids: sheetFeed.parent_ids || [], release_ids: sheetFeed.release_ids || [] }}
-      action=${pageSheet.action} above=${pageSheet.above} feeds=${feeds}
+      action=${pageSheet.action} above=${pageSheet.above} startSelected=${pageSheet.selected} feeds=${feeds}
       prepare=${draftFeedId !== null ? () => draft.flush() : undefined}
       onChanged=${pageChanged}
       onAddHost=${() => { setPageSheet(null); go({ name: 'hosts', add: true }); }}
@@ -4730,7 +4812,7 @@ function Shell({ vault, onLock, version }) {
       onAddHost=${() => { setGather(null); go({ name: 'hosts', add: true }); }}
       onOpenChanges=${(id) => { setGather(null); openChangeSet(id); }}
       onClose=${() => setGather(null)} />`}
-  </div><//><//><//><//>`;
+  </div><//><//><//><//><//>`;
 }
 
 // ---- Sign-in and sign-up on a server (ADR 0204, ADR 0056) ----

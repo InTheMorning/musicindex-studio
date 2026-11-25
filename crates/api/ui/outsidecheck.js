@@ -1,4 +1,4 @@
-import { unlinkedReleases, otherFeeds } from './shell.js';
+import { unlinkedReleases, unlinkedPlaylists, otherFeeds } from './shell.js';
 import { INDEX_READ_AGAIN_MS, INDEX_READ_AGAIN_MAX } from './releasemove.js';
 import { musicindexFeedUrl } from './people.js';
 
@@ -239,6 +239,7 @@ export async function eachLimited(items, limit, work) {
 export function panelSet(feeds, group) {
   const list = Array.isArray(feeds) ? feeds : [];
   if (group === 'none') return unlinkedReleases(list);
+  if (group === 'no-curator') return unlinkedPlaylists(list);
   if (group === 'other') return otherFeeds(list);
   const byId = new Map(list.map((feed) => [feed.id, feed]));
   const owner = byId.get(group);

@@ -3704,7 +3704,10 @@ function DestinationRow({ item, open }) {
   const set = item.group === undefined ? [] : panelSet(feeds, item.group);
   const mark = useStateMark(set);
   const click = useOpenAndCheck(set, mark, () => open(item));
-  const releases = item.group === undefined ? '' : `${item.label}, ${item.countLabel || `${item.count} ${item.count === 1 ? 'release' : 'releases'}`}`;
+  // A playlist row below a curator has no count (ADR 0263 item 10).
+  const releases = item.group === undefined ? ''
+    : item.typeLabel ? `${item.label}, ${item.typeLabel}`
+      : `${item.label}, ${item.countLabel || `${item.count} ${item.count === 1 ? 'release' : 'releases'}`}`;
   const row = html`<button class="row" type="button" aria-current=${currentAttr(item)}
     aria-label=${item.group === undefined ? undefined : (mark ? `${releases}, ${mark.text}` : releases)}
     onClick=${click}>
@@ -3712,9 +3715,9 @@ function DestinationRow({ item, open }) {
     ${item.group !== undefined && (item.art
       ? html`<${FeedArt} art=${item.art} glow=${item.glow} dot=${item.dot} />`
       : html`<span class="art-space" aria-hidden="true"></span>`)}
-    <span class="row-label">${item.label}${item.also && html`<span class="sub">${item.also}</span>`}</span>
+    <span class="row-label">${item.label}${(item.also || item.typeLabel) && html`<span class="sub">${item.also || item.typeLabel}</span>`}</span>
     <${StateMark} mark=${mark} />
-    ${item.group !== undefined && html`<span class="count" aria-hidden="true">${item.countText ?? item.count}</span>`}
+    ${item.group !== undefined && item.count !== null && html`<span class="count" aria-hidden="true">${item.countText ?? item.count}</span>`}
   </button>`;
   if (item.group === undefined) return row;
   const feed = item.key !== undefined;
@@ -4037,7 +4040,7 @@ function GroupPage({ feeds, connectors, marked, group, groupSort, groupReversed,
       <div class="releases-head">
         <h1>${title}</h1>
         ${(hasUnfilteredRows || (head && head.id !== null)) && html`<div class="releases-tools">
-          ${hasUnfilteredRows && html`<${SortMenu} sorts=${releases.sorts} sort=${releases.sort} reversed=${releases.reversed} onSort=${pickSort} />`}
+          ${hasUnfilteredRows && releases.sorts.length > 0 && html`<${SortMenu} sorts=${releases.sorts} sort=${releases.sort} reversed=${releases.reversed} onSort=${pickSort} />`}
           ${!hideAdd && html`<${AddMenu} release=${more} head=${headFeed} from=${from} onOpenForm=${setAdding} />`}
           ${head && head.id !== null && html`<button class="button" type="button" onClick=${() => onOpen(head.id)}>${head.typeLabel} Page</button>`}
         </div>`}
@@ -4056,7 +4059,7 @@ function GroupPage({ feeds, connectors, marked, group, groupSort, groupReversed,
                 <span class="releases-text">
                   <span class="title">${row.title}${changedFeeds.has(row.id) && html`<span class="change-mark"><span class="visually-hidden"> Changes in the library folder</span></span>`}</span>
                   ${row.artistLine && html`<span class="sub">${row.artistLine}</span>`}
-                  <span class="sub">${[row.typeLabel, row.countText, row.hidden ? 'Hidden from apps' : null, releases.view === 'rows' ? row.host : null].filter(Boolean).join(' · ')}</span>
+                  <span class="sub">${[row.typeLabel, row.countText, row.date, row.hidden ? 'Hidden from apps' : null, releases.view === 'rows' ? row.host : null].filter(Boolean).join(' · ')}</span>
                   ${row.unlistedLine && html`<span class="sub">${row.unlistedLine}</span>`}
                   ${row.note && html`<span class="sub">${row.note}</span>`}
                   ${outsideMark(outside[row.id]) && html`<span class=${`sub outside-mark ${outsideMark(outside[row.id]).tone}`}><${Icon} name="alert" />${outsideMark(outside[row.id]).text}</span>`}

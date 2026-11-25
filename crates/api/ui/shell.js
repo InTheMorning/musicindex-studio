@@ -708,8 +708,19 @@ export function groupDestinations(feeds, view, open = [], { all = false } = {}) 
   const add = (feed, path, heading) => {
     const key = rowKey(path);
     const kids = ranked((feed.child_ids || []).map((id) => byId.get(id)).filter((kid) => kid && isPublisher(kid) && !path.includes(kid.id)));
-    const isOpen = kids.length > 0 && (all || openKeys.has(key));
-    const { releases, pages } = levelCounts(feed);
+    const counted = levelCounts(feed);
+    // The playlists of a curator page, in the sequence of its feed (ADR 0254
+    // item 4a, ADR 0263 item 10).
+    const playlists = (feed.release_ids || []).map((id) => byId.get(id)).filter((item) => item && isPlaylist(item));
+    const hasPlaylists = (feed.publisher_roles || []).includes('curator') && playlists.length > 0;
+    // The count of a row below the heading "Curators" is the number of its
+    // playlists (ADR 0263 item 10). The first level role of the feed gives
+    // its heading (ADR 0253 item 15).
+    const curatorCount = hasPlaylists && headingOf(feed) === 'Curators';
+    const isOpen = (kids.length > 0 || hasPlaylists) && (all || openKeys.has(key));
+    const releases = curatorCount ? playlists.length : counted.releases;
+    const pages = counted.pages;
+    const releaseNoun = curatorCount ? ['playlist', 'playlists'] : ['release', 'releases'];
     const parent = path.length > 1 ? path[path.length - 2] : null;
     const others = ranked((feed.parent_ids || []).filter((id) => id !== parent).map((id) => byId.get(id)).filter(Boolean));
     const labels = others.filter((other) => (other.publisher_roles || []).includes('label'));
@@ -728,10 +739,10 @@ export function groupDestinations(feeds, view, open = [], { all = false } = {}) 
       count: releases ?? pages,
       countText: [releases, pages].filter((n) => n !== null).join(' · '),
       countLabel: [
-        releases === null ? null : `${releases} ${releases === 1 ? 'release' : 'releases'}`,
+        releases === null ? null : `${releases} ${releases === 1 ? releaseNoun[0] : releaseNoun[1]}`,
         pages === null ? null : `${pages} ${pages === 1 ? 'page' : 'pages'} below`,
       ].filter(Boolean).join(', '),
-      expandable: kids.length > 0,
+      expandable: kids.length > 0 || hasPlaylists,
       open: isOpen,
       also: parent === null || others.length === 0 ? null
         : `${labels.length > 0 ? 'Also on' : 'Also published by'} ${andNames(names)}`,
@@ -740,7 +751,28 @@ export function groupDestinations(feeds, view, open = [], { all = false } = {}) 
       view: openFeedView(feed.id, false, fromPath(path.slice(0, -1))),
       ...(heading ? { heading } : {}),
     });
-    if (isOpen) kids.forEach((kid) => add(kid, [...path, kid.id]));
+    if (isOpen) {
+      // One row for each playlist of a curator page, then the pages below it
+      // (ADR 0263 item 10). A playlist row has no key, no count and no menu.
+      playlists.forEach((playlist) => {
+        const playlistKind = feedKind(playlist);
+        rows.push({
+          id: `tree-${key}-playlist-${playlist.id}`,
+          group: playlist.id,
+          depth: path.length,
+          label: displayTitle(playlist),
+          typeLabel: playlistKind.label,
+          dot: playlistKind.dot,
+          glow: kindGlow(playlistKind),
+          art: [feedCover(playlist)].filter(Boolean),
+          count: null,
+          current: false,
+          opens: true,
+          view: openFeedView(playlist.id, false, fromPath(path)),
+        });
+      });
+      kids.forEach((kid) => add(kid, [...path, kid.id]));
+    }
   };
   const top = ranked(list.filter((feed) => isPublisher(feed) && (feed.parent_ids || []).length === 0));
   let last = null;
@@ -750,10 +782,20 @@ export function groupDestinations(feeds, view, open = [], { all = false } = {}) 
     last = heading;
   }
   const unlinked = unlinkedReleases(list).length;
+  // "No artist yet", "No curator yet" and "Other feeds" follow the tree (ADR
+  // 0263 item 9).
   if (unlinked > 0) {
     rows.push({
       id: 'group-none', group: 'none', label: 'No artist yet', dot: null,
       count: unlinked, current: shown('none'), opens: !shown('none'),
+    });
+  }
+  // The playlists with no curator page (ADR 0263 item 11).
+  const noCurator = unlinkedPlaylists(list).length;
+  if (noCurator > 0) {
+    rows.push({
+      id: 'group-no-curator', group: 'no-curator', label: 'No curator yet', dot: null,
+      count: noCurator, current: shown('no-curator'), opens: !shown('no-curator'),
     });
   }
   // The feeds that the editor does not open (ADR 0090 item 2).
@@ -790,11 +832,11 @@ function relatedLevels(feeds, owner) {
   return found;
 }
 
-// The releases with no link to an artist page of the collection (ADR 0254
-// item 2).
+// The albums with no link to an artist page of the collection (ADR 0254
+// item 2, ADR 0263 item 11). A playlist is never in this list.
 export function unlinkedReleases(feeds) {
   const byId = new Map((feeds || []).map((feed) => [feed.id, feed]));
-  return (feeds || []).filter((feed) => isRelease(feed) && !(feed.publisher_ids || []).some((id) => {
+  return (feeds || []).filter((feed) => isAlbum(feed) && !(feed.publisher_ids || []).some((id) => {
     const page = byId.get(id);
     return isPublisher(page || {}) && (page.publisher_roles || []).includes('artist');
   }));
@@ -1089,7 +1131,7 @@ export function overviewModel({ feeds, filter = 'all', query = '', marked = null
     [list.filter(isPlaylist).length, 'playlist', 'playlists'],
   ].filter(([n]) => n > 0).map(([n, one, many]) => plural(n, one, many)).join(' · ');
   const notices = [];
-  const noArtistCount = unlinkedReleases(list).filter(isAlbum).length;
+  const noArtistCount = unlinkedReleases(list).length;
   if (noArtistCount > 0) {
     notices.push({
       id: 'no-artist',
@@ -1138,12 +1180,14 @@ export function overviewModel({ feeds, filter = 'all', query = '', marked = null
 // feed. Then `head` gives the feed. The group 'none' gives the releases with no
 // link (ADR 0085 items 3 and 4). The group 'no-curator' gives the playlists
 // with no curator page (ADR 0263 item 11). The group 'other' gives the feeds
-// that Studio does not edit. Overview has its own model, `overviewModel`.
-// Packets 256c and 256d replace this list with the list pages and the release
-// list of a page.
+// that Studio does not edit. These three groups are list pages (ADR 0263 item
+// 9a): the sequence of Overview, the search, no sort and no letters, and a row
+// with the release date and the artist or curator. Overview has its own
+// model, `overviewModel`. Packet 256d replaces the sort of the group of a page.
 export function releasesList({ feeds, connectors, sort, view, reversed, marked, group, query = '' }) {
   const list = Array.isArray(feeds) ? feeds : [];
-  const owner = group === undefined || group === 'none' || group === 'no-curator'
+  const listPage = group === 'none' || group === 'no-curator' || group === 'other';
+  const owner = group === undefined || listPage
     ? null
     : list.find((feed) => feed.id === group && isPublisher(feed)) || null;
   let chosen = [];
@@ -1167,15 +1211,18 @@ export function releasesList({ feeds, connectors, sort, view, reversed, marked, 
     chosen = otherFeeds(list);
     head = { id: null, title: 'Other feeds', typeLabel: null, dot: null, note: 'Studio edits albums, playlists, and artist and label feeds. It shows only the facts of these feeds.' };
   }
-  const sorts = owner ? GROUP_SORTS : ALL_SORTS;
-  const sortKey = sorts.includes(sort) ? sort : sorts[0];
-  const viewKey = view === 'tiles' ? 'tiles' : 'rows';
-  const sorted = sortKey === 'order'
-    ? chosen.slice()
-    : chosen.slice().sort(sortKey === 'az' ? compareAz : compareNewest);
+  // A list page has one sequence and no sort (ADR 0263 items 5 and 9a).
+  const sorts = listPage ? [] : owner ? GROUP_SORTS : ALL_SORTS;
+  const sortKey = listPage ? null : sorts.includes(sort) ? sort : sorts[0];
+  const viewKey = view === 'tiles' && !listPage ? 'tiles' : 'rows';
+  const sorted = listPage
+    ? chosen.slice().sort(compareTiles)
+    : sortKey === 'order'
+      ? chosen.slice()
+      : chosen.slice().sort(sortKey === 'az' ? compareAz : compareNewest);
   // Studio holds each row of this list, so the whole list reverses
   // (musicindex ADR 0043 R-LIST-7 item 9). The letters follow the rows.
-  const isReversed = reversed === true;
+  const isReversed = reversed === true && !listPage;
   if (isReversed) sorted.reverse();
   const search = typeof query === 'string' ? query.trim().toLowerCase() : '';
   const matches = (feed) => {
@@ -1212,8 +1259,12 @@ export function releasesList({ feeds, connectors, sort, view, reversed, marked, 
     hidden: feed.hidden === true,
     marked: feed.id === marked,
     note: noteOf(feed),
-    artistLine: artistLevel && typeof feed.author === 'string' && feed.author.trim().toLowerCase() !== displayTitle(owner).trim().toLowerCase()
+    artistLine: listPage ? (typeof feed.author === 'string' && feed.author.trim()
+      ? `${isPlaylist(feed) ? 'Curator' : 'Artist'}: ${feed.author.trim()}` : null) : artistLevel && typeof feed.author === 'string' && feed.author.trim().toLowerCase() !== displayTitle(owner).trim().toLowerCase()
       ? `Artist: ${feed.author}` : null,
+    // A list page row shows the release date and the artist or curator (ADR
+    // 0263 item 9a with item 7).
+    date: listPage ? dateText(feed.release_date) : null,
     unlistedLine: owner && (feed.unlisted_by || []).includes(owner.id)
       ? `⚠ ${displayTitle(owner)} does not list it yet` : null,
   }));
@@ -1237,6 +1288,7 @@ export function releasesList({ feeds, connectors, sort, view, reversed, marked, 
     nested: levelTile !== null && viewKey === 'rows',
     rows,
     letters: search ? null : sortKey === 'az' ? letterGroups(rows) : null,
+    listPage,
   };
 }
 

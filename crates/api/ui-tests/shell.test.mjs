@@ -239,15 +239,16 @@ test('a feed that the editor does not open gives no page, and a publisher feed h
   assert.equal(read.feed.current, true);
 });
 
-test('the Releases list gives the newest feed first, with the greater ID first on a tie', () => {
-  const tie = { ...album, id: 9, added_at: 200 };
-  const list = releasesList({ feeds: [album, publisher, readOnly, tie], connectors: [{ id: 'c1', name: 'Local' }], sort: 'newest', view: 'rows', group: 'none' });
-  assert.equal(list.letters, null);
-  // ADR 0085 item 6: a feed with roles opens from its destination, not from
-  // a row of Releases.
-  assert.deepEqual(list.rows.map((r) => r.id), [9, 1, 3]);
-  assert.equal(list.rows[1].host, 'Local');
-  assert.equal(list.rows[2].host, 'Read-only');
+test('a list page gives the sequence of Overview: newest date, then no date, then A to Z (ADR 0263 items 5 and 9a)', () => {
+  const message = 'ADR 0263 items 5 and 9a: a list page gives the newest release date first, then the rows with no date, then A to Z. Use releasesList of crates/api/ui/shell.js.';
+  const old = { ...album, id: 4, title: 'Old', release_date: '2020-01-01T00:00:00Z' };
+  const fresh = { ...album, id: 5, title: 'Fresh', release_date: '2026-05-01T00:00:00Z' };
+  const bare = { ...album, id: 6, title: 'Bare' };
+  const list = releasesList({ feeds: [bare, old, fresh, album, publisher, readOnly], connectors: [{ id: 'c1', name: 'Local' }], sort: 'az', reversed: true, view: 'tiles', group: 'none' });
+  assert.deepEqual(list.rows.map((r) => r.id), [5, 4, 6, 3, 1], message);
+  assert.equal(list.rows[4].host, 'Local');
+  assert.equal(list.rows[3].host, 'Read-only');
+  assert.deepEqual([list.sorts, list.sort, list.letters, list.reversed, list.view], [[], null, null, false, 'rows'], 'ADR 0263 item 9a: a list page has no sort, no letters and no view buttons. Use releasesList of crates/api/ui/shell.js.');
 });
 
 test('the Releases list gives each release its track count text', () => {
@@ -274,15 +275,16 @@ test('the Releases list marks a feed that apps do not list (ADR 0063)', () => {
   assert.equal(byId[2], false);
 });
 
-test('the A to Z sort gives the letter groups, with "#" after Z', () => {
-  const feeds = [
+test('the A to Z sort of a page gives the letter groups, with "#" after Z', () => {
+  const owner = { id: 9, title: 'Owner', medium: 'publisher', publisher_roles: ['artist'], release_ids: [1, 2, 3, 4, 5] };
+  const feeds = [owner,
     { id: 1, title: 'beta', medium: 'music' },
     { id: 2, title: '2 More', medium: 'music' },
     { id: 3, title: 'Alpha', medium: 'music' },
     { id: 4, title: 'Blue', medium: 'music' },
     { id: 5, title: 'Zed', medium: 'music' },
   ];
-  const list = releasesList({ feeds, connectors: [], sort: 'az', view: 'tiles', group: 'none' });
+  const list = releasesList({ feeds, connectors: [], sort: 'az', view: 'tiles', group: 9 });
   assert.equal(list.sort, 'az');
   assert.equal(list.view, 'tiles');
   assert.deepEqual(list.rows.map((r) => r.id), [3, 1, 4, 5, 2]);
@@ -306,7 +308,8 @@ test('the reverse command changes the sequence of the rows (musicindex ADR 0043 
     { id: 2, title: 'Alpha', medium: 'music', added_at: 3 },
     { id: 3, title: 'Charlie', medium: 'music', added_at: 2 },
   ];
-  const ids = (sort, reversed) => releasesList({ feeds, connectors: [], sort, view: 'rows', reversed, group: 'none' }).rows.map((r) => r.id);
+  const owner = { id: 9, title: 'Owner', medium: 'publisher', publisher_roles: ['artist'], release_ids: [1, 2, 3] };
+  const ids = (sort, reversed) => releasesList({ feeds: [owner, ...feeds], connectors: [], sort, view: 'rows', reversed, group: 9 }).rows.map((r) => r.id);
   assert.deepEqual(ids('newest', false), [2, 3, 1]);
   assert.deepEqual(ids('newest', true), [1, 3, 2]);
   assert.deepEqual(ids('az', false), [2, 1, 3]);
@@ -323,7 +326,8 @@ test('a reversed feed group reverses its feed order', () => {
 
 test('a reversed A to Z list shows its letters from Z to A (musicindex ADR 0043 R-LIST-7 item 7)', () => {
   const feeds = [{ id: 1, title: 'Alpha', medium: 'music' }, { id: 2, title: 'Zulu', medium: 'music' }];
-  const list = releasesList({ feeds, connectors: [], sort: 'az', view: 'rows', reversed: true, group: 'none' });
+  const owner = { id: 9, title: 'Owner', medium: 'publisher', publisher_roles: ['artist'], release_ids: [1, 2] };
+  const list = releasesList({ feeds: [owner, ...feeds], connectors: [], sort: 'az', view: 'rows', reversed: true, group: 9 });
   assert.deepEqual(list.letters.map((g) => g.letter), ['Z', 'A']);
   assert.equal(list.reversed, true);
 });
@@ -670,12 +674,13 @@ const catalog = [artist, label, first, shared, mixtape];
 
 test('the panel gives Overview, the tree, then "No artist yet" (ADR 0254 item 2)', () => {
   const message = 'ADR 0254 item 2: the panel gives Overview, the top rows of the tree A to Z, then "No artist yet". Use groupDestinations of crates/api/ui/shell.js.';
-  const panel = leftPanel({ view: { name: 'releases', group: 'none' }, feeds: catalog, model: null, vaultOpen: false });
+  const loose = { id: 24, title: 'Loose', medium: 'music', publisher_ids: [], added_at: 5, draft_state: 'none' };
+  const panel = leftPanel({ view: { name: 'releases', group: 'none' }, feeds: [...catalog, loose], model: null, vaultOpen: false });
   assert.deepEqual(panel.top.map((e) => [e.id, e.label, e.count]),
-    [['overview', 'Overview', undefined], ['tree-30', 'Acme', 1], ['tree-20', 'Zed', 2], ['group-none', 'No artist yet', 1]], message);
-  assert.deepEqual(panel.top.map((e) => e.current), [false, false, false, true], message);
+    [['overview', 'Overview', undefined], ['tree-30', 'Acme', 1], ['tree-20', 'Zed', 2], ['group-none', 'No artist yet', 1], ['group-no-curator', 'No curator yet', 1]], message);
+  assert.deepEqual(panel.top.map((e) => e.current), [false, false, false, true, false], message);
   assert.equal(panel.top[0].opens, true, 'ADR 0085 item 1: on a destination below Overview, the row Overview opens Overview.');
-  assert.deepEqual(panel.top.map((e) => e.dot), [undefined, 'label hollow', 'artist hollow', null], message);
+  assert.deepEqual(panel.top.map((e) => e.dot), [undefined, 'label hollow', 'artist hollow', null, null], message);
   const linked = leftPanel({ view: { name: 'overview' }, feeds: [artist, first], model: null, vaultOpen: false });
   assert.deepEqual(linked.top.map((e) => e.id), ['overview', 'tree-20'], 'ADR 0254 item 2: "No artist yet" shows only when a release has no artist page.');
 });
@@ -694,8 +699,8 @@ test('the page of a feed with roles gives its releases in feed order, with a not
 
 test('No artist yet gives the releases with no artist page', () => {
   const none = releasesList({ feeds: catalog, connectors: [], sort: 'order', view: 'rows', group: 'none' });
-  assert.deepEqual(none.rows.map((r) => r.id), [23], 'ADR 0254 item 2: "No artist yet" gives each release with no artist page.');
-  assert.equal(none.sort, 'newest', 'ADR 0254 item 2: "No artist yet" has the sorts of Releases.');
+  assert.deepEqual(none.rows.map((r) => r.id), [], 'ADR 0263 item 11: "No artist yet" holds only albums with no artist page. A playlist is in "No curator yet". Use unlinkedReleases of crates/api/ui/shell.js.');
+  assert.equal(none.sort, null, 'ADR 0263 item 9a: "No artist yet" has no sort.');
   assert.equal(none.head.title, 'No artist yet');
   assert.equal(none.head.note, 'These releases have no artist page.');
 });
@@ -1225,4 +1230,85 @@ test('ADR 0263 item 8: an old Releases view and an old address open Overview', (
   assert.equal(nav.entries[1], group);
   assert.equal(addressSearch('?sort=az&reversed=1&view=tiles&x=2'), '?x=2');
   assert.equal(addressSearch('?sort=az'), '');
+});
+
+// ---- The Catalog rows and the list pages (ADR 0263 items 9 to 11, task 256c) ----
+
+const curator = { id: 60, title: 'Mix Curator', medium: 'publisher', publisher_roles: ['curator'], release_ids: [72, 71, 73], added_at: 1 };
+const curator2 = { id: 61, title: 'Other Curator', medium: 'publisher', publisher_roles: ['curator'], release_ids: [71], added_at: 2 };
+const listA = { id: 71, title: 'List A', medium: 'musicL', publisher_ids: [60, 61], added_at: 3, draft_state: 'none', author: 'DJ A' };
+const listB = { id: 72, title: 'List B', medium: 'musicL', publisher_ids: [60], added_at: 4, draft_state: 'none' };
+const album3 = { id: 73, title: 'Curated Album', medium: 'music', publisher_ids: [60], added_at: 5, draft_state: 'none' };
+const listC = { id: 74, title: 'List C', medium: 'musicL', publisher_ids: [], added_at: 6, draft_state: 'none' };
+const onlyArtist = { id: 62, title: 'Some Artist', medium: 'publisher', publisher_roles: ['artist'], release_ids: [75], added_at: 7 };
+const listD = { id: 75, title: 'List D', medium: 'musicL', publisher_ids: [62], added_at: 8, draft_state: 'none' };
+const playlistFeeds = [curator, curator2, listA, listB, album3, listC, onlyArtist, listD];
+
+test('a curator row with a playlist has the open button and shows its playlists in the sequence of its feed (ADR 0263 item 10)', () => {
+  const message = 'ADR 0263 item 10: below the open curator row, one row for each playlist in the sequence of release_ids. An album is not a playlist row. Use groupDestinations of crates/api/ui/shell.js.';
+  const closed = groupDestinations(playlistFeeds, { name: 'overview' }, []);
+  const row = closed.find((r) => r.key === '60');
+  assert.equal(row.expandable, true, message);
+  assert.equal(row.open, false, message);
+  assert.equal(closed.some((r) => r.group === 72), false, 'ADR 0254 item 5: a closed row hides its rows.');
+  const rows = groupDestinations(playlistFeeds, { name: 'overview' }, ['60']);
+  const below = rows.filter((r) => r.typeLabel === 'Playlist');
+  assert.deepEqual(below.map((r) => r.group), [72, 71], message);
+  assert.deepEqual(below.map((r) => r.depth), [1, 1], message);
+  assert.deepEqual(below.map((r) => r.count), [null, null], 'ADR 0263 item 10: a playlist row has no count.');
+  assert.equal(below.every((r) => r.key === undefined && r.dot === 'playlist' && r.opens === true), true, 'ADR 0263 item 10: a playlist row has the dot, no key (so no handle and no menu) and opens.');
+  assert.deepEqual(below[0].view, { name: 'feed', id: 72, from: { group: 60, trail: [] } }, 'ADR 0263 item 10: a selection opens the playlist.');
+  assert.deepEqual([row.count, rows.find((r) => r.key === '60').count], [2, 2], 'ADR 0263 item 10: the count of a curator row is the number of its playlists.');
+  assert.equal(rows.find((r) => r.key === '60').countLabel, '2 playlists', message);
+  // A playlist with two curator pages shows below each one.
+  const both = groupDestinations(playlistFeeds, { name: 'overview' }, ['60', '61']);
+  assert.deepEqual(both.filter((r) => r.group === 71).map((r) => r.id), ['tree-60-playlist-71', 'tree-61-playlist-71'], message);
+  // The same rows show when `all` is true.
+  assert.equal(groupDestinations(playlistFeeds, { name: 'overview' }, [], { all: true }).filter((r) => r.group === 71).length, 2, message);
+});
+
+test('the panel gives "No curator yet" only when a playlist has no curator page, and "No artist yet" holds albums only (ADR 0263 items 9 and 11)', () => {
+  const message = 'ADR 0263 items 9 and 11: the panel ends with "No artist yet" (albums only), "No curator yet" (playlists with no curator page) and "Other feeds". Use groupDestinations of crates/api/ui/shell.js.';
+  const other = { id: 80, title: 'Podcast', medium: 'podcast' };
+  const loose = { id: 81, title: 'Loose', medium: 'music', publisher_ids: [] };
+  const rows = groupDestinations([...playlistFeeds, loose, other], { name: 'overview' }, []);
+  assert.deepEqual(rows.slice(-3).map((r) => [r.id, r.label, r.count]),
+    [['group-none', 'No artist yet', 2], ['group-no-curator', 'No curator yet', 2], ['group-other', 'Other feeds', 1]], message);
+  // List C has no link, and List D links only to an artist page: both are in the group.
+  assert.deepEqual(unlinkedPlaylists(playlistFeeds).map((f) => f.id), [74, 75], message);
+  const linked = groupDestinations([curator, listB], { name: 'overview' }, []);
+  assert.equal(linked.some((r) => r.id === 'group-no-curator'), false, 'ADR 0263 item 11: "No curator yet" shows only when a playlist has no curator page.');
+  assert.equal(groupDestinations([listC], { name: 'releases', group: 'no-curator' }, []).find((r) => r.group === 'no-curator').current, true, message);
+});
+
+test('the three list pages give the rows of item 7, the sequence of item 5 and no sort (ADR 0263 item 9a)', () => {
+  const message = 'ADR 0263 item 9a: "No artist yet", "No curator yet" and "Other feeds" are list pages with the sequence of Overview, no sort and no letters. Use releasesList of crates/api/ui/shell.js.';
+  const old = { ...listC, id: 90, title: 'Old', release_date: '2020-01-01T00:00:00Z', author: 'Host', track_count: 3 };
+  const fresh = { ...listC, id: 91, title: 'Fresh', release_date: '2026-05-01T09:00:00Z' };
+  const bare = { ...listC, id: 92, title: 'Abc' };
+  const list = releasesList({ feeds: [bare, old, fresh, curator], connectors: [], sort: 'newest', view: 'tiles', reversed: true, group: 'no-curator' });
+  assert.deepEqual(list.rows.map((r) => r.id), [91, 90, 92], message);
+  assert.deepEqual([list.sorts, list.sort, list.letters, list.reversed, list.view], [[], null, null, false, 'rows'], message);
+  assert.equal(list.head.title, 'No curator yet', message);
+  assert.deepEqual([list.rows[1].date, list.rows[1].typeLabel, list.rows[1].countText, list.rows[1].artistLine, list.rows[1].draftLabel],
+    ['2020-01-01', 'Playlist', '3 tracks', 'Curator: Host', 'No changes'], 'ADR 0263 item 7: a row has the type label, the track count, the date, the curator and the draft state.');
+  assert.equal(list.rows[2].date, null, message);
+  const album = { id: 93, title: 'Solo', medium: 'music', publisher_ids: [], author: 'Ann', release_date: '2024-02-03T00:00:00Z' };
+  assert.equal(releasesList({ feeds: [album], connectors: [], group: 'none' }).rows[0].artistLine, 'Artist: Ann', 'ADR 0263 item 7: an album row has the artist.');
+  const podcast = { id: 94, title: 'Show', medium: 'podcast' };
+  const others = releasesList({ feeds: [podcast, curator], connectors: [], sort: 'az', group: 'other' });
+  assert.deepEqual([others.rows.map((r) => r.id), others.sorts, others.letters], [[94], [], null], message);
+  // The group of a page keeps its sort until packet 256d.
+  assert.deepEqual(releasesList({ feeds: [curator, listA, listB], connectors: [], group: 60 }).sorts, ['order', 'newest', 'az']);
+});
+
+test('the search of a list page finds the title or the name of a linked page (ADR 0263 items 4 and 9a)', () => {
+  const message = 'ADR 0263 item 4: the search ignores capital letters and finds the title or the name of a linked page. Use releasesList of crates/api/ui/shell.js.';
+  const lone = { id: 95, title: 'Lone Album', medium: 'music', publisher_ids: [63] };
+  const lab = { id: 63, title: 'Zeta Label', medium: 'publisher', publisher_roles: ['label'], release_ids: [95] };
+  const other = { id: 96, title: 'Different', medium: 'music', publisher_ids: [] };
+  const ids = (query) => releasesList({ feeds: [lab, lone, other], connectors: [], group: 'none', query }).rows.map((r) => r.id);
+  assert.deepEqual(ids('LONE'), [95], message);
+  assert.deepEqual(ids('zeta'), [95], message);
+  assert.deepEqual(ids('nothing'), [], message);
 });

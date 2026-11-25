@@ -14,6 +14,7 @@
 - Source: [observations of the user journeys](../research/2026-11-18-user-journeys/observations.md) O10, O12, O13, O14, O15 and O16.
 - Changed by: [ADR 0226](0226-the-typed-start-folder-the-program-name-the-root-order-and-person-tabs.md) items 1 to 4, 7 and 8, on 2026-11-19. Item 7: People, File hosts and Settings are at the bottom in both layouts. Item 10: the folder dialog starts at the typed folder.
 - Changed by: [ADR 0228](0228-undo-in-the-bar-a-notice-that-stays-and-the-rc28-check-findings.md) items 11 and 12, on 2026-11-20. Item 8: the button is "‹ Overview", at the left of the select menu of the tabs.
+- Changed by: [ADR 0263](0263-overview-is-the-start-page-and-each-page-keeps-the-sequence-of-its-feed.md) items 5, 6 and 8, on 2026-11-25. The search is on Overview, with the text of item 4. The narrow stack starts on Overview.
 
 ## Context
 

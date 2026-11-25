@@ -5,6 +5,7 @@
 - Owner: operator
 - Accepted: 2026-11-23 by the operator, from drawings in the questionnaire. The page of the feed has the select menu "Type of this feed" for a bad tag and for a missing tag. The list of found feeds names the cause.
 - Technical choices: the main session selected the conditions of items 1 to 3 and the values of item 5. It also selected the position of the new tag in item 7 and the texts.
+- Changed by: [ADR 0263](0263-overview-is-the-start-page-and-each-page-keeps-the-sequence-of-its-feed.md) item 8, on 2026-11-25. A feed with a corrected type shows in Overview (item 2).
 - Changes: [ADR 0090](0090-studio-names-the-feeds-that-it-does-not-edit.md) item 1. A feed with a bad or missing medium tag gets the text and the menu of this record, not only the facts.
 - Changes: [ADR 0019](0019-select-a-feed-from-the-host.md) item 5. A candidate with a bad or missing medium tag names the cause.
 - Uses: [ADR 0174](0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md) item 6 for a repair through the draft, [ADR 0012](0012-lossless-tree-with-a-typed-model.md) for the unknown elements, [ADR 0008](0008-feed-types-and-feed-identity.md) for the feed types, [ADR 0065](0065-the-core-applies-each-feed-rule.md) for the feed rules in the core.

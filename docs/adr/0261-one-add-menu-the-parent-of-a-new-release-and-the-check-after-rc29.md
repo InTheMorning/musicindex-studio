@@ -5,6 +5,7 @@
 - Owner: operator
 - Accepted: 2026-11-25. The global decision on ADR overuse (musicindex-research `df7b823`) sets one current ADR for an area after three changes. This ADR makes no new decision. It restates each live rule of the ADRs that it supersedes, with each subsequent change.
 - Supersedes: [ADR 0230](../archive/adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md), One Add Menu, The Parent Of A New Release, And The Check After rc.29.
+- Changed by: [ADR 0263](0263-overview-is-the-start-page-and-each-page-keeps-the-sequence-of-its-feed.md) item 1, on 2026-11-25. The button **＋ Add** is in the head of Overview (item 3).
 - Uses: [ADR 0164](0164-the-releases-of-a-publisher-feed-have-an-add-row.md), the add row of a publisher page. [ADR 0211](0211-studio-follows-a-move-that-a-different-studio-made.md) item 16, the notice **Use This File Host**. [ADR 0036](0036-library-records-host-inventory-and-host-operations.md), the remote records.
 
 ## Context

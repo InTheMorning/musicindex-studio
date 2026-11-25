@@ -7,6 +7,7 @@
 - Uses: musicindex ADR 0054 R-LIST-13 and R-LIST-14, musicindex ADR 0043 R-LIST-6.
 - Changes: [ADR 0153](0153-the-people-list-has-a-sort-and-names-sort-with-numbers.md) item 1, and the reverse icon of task 094 on Releases.
 - Changed by: [ADR 0231](0231-a-new-release-writes-its-artist-page-and-the-files-of-a-restored-release.md) items 4 and 5, on 2026-11-20. Item 1: "Page Order" replaces "Feed Order", as in musicindex ADR 0054.
+- Changed by: [ADR 0263](0263-overview-is-the-start-page-and-each-page-keeps-the-sequence-of-its-feed.md) items 1, 3, 4 and 5, on 2026-11-25. Overview and the group Releases of a page have no sort menu, no reversed sequence and no view icons (items 5 and 17). The sort "Feed Order" is not in a menu.
 
 ## Context
 

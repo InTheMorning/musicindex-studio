@@ -12,6 +12,7 @@
 - Source: design item 7 of the [human check walk of 2026-11-14](../reviews/2026-11-14-human-check-walk.md).
 - Restates: the changes of ADR 0213 by [ADR 0218](0218-a-page-link-in-review-and-a-suggestion-starts-with-no-person.md) items 1 to 9, [ADR 0223](0223-a-split-in-shares-or-percent-a-release-search-and-one-tap-on-a-phone.md) items 11 and 12 and [ADR 0261](0261-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 1 to 13, and the revision of 2026-11-15.
 - Changed by: [ADR 0257](0257-a-release-has-one-artist-one-label-and-one-publisher-in-its-fields.md) items 16a, 17 and 18, on 2026-11-24. Item 8: one label and one publisher. Items 9 and 19: a release has the fields Artist, Label and Publisher in place of the section "Linked artist and label pages".
+- Changed by: [ADR 0263](0263-overview-is-the-start-page-and-each-page-keeps-the-sequence-of-its-feed.md) item 1, on 2026-11-25. A release starts from **＋ Add** on Overview or on an artist page (item 2).
 
 ## Context
 

@@ -6,6 +6,7 @@
 - Accepted: 2026-10-28 by the operator.
 - Changes: [ADR 0039](../archive/adr/0039-the-shell-releases-and-the-outline.md) items 1, 5 and 11, its verification and its invariant.
 - Changed by: [ADR 0119](../archive/adr/0119-a-new-user-starts-as-a-musician-or-a-label.md), A New User Starts As A Musician Or A Label.
+- Changed by: [ADR 0263](0263-overview-is-the-start-page-and-each-page-keeps-the-sequence-of-its-feed.md) items 1, 2 and 5, on 2026-11-25. Overview is the top row of the panel, and the Add feeds page is a page of Overview (items 1 and 2).
 
 ## Context
 

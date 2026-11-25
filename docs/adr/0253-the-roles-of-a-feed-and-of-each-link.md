@@ -13,6 +13,7 @@
 - Changes: [ADR 0240](../archive/adr/0240-hosting-is-a-first-role-and-a-stray-release-moves-to-its-pages.md) items 1, 2 and 3. The menu value and the Welcome row say "Publisher" (item 12).
 - Restated in: [ADR 0255](0255-publisher-feeds-announcements-and-show-grants.md) items 1, 2, 4, 6 and 11 restate items 1 to 5, 10, 20 and 22 of this ADR, and cite them.
 - Changed by: [ADR 0257](0257-a-release-has-one-artist-one-label-and-one-publisher-in-its-fields.md) item 10a, on 2026-11-24. Item 22: a new role does not go on a link where it gives a release a second page of that role.
+- Changed by: [ADR 0263](0263-overview-is-the-start-page-and-each-page-keeps-the-sequence-of-its-feed.md) item 9, on 2026-11-25. The type label shows in the list of Overview (item 7).
 - Uses: musicindex ADR 0097 R-ROLE-1 to R-ROLE-8, R-WORD-8 and R-WORD-15. musicindex ADR 0033 R-WORD-3 to R-WORD-5. musicindex ADR 0037 R-WORD-7. musicindex ADR 0067 item 82. Stophammer ADR 0101 (the `rel` of each link). ADR 0041 item 4 (a change of a link). ADR 0251 (Review writes the two sides of a link).
 
 ## Context

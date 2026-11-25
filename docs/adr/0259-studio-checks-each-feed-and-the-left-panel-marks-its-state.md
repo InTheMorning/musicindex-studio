@@ -6,6 +6,7 @@
 - Accepted: 2026-11-25. The global decision on ADR overuse (musicindex-research `df7b823`) sets one current ADR for an area after three changes. This ADR makes no new decision. It restates each live rule of the ADRs that it supersedes, with each subsequent change.
 - Supersedes: [ADR 0150](../archive/adr/0150-studio-shows-a-change-from-outside-when-a-page-opens.md), Studio Shows A Change From Outside When A Page Opens.
 - Supersedes: [ADR 0165](../archive/adr/0165-the-left-panel-marks-the-state-of-each-feed.md), The Left Panel Marks The State Of Each Feed.
+- Changed by: [ADR 0263](0263-overview-is-the-start-page-and-each-page-keeps-the-sequence-of-its-feed.md) items 1, 2, 5, 11, 18, 19 and 23, on 2026-11-25. The checks of Releases run when Overview opens, and the row of Overview takes the place of the tile (items 2 and 7).
 - Uses: [ADR 0150](../archive/adr/0150-studio-shows-a-change-from-outside-when-a-page-opens.md) for the source of items 1 to 13. [ADR 0088](../archive/adr/0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) for the earlier panel rows. ADR 0254 owns the Catalog rows. musicindex ADR 0032 R-DOT-1 keeps the dot for the type only.
 
 ## Context

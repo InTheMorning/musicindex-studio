@@ -219,6 +219,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0260: The Welcome page and the first steps](adr/0260-the-welcome-page-and-the-first-steps.md)
 - [ADR 0261: One Add menu, the parent of a new release, and the check after rc.29](adr/0261-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md)
 - [ADR 0262: A user can export and import an account](adr/0262-a-user-can-export-and-import-an-account.md)
+- [ADR 0263: Overview is the start page, and each page keeps the sequence of its feed](adr/0263-overview-is-the-start-page-and-each-page-keeps-the-sequence-of-its-feed.md)
 
 
 ## Plans

@@ -12,6 +12,7 @@
 - Changes: [ADR 0155](0155-the-sort-menu-names-both-directions.md) item 1 and [ADR 0153](0153-the-people-list-has-a-sort-and-names-sort-with-numbers.md) item 7, the name of the sort "Feed Order" (items 4 and 5).
 - Changed by: [ADR 0234](0234-a-new-release-is-written-with-its-pages-and-a-one-sided-link-is-reported.md) items 3 and 4, on 2026-11-20. Item 10: the check box is on and disabled for the first write of a new release.
 - Changed by: [ADR 0251](0251-review-writes-the-two-sides-of-a-changed-link.md) items 1 and 2, on 2026-11-23. Item 7: the rows are in Review of each feed with a linked feed, not only of a new release.
+- Changed by: [ADR 0263](0263-overview-is-the-start-page-and-each-page-keeps-the-sequence-of-its-feed.md) item 4, on 2026-11-25. The group Releases has no sort menu, so the name "Page Order" does not show (item 12).
 - Uses: [ADR 0007](0007-draft-diff-write-and-announce.md), the write of a draft. [ADR 0036](0036-library-records-host-inventory-and-host-operations.md), the planned address of a library file. [ADR 0148](0148-a-move-keeps-the-old-files-until-the-user-reviews-the-deletion.md) items 2 and 3, the files of a move plan. [ADR 0198](0198-the-review-of-a-delete-names-the-delete-and-a-deleted-feed-shows-only-what-it-can-do.md), the Retire block. [ADR 0256](0256-a-release-starts-on-the-page-of-its-artist.md) item 17, the link to an artist page.
 
 ## Context

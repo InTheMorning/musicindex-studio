@@ -7,6 +7,7 @@
 - Technical choices: items 2, 5 and 6 are choices of the planning model.
 - Applies: musicindex ADR 0061 R-LISTKEY-1 items 1 to 6 and R-LISTKEY-2 items 1 to 3, at musicindex `5123573`.
 - Changed by: musicindex ADR 0078 R-GRIDKEY-1, at musicindex `574c4c4`, for the keys of item 3.
+- Changed by: [ADR 0263](0263-overview-is-the-start-page-and-each-page-keeps-the-sequence-of-its-feed.md) item 3, on 2026-11-25. Overview has no tiles view (item 5).
 - Uses: [ADR 0171](0171-a-closed-fold-is-a-row-and-enter-closes-the-field-list.md) for the types of row. [ADR 0157](0157-the-page-tabs-are-a-segmented-control.md) item 5 for the keys of a segmented control.
 
 ## Context

@@ -5,6 +5,7 @@
 - Owner: operator
 - Accepted: 2026-11-25. The global decision on ADR overuse (musicindex-research `df7b823`) sets one current ADR for an area after three changes. This ADR makes no new decision. It restates each live rule of the ADRs that it supersedes, with each subsequent change.
 - Supersedes: [ADR 0107](../archive/adr/0107-a-user-can-export-and-import-an-account.md), A User Can Export And Import An Account.
+- Changed by: [ADR 0263](0263-overview-is-the-start-page-and-each-page-keeps-the-sequence-of-its-feed.md) item 9, on 2026-11-25. An import into an empty collection is on the Welcome page or on Overview (item 2).
 - Uses: [ADR 0003](0003-user-unlocked-secret-vault.md) item 5 (one vault format in the two shells), [ADR 0013](0013-vault-format-and-cryptography.md), [ADR 0056](0056-server-sign-in-methods-and-vault-wrappers.md) (the sign-in methods and the wrappers), [ADR 0058](0058-grant-vaults-and-connected-apps-on-the-server.md) (grant vaults and the index of app tokens), [ADR 0059](0059-uploads-in-parts-and-the-home-screen-app.md) (uploads in parts) and [ADR 0105](0105-a-public-server-holds-no-assets.md) (a server that holds no assets).
 
 ## Context

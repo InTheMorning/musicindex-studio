@@ -8,6 +8,7 @@
 - Changes: [ADR 0088](../archive/adr/0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) item 4.
 - Changed by: [ADR 0250](0250-studio-corrects-the-type-of-a-feed-with-a-bad-or-missing-medium-tag.md) items 3 and 4, on 2026-11-23. Item 1: a feed with a bad or missing medium tag gets the notice and the menu of ADR 0250. Item 1 stays for a feed with a known type that Studio does not edit.
 - Changed by: [ADR 0254](0254-the-catalog-is-a-tree-and-each-change-uses-music-words.md) items 2 and 3, on 2026-11-24. Item 2: "No artist yet" replaces "Not linked". A publisher feed with no role is in the heading "No role" of the top rows of the Catalog.
+- Changed by: [ADR 0263](0263-overview-is-the-start-page-and-each-page-keeps-the-sequence-of-its-feed.md) item 2, on 2026-11-25. Overview, not Releases, lists each album and each playlist. "No curator yet" follows "No artist yet" (items 9 to 11).
 - Uses: [ADR 0008](0008-feed-types-and-feed-identity.md) (the feed types), [ADR 0025](0025-studio-serves-cover-art.md) (the image limit of 10 MB).
 
 ## Context

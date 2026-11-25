@@ -5,6 +5,7 @@
 - Owner: operator
 - Accepted: 2026-11-25. The global decision on ADR overuse (musicindex-research `df7b823`) sets one current ADR for an area after three changes. This ADR makes no new decision. It restates each live rule of the ADRs that it supersedes, with each subsequent change.
 - Supersedes: [ADR 0221](../archive/adr/0221-the-welcome-page-and-the-first-steps.md), The Welcome Page And The First Steps.
+- Changed by: [ADR 0263](0263-overview-is-the-start-page-and-each-page-keeps-the-sequence-of-its-feed.md) item 1, on 2026-11-25. The Welcome page shows in the place of an empty Overview (item 1).
 - Uses: these current ADRs own a part of this area. This ADR names each one at its item. [ADR 0122](0122-a-new-user-starts-with-a-default-file-host.md) items 1 to 4 (the rows of step 2), [ADR 0164](0164-the-releases-of-a-publisher-feed-have-an-add-row.md) item 3 (the link of the new release to its artist), [ADR 0212](0212-the-add-pages.md) (the form "Add tracks" and the search), [ADR 0020](0020-first-run-asks-one-question.md) items 3 to 15 (the search of "My music is online already").
 - Uses: [ADR 0007](0007-draft-diff-write-and-announce.md) for the first write. [ADR 0045](0045-phase-9-crates-test-servers-and-host-forms.md) for the file host forms. [ADR 0253](0253-the-roles-of-a-feed-and-of-each-link.md) for the roles. [ADR 0262](0262-a-user-can-export-and-import-an-account.md) for the import.
 

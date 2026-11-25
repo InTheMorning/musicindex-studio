@@ -19,6 +19,7 @@ Operator choices (the main session, in the approved ADR 0254):
 - Packet 254d: a drop on a label row uses the label action that the menu **⋯** of the dragged row gives: "Change label…" or "Sign to a label…". A drop on a publisher row uses "Change publisher…".
 - Packet 254d: the drop asks the preview route with the dropped row and the page above. When its start selection holds each release of the page, the change occurs immediately with that selection. When the preview says that nothing changes, the sheet opens and shows its hint.
 - Packet 254d: a drop on the top area sends `leave_all` with each release of the page immediately. It has no sheet.
+- Packet 254d, operator check of 2026-11-25: the drag starts only from a handle at the left side of the row (ADR 0254 item 38, musicindex ADR 0080 R-LIST-2). WebKitGTK stops a drag when the page changes during `dragstart`, so the drag state starts in the next task. The top area covers the heading "Catalog", so no row moves during a drag.
 
 ## Goal
 
@@ -87,7 +88,7 @@ Each change of a page asks one question in music words. The Add sheet signs or p
 
 ### 254d: Drag And Drop On The Desktop (UI)
 
-1. Wider than 760 px, a tree row of an artist or a label can move. A row of a higher rank takes the drop and shows the drop color. The top of the tree shows "Drop here: no label and no publisher" during a drag (item 38).
+1. Wider than 760 px, a tree row of an artist or a label can move from its drag handle. A row of a higher rank takes the drop and shows the drop color. The top of the tree shows "Drop here: no label and no publisher" during a drag (item 38).
 2. A drop does "Change label…" or "Change publisher…" with the dragged page and the row of the drop (item 39). When the start selection holds each release of the page, the change occurs at once with the notice. When it does not, the sheet of packet 254a opens with the dropped row selected.
 3. A drop on the top area calls the action `LeaveAll` of packet 251a: "Go independent…" and "Not published" as one change.
 4. Node tests: the model of a drop gives the change at once or the sheet. The rows that take the drop follow the rank.

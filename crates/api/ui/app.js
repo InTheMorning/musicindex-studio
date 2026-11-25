@@ -2145,6 +2145,7 @@ function Chevron({ direction }) {
 // icons/lucide/<name>.svg. The icon is decoration, and the label of the row
 // gives the accessible name.
 const ICONS = {
+  grip: () => html`<circle cx="9" cy="5" r="1" /><circle cx="9" cy="12" r="1" /><circle cx="9" cy="19" r="1" /><circle cx="15" cy="5" r="1" /><circle cx="15" cy="12" r="1" /><circle cx="15" cy="19" r="1" />`,
   'at-sign': () => html`<circle cx="12" cy="12" r="4" /><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8" />`,
   cloud: () => html`<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />`,
   upload: () => html`<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" x2="12" y1="3" y2="15" />`,
@@ -3722,17 +3723,26 @@ function DestinationRow({ item, open }) {
   const target = feed && drag.targets.find((target) => target.id === item.group);
   // The actions of ADR 0254 item 23 for the rank of the feed, then "Open".
   const rowMenu = feed ? [...pageActions(page || {}, feeds), { label: 'Open' }] : [];
-  return html`<div class=${`tree-row${feed ? ' panel-row-with-menu' : ''}${drag.page && drag.key === item.key ? ' catalog-dragging' : ''}${target ? ' catalog-drop-target' : ''}${target && drag.over === item.key ? ' catalog-drop-over' : ''}`}
-    style=${`--depth:${item.depth || 0}`} draggable=${draggable}
+  // A row that can move has a drag handle on its left side, and the drag
+  // starts only from the handle (operator choice of 2026-11-25). The menu
+  // "More" gives the same changes to the keyboard (ADR 0254 item 39).
+  const handle = feed && !drag.narrow && html`<span class=${`drag-handle${draggable ? '' : ' drag-handle-space'}`} aria-hidden="true"
+    draggable=${draggable ? 'true' : undefined} title=${draggable ? `Drag ${item.label}` : undefined}
     onDragStart=${(event) => {
       if (!draggable) { event.preventDefault(); return; }
       event.stopPropagation();
       event.dataTransfer.effectAllowed = 'move';
       event.dataTransfer.setData('application/x-studio-catalog-page', String(page.id));
-      drag.start({ page, key: item.key, above: aboveOf(item.key) });
+      // WebKit stops the drag when the page changes during dragstart. The
+      // drag state thus starts in the next task.
+      const start = { page, key: item.key, above: aboveOf(item.key) };
+      setTimeout(() => drag.start(start), 0);
     }}
-    onDragEnd=${drag.end}
+    onDragEnd=${drag.end}>${draggable && html`<${Icon} name="grip" />`}</span>`;
+  return html`<div class=${`tree-row${feed ? ' panel-row-with-menu' : ''}${drag.page && drag.key === item.key ? ' catalog-dragging' : ''}${target ? ' catalog-drop-target' : ''}${target && drag.over === item.key ? ' catalog-drop-over' : ''}`}
+    style=${`--depth:${item.depth || 0}`}
     ...${target ? catalogDropHandlers(drag, item.key, target.id) : {}}>
+    ${handle}
     ${item.expandable
       ? html`<button class="tree-toggle" type="button" aria-expanded=${item.open ? 'true' : 'false'}
         aria-label=${`${item.open ? 'Close' : 'Open'} ${item.label}`} onClick=${() => onToggle(item.key)}><span aria-hidden="true">${item.open ? '▾' : '▸'}</span></button>`

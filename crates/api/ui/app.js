@@ -55,7 +55,7 @@ import {
   mediumKind, feedKind, FIRST_CLASS_ROLES, roleWord, kindGlow, isEditable, isReadOnly, isPublisher, trackKey, isTrack,
   leftPanel, releasesList, listQuery, queryText, sortLabel, sortEntries, mosaicCells, otherFeedText, mediumProblemView, mediumProblemCause, feedCover,
   startNav, pushNav, backNav, forwardNav, releasesView, canBack, canForward, setScroll,
-  isFeedView, openFeedView, newFeedView, navAtWidth, pageTabs, tabsFit, showsRootButtons, rootNav, segmentKey, levelFeedSet, isTabChange, movedReleaseView } from './shell.js';
+  isFeedView, openFeedView, newFeedView, navAtWidth, toggleRow, revealRows, pageTabs, tabsFit, showsRootButtons, rootNav, segmentKey, levelFeedSet, isTabChange, movedReleaseView } from './shell.js';
 import {
   eventsToSign, signErrorText,
   npubOf, addressLines, linesText, invalidConfigField, blossomDefaultName, siteAddress, siteNameFromGuid, isNsec,
@@ -2181,6 +2181,8 @@ export function Icon({ name, mirrored = false }) {
 // shell gives them to the left panel (ADR 0165 item 6).
 // `running` is a Set of the feed IDs that a click-started check reads now.
 // `check` reads a list of feeds (ADR 0230 items 17 and 18).
+// The handler of the button before a tree row of the Catalog (ADR 0254 item 5).
+const CatalogContext = createContext(() => {});
 const OutsideContext = createContext({ feeds: [], results: {}, running: new Set(), check: () => {} });
 
 // The state mark of a row of the left panel, for the feeds that `ids` covers
@@ -2535,6 +2537,12 @@ export function PageTabs({ feed, view, go, checkCount = 0, tabs: suppliedTabs, c
     </select>`;
     // At narrow width, the button "‹ Overview" is at the left of the menu and
     // opens the outline page (ADR 0228 item 11).
+    // A publisher feed has no outline. Its button goes back to the tree
+    // (ADR 0254 items 7 and 10).
+    if (narrow && !settings && isPublisher(feed)) {
+      return html`<div class="page-tabs-host" ref=${host}>${probeLabels}<div class="page-tab-row">
+        <button class="button" type="button" onClick=${() => go({ name: 'root' })}>‹ Catalog</button>${menu}</div></div>`;
+    }
     if (narrow && !settings) {
       return html`<div class="page-tabs-host" ref=${host}>${probeLabels}<div class="page-tab-row">
         <button class="button" type="button" onClick=${() => go({ name: 'outline', id: feed.id, ...(view.from ? { from: view.from } : {}) })}>‹ Overview</button>${menu}</div></div>`;
@@ -3575,11 +3583,6 @@ function ChangeSetPage({ id, go, onChanged, feeds }) {
 // page and the outline page of the stack (ADR 0206 item 13, musicindex ADR
 // 0030 R-SHELL-2).
 function LeftPanel({ panel, draft, changedFeeds, go, showReleases, onAdding, onImporting, onAddFeedRow, onMove, onLock, collections }) {
-  if (panel.kind === 'level') {
-    return html`<header><${Brand} /><${ThemeToggle} /></header>
-      <div class="sidebar-scroll"><${Level} panel=${panel} go=${go} back onAddFeedRow=${onAddFeedRow} onMove=${onMove} /></div>
-      <${LeftPanelFooter} panel=${panel} go=${go} onLock=${onLock} collections=${collections} />`;
-  }
   if (panel.kind === 'destinations') {
     return html`<header><${Brand} /><${ThemeToggle} /></header>
       <div class="sidebar-scroll">${destinationRows(panel.top, go)}</div>
@@ -3598,36 +3601,43 @@ const currentAttr = (item) => (item.current ? 'page' : undefined);
 
 // One destination row. A row below Releases shows the state mark of the
 // feeds that it covers, between the name and the count (ADR 0165 items 1 to 4).
+// A tree row of a feed shows its depth, the button before its title when rows
+// are below it, and the second line (ADR 0254 items 5 to 8).
 function DestinationRow({ item, open }) {
   const { feeds } = useContext(OutsideContext);
+  const onToggle = useContext(CatalogContext);
   const set = item.group === undefined ? [] : panelSet(feeds, item.group);
   const mark = useStateMark(set);
   const click = useOpenAndCheck(set, mark, () => open(item));
-  const releases = item.group === undefined ? '' : `${item.label}, ${item.count} ${item.count === 1 ? 'release' : 'releases'}`;
-  return html`<button class="row" type="button" aria-current=${currentAttr(item)}
+  const releases = item.group === undefined ? '' : `${item.label}, ${item.countLabel || `${item.count} ${item.count === 1 ? 'release' : 'releases'}`}`;
+  const row = html`<button class="row" type="button" aria-current=${currentAttr(item)}
     aria-label=${item.group === undefined ? undefined : (mark ? `${releases}, ${mark.text}` : releases)}
     onClick=${click}>
     ${item.icon && html`<${Icon} name=${item.icon} />`}
     ${item.group !== undefined && (item.art
       ? html`<${FeedArt} art=${item.art} glow=${item.glow} dot=${item.dot} />`
       : html`<span class="art-space" aria-hidden="true"></span>`)}
-    <span class="row-label">${item.label}</span>
+    <span class="row-label">${item.label}${item.also && html`<span class="sub">${item.also}</span>`}</span>
     <${StateMark} mark=${mark} />
-    ${item.group !== undefined && html`<span class="count" aria-hidden="true">${item.count}</span>`}
+    ${item.group !== undefined && html`<span class="count" aria-hidden="true">${item.countText ?? item.count}</span>`}
   </button>`;
+  if (item.depth === undefined) return row;
+  return html`<div style=${`display:flex;align-items:center;margin-left:${item.depth * 16}px`}>
+    ${item.expandable && html`<button class="button quiet icon-button" type="button" aria-expanded=${item.open ? 'true' : 'false'}
+      aria-label=${`${item.open ? 'Close' : 'Open'} ${item.label}`} onClick=${() => onToggle(item.key)}><span aria-hidden="true">${item.open ? '▾' : '▸'}</span></button>`}
+    ${row}</div>`;
 }
 
-// The destination rows: Releases, then each artist, label or other feed with
-// roles, then "Not linked" (ADR 0072 item 1, ADR 0085 items 1 and 3). A row
-// opens its destination when `opens` is true. A row below Releases shows the
-// dot of the feed and the number of its releases.
-// `between` is a node that shows after the plain rows and before the groups.
+// The destination rows: Releases, then the tree of the feeds with roles, then
+// "No artist yet" and "Other feeds" (ADR 0072 item 1, ADR 0254 item 2). A row
+// opens its destination when `opens` is true. A tree row opens the page of its
+// feed.
 function destinationRows(top, go) {
   const open = (item) => {
     if (!item.opens) return;
-    go(item.group === undefined ? { name: item.id } : { name: 'releases', group: item.group });
+    go(item.view || (item.group === undefined ? { name: item.id } : { name: 'releases', group: item.group }));
   };
-  const row = (item) => html`<${DestinationRow} item=${item} open=${open} />`;
+  const row = (item) => html`<${DestinationRow} key=${item.id} item=${item} open=${open} />`;
   const groups = top.filter((item) => item.group !== undefined);
   return html`${top.filter((item) => item.group === undefined).map(row)}
     ${groups.length > 0 && html`<div class="destination-group">${groups.map((item) => html`
@@ -3737,8 +3747,8 @@ function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImp
   // checked" (task 210 item 2).
   const openHead = useOpenAndCheck(feeds.filter((item) => item.id === feed.id), feedMark,
     () => { if (!feed.first) go({ name: 'feed', id: feed.id, page: feed.page }); });
-  const releases = panel.items.find((item) => item.id === 'releases');
-  const rest = panel.items.filter((item) => item.id !== 'releases');
+  const releases = panel.items.find((item) => item.id === 'catalog');
+  const rest = panel.items.filter((item) => item.id !== 'catalog');
   // An add item with a menu is not a tree item (see AddTreeRow).
   const childRows = rest.filter((item) => !item.heading && !item.menu);
   const feedIndex = releases ? 1 : 0;
@@ -4223,6 +4233,11 @@ function writeNav(nav) {
 // that the browser Back button works (musicindex ADR 0080 R-NAV-2).
 function Shell({ vault, onLock, version }) {
   const [feeds, setFeeds] = useState(null);
+  const feedsRef = useRef(null);
+  feedsRef.current = feeds;
+  // The keys of the open rows of the Catalog tree (ADR 0254 item 7).
+  const [openRows, setOpenRows] = useState(() => new Set());
+  const toggleOpenRow = (key) => setOpenRows((open) => toggleRow(open, key));
   const [connectors, setConnectors] = useState([]);
   // At 760 px or less the window is one stack (musicindex ADR 0080 R-SHELL-2).
   const narrow = useNarrow();
@@ -4519,7 +4534,7 @@ function Shell({ vault, onLock, version }) {
   const panel = leftPanel({
     view, feeds: feeds || [], model: draft.model, vaultOpen: vault === 'open',
     vaultLocked: serverMode && vault === 'locked', narrow, collection, serverMode,
-    collectionCount: collectionState.count,
+    collectionCount: collectionState.count, open: openRows,
   });
 
   // A new feed opens its page. The list is loaded before the page opens.
@@ -4527,6 +4542,7 @@ function Shell({ vault, onLock, version }) {
     await load();
     if (makeInfo?.copyFailed) setCopyNotice(`Studio could not read the feed file of ${makeInfo.copyTitle || f?.title || 'the found feed'}. No tracks and no payment recipients are copied.`);
     if (f && makeInfo && !makeInfo.copied && shouldAddTracksAfterNewRelease(makeInfo.type)) setPendingAddTracks(f.id);
+    if (f && from) setOpenRows((open) => revealRows(open, from));
     go(f ? newFeedView(f.id, from) : { name: 'releases' });
   };
   const openAddFeedRow = (item) => item.gatherRole
@@ -4570,7 +4586,7 @@ function Shell({ vault, onLock, version }) {
     main = html`<${WalletPage} key=${JSON.stringify(recipientKey(view.recipient))} recipient=${view.recipient} feeds=${feeds} go=${go} />`;
   } else if (view.name === 'change-set') {
     main = html`<${ChangeSetPage} key=${view.id} id=${view.id} go=${go} feeds=${feeds} onChanged=${() => load()} />`;
-  } else if (selected && view.name === 'outline') {
+  } else if (selected && view.name === 'outline' && panel.kind === 'outline') {
     main = html`<${OutlinePage} feed=${selected} panel=${panel} draft=${draft} changedFeeds=${changedFeeds} feeds=${feeds} go=${go}
       onAdding=${setAdding} onImporting=${setImporting} onAddFeedRow=${openAddFeedRow} onMove=${setMoveId}
       onChanged=${() => load()} onListChanged=${() => load()} connectors=${connectors} />`;
@@ -4580,9 +4596,6 @@ function Shell({ vault, onLock, version }) {
       onListChanged=${() => load()}
       onRemoved=${async () => { await load(); go({ name: 'releases' }, { replace: true }); }} connectors=${connectors}
       differences=${differences.filter((d) => d.feed_id === selected.id)} onRescan=${rescan} />`;
-  } else if (narrow && panel.kind === 'level') {
-    main = html`<${LevelPage} panel=${panel} go=${go} onAddFeedRow=${openAddFeedRow}
-      onMove=${setMoveId} />`;
   } else {
     // A release of a level goes back to that level (ADR 0215 item 6).
     const from = view.name === 'releases' && typeof view.group === 'number'
@@ -4602,7 +4615,7 @@ function Shell({ vault, onLock, version }) {
   const panelProps = { panel, draft, changedFeeds, go, showReleases, onAdding: setAdding, onImporting: setImporting, onAddFeedRow: openAddFeedRow,
     collections: collectionState.collections,
     onMove: setMoveId, onLock: lock };
-  return html`<${NavContext.Provider} value=${navValue}><${OutsideContext.Provider} value=${outsideValue}><div class="shell">
+  return html`<${NavContext.Provider} value=${navValue}><${OutsideContext.Provider} value=${outsideValue}><${CatalogContext.Provider} value=${toggleOpenRow}><div class="shell">
     ${!narrow && html`<nav class="sidebar" aria-label="Collection">
       <${LeftPanel} ...${panelProps} />
     </nav>`}
@@ -4636,7 +4649,7 @@ function Shell({ vault, onLock, version }) {
       onAddHost=${() => { setGather(null); go({ name: 'hosts', add: true }); }}
       onOpenChanges=${(id) => { setGather(null); openChangeSet(id); }}
       onClose=${() => setGather(null)} />`}
-  </div><//><//>`;
+  </div><//><//><//>`;
 }
 
 // ---- Sign-in and sign-up on a server (ADR 0204, ADR 0056) ----

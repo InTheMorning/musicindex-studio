@@ -220,51 +220,16 @@ function isCurrentPage(view, page, track) {
   return page !== 'track' || view.track === track;
 }
 
-// The entries of the outline of an open feed (ADR 0239 item 1). The head of
-// the outline opens the first page of the feed, so no entry is for that page
-// (ADR 0069). At narrow width there is no "Releases" entry, because Back
-// opens Releases (ADR 0206 item 14).
-function outlineItems(feed, view, model, narrow, feeds) {
-  // A feed opened from a level goes back to that level (ADR 0215 item 6).
-  const from = view.from;
-  const items = narrow ? [] : [from
-    ? { id: 'releases', label: titleOf(feeds, from.group), target: upView([...from.trail, from.group], feed.id) }
-    : { id: 'releases', label: 'Releases' }];
-  const page = (id, label, pageName, track) => ({
-    id,
-    label,
-    page: pageName,
-    ...(track === undefined ? {} : { track }),
-    current: isCurrentPage(view, pageName, track),
-  });
-  if (isPublisher(feed)) {
-    // The panel of a publisher feed shows the groups of its level, and the
-    // tabs hold its pages (ADR 0239 item 4, ADR 0240 item 7).
-    const byId = new Map((feeds || []).map((f) => [f.id, f]));
-    const level = pageLevel(feed.id, from);
-    const groups = pageGroups(feed, feeds || []);
-    for (const section of groups.sections) {
-      items.push({ id: `${section.heading.toLowerCase()}-heading`, label: section.heading, heading: true });
-      section.feeds.forEach((child) => items.push({
-        id: `page:${child.id}`,
-        label: displayTitle(child),
-        move: (child.publisher_roles || []).some((role) => role === 'artist' || role === 'label'),
-        target: openFeedView(child.id, narrow, level),
-      }));
-      if (section.add) items.push({ id: `add-${section.add.add}`, label: section.add.label, action: 'add-feed', open: section.add.open, start: section.add.start, from: level, menu: section.add.menu });
-    }
-    if (groups.releases) {
-      items.push({ id: 'releases-heading', label: 'Releases', heading: true });
-      (feed.release_ids || []).map((id) => byId.get(id)).filter(Boolean).forEach((release) => items.push({
-        id: `release:${release.id}`,
-        label: displayTitle(release),
-        move: false,
-        target: openFeedView(release.id, narrow, level),
-      }));
-      if (groups.releaseAdd) items.push({ id: 'add-release', label: groups.releaseAdd.label, action: 'add-feed', open: groups.releaseAdd.open, start: groups.releaseAdd.start, from: level });
-    }
-    return items;
-  }
+// The entries of the outline of an open release or playlist (ADR 0239 item
+// 1). A publisher feed has no outline (ADR 0254 item 7). The first row is
+// "Catalog". It goes to the page that opened the feed, or else it shows the
+// tree again (ADR 0254 items 7 and 43). The head of the outline opens the
+// first page of the feed, so no entry is for that page (ADR 0069). At narrow
+// width there is no "Catalog" row, because Back opens the page before it
+// (ADR 0206 item 14).
+function outlineItems(feed, view, model, narrow) {
+  const above = view.from ? openFeedView(view.from.group, narrow, fromPath(pathOfFrom(view.from).slice(0, -1))) : null;
+  const items = narrow ? [] : [{ id: 'catalog', label: 'Catalog', ...(above ? { target: above } : {}) }];
   // A playlist has no track pages, so its tracks are a tab (ADR 0053 item 4).
   if (!isEditable(feed) || isPlaylist(feed) || !model) return items;
   model.items.forEach((item, i) => {
@@ -342,14 +307,16 @@ export function isTabChange(current, target) {
 const inHosts = (view) => view.name === 'hosts' || (view.name === 'change-set' && view.area === 'hosts');
 const inReleases = (view) => view.name === 'change-set' && view.area === 'releases';
 
-// The left panel (ADR 0206 items 1, 6 and 7). With no open feed it gives the
-// destinations. With an open feed, or the outline view, it gives the outline
-// of that feed. `model` is the typed model of the draft of the open feed, or
-// null before it loads. `narrow` is true at 760 px or less. `vaultLocked` is
-// true on a server with a locked vault: the row "Unlock Studio" then takes
-// the place of "Lock Studio" (ADR 0206 item 1).
+// The left panel (ADR 0206 items 1, 6 and 7, ADR 0254 items 2 and 7). With
+// no open feed, or with the page of a publisher feed, it gives the
+// destinations and the Catalog tree. With an open release or playlist, or the
+// outline view of one, it gives the outline of that feed. `model` is the
+// typed model of the draft of the open feed, or null before it loads. `open`
+// is the set of the keys of the open tree rows. `narrow` is true at 760 px or
+// less. `vaultLocked` is true on a server with a locked vault: the row
+// "Unlock Studio" then takes the place of "Lock Studio" (ADR 0206 item 1).
 export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, narrow = false, collection = null,
-  serverMode = false, collectionCount = 0 }) {
+  serverMode = false, collectionCount = 0, open = [] }) {
   const bottom = [
     // The People destination holds the page of a person, the page of a
     // wallet and the review of a change set (ADR 0203 items 36 and 79).
@@ -374,9 +341,7 @@ export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, 
   const feed = isFeedView(view) && Array.isArray(feeds)
     ? feeds.find((f) => f.id === view.id)
     : undefined;
-  const owner = levelFeed(view, feeds);
-  if (!feed && owner) return { ...feedLevel(owner, view, feeds), bottom };
-  if (!feed) {
+  if (!feed || isPublisher(feed)) {
     const all = (view.name === 'releases' && view.group === undefined) || inReleases(view);
     return {
       kind: 'destinations',
@@ -390,7 +355,7 @@ export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, 
           current: all,
           opens: !all,
         },
-        ...groupDestinations(feeds, view),
+        ...groupDestinations(feeds, view, open),
       ],
       bottom,
     };
@@ -411,19 +376,21 @@ export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, 
       current: view.name === 'feed' && view.page !== 'track',
       label: `${displayTitle(feed)}, ${feedKind(feed).label}`,
     },
-    items: outlineItems(feed, view, model, narrow, feeds),
+    items: outlineItems(feed, view, model, narrow),
     bottom,
   };
 }
 
-// ---- The levels of the hierarchy (ADR 0215) ----
+// ---- The Catalog tree (ADR 0254) ----
 
-// The four role headings follow ADR 0253 item 16.
-// A feed with no level role goes below "No role" (ADR 0254 item 3).
+// The four role headings follow ADR 0253 item 16. A feed with no level role
+// goes below "No role" (ADR 0254 item 3).
 const HEADINGS = [
   ['hosting', 'Publishers'], ['label', 'Labels'], ['curator', 'Curators'], ['artist', 'Artists'],
 ];
 
+// The rank of a feed in the headings: 0 is the highest. A feed with no level
+// role has the rank after the last heading (ADR 0253 item 15).
 export function headingIndex(feed) {
   const roles = feed.publisher_roles || [];
   const first = ROLES.find((role) => roles.includes(role));
@@ -431,20 +398,18 @@ export function headingIndex(feed) {
   return index < 0 ? HEADINGS.length : index;
 }
 
-// The feeds of `list` under their role headings, A to Z in each heading.
-// `item` makes the row of each feed.
-function headed(list, item) {
-  const sections = [];
-  for (const feed of list.slice().sort((a, b) => headingIndex(a) - headingIndex(b) || compareAz(a, b))) {
-    const index = headingIndex(feed);
-    // A feed with no role is in "No role" (ADR 0090 item 2).
-    const heading = index < HEADINGS.length ? HEADINGS[index][1] : 'No role';
-    if (sections.length === 0 || sections[sections.length - 1].heading !== heading) {
-      sections.push({ heading, items: [] });
-    }
-    sections[sections.length - 1].items.push(item(feed));
-  }
-  return sections;
+// The heading of a feed. A feed with no role is in "No role" (ADR 0090 item
+// 2).
+const headingOf = (feed) => {
+  const index = headingIndex(feed);
+  return index < HEADINGS.length ? HEADINGS[index][1] : 'No role';
+};
+
+// A copy of `list` in the rank of the headings, then A to Z (ADR 0254 items 3
+// and 5). The function sorts rows for display. It does not decide which feed
+// is below which feed (ADR 0065).
+function ranked(list) {
+  return list.slice().sort((a, b) => headingIndex(a) - headingIndex(b) || compareAz(a, b));
 }
 
 // The art of a publisher feed (musicindex ADR 0021 R-ART-3 item 2): its own
@@ -467,11 +432,80 @@ export function mosaicCells(images) {
   return images;
 }
 
-// The publisher feed of a level view, or null. A level view is Releases
-// with the ID of a publisher feed as its group.
-function levelFeed(view, feeds) {
-  if (view.name !== 'releases' || typeof view.group !== 'number' || !Array.isArray(feeds)) return null;
-  return feeds.find((feed) => feed.id === view.group && isPublisher(feed)) || null;
+// The names in one line: "A", "A and B", "A, B and C".
+function andNames(names) {
+  return names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+// The IDs of the feeds above a row, from the top, as the `from` of a view
+// gives them. `from` is `{ group, trail }`: `group` is the feed directly
+// above, and `trail` holds the feeds above that one, from the top.
+export function pathOfFrom(from) {
+  return from ? [...(from.trail || []), from.group] : [];
+}
+
+// The `from` of a view for a list of the IDs above a row. An empty list gives
+// no `from`.
+export function fromPath(path) {
+  return path.length === 0 ? undefined : { group: path[path.length - 1], trail: path.slice(0, -1) };
+}
+
+// The key of a tree row. A feed below two feeds has two rows, so the key is
+// the IDs from the top to the row (ADR 0254 item 5).
+export const rowKey = (path) => path.join('/');
+
+// The path of the tree row of feed `id`, from the top, with `id` last: the
+// row that the user selected when `from` names a row of the tree, or else the
+// feed directly above with the highest rank, then A to Z (ADR 0254 item 12a).
+export function rowPath(feeds, id, from = undefined) {
+  const byId = new Map((feeds || []).map((feed) => [feed.id, feed]));
+  const given = pathOfFrom(from);
+  const below = (upper, lower) => (byId.get(upper)?.child_ids || []).includes(lower);
+  const holds = given.length > 0 && given.every((up, i) => byId.has(up) && (i === 0
+    ? (byId.get(up).parent_ids || []).length === 0
+    : below(given[i - 1], up))) && below(given[given.length - 1], id);
+  if (holds) return [...given, id];
+  const path = [id];
+  for (;;) {
+    const feed = byId.get(path[0]);
+    const above = ranked((feed?.parent_ids || []).map((up) => byId.get(up)).filter((up) => up && !path.includes(up.id)));
+    if (above.length === 0) return path;
+    path.unshift(above[0].id);
+  }
+}
+
+// The path and the page above of the page of feed `id` (ADR 0254 items 12 and
+// 12a). `names` holds each feed above, from the top, with the view that opens
+// its page. `above` is the ID of the page above, or null. A feed with no feed
+// above it has the text "Top level".
+export function pagePath(feeds, id, from = undefined) {
+  const byId = new Map((feeds || []).map((feed) => [feed.id, feed]));
+  const up = rowPath(feeds, id, from).slice(0, -1);
+  return {
+    names: up.map((upId, i) => ({
+      id: upId,
+      title: byId.has(upId) ? displayTitle(byId.get(upId)) : 'Untitled feed',
+      view: openFeedView(upId, false, fromPath(up.slice(0, i))),
+    })),
+    above: up.length > 0 ? up[up.length - 1] : null,
+    top: up.length === 0,
+  };
+}
+
+// The set of open rows after a click on the button of the row with `key`.
+export function toggleRow(open, key) {
+  const next = new Set(open || []);
+  if (!next.delete(key)) next.add(key);
+  return next;
+}
+
+// The set of open rows with each row above a new feed open (ADR 0254 item
+// 43). `from` is the `from` of the view of the new feed.
+export function revealRows(open, from) {
+  const next = new Set(open || []);
+  const up = pathOfFrom(from);
+  up.forEach((_, i) => next.add(rowKey(up.slice(0, i + 1))));
+  return next;
 }
 
 // The feed set of an open level's head row (ADR 0181 item 1).
@@ -479,111 +513,6 @@ export function levelFeedSet(feeds, id) {
   if (!Array.isArray(feeds)) return [];
   const feed = feeds.find((item) => item.id === id && isPublisher(item));
   return feed ? [feed] : [];
-}
-
-// The view that "‹" opens from a level, or from a feed opened from a level.
-// `trail` is the list of the levels above, from the top. With no trail it
-// is Releases (ADR 0215 item 6).
-function upView(trail, marked) {
-  if (!trail || trail.length === 0) return { name: 'releases', marked };
-  return { name: 'releases', group: trail[trail.length - 1], trail: trail.slice(0, -1), marked };
-}
-
-function titleOf(feeds, id) {
-  const feed = (feeds || []).find((f) => f.id === id);
-  return feed ? displayTitle(feed) : 'Releases';
-}
-
-// The groups of a publisher feed (ADR 0240 items 5 and 6). The level panel
-// and the outline use this one function (ADR 0240 item 7). A hosting feed has
-// Labels and Artists with their add rows, and no group Releases. A label feed
-// has Artists with its add row, then Releases with no add row. An artist feed
-// has Releases with its add row. A group of a different role heading shows
-// only when it has rows, and it has no add row. `sections` hold the feeds
-// below `owner` under their role headings. `releases` is false for a hosting
-// feed. `releaseAdd` is null when the feed is not an artist feed.
-function pageGroups(owner, feeds) {
-  const byId = new Map(feeds.map((feed) => [feed.id, feed]));
-  const children = (owner.child_ids || []).map((id) => byId.get(id)).filter(Boolean);
-  const rank = headingIndex(owner);
-  const addHeadings = rank === 0 ? ['Labels', 'Artists'] : rank === 1 ? ['Artists'] : [];
-  const sections = headed(children, (feed) => feed);
-  for (const heading of addHeadings) {
-    if (!sections.some((section) => section.heading === heading)) sections.push({ heading, items: [] });
-  }
-  const headingOrder = [...HEADINGS.map(([, heading]) => heading), 'No role'];
-  sections.sort((a, b) => headingOrder.indexOf(a.heading) - headingOrder.indexOf(b.heading));
-  const addRow = (role, label) => ({
-    add: role,
-    label,
-    open: 'publisher',
-    start: { role, below_id: owner.id },
-    menu: ['hosting', 'label'].includes((owner.publisher_roles || [])[0])
-      ? [
-        { action: 'new', label: `New ${roleWord(role)} Page…` },
-        { action: 'gather', label: `Move ${roleWord(role)}s Here…`, pageRole: role },
-      ]
-      : null,
-  });
-  const adds = {
-    Artists: addRow('artist', 'Add artist'),
-    Labels: addRow('label', 'Add label'),
-  };
-  const releases = rank !== 0;
-  return {
-    sections: sections.map((section) => ({ heading: section.heading, feeds: section.items, add: adds[section.heading] || null })),
-    releases,
-    releaseAdd: releases && (owner.publisher_roles || []).includes('artist')
-      ? { add: 'release', label: 'Add release', open: 'album', start: releaseStart(owner, owner.title) || {} }
-      : null,
-  };
-}
-
-// The left panel of a level (ADR 0215 item 5): "‹" to the level above, the
-// head of the feed, the feeds directly below it under their role headings,
-// then its releases in feed order. The groups follow ADR 0240 item 5.
-function feedLevel(owner, view, feeds) {
-  const trail = Array.isArray(view.trail) ? view.trail : [];
-  const byId = new Map(feeds.map((feed) => [feed.id, feed]));
-  const from = { group: owner.id, trail };
-  const groups = pageGroups(owner, feeds);
-  return {
-    kind: 'level',
-    back: { label: trail.length > 0 ? titleOf(feeds, trail[trail.length - 1]) : 'Releases', view: upView(trail, owner.id) },
-    head: {
-      id: owner.id,
-      title: displayTitle(owner),
-      art: publisherArt(owner, feeds),
-      glow: kindGlow(feedKind(owner)),
-      typeLabel: feedKind(owner).label,
-      dot: feedKind(owner).dot,
-      from,
-    },
-    sections: groups.sections.map((section) => ({
-      heading: section.heading,
-      items: section.feeds.map((feed) => ({
-        id: feed.id,
-        label: displayTitle(feed),
-        move: (feed.publisher_roles || []).some((role) => role === 'artist' || role === 'label'),
-        dot: feedKind(feed).dot,
-        glow: kindGlow(feedKind(feed)),
-        art: publisherArt(feed, feeds),
-        count: (feed.release_ids || []).length,
-        view: { name: 'releases', group: feed.id, trail: [...trail, owner.id] },
-      })),
-      add: section.add && { ...section.add, from },
-    })),
-    releaseAdd: groups.releaseAdd && { ...groups.releaseAdd, from },
-    from,
-    releases: groups.releases
-      ? (owner.release_ids || []).map((id) => byId.get(id)).filter(Boolean).map((feed) => ({
-        id: feed.id,
-        title: displayTitle(feed),
-        move: false,
-        from,
-      }))
-      : null,
-  };
 }
 
 // The start values of a new release of a publisher feed (ADR 0164 items 1
@@ -594,53 +523,100 @@ export function releaseStart(feed, name) {
   return { author: name || '', publisher_id: feed.id };
 }
 
-// The level of the page of publisher feed `id` that opened with `from`. A
-// release row of its outline and a new feed of the page go back to this
-// level (ADR 0215 item 6, ADR 0232 item 8).
+// The `from` that the feeds below publisher feed `id` get when the page of
+// `id` opened with `from`. A release row of a page and a new feed of the page
+// go back to this page (ADR 0254 item 43).
 export function pageLevel(id, from) {
-  return { group: id, trail: from ? [...(from.trail || []), from.group] : [] };
+  return { group: id, trail: from ? pathOfFrom(from) : [] };
 }
 
-// The page of a new feed keeps the level that opened its add form.
+// The page of a new feed keeps the tree row that opened its add form.
 export function newFeedView(id, from) {
   return { name: 'feed', id, ...(from ? { from } : {}) };
 }
 
-// The destinations below Releases (ADR 0085 items 1 and 3, ADR 0215 item
-// 3): each top feed, with no feed above it, under its role heading, then
-// "Not linked" when a release has no link. `count` is the number of
-// releases of the destination. The first row of a heading has `heading`.
-export function groupDestinations(feeds, view) {
+// The rows of the panel below Releases (ADR 0254 items 2 to 8): the rows of
+// the Catalog tree, then "No artist yet" when a release has no artist page,
+// then "Other feeds". `open` is the set of the keys of the open rows. The top
+// rows are the feeds with no feed above them, under their role headings. The
+// first top row of a heading has `heading`. Each row gives:
+// - `key` and `depth`: the place of the row in the tree.
+// - `expandable` and `open`: the state of the button before the title.
+// - `counts`, `count`, `countText` and `countLabel`: the releases of the feed,
+//   the pages below it, or the two numbers (item 6).
+// - `also`: the second line of a feed below two or more feeds (item 8).
+// - `current` and `view`: the page that a selection opens.
+export function groupDestinations(feeds, view, open = []) {
   const list = Array.isArray(feeds) ? feeds : [];
+  const byId = new Map(list.map((feed) => [feed.id, feed]));
   const shown = (group) => view.name === 'releases' && view.group === group;
-  const top = list.filter((feed) => isPublisher(feed) && (feed.parent_ids || []).length === 0);
-  const groups = headed(top, (feed) => ({
-    id: `group-${feed.id}`,
-    group: feed.id,
-    label: displayTitle(feed),
-    dot: feedKind(feed).dot,
-    glow: kindGlow(feedKind(feed)),
-    art: publisherArt(feed, list),
-    count: (feed.release_ids || []).length,
-    current: shown(feed.id),
-    opens: !shown(feed.id),
-  })).flatMap((section) => section.items.map((item, i) => (i === 0 ? { ...item, heading: section.heading } : item)));
+  const openKeys = new Set(open || []);
+  const selected = isFeedView(view) && isPublisher(byId.get(view.id) || {})
+    ? rowKey(rowPath(list, view.id, view.from)) : null;
+  const rows = [];
+  const add = (feed, path, heading) => {
+    const key = rowKey(path);
+    const kids = ranked((feed.child_ids || []).map((id) => byId.get(id)).filter((kid) => kid && isPublisher(kid) && !path.includes(kid.id)));
+    const isOpen = kids.length > 0 && openKeys.has(key);
+    const roles = feed.publisher_roles || [];
+    const releases = !roles.includes('hosting') || roles.some((role) => ['label', 'curator', 'artist'].includes(role))
+      ? (feed.release_ids || []).length : null;
+    const pages = roles.includes('hosting') ? (feed.child_ids || []).length : null;
+    const parent = path.length > 1 ? path[path.length - 2] : null;
+    const others = ranked((feed.parent_ids || []).filter((id) => id !== parent).map((id) => byId.get(id)).filter(Boolean));
+    const labels = others.filter((other) => (other.publisher_roles || []).includes('label'));
+    const names = (labels.length > 0 ? labels : others).map(displayTitle);
+    const kind = feedKind(feed);
+    rows.push({
+      id: `tree-${key}`,
+      key,
+      group: feed.id,
+      depth: path.length - 1,
+      label: displayTitle(feed),
+      dot: kind.dot,
+      glow: kindGlow(kind),
+      art: publisherArt(feed, list),
+      counts: { releases, pages },
+      count: releases ?? pages,
+      countText: [releases, pages].filter((n) => n !== null).join(' · '),
+      countLabel: [
+        releases === null ? null : `${releases} ${releases === 1 ? 'release' : 'releases'}`,
+        pages === null ? null : `${pages} ${pages === 1 ? 'page' : 'pages'} below`,
+      ].filter(Boolean).join(', '),
+      expandable: kids.length > 0,
+      open: isOpen,
+      also: parent === null || others.length === 0 ? null
+        : `${labels.length > 0 ? 'Also on' : 'Also published by'} ${andNames(names)}`,
+      current: key === selected,
+      opens: key !== selected,
+      view: openFeedView(feed.id, false, fromPath(path.slice(0, -1))),
+      ...(heading ? { heading } : {}),
+    });
+    if (isOpen) kids.forEach((kid) => add(kid, [...path, kid.id]));
+  };
+  const top = ranked(list.filter((feed) => isPublisher(feed) && (feed.parent_ids || []).length === 0));
+  let last = null;
+  for (const feed of top) {
+    const heading = headingOf(feed);
+    add(feed, [feed.id], heading === last ? null : heading);
+    last = heading;
+  }
   const unlinked = unlinkedReleases(list).length;
   if (unlinked > 0) {
-    groups.push({
-      id: 'group-none', group: 'none', label: 'Not linked', dot: null,
+    rows.push({
+      id: 'group-none', group: 'none', label: 'No artist yet', dot: null,
       count: unlinked, current: shown('none'), opens: !shown('none'),
     });
   }
   // The feeds that the editor does not open (ADR 0090 item 2).
   const other = otherFeeds(list).length;
   if (other > 0) {
-    groups.push({
+    rows.push({
       id: 'group-other', group: 'other', label: 'Other feeds', dot: null,
       count: other, current: shown('other'), opens: !shown('other'),
     });
   }
-  return groups;
+  return rows;
 }
 
 // The feeds that are not a publisher feed and not a release (ADR 0090
@@ -650,7 +626,7 @@ export function otherFeeds(feeds) {
 }
 
 // The IDs of each feed above and below `owner`, from the levels that the
-// core gives (ADR 0215 item 8).
+// core gives (ADR 0254 item 9).
 function relatedLevels(feeds, owner) {
   const byId = new Map(feeds.map((feed) => [feed.id, feed]));
   const found = new Set();
@@ -666,12 +642,13 @@ function relatedLevels(feeds, owner) {
   return found;
 }
 
-// The releases with no artist, label or hosting page in the collection (ADR 0240 item 9).
+// The releases with no link to an artist page of the collection (ADR 0254
+// item 2).
 export function unlinkedReleases(feeds) {
   const byId = new Map((feeds || []).map((feed) => [feed.id, feed]));
   return (feeds || []).filter((feed) => isRelease(feed) && !(feed.publisher_ids || []).some((id) => {
     const page = byId.get(id);
-    return isPublisher(page) && (page.publisher_roles || []).some((role) => ['artist', 'label', 'hosting'].includes(role));
+    return isPublisher(page || {}) && (page.publisher_roles || []).includes('artist');
   }));
 }
 
@@ -811,7 +788,7 @@ export function releasesList({ feeds, connectors, sort, view, reversed, marked, 
     };
   } else if (group === 'none') {
     chosen = unlinkedReleases(list);
-    head = { id: null, title: 'Not linked', typeLabel: null, dot: null, note: 'These releases have no artist page, label page or publisher page.' };
+    head = { id: null, title: 'No artist yet', typeLabel: null, dot: null, note: 'These releases have no artist page.' };
   } else if (group === 'other') {
     chosen = otherFeeds(list);
     head = { id: null, title: 'Other feeds', typeLabel: null, dot: null, note: 'Studio edits albums, playlists, and artist and label feeds. It shows only the facts of these feeds.' };
@@ -841,7 +818,7 @@ export function releasesList({ feeds, connectors, sort, view, reversed, marked, 
   };
   // A release of two feeds names the other feeds (ADR 0085 item 5). A feed
   // above or below the owner is in the tree already, so the note leaves it
-  // out (ADR 0215 item 8).
+  // out (ADR 0254 item 9).
   const related = owner ? relatedLevels(list, owner) : new Set();
   const noteOf = (feed) => {
     if (!owner) return null;
@@ -990,15 +967,17 @@ export function setScroll(nav, y) {
 // ---- Narrow width (musicindex ADR 0080 R-SHELL-2, ADR 0206 items 11 to 14) ----
 
 // The stack that a narrow window shows for one view. The entries go from the
-// root page to the view, and the view is the last entry.
-export function narrowStack(view) {
+// root page to the view, and the view is the last entry. The root page shows
+// the Catalog tree (ADR 0254 item 10). `feeds` is the feed list, or null before
+// it loads. The page of a publisher feed is directly above the root page, so
+// its "‹ Catalog" goes back to the tree.
+export function narrowStack(view, feeds = null) {
   const root = { name: 'root' };
   const releases = { name: 'releases' };
   switch (view.name) {
     case 'root': return [root];
     // A destination below Releases is a page of the root (ADR 0085 item 7).
-    // Each level above a level is a page below it (ADR 0215 item 7).
-    case 'releases': return view.group === undefined ? [root, releases] : [root, ...levelPages(view.trail), view];
+    case 'releases': return view.group === undefined ? [root, releases] : [root, view];
     // The People area (ADR 0203 items 36 and 64).
     case 'person':
     case 'wallet':
@@ -1009,19 +988,19 @@ export function narrowStack(view) {
     // feed page (ADR 0223 item 8).
     case 'outline': {
       const feed = { name: 'feed', id: view.id, ...(view.from ? { from: view.from } : {}) };
-      return [...narrowStack(feed), view];
+      return [...narrowStack(feed, feeds), view];
     }
-    case 'feed': return view.from
-      ? [root, ...levelPages([...view.from.trail, view.from.group]), view]
-      : [root, releases, view];
+    case 'feed': {
+      const own = (feeds || []).find((feed) => feed.id === view.id);
+      if (own && isPublisher(own)) return [root, view];
+      // A release that opened from a page of a publisher feed goes back to
+      // that page.
+      return view.from
+        ? [root, openFeedView(view.from.group, true, fromPath(pathOfFrom(view.from).slice(0, -1))), view]
+        : [root, releases, view];
+    }
     default: return [root, view];
   }
-}
-
-// The level pages of a trail, from the top (ADR 0215 item 7).
-function levelPages(trail) {
-  const list = Array.isArray(trail) ? trail : [];
-  return list.map((group, i) => ({ name: 'releases', group, trail: list.slice(0, i) }));
 }
 
 // The view of a feed on Releases. It is the feed view at each width
@@ -1041,9 +1020,9 @@ export function wideView(view) {
 
 // The navigation state for a new width of the window. A narrow window gets
 // the stack of the view. A wide window gets the view alone.
-export function widthNav(view, narrow) {
+export function widthNav(view, narrow, feeds = null) {
   if (!narrow) return startNav(wideView(view));
-  const entries = narrowStack(view);
+  const entries = narrowStack(view, feeds);
   return { entries, index: entries.length - 1 };
 }
 
@@ -1068,9 +1047,9 @@ export function rootNav(nav) {
 // The navigation state that fits a width. A state that already has the form
 // of the width is kept, so that a reload keeps its history. Any other state
 // becomes `widthNav` of its current view.
-export function navAtWidth(nav, narrow) {
+export function navAtWidth(nav, narrow, feeds = null) {
   const narrowForm = nav.entries[0].name === 'root';
   const wideForm = nav.entries.every((e) => e.name !== 'root' && e.name !== 'outline');
   if (narrow ? narrowForm : wideForm) return nav;
-  return widthNav(nav.entries[nav.index], narrow);
+  return widthNav(nav.entries[nav.index], narrow, feeds);
 }

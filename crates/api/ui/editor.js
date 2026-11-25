@@ -3100,7 +3100,7 @@ function ArtistsAndLabels({ feed, feeds, model, update, draft, go, onListChanged
   };
   return html`<section id="linked-artist-and-label-pages" class="page-section"><h2>Linked artist and label pages</h2>
     <div class="group">
-      <${ChangedNotices} changed=${changed} go=${go} />
+      <${ChangedNotices} changed=${changed} go=${go} onClose=${(id) => setChanged((list) => list.filter((c) => c.id !== id))} />
       ${rows.length === 0 && html`<p class="hint">Not linked to an artist or label page yet.</p>`}
       ${rows.map((row) => html`<div class="release-row" key=${row.entry._cid}>
         <span class="title">${row.entry.title || row.entry.feed_url}</span>
@@ -4447,12 +4447,14 @@ async function changeTwoDrafts(action, { feedId, draft, onListChanged, setChange
 }
 
 // One notice for each feed whose draft a change altered (ADR 0255 item 8).
-// Each notice has a button that opens its feed.
-function ChangedNotices({ changed, go }) {
+// Each notice has a button that opens its feed, and a close button.
+function ChangedNotices({ changed, go, onClose }) {
   return changed.map((c) => html`<div class="notice" role="status" key=${c.id}>
       <span>Studio also changed the draft of ${c.title || 'Untitled feed'}. Open it to examine and write it.</span>
       <div class="actions"><button class="button" type="button"
-        onClick=${() => go({ name: 'feed', id: c.id })}>Open ${c.title || 'Untitled feed'}</button></div>
+        onClick=${() => go({ name: 'feed', id: c.id })}>Open ${c.title || 'Untitled feed'}</button>
+        ${onClose && html`<button class="button quiet icon-button" type="button" aria-label=${`Close the notice about ${c.title || 'Untitled feed'}`}
+          onClick=${() => onClose(c.id)}>✕</button>`}</div>
     </div>`);
 }
 
@@ -4546,6 +4548,9 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, view,
   const [linkRolesRow, setLinkRolesRow] = useState(null);
   // The feeds whose draft the last link or role change altered.
   const [changed, setChanged] = useState([]);
+  // The notices of a role change show below the role field, so that the
+  // check boxes do not move (task 254 check, finding 1).
+  const [roleChanged, setRoleChanged] = useState([]);
   const [chosen, setChosen] = useState('');
   // The row of the Add feeds page that is open, from the first steps (ADR 0221).
   const [addOpen, setAddOpen] = useState(null);
@@ -4617,14 +4622,28 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, view,
   // Save and confirm a set of roles (ADR 0082 items 5 and 8).
   // The releases that keep a page of a role (ADR 0257 item 10a).
   const [keptFolds, setKeptFolds] = useState([]);
-  const setRoles = (next) => {
-    if (next.length === 0) return;
+  const putRoles = async (list) => {
+    const response = await api(`/feeds/${feed.id}/role`, { method: 'PUT', body: { roles: list } });
+    setKeptFolds(keptRoleFolds(response.kept_role_releases));
+    return response.changed;
+  };
+  // A role change also changes the drafts of other feeds, so it is one
+  // operation for Undo (ADR 0228 item 2). The load of the draft keeps the
+  // history, so Redo stays after Undo.
+  const applyRoles = async (list) => {
     setKeptFolds([]);
-    twoDrafts(roleAction, async () => {
-      const response = await api(`/feeds/${feed.id}/role`, { method: 'PUT', body: { roles: next } });
-      setKeptFolds(keptRoleFolds(response.kept_role_releases));
-      return response.changed;
-    });
+    setRoleChanged([]);
+    const named = (await putRoles(list)).filter((c) => c.id !== feed.id);
+    await draft.load(true);
+    await onListChanged();
+    setRoleChanged(named);
+  };
+  const setRoles = async (next) => {
+    if (next.length === 0) return;
+    const before = roles;
+    setKeptFolds([]);
+    const done = await changeTwoDrafts(roleAction, { feedId: feed.id, draft, onListChanged, setChanged: setRoleChanged, call: () => putRoles(next) });
+    if (done) draft.recordOperation({ undo: () => applyRoles(before), redo: () => applyRoles(next) });
   };
   const choose = (value) => {
     setCustom(value === 'custom');
@@ -4698,6 +4717,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, view,
         </div>
         ${keptFolds.map((fold, i) => html`<details class="disclosure" key=${`k${i}`}><summary class="link-row"><span class="summary">${fold.summary}</span></summary>
           <div class="form">${fold.names.map((name, j) => html`<div class="link-row static" key=${j}><span class="text">${name}</span></div>`)}</div></details>`)}
+        <${ChangedNotices} changed=${roleChanged} go=${go} onClose=${(id) => setRoleChanged((list) => list.filter((c) => c.id !== id))} />
         <${ErrorNotice} error=${publisherError(roleAction.error, PUBLISHER_ROLE_TEXT)} />
       </div>
     </section>`,
@@ -4774,7 +4794,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, view,
     if (f && makeInfo && nav && shouldAddTracksAfterNewRelease(makeInfo.type)) nav.addTracksNext(f.id);
     go(f ? newFeedView(f.id, from) : { name: 'releases' });
   };
-  return html`<${ChangedNotices} changed=${changed} go=${go} />
+  return html`<${ChangedNotices} changed=${changed} go=${go} onClose=${(id) => setChanged((list) => list.filter((c) => c.id !== id))} />
     ${linkRolesRow && html`<${LinkRolesSheet} row=${linkRolesRow} pageRoles=${roles}
       onSave=${(action, selected) => twoDrafts(action, async () => (await api(`/feeds/${feed.id}/links/${linkRolesRow.match.id}`, {
         method: 'PUT', body: { roles: selected },

@@ -1890,6 +1890,22 @@ button.outline-feed {
 /* The base size of the heading is its text width, so the tools wrap to a new
    line before they cover the heading. */
 .releases-head h1 { flex: 1 1 auto; min-width: 0; font-size: var(--text-title-1); font-weight: 800; letter-spacing: -.03em; }
+/* Overview (ADR 0263, ADR 0264): the counts line, the filters and the headings
+   with their tiles. A level 2 heading is indented below its level 1 heading. */
+.overview-counts { color: var(--muted); font-size: var(--text-callout); }
+.overview-filters { max-width: 360px; }
+.overview-part { display: grid; gap: 24px; }
+.overview-group { display: grid; gap: 8px; min-width: 0; }
+.overview-group.level-2 { padding-left: 16px; }
+.overview-heading { display: flex; align-items: baseline; gap: 10px; min-width: 0; font-size: var(--text-title-2); font-weight: 700; }
+.overview-group.level-2 > .overview-heading { font-size: var(--text-title-3); }
+.overview-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.overview-heading .button.link.overview-name { padding: 0; color: inherit; font: inherit; text-decoration: none; }
+.overview-heading .button.link.overview-name:hover { text-decoration: underline; }
+/* Overview has smaller tiles than the old view "Tiles", so a phone shows two
+   tiles on each line (ADR 0264 item 7). */
+.overview .releases-list.tiles { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.overview-count { color: var(--muted); font-size: var(--text-callout); font-weight: 500; }
 .releases-roles { display: flex; align-items: center; gap: 8px; margin-top: 4px; color: var(--muted); }
 /* The tools wrap, so that "＋ Add a feed" goes to a new line in a narrow
    window and stays in the margins of the page (ADR 0072 item 2). */

@@ -4792,7 +4792,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, view,
     }
     // A new release with no track opens the import sheet (ADR 0224 item 7).
     if (f && makeInfo && nav && shouldAddTracksAfterNewRelease(makeInfo.type)) nav.addTracksNext(f.id);
-    go(f ? newFeedView(f.id, from) : { name: 'releases' });
+    go(f ? newFeedView(f.id, from) : { name: 'overview' });
   };
   return html`<${ChangedNotices} changed=${changed} go=${go} onClose=${(id) => setChanged((list) => list.filter((c) => c.id !== id))} />
     ${linkRolesRow && html`<${LinkRolesSheet} row=${linkRolesRow} pageRoles=${roles}

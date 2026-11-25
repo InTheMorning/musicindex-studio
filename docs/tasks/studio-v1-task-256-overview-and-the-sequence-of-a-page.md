@@ -4,13 +4,16 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Levels And Move
 Decisions: [ADR 0263](../adr/0263-overview-is-the-start-page-and-each-page-keeps-the-sequence-of-its-feed.md) items 1 to 18. [ADR 0264](../adr/0264-overview-groups-the-releases-below-label-artist-and-curator-headings.md) items 1 to 8 replace ADR 0263 items 5 and 7 on Overview.
 Mockup: `.studio-dev/design-brief/prototype/overview.html`. Git ignores it.
 
-Status: Packet 256a is built. Packets 256b to 256d are not started.
+Status: Packets 256a and 256b are built. Packets 256c and 256d are not started.
 
 Operator choices (the main session, in the approved ADR 0263):
 
 - The name of the outline button of item 18 is "‹ Sections". This value is open in ADR 0263. The packets use it.
 - Packet 256a: a new playlist gets its channel `pubDate` when Studio makes its first draft, not at its first file write. The draft is the first save, and a later write keeps the value.
 - Packet 256a: the channel `pubDate` is a field of the feed model, so Review shows a change of it. A new link on the `podcast:publisher` side stays last, because `sort_publisher_links` gives that sequence.
+- Packet 256b: the feed list gives no role for each link of a release. Overview puts an album below its first linked page with the role `artist` and its first other linked page with the role `label`, in the sequence of the tree.
+- Packet 256b: the group page of a Catalog row (`GroupPage`) keeps its sort until packets 256c and 256d replace it, so the old sort code stays until then.
+- Packet 256b: Overview tiles have a minimum width of 140 px, so a phone shows two tiles on each line.
 
 ## Goal
 

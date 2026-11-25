@@ -7,18 +7,18 @@ import { openFeedView, widthNav } from '../ui/shell.js';
 
 const app = readFileSync(new URL('../ui/app.js', import.meta.url), 'utf8');
 const root = { name: 'root' };
-const releases = { name: 'releases' };
+const releases = { name: 'overview' };
 
 test('a feed opens as the feed view at each width', () => {
   assert.deepEqual(openFeedView(5, true), { name: 'feed', id: 5 });
   assert.deepEqual(openFeedView(5, false), { name: 'feed', id: 5 });
 });
 
-test('the narrow stack of a feed is root, Releases, feed', () => {
+test('the narrow stack of a feed is root, Overview, feed', () => {
   assert.deepEqual(widthNav({ name: 'feed', id: 5 }, true).entries, [root, releases, { name: 'feed', id: 5 }]);
 });
 
-test('the narrow stack of an outline is root, Releases, feed, outline', () => {
+test('the narrow stack of an outline is root, Overview, feed, outline', () => {
   const nav = widthNav({ name: 'outline', id: 5 }, true);
   assert.deepEqual(nav.entries, [root, releases, { name: 'feed', id: 5 }, { name: 'outline', id: 5 }]);
   assert.equal(nav.index, 3);
@@ -39,9 +39,9 @@ test('ADR 0226 items 7 and 8: RootPage gives the full panel to LeftPanelFooter, 
   assert.ok(!body.includes('panel.bottom'), `ADR 0226 item 8: RootPage must not split panel.bottom. ${fix}`);
 });
 
-test('ADR 0228 item 11: the button "‹ Overview" is at the left of the menu of the tabs, not in the bar. Fix PageTabs and EditableFeed in app.js.', () => {
+test('ADR 0228 item 11: the button "‹ Sections" (ADR 0263 item 18) is at the left of the menu of the tabs, not in the bar. Fix PageTabs and EditableFeed in app.js.', () => {
   const tabs = app.indexOf('export function PageTabs');
-  const button = app.indexOf('‹ Overview</button>', tabs);
+  const button = app.indexOf('‹ Sections</button>', tabs);
   const menu = app.indexOf('${menu}</div></div>', button);
   assert.ok(button > tabs && menu > button);
   assert.ok(!app.includes('>Sections</button>'));

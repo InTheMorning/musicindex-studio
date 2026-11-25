@@ -4,8 +4,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   pageTabs, tabsFit, mediumKind, feedKind, trackCountText, roleChoice, roleHint, keptRoleFolds, linkRoleChoices, toggleRole, isEditable, isReadOnly, reviewHost, moveNote, isPublisher, isPlaylist, trackKey, isTrack,
-  leftPanel, groupDestinations, releasesList, listQuery, queryText, sortLabel, sortEntries, compareNames, byName, segmentKey,
-  startNav, pushNav, backNav, forwardNav, canBack, canForward, setScroll, releasesView,
+  leftPanel, groupDestinations, releasesList, overviewModel, overviewFilter, legacyView, legacyNav, addressSearch, unlinkedPlaylists, sortLabel, sortEntries, compareNames, byName, segmentKey,
+  startNav, pushNav, backNav, forwardNav, canBack, canForward, setScroll, overviewView,
   narrowStack, openFeedView, publisherGroups, placeText, pageSort, pageSortLabel, PAGE_SORTS, draftLabel, newFeedView, navAtWidth, rowPath, pagePath, toggleRow, revealRows, widthNav, wideView, publisherArt, mosaicCells, otherFeedText, mediumProblemView, mediumProblemCause,
 } from '../ui/shell.js';
 import { stateMark } from '../ui/outsidecheck.js';
@@ -141,24 +141,24 @@ test('a track key uses the GUID, or the client ID with no GUID', () => {
   assert.equal(isTrack(model.items[0], 'g-2'), false);
 });
 
-test('with no open feed, the left panel gives Releases at the top', () => {
-  const panel = leftPanel({ view: { name: 'releases' }, feeds: [album], model: null, vaultOpen: true });
+test('with no open feed, the left panel gives Overview at the top (ADR 0263 item 1)', () => {
+  const panel = leftPanel({ view: { name: 'overview' }, feeds: [album], model: null, vaultOpen: true });
   assert.equal(panel.kind, 'destinations');
-  assert.equal(panel.top[0].id, 'releases');
+  assert.equal(panel.top[0].id, 'overview');
   assert.deepEqual(panel.bottom.map((e) => e.id), ['people', 'hosts', 'settings', 'lock']);
   assert.equal(panel.top[0].current, true);
   assert.equal(JSON.stringify(panel).includes('Select a feed'), false);
 });
 
-test('Releases stays current on the Releases page', () => {
-  const releases = leftPanel({ view: { name: 'releases' }, feeds: [album], model: null, vaultOpen: true });
-  assert.equal(releases.top.find((e) => e.id === 'releases').current, true);
-  assert.equal(releases.top[0].id, 'releases');
+test('Overview stays current on the Overview page', () => {
+  const releases = leftPanel({ view: { name: 'overview' }, feeds: [album], model: null, vaultOpen: true });
+  assert.equal(releases.top.find((e) => e.id === 'overview').current, true);
+  assert.equal(releases.top[0].id, 'overview');
   assert.equal(releases.top[0].opens, false);
 });
 
 test('Unlock Studio takes the place of Lock Studio on a server with a locked vault', () => {
-  const panel = leftPanel({ view: { name: 'releases' }, feeds: [], model: null, vaultOpen: false, vaultLocked: true });
+  const panel = leftPanel({ view: { name: 'overview' }, feeds: [], model: null, vaultOpen: false, vaultLocked: true });
   assert.deepEqual(panel.bottom.map((e) => [e.id, e.label]), [['people', 'People'], ['hosts', 'File hosts'], ['settings', 'Settings'], ['unlock', 'Unlock Studio']]);
 });
 
@@ -241,7 +241,7 @@ test('a feed that the editor does not open gives no page, and a publisher feed h
 
 test('the Releases list gives the newest feed first, with the greater ID first on a tie', () => {
   const tie = { ...album, id: 9, added_at: 200 };
-  const list = releasesList({ feeds: [album, publisher, readOnly, tie], connectors: [{ id: 'c1', name: 'Local' }], sort: 'newest', view: 'rows' });
+  const list = releasesList({ feeds: [album, publisher, readOnly, tie], connectors: [{ id: 'c1', name: 'Local' }], sort: 'newest', view: 'rows', group: 'none' });
   assert.equal(list.letters, null);
   // ADR 0085 item 6: a feed with roles opens from its destination, not from
   // a row of Releases.
@@ -251,14 +251,14 @@ test('the Releases list gives the newest feed first, with the greater ID first o
 });
 
 test('the Releases list gives each release its track count text', () => {
-  const list = releasesList({ feeds: [{ ...album, track_count: 2 }, { ...album, id: 4 }], connectors: [], sort: 'newest', view: 'rows' });
+  const list = releasesList({ feeds: [{ ...album, track_count: 2 }, { ...album, id: 4 }], connectors: [], sort: 'newest', view: 'rows', group: 'none' });
   assert.equal(list.rows.find((row) => row.id === 1).countText, '2 tracks');
   assert.equal(list.rows.find((row) => row.id === 4).countText, null);
 });
 
 test('the Releases list gives the draft label of each draft state', () => {
   const states = ['new', 'changed', 'unchanged', 'none'].map((s, i) => ({ ...album, id: i + 1, draft_state: s }));
-  const list = releasesList({ feeds: states, connectors: [], sort: 'newest', view: 'rows' });
+  const list = releasesList({ feeds: states, connectors: [], sort: 'newest', view: 'rows', group: 'none' });
   const byId = Object.fromEntries(list.rows.map((r) => [r.id, r.draftLabel]));
   assert.equal(byId[1], 'New, not written');
   assert.equal(byId[2], 'Saved, not written');
@@ -268,7 +268,7 @@ test('the Releases list gives the draft label of each draft state', () => {
 
 test('the Releases list marks a feed that apps do not list (ADR 0063)', () => {
   const feeds = [{ ...album, id: 1, hidden: true }, { ...album, id: 2 }];
-  const list = releasesList({ feeds, connectors: [], sort: 'newest', view: 'rows' });
+  const list = releasesList({ feeds, connectors: [], sort: 'newest', view: 'rows', group: 'none' });
   const byId = Object.fromEntries(list.rows.map((r) => [r.id, r.hidden]));
   assert.equal(byId[1], true);
   assert.equal(byId[2], false);
@@ -282,7 +282,7 @@ test('the A to Z sort gives the letter groups, with "#" after Z', () => {
     { id: 4, title: 'Blue', medium: 'music' },
     { id: 5, title: 'Zed', medium: 'music' },
   ];
-  const list = releasesList({ feeds, connectors: [], sort: 'az', view: 'tiles' });
+  const list = releasesList({ feeds, connectors: [], sort: 'az', view: 'tiles', group: 'none' });
   assert.equal(list.sort, 'az');
   assert.equal(list.view, 'tiles');
   assert.deepEqual(list.rows.map((r) => r.id), [3, 1, 4, 5, 2]);
@@ -296,30 +296,21 @@ test('the A to Z sort gives the letter groups, with "#" after Z', () => {
 
 test('a feed with no title sorts by its path', () => {
   const feeds = [{ id: 1, path: 'zz.xml', medium: 'music' }, { id: 2, path: 'aa.xml', medium: 'music' }];
-  const list = releasesList({ feeds, connectors: [], sort: 'az', view: 'rows' });
+  const list = releasesList({ feeds, connectors: [], sort: 'az', view: 'rows', group: 'none' });
   assert.deepEqual(list.rows.map((r) => r.title), ['aa.xml', 'zz.xml']);
 });
 
-test('the query gives the sort, the view and the reversed state, with the defaults for unknown values', () => {
-  assert.deepEqual(listQuery('?sort=az&view=tiles&reversed=1'), { sort: 'az', view: 'tiles', reversed: true });
-  assert.deepEqual(listQuery('sort=other&view=x&reversed=x'), { sort: 'newest', view: 'rows', reversed: false });
-  assert.deepEqual(listQuery(''), { sort: 'newest', view: 'rows', reversed: false });
-});
-
-test('the reverse command changes the sequence of the rows and the address (musicindex ADR 0043 R-LIST-7)', () => {
+test('the reverse command changes the sequence of the rows (musicindex ADR 0043 R-LIST-7)', () => {
   const feeds = [
     { id: 1, title: 'Bravo', medium: 'music', added_at: 1 },
     { id: 2, title: 'Alpha', medium: 'music', added_at: 3 },
     { id: 3, title: 'Charlie', medium: 'music', added_at: 2 },
   ];
-  const ids = (sort, reversed) => releasesList({ feeds, connectors: [], sort, view: 'rows', reversed }).rows.map((r) => r.id);
+  const ids = (sort, reversed) => releasesList({ feeds, connectors: [], sort, view: 'rows', reversed, group: 'none' }).rows.map((r) => r.id);
   assert.deepEqual(ids('newest', false), [2, 3, 1]);
   assert.deepEqual(ids('newest', true), [1, 3, 2]);
   assert.deepEqual(ids('az', false), [2, 1, 3]);
   assert.deepEqual(ids('az', true), [3, 1, 2]);
-  assert.equal(queryText({ sort: 'newest', view: 'rows', reversed: true }), 'reversed=1');
-  assert.equal(queryText({ sort: 'newest', view: 'rows', reversed: false }), '');
-  assert.deepEqual(listQuery(queryText({ sort: 'az', view: 'tiles', reversed: true })), { sort: 'az', view: 'tiles', reversed: true });
 });
 
 test('a reversed feed group reverses its feed order', () => {
@@ -332,7 +323,7 @@ test('a reversed feed group reverses its feed order', () => {
 
 test('a reversed A to Z list shows its letters from Z to A (musicindex ADR 0043 R-LIST-7 item 7)', () => {
   const feeds = [{ id: 1, title: 'Alpha', medium: 'music' }, { id: 2, title: 'Zulu', medium: 'music' }];
-  const list = releasesList({ feeds, connectors: [], sort: 'az', view: 'rows', reversed: true });
+  const list = releasesList({ feeds, connectors: [], sort: 'az', view: 'rows', reversed: true, group: 'none' });
   assert.deepEqual(list.letters.map((g) => g.letter), ['Z', 'A']);
   assert.equal(list.reversed, true);
 });
@@ -346,14 +337,8 @@ test('each sort has its reversed name (musicindex ADR 0043 R-LIST-7 item 5)', ()
   assert.equal(sortLabel('order', true), 'Page Order, Reversed');
 });
 
-test('the query text holds only the values that are not the default', () => {
-  assert.equal(queryText({ sort: 'az', view: 'tiles' }), 'sort=az&view=tiles');
-  assert.equal(queryText({ sort: 'newest', view: 'tiles' }), 'view=tiles');
-  assert.equal(queryText({ sort: 'newest', view: 'rows' }), '');
-});
-
 test('after a feed and Back, the Releases entry has the marked feed and its scroll', () => {
-  let nav = startNav({ name: 'releases' });
+  let nav = startNav({ name: 'overview' });
   nav = setScroll(nav, 120);
   nav = pushNav(nav, { name: 'feed', id: 1 });
   assert.equal(canBack(nav), true);
@@ -370,31 +355,31 @@ test('Back at index 0 on a feed puts a marked Releases entry before it', () => {
   let nav = startNav({ name: 'feed', id: 4 });
   assert.equal(canBack(nav), true);
   nav = backNav(nav);
-  assert.deepEqual(nav.entries, [{ name: 'releases', marked: 4 }, { name: 'feed', id: 4 }]);
+  assert.deepEqual(nav.entries, [{ name: 'overview', marked: 4 }, { name: 'feed', id: 4 }]);
   assert.equal(nav.index, 0);
   nav = forwardNav(nav);
   assert.deepEqual(nav.entries[nav.index], { name: 'feed', id: 4 });
 });
 
 test('Forward is false when no entry follows, and Back is false at the start', () => {
-  const nav = startNav({ name: 'releases' });
+  const nav = startNav({ name: 'overview' });
   assert.equal(canBack(nav), false);
   assert.equal(canForward(nav), false);
   assert.deepEqual(forwardNav(nav), nav);
 });
 
 test('a new view drops the entries after the current one', () => {
-  let nav = startNav({ name: 'releases' });
+  let nav = startNav({ name: 'overview' });
   nav = pushNav(nav, { name: 'hosts' });
   nav = pushNav(nav, { name: 'people' });
   nav = backNav(nav);
   nav = pushNav(nav, { name: 'feed', id: 2 });
-  assert.deepEqual(nav.entries.map((e) => e.name), ['releases', 'hosts', 'feed']);
+  assert.deepEqual(nav.entries.map((e) => e.name), ['overview', 'hosts', 'feed']);
   assert.equal(canForward(nav), false);
 });
 
 test('the navigation functions do not change their argument', () => {
-  const nav = startNav({ name: 'releases' });
+  const nav = startNav({ name: 'overview' });
   const before = JSON.stringify(nav);
   pushNav(nav, { name: 'feed', id: 1 });
   backNav(startNav({ name: 'feed', id: 1 }));
@@ -405,9 +390,9 @@ test('the navigation functions do not change their argument', () => {
 
 test('the narrow stack gives the root page below each view (ADR 0258 item 13)', () => {
   const root = { name: 'root' };
-  const releases = { name: 'releases' };
+  const releases = { name: 'overview' };
   assert.deepEqual(narrowStack({ name: 'root' }), [root]);
-  assert.deepEqual(narrowStack({ name: 'releases' }), [root, releases]);
+  assert.deepEqual(narrowStack({ name: 'overview' }), [root, releases]);
   assert.deepEqual(narrowStack({ name: 'change-set', id: 3 }), [root, { name: 'people' }, { name: 'change-set', id: 3 }]);
   assert.deepEqual(narrowStack({ name: 'hosts' }), [root, { name: 'hosts' }]);
   assert.deepEqual(narrowStack({ name: 'outline', id: 1 }), [root, releases, { name: 'feed', id: 1 }, { name: 'outline', id: 1 }]);
@@ -462,7 +447,7 @@ test('Back from the outline marks the feed on Releases, and Back from a part kee
   assert.equal(nav.entries[nav.index].name, 'feed');
   assert.equal(nav.entries[nav.index - 1].marked, undefined);
   nav = backNav(nav);
-  assert.deepEqual(nav.entries[nav.index], { name: 'releases', marked: 1 });
+  assert.deepEqual(nav.entries[nav.index], { name: 'overview', marked: 1 });
   assert.equal(nav.index, 1);
   nav = backNav(nav);
   assert.deepEqual(nav.entries[nav.index], { name: 'root' });
@@ -481,7 +466,7 @@ test('a width change gives the stack, or the view at wide width', () => {
   assert.deepEqual(navAtWidth(narrowNav, false), startNav({ name: 'feed', id: 2 }));
   assert.deepEqual(navAtWidth(narrowNav, true), narrowNav);
   assert.deepEqual(wideView({ name: 'outline', id: 5 }), { name: 'feed', id: 5 });
-  assert.deepEqual(wideView({ name: 'root' }), { name: 'releases' });
+  assert.deepEqual(wideView({ name: 'root' }), { name: 'overview' });
 });
 
 test('a musicL feed is a playlist, with no regard to case', () => {
@@ -556,13 +541,13 @@ test('a feed row with only rss_image_url gives that address as the cover of the 
   const demu = { ...album, image: null, rss_image_url: 'https://m.example/demu.png' };
   const panel = leftPanel({ view: { name: 'feed', id: 1, page: 'track', track: 'g-1' }, feeds: [demu], model, vaultOpen: true });
   assert.equal(panel.feed.image, 'https://m.example/demu.png');
-  const list = releasesList({ feeds: [demu], connectors: [], sort: 'newest', view: 'rows' });
+  const list = releasesList({ feeds: [demu], connectors: [], sort: 'newest', view: 'rows', group: 'none' });
   assert.equal(list.rows[0].image, 'https://m.example/demu.png');
 });
 
 test('the itunes:image of a feed row comes before its rss_image_url', () => {
   const both = { ...album, image: 'https://m.example/a.png', rss_image_url: 'https://m.example/b.png' };
-  const list = releasesList({ feeds: [both], connectors: [], sort: 'newest', view: 'rows' });
+  const list = releasesList({ feeds: [both], connectors: [], sort: 'newest', view: 'rows', group: 'none' });
   assert.equal(list.rows[0].image, 'https://m.example/a.png');
 });
 
@@ -584,18 +569,18 @@ test('the head is current on the first page and not on a track page (ADR 0069)',
   assert.equal(track.feed.current, false);
 });
 
-test('releasesView gives the scroll of the nearest Releases entry and does not change nav (ADR 0069)', () => {
+test('overviewView gives the scroll of the nearest Releases entry and does not change nav (ADR 0069)', () => {
   const nav = {
-    entries: [{ name: 'releases', marked: 9, scroll: 40 }, { name: 'feed', id: 1 }, { name: 'feed', id: 1, page: 'files' }],
+    entries: [{ name: 'overview', marked: 9, scroll: 40 }, { name: 'feed', id: 1 }, { name: 'feed', id: 1, page: 'files' }],
     index: 2,
   };
   const copy = JSON.parse(JSON.stringify(nav));
-  assert.deepEqual(releasesView(nav, 1), { name: 'releases', marked: 1, scroll: 40 });
+  assert.deepEqual(overviewView(nav, 1), { name: 'overview', marked: 1, scroll: 40 });
   assert.deepEqual(nav, copy);
   const none = { entries: [{ name: 'feed', id: 1 }], index: 0 };
-  assert.deepEqual(releasesView(none, 1), { name: 'releases', marked: 1 });
-  const later = { entries: [{ name: 'feed', id: 1 }, { name: 'releases', scroll: 5 }], index: 0 };
-  assert.deepEqual(releasesView(later, 1), { name: 'releases', marked: 1 });
+  assert.deepEqual(overviewView(none, 1), { name: 'overview', marked: 1 });
+  const later = { entries: [{ name: 'feed', id: 1 }, { name: 'overview', scroll: 5 }], index: 0 };
+  assert.deepEqual(overviewView(later, 1), { name: 'overview', marked: 1 });
 });
 
 test('Settings is current on the view settings', () => {
@@ -617,7 +602,7 @@ test('a page move change set belongs to Releases', () => {
   assert.equal(panel.top[0].current, true, 'ADR 0243 item 3: fix leftPanel in crates/api/ui/shell.js.');
   assert.equal(panel.bottom.find((item) => item.id === 'people').current, false,
     'ADR 0243 item 3: fix leftPanel in crates/api/ui/shell.js.');
-  assert.deepEqual(narrowStack(view), [{ name: 'root' }, { name: 'releases' }, view],
+  assert.deepEqual(narrowStack(view), [{ name: 'root' }, { name: 'overview' }, view],
     'ADR 0243 item 3: fix narrowStack in crates/api/ui/shell.js.');
 });
 
@@ -628,7 +613,7 @@ test('People is current on each view of its area (ADR 0203 item 36)', () => {
     assert.equal(people.current, true, `ADR 0203 item 36: People is current on the view ${name}.`);
     assert.equal(people.icon, 'users', 'ADR 0203 item 36: People has the Lucide icon users.');
   }
-  const panel = leftPanel({ view: { name: 'releases' }, feeds: [], model: null, vaultOpen: true });
+  const panel = leftPanel({ view: { name: 'overview' }, feeds: [], model: null, vaultOpen: true });
   assert.deepEqual(panel.bottom.map((e) => e.id), ['people', 'hosts', 'settings', 'lock'],
     'ADR 0203 item 36: the bottom is People, File hosts, Settings, then Lock Studio.');
   assert.equal(panel.bottom.find((e) => e.id === 'people').current, false);
@@ -661,7 +646,7 @@ test('the role headings are Publishers, Labels, Curators, Artists and No role', 
   const feeds = ['artist', 'curator', 'label', 'hosting', null, 'producer'].map((role, i) => ({
     id: i + 1, medium: 'publisher', title: role || 'Bare', publisher_roles: role ? [role] : [],
   }));
-  const panel = leftPanel({ view: { name: 'releases' }, feeds, model: null, vaultOpen: true });
+  const panel = leftPanel({ view: { name: 'overview' }, feeds, model: null, vaultOpen: true });
   assert.deepEqual(panel.top.filter((row) => row.heading).map((row) => row.heading),
     ['Publishers', 'Labels', 'Curators', 'Artists', 'No role'], owner);
   assert.deepEqual(panel.top.slice(-2).map((row) => row.label), ['Bare', 'producer'], owner);
@@ -683,16 +668,16 @@ const shared = { id: 22, title: 'Shared', medium: 'music', publisher_ids: [20, 3
 const mixtape = { id: 23, title: 'Mixtape', medium: 'musicL', publisher_ids: [], added_at: 20, draft_state: 'none' };
 const catalog = [artist, label, first, shared, mixtape];
 
-test('the panel gives Releases, the tree, then "No artist yet" (ADR 0254 item 2)', () => {
-  const message = 'ADR 0254 item 2: the panel gives Releases, the top rows of the tree A to Z, then "No artist yet". Use groupDestinations of crates/api/ui/shell.js.';
+test('the panel gives Overview, the tree, then "No artist yet" (ADR 0254 item 2)', () => {
+  const message = 'ADR 0254 item 2: the panel gives Overview, the top rows of the tree A to Z, then "No artist yet". Use groupDestinations of crates/api/ui/shell.js.';
   const panel = leftPanel({ view: { name: 'releases', group: 'none' }, feeds: catalog, model: null, vaultOpen: false });
   assert.deepEqual(panel.top.map((e) => [e.id, e.label, e.count]),
-    [['releases', 'Releases', undefined], ['tree-30', 'Acme', 1], ['tree-20', 'Zed', 2], ['group-none', 'No artist yet', 1]], message);
+    [['overview', 'Overview', undefined], ['tree-30', 'Acme', 1], ['tree-20', 'Zed', 2], ['group-none', 'No artist yet', 1]], message);
   assert.deepEqual(panel.top.map((e) => e.current), [false, false, false, true], message);
-  assert.equal(panel.top[0].opens, true, 'ADR 0085 item 1: on a destination below Releases, the row Releases opens Releases.');
+  assert.equal(panel.top[0].opens, true, 'ADR 0085 item 1: on a destination below Overview, the row Overview opens Overview.');
   assert.deepEqual(panel.top.map((e) => e.dot), [undefined, 'label hollow', 'artist hollow', null], message);
-  const linked = leftPanel({ view: { name: 'releases' }, feeds: [artist, first], model: null, vaultOpen: false });
-  assert.deepEqual(linked.top.map((e) => e.id), ['releases', 'tree-20'], 'ADR 0254 item 2: "No artist yet" shows only when a release has no artist page.');
+  const linked = leftPanel({ view: { name: 'overview' }, feeds: [artist, first], model: null, vaultOpen: false });
+  assert.deepEqual(linked.top.map((e) => e.id), ['overview', 'tree-20'], 'ADR 0254 item 2: "No artist yet" shows only when a release has no artist page.');
 });
 
 test('the page of a feed with roles gives its releases in feed order, with a note for another feed', () => {
@@ -707,16 +692,12 @@ test('the page of a feed with roles gives its releases in feed order, with a not
   assert.deepEqual(az.rows.map((r) => r.id), [21, 22]);
 });
 
-test('No artist yet gives the releases with no artist page, and Releases gives each release', () => {
+test('No artist yet gives the releases with no artist page', () => {
   const none = releasesList({ feeds: catalog, connectors: [], sort: 'order', view: 'rows', group: 'none' });
   assert.deepEqual(none.rows.map((r) => r.id), [23], 'ADR 0254 item 2: "No artist yet" gives each release with no artist page.');
   assert.equal(none.sort, 'newest', 'ADR 0254 item 2: "No artist yet" has the sorts of Releases.');
   assert.equal(none.head.title, 'No artist yet');
   assert.equal(none.head.note, 'These releases have no artist page.');
-  const all = releasesList({ feeds: catalog, connectors: [], sort: 'newest', view: 'rows' });
-  assert.deepEqual(all.rows.map((r) => r.id), [21, 23, 22], 'ADR 0085 item 6: Releases gives each album and playlist.');
-  assert.equal(all.head, null);
-  assert.equal(all.rows.every((r) => r.note === null), true);
 });
 
 test('No artist yet includes a release linked only to a label page (ADR 0254 item 2)', () => {
@@ -746,7 +727,7 @@ const album2 = { id: 52, title: 'Album 2', medium: 'music', publisher_ids: [40, 
 const tree = [host, labelA, labelB, artistX, beatLab, album1, album2];
 
 const rows = (panel) => panel.top.filter((row) => row.depth !== undefined);
-const catalogOf = (feeds, open = [], view = { name: 'releases' }) => rows(leftPanel({ view, feeds, model: null, vaultOpen: false, open }));
+const catalogOf = (feeds, open = [], view = { name: 'overview' }) => rows(leftPanel({ view, feeds, model: null, vaultOpen: false, open }));
 
 test('the top rows are the feeds with no feed above them, A to Z under their headings (ADR 0254 item 3)', () => {
   const message = 'ADR 0254 item 3: the top rows are the feeds with no feed above them, under the role headings. Use groupDestinations of crates/api/ui/shell.js.';
@@ -754,9 +735,9 @@ test('the top rows are the feeds with no feed above them, A to Z under their hea
   const zed = { ...artistX, id: 46, title: 'Zed Artist', parent_ids: [] };
   const bare = { ...artistX, id: 47, title: 'Bare', publisher_roles: [], parent_ids: [] };
   const lists = { ...artistX, id: 48, title: 'Lists', publisher_roles: ['curator'], parent_ids: [] };
-  const panel = leftPanel({ view: { name: 'releases' }, feeds: [...tree, zed, alone, bare, lists], model: null, vaultOpen: false });
+  const panel = leftPanel({ view: { name: 'overview' }, feeds: [...tree, zed, alone, bare, lists], model: null, vaultOpen: false });
   assert.deepEqual(panel.top.map((e) => [e.label, e.heading]), [
-    ['Releases', undefined], ['Some Host', 'Publishers'], ['Lists', 'Curators'], ['Alone', 'Artists'], ['Zed Artist', undefined], ['Bare', 'No role'], ['No artist yet', undefined],
+    ['Overview', undefined], ['Some Host', 'Publishers'], ['Lists', 'Curators'], ['Alone', 'Artists'], ['Zed Artist', undefined], ['Bare', 'No role'], ['No artist yet', undefined],
   ], message);
   assert.deepEqual(rows(panel).map((e) => e.depth), [0, 0, 0, 0, 0], message);
 });
@@ -934,7 +915,7 @@ test('the tree is the root page of the narrow stack, and "‹ Catalog" goes back
   const release = { name: 'feed', id: 51, from };
   const parent = { name: 'feed', id: 41, from: { group: 40, trail: [] } };
   assert.deepEqual(narrowStack(release, tree), [root, parent, release], message);
-  assert.deepEqual(narrowStack({ name: 'feed', id: 51 }, tree), [root, { name: 'releases' }, { name: 'feed', id: 51 }], message);
+  assert.deepEqual(narrowStack({ name: 'feed', id: 51 }, tree), [root, { name: 'overview' }, { name: 'feed', id: 51 }], message);
   const outline = { name: 'outline', id: 51, from };
   assert.deepEqual(narrowStack(outline, tree), [root, parent, release, outline], message);
   assert.deepEqual(widthNav(page, true, tree).entries, [root, page], message);
@@ -952,8 +933,8 @@ test('the note of a release leaves out the feeds above and below the page', () =
 test('a feed with the roles artist and label is in Artists', () => {
   const message = 'ADR 0253 item 16: the first role gives the heading. Use headingIndex of crates/api/ui/shell.js.';
   const own = { id: 60, title: 'HeyCitizen', medium: 'publisher', publisher_roles: ['artist', 'label', 'producer'], roles_confirmed: true, release_ids: [], child_ids: [], parent_ids: [] };
-  const panel = leftPanel({ view: { name: 'releases' }, feeds: [own], model: null, vaultOpen: false });
-  assert.deepEqual(panel.top.map((e) => [e.label, e.heading]), [['Releases', undefined], ['HeyCitizen', 'Artists']], message);
+  const panel = leftPanel({ view: { name: 'overview' }, feeds: [own], model: null, vaultOpen: false });
+  assert.deepEqual(panel.top.map((e) => [e.label, e.heading]), [['Overview', undefined], ['HeyCitizen', 'Artists']], message);
 });
 
 test('a publisher feed shows its cover, then the mosaic of its releases, then the logo shape', () => {
@@ -970,7 +951,7 @@ test('a publisher feed shows its cover, then the mosaic of its releases, then th
   assert.deepEqual(mosaicCells(['1', '2']), ['1', '2', '2', '1']);
   assert.deepEqual(mosaicCells(['1', '2', '3']), ['1', '2', '3', '1']);
   assert.deepEqual(mosaicCells(['1', '2', '3', '4', '5']), ['1', '2', '3', '4']);
-  const panel = leftPanel({ view: { name: 'releases' }, feeds, model: null, vaultOpen: false });
+  const panel = leftPanel({ view: { name: 'overview' }, feeds, model: null, vaultOpen: false });
   assert.deepEqual(panel.top.find((e) => e.group === 70).art, ['https://e.x/a.jpg', 'https://e.x/b.jpg'], 'musicindex ADR 0204 R-DOT-3 item 6: a destination row has the art of its feed.');
 });
 
@@ -979,13 +960,12 @@ test('a feed that the editor does not open is only in Other feeds', () => {
   const show = { id: 80, title: 'A Podcast', medium: 'podcast', publisher_ids: [], added_at: 5, draft_state: 'none' };
   const single = { id: 81, title: 'A Single', medium: 'music', publisher_ids: [], added_at: 4, draft_state: 'none' };
   const feeds = [show, single];
-  assert.deepEqual(releasesList({ feeds, connectors: [], sort: 'newest', view: 'rows' }).rows.map((r) => r.id), [81], message);
   assert.deepEqual(releasesList({ feeds, connectors: [], sort: 'newest', view: 'rows', group: 'none' }).rows.map((r) => r.id), [81], message);
   const other = releasesList({ feeds, connectors: [], sort: 'newest', view: 'rows', group: 'other' });
   assert.deepEqual(other.rows.map((r) => r.id), [80], message);
   assert.equal(other.head.title, 'Other feeds', message);
-  const panel = leftPanel({ view: { name: 'releases' }, feeds, model: null, vaultOpen: false });
-  assert.deepEqual(panel.top.map((e) => [e.label, e.count]), [['Releases', undefined], ['No artist yet', 1], ['Other feeds', 1]], message);
+  const panel = leftPanel({ view: { name: 'overview' }, feeds, model: null, vaultOpen: false });
+  assert.deepEqual(panel.top.map((e) => [e.label, e.count]), [['Overview', undefined], ['No artist yet', 1], ['Other feeds', 1]], message);
   assert.equal(otherFeedText(show), 'This feed has the type “podcast”. Studio edits albums, playlists, and artist and label feeds, so it shows only the facts of this feed.', 'ADR 0090 item 1: the page gives the type of the feed.');
   assert.match(otherFeedText({ medium: null }), /^This feed has no type\./);
 });
@@ -993,8 +973,8 @@ test('a feed that the editor does not open is only in Other feeds', () => {
 test('a publisher feed with no role is in the heading No role', () => {
   const message = 'ADR 0090 item 2: "Other feeds" names only the feeds that the editor does not open. Use groupDestinations of crates/api/ui/shell.js.';
   const bare = { id: 90, title: 'Bare', medium: 'publisher', publisher_roles: [], release_ids: [], child_ids: [], parent_ids: [] };
-  const panel = leftPanel({ view: { name: 'releases' }, feeds: [bare], model: null, vaultOpen: false });
-  assert.deepEqual(panel.top.map((e) => [e.label, e.heading]), [['Releases', undefined], ['Bare', 'No role']], message);
+  const panel = leftPanel({ view: { name: 'overview' }, feeds: [bare], model: null, vaultOpen: false });
+  assert.deepEqual(panel.top.map((e) => [e.label, e.heading]), [['Overview', undefined], ['Bare', 'No role']], message);
 });
 
 test('each head and row with art and a type word gives its dot', () => {
@@ -1003,7 +983,7 @@ test('each head and row with art and a type word gives its dot', () => {
     { id: 20, title: 'Zed', medium: 'publisher', publisher_roles: ['artist'], roles_confirmed: true, release_ids: [1] },
     { id: 1, title: 'One', medium: 'music' },
   ];
-  const list = releasesList({ feeds, connectors: [], sort: 'title', view: 'rows' });
+  const list = releasesList({ feeds, connectors: [], sort: 'title', view: 'rows', group: 'none' });
   assert.ok(list.rows.length > 0);
   for (const row of list.rows) assert.ok(row.dot, message);
 });
@@ -1017,7 +997,7 @@ test('a name order reads numbers as numbers', () => {
   assert.equal(compareNames('anna', 'Anna'), 0);
   assert.ok(compareNames('Track 9', 'Track 10') < 0);
   const titled = (id, title) => ({ ...album, id, title, path: `p${id}` });
-  const list = releasesList({ feeds: [titled(1, 'Volume 10'), titled(2, 'Volume 9')], connectors: [], sort: 'az', view: 'rows' });
+  const list = releasesList({ feeds: [titled(1, 'Volume 10'), titled(2, 'Volume 9')], connectors: [], sort: 'az', view: 'rows', group: 'none' });
   assert.deepEqual(list.rows.map((r) => r.title), ['Volume 9', 'Volume 10']);
 });
 
@@ -1162,4 +1142,87 @@ test('the place of a feed uses music words (ADR 0254 item 11)', () => {
   assert.equal(placeText({ ...north, parent_ids: [], publisher_roles: ['label', 'hosting'] }, feeds), null, message);
   assert.equal(draftLabel({ draft_state: 'changed' }), 'Saved, not written', message);
   assert.equal(draftLabel({}), 'No changes', message);
+});
+
+// Overview (ADR 0263 and ADR 0264).
+const pg = (id, title, roles, extra = {}) => ({ id, title, medium: 'publisher', publisher_roles: roles, role_set: roles, ...extra });
+const rel = (id, title, pubs, extra = {}) => ({ id, title, medium: 'music', publisher_ids: pubs, ...extra });
+const pl = (id, title, pubs, extra = {}) => ({ id, title, medium: 'musicl', publisher_ids: pubs, ...extra });
+const heads = (model, part) => (model.parts.find((p) => p.id === part) || { headings: [] }).headings;
+const tileIds = (h) => (h.children.length > 0 ? h.children.flatMap(tileIds) : h.tiles.map((t) => t.id));
+
+test('ADR 0264 items 1 to 3: label, artist, Independent and No artist yet headings, each release once', () => {
+  const feeds = [
+    pg(10, 'Label A', ['label']), pg(11, 'Artist B', ['artist']), pg(12, 'Artist C', ['artist']),
+    rel(1, 'R1', [10, 11]), rel(2, 'R2', [11]), rel(3, 'R3', []), rel(4, 'R4', [10]), rel(5, 'R5', [12]),
+  ];
+  const m = overviewModel({ feeds });
+  const h = heads(m, 'releases');
+  assert.deepEqual(h.map((x) => x.title), ['Label A', 'Independent', 'No artist yet']);
+  assert.equal(h[0].level, 1);
+  assert.deepEqual(h[0].children.map((x) => x.title), ['Artist B', 'No artist yet']);
+  assert.equal(h[0].children[0].level, 2);
+  assert.deepEqual(h[1].children.map((x) => x.title), ['Artist B', 'Artist C']);
+  const all = h.flatMap(tileIds).sort();
+  assert.deepEqual(all, [1, 2, 3, 4, 5]);
+  assert.equal(h[0].count, 2);
+});
+
+test('ADR 0264 item 4: tiles sort by newest date, then no date, then A to Z', () => {
+  const feeds = [
+    pg(11, 'Artist B', ['artist']),
+    rel(1, 'Zed', [11], { release_date: '2020-01-01' }), rel(2, 'Beta', [11]), rel(3, 'Alpha', [11]),
+    rel(4, 'New', [11], { release_date: '2024-05-05' }),
+  ];
+  const h = heads(overviewModel({ feeds }), 'releases');
+  assert.deepEqual(tileIds(h[0]), [4, 1, 3, 2]);
+});
+
+test('ADR 0264 item 5: a playlist shows below each curator, and No curator yet comes last', () => {
+  const feeds = [pg(20, 'Cur 1', ['curator']), pg(21, 'Cur 2', ['curator']), pl(7, 'P7', [20, 21]), pl(8, 'P8', [])];
+  const h = heads(overviewModel({ feeds }), 'playlists');
+  assert.deepEqual(h.map((x) => x.title), ['Cur 1', 'Cur 2', 'No curator yet']);
+  assert.deepEqual(tileIds(h[0]), [7]);
+  assert.deepEqual(tileIds(h[1]), [7]);
+  assert.deepEqual(tileIds(h[2]), [8]);
+});
+
+test('ADR 0264 items 6 and 7: filters and search hide parts and empty headings', () => {
+  const feeds = [pg(11, 'Artist B', ['artist']), rel(1, 'Night', [11]), rel(2, 'Day', [11]), pl(7, 'P7', [])];
+  assert.deepEqual(overviewModel({ feeds, filter: 'releases' }).parts.map((p) => p.id), ['releases']);
+  assert.deepEqual(overviewModel({ feeds, filter: 'playlists' }).parts.map((p) => p.id), ['playlists']);
+  const found = overviewModel({ feeds, query: 'night' });
+  assert.deepEqual(found.parts.map((p) => p.id), ['releases']);
+  assert.deepEqual(tileIds(heads(found, 'releases')[0]), [1]);
+  assert.deepEqual(overviewModel({ feeds, query: 'artist b' }).parts.flatMap((p) => p.headings).flatMap(tileIds).sort(), [1, 2]);
+  const none = overviewModel({ feeds, query: 'zzz' });
+  assert.equal(none.empty, true);
+  assert.ok(none.emptyText.includes('zzz'));
+  assert.equal(overviewModel({ feeds: [], filter: 'playlists' }).emptyText, 'No playlists yet.');
+  assert.equal(overviewModel({ feeds: [] }).emptyText, 'No releases yet.');
+});
+
+test('ADR 0263 item 3: the counts line leaves out a zero count, and each notice opens its target', () => {
+  const feeds = [pg(11, 'Artist B', ['artist']), rel(1, 'R1', [], { draft_state: 'new' }), pl(7, 'P7', [])];
+  const m = overviewModel({ feeds });
+  assert.ok(m.countsText.includes('1 artist'));
+  assert.ok(!m.countsText.includes('label'));
+  assert.ok(!m.countsText.includes('0'));
+  const by = Object.fromEntries(m.notices.map((n) => [n.id, n.view]));
+  assert.deepEqual(by['no-artist'], { name: 'releases', group: 'none' });
+  assert.deepEqual(by['no-curator'], { name: 'releases', group: 'no-curator' });
+  assert.deepEqual(by['not-written'], openFeedView(1, false, undefined));
+  assert.deepEqual(overviewModel({ feeds: [pg(11, 'Artist B', ['artist'])] }).notices, []);
+  assert.equal(unlinkedPlaylists(feeds).length, 1);
+});
+
+test('ADR 0263 item 8: an old Releases view and an old address open Overview', () => {
+  assert.deepEqual(legacyView({ name: 'releases', sort: 'az', marked: 4, scroll: 9 }), { name: 'overview', marked: 4, scroll: 9 });
+  const group = { name: 'releases', group: 'none' };
+  assert.equal(legacyView(group), group);
+  const nav = legacyNav({ entries: [{ name: 'releases' }, group], index: 1 });
+  assert.equal(nav.entries[0].name, 'overview');
+  assert.equal(nav.entries[1], group);
+  assert.equal(addressSearch('?sort=az&reversed=1&view=tiles&x=2'), '?x=2');
+  assert.equal(addressSearch('?sort=az'), '');
 });

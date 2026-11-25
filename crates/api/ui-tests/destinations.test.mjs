@@ -8,7 +8,7 @@ const appText = readFileSync(new URL('../ui/app.js', import.meta.url), 'utf8');
 const shellText = readFileSync(new URL('../ui/shell.js', import.meta.url), 'utf8');
 
 const panel = (extra) => leftPanel({
-  view: { name: 'releases' }, feeds: [], model: null, vaultOpen: false, ...extra,
+  view: { name: 'overview' }, feeds: [], model: null, vaultOpen: false, ...extra,
 });
 
 test('each fixed destination of leftPanel has its icon', () => {
@@ -18,7 +18,7 @@ test('each fixed destination of leftPanel has its icon', () => {
     ...panel({ vaultLocked: true }).bottom,
   ];
   const expected = {
-    releases: 'library', people: 'users', hosts: 'hard-drive', settings: 'settings', lock: 'lock', unlock: 'lock-open',
+    overview: 'library', people: 'users', hosts: 'hard-drive', settings: 'settings', lock: 'lock', unlock: 'lock-open',
   };
   for (const [id, icon] of Object.entries(expected)) {
     const entry = entries.find((item) => item.id === id);

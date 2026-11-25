@@ -53,8 +53,8 @@ import {
 } from './move.js';
 import {
   mediumKind, feedKind, FIRST_CLASS_ROLES, roleWord, kindGlow, isEditable, isReadOnly, isPublisher, trackKey, isTrack,
-  placeText, draftLabel, leftPanel, releasesList, listQuery, queryText, sortLabel, sortEntries, mosaicCells, otherFeedText, mediumProblemView, mediumProblemCause, feedCover,
-  startNav, pushNav, backNav, forwardNav, releasesView, canBack, canForward, setScroll,
+  placeText, draftLabel, leftPanel, releasesList, overviewModel, overviewFilter, legacyNav, addressSearch, sortLabel, sortEntries, mosaicCells, otherFeedText, mediumProblemView, mediumProblemCause, feedCover,
+  startNav, pushNav, backNav, forwardNav, overviewView, canBack, canForward, setScroll,
   isFeedView, openFeedView, newFeedView, navAtWidth, toggleRow, revealRows, pageTabs, tabsFit, showsRootButtons, rootNav, segmentKey, isTabChange } from './shell.js';
 import { pageActions, pageChangeNotice, catalogChangeCount, catalogReview, gatherChangeNotice,
   pageDropRows, pageDropDecision, leaveAllBody, previewPath, startSelection, pageChangeBody } from './movepages.js';
@@ -2550,8 +2550,8 @@ export function PageTabs({ feed, view, go, checkCount = 0, tabs: suppliedTabs, c
       value=${tabs.find((tab) => tab.current)?.page} onChange=${(e) => open(e.target.value)}>
       ${tabs.map((tab) => html`<option key=${tab.page} value=${tab.page}>${tab.label}${tab.pending ? ' (Not saved)' : ''}</option>`)}
     </select>`;
-    // At narrow width, the button "‹ Overview" is at the left of the menu and
-    // opens the outline page (ADR 0228 item 11).
+    // At narrow width, the button "‹ Sections" is at the left of the menu and
+    // opens the outline page (ADR 0228 item 11, ADR 0263 item 18).
     // A publisher feed has no outline. Its button goes back to the tree
     // (ADR 0254 items 7 and 10).
     if (narrow && !settings && isPublisher(feed)) {
@@ -2560,7 +2560,7 @@ export function PageTabs({ feed, view, go, checkCount = 0, tabs: suppliedTabs, c
     }
     if (narrow && !settings) {
       return html`<div class="page-tabs-host" ref=${host}>${probeLabels}<div class="page-tab-row">
-        <button class="button" type="button" onClick=${() => go({ name: 'outline', id: feed.id, ...(view.from ? { from: view.from } : {}) })}>‹ Overview</button>${menu}</div></div>`;
+        <button class="button" type="button" onClick=${() => go({ name: 'outline', id: feed.id, ...(view.from ? { from: view.from } : {}) })}>‹ Sections</button>${menu}</div></div>`;
     }
     return html`<div class="page-tabs-host" ref=${host}>${probeLabels}${menu}</div>`;
   }
@@ -3483,7 +3483,7 @@ function ChangeSetPage({ id, go, onChanged, feeds }) {
       setStatuses((before) => refreshedStatuses(before, loaded));
       setDiffs({});
       writableIds(loaded).forEach((feedId) => loadDiff(feedId));
-    }, (error) => { if (error.status === 404) go({ name: 'releases' }, { replace: true }); });
+    }, (error) => { if (error.status === 404) go({ name: 'overview' }, { replace: true }); });
     window.addEventListener(UNLOCKED, again);
     window.addEventListener(UNDO_COMPLETE, again);
     return () => {
@@ -3997,18 +3997,18 @@ export function LetterBar({ letters, idOf }) {
   </nav>`;
 }
 
-// The Releases page, the start page (ADR 0258 items 2 to 4, musicindex
-// ADR 0080 R-LIST-1). `list` is the sort and the view from the address.
-// `marked` is the feed that the last Back selection left marked. With a
-// `group`, the page shows the releases of one destination below Releases,
-// and the sort of that page is `groupSort` (ADR 0085 items 4 to 6).
-function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, groupReversed, changedFeeds, onQuery, onGroupSort, onOpen, onAddedFeed, onConnect, onListChanged, onGo, from }) {
-  const inGroup = group !== undefined;
+// The page of one group below the Catalog (ADR 0258 items 2 to 4, musicindex
+// ADR 0080 R-LIST-1): the releases of a feed with roles, "No artist yet", "No
+// curator yet" or "Other feeds". `marked` is the feed that the last Back
+// selection left marked. The sort of the page is `groupSort` (ADR 0085 items
+// 4 to 6). The list pages and the release list of a page replace this page in
+// packets 256c and 256d of task 256.
+function GroupPage({ feeds, connectors, marked, group, groupSort, groupReversed, changedFeeds, onGroupSort, onOpen, onAddedFeed, onConnect, from }) {
   // The search text stays in the page and not in the address (ADR 0223
   // item 6). A different feed group starts with no text.
   const [query, setQuery] = useState('');
   useEffect(() => { setQuery(''); }, [group]);
-  const releaseArgs = { feeds, connectors, sort: inGroup ? groupSort : list.sort, reversed: inGroup ? groupReversed : list.reversed, view: list.view, marked, group };
+  const releaseArgs = { feeds, connectors, sort: groupSort, reversed: groupReversed, view: 'rows', marked, group };
   const allReleases = releasesList(releaseArgs);
   const releases = releasesList({ ...releaseArgs, query });
   const { results: outside } = useContext(OutsideContext);
@@ -4017,28 +4017,20 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
   // The add action of the group of a publisher feed (ADR 0164 item 6). A new
   // album or playlist becomes a release of that feed before its page opens.
   // When the link fails, the group stays and shows the error.
-  const headFeed = inGroup && head && head.id !== null ? feeds.find((f) => f.id === head.id) : null;
+  const headFeed = head && head.id !== null ? feeds.find((f) => f.id === head.id) : null;
   const more = releaseAdd(headFeed, headFeed && headFeed.title);
   const [adding, setAdding] = useState(null);
   // The groups "Not linked" and "Other" have no add menu (ADR 0261 item 2
   // names the top page and the pages of a publisher).
-  const hideAdd = inGroup && !headFeed;
+  const hideAdd = !headFeed;
   const addedRelease = (f, makeInfo) => {
     setAdding(null);
     onAddedFeed(f, makeInfo, (adding && adding.from) || from);
   };
   // A feed group keeps its own sort and direction (ADR 0085 item 8).
-  const pickSort = (id, reversed) => {
-    if (inGroup) onGroupSort(id, reversed);
-    else onQuery({ sort: id, reversed });
-  };
+  const pickSort = (id, reversed) => onGroupSort(id, reversed);
   const hasRows = releases.rows.length > 0;
   const hasUnfilteredRows = allReleases.rows.length > 0;
-  const viewButton = (name, label, icon) => html`<button class="button quiet icon-button view-button" type="button"
-    aria-label=${label} title=${label} aria-pressed=${list.view === name ? 'true' : 'false'}
-    onClick=${() => onQuery({ view: name })}>${icon}</button>`;
-  // A collection with no feed starts at the Welcome page (ADR 0260 item 1).
-  if (!inGroup && showWelcome(feeds)) return html`<${WelcomePage} connectors=${connectors} feeds=${feeds} onAdded=${onAddedFeed} />`;
   return html`<div>
     <${Bar}><span class="bar-title">${title}</span><${DeleteUndoBar} /><//>
     <section class="releases">
@@ -4046,8 +4038,6 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
         <h1>${title}</h1>
         ${(hasUnfilteredRows || (head && head.id !== null)) && html`<div class="releases-tools">
           ${hasUnfilteredRows && html`<${SortMenu} sorts=${releases.sorts} sort=${releases.sort} reversed=${releases.reversed} onSort=${pickSort} />`}
-          ${hasUnfilteredRows && viewButton('rows', 'Rows', html`<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>`)}
-          ${hasUnfilteredRows && viewButton('tiles', 'Tiles', html`<svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"></rect><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"></rect><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"></rect><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"></rect></svg>`)}
           ${!hideAdd && html`<${AddMenu} release=${more} head=${headFeed} from=${from} onOpenForm=${setAdding} />`}
           ${head && head.id !== null && html`<button class="button" type="button" onClick=${() => onOpen(head.id)}>${head.typeLabel} Page</button>`}
         </div>`}
@@ -4077,20 +4067,89 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
           <//>`
         : query.trim()
         ? html`<p class="hint">No release has “${query.trim()}”.</p>`
-        : inGroup
-        ? html`<div class="empty-releases"><p class="empty">No releases are linked yet.</p></div>`
-        : html`<div class="empty-releases">
-            <p class="empty">No releases yet.</p>
-            <div class="actions"><${AddMenu} release=${more} head=${headFeed} from=${from} onOpenForm=${setAdding} /></div>
-          </div>`}
+        : html`<div class="empty-releases"><p class="empty">No releases are linked yet.</p></div>`}
     </section>
     ${adding && html`<${AddFeedRowSheet} open=${adding.open} connectors=${connectors} feeds=${feeds}
       start=${adding.start} onAdded=${addedRelease} onConnect=${onConnect} onClose=${() => setAdding(null)} />`}
   </div>`;
 }
 
-// The add menu of Releases and a publisher page (ADR 0233 item 1). `head` is
-// the feed of the page head, or null on Releases (ADR 0240 item 4).
+// Overview, the start page (ADR 0263 items 1 to 4, ADR 0264). The model gives
+// the counts line, the notice rows, the filters and the headings with their
+// tiles (`overviewModel`). The filter and the search are part of the view, and
+// `onChange` replaces them. A collection with no feed starts at the Welcome
+// page (ADR 0260 item 1, ADR 0263 item 1).
+function OverviewPage({ feeds, connectors, marked, filter, query, changedFeeds, onChange, onOpen, onAddedFeed, onConnect }) {
+  const { results: outside } = useContext(OutsideContext);
+  const [adding, setAdding] = useState(null);
+  if (showWelcome(feeds)) return html`<${WelcomePage} connectors=${connectors} feeds=${feeds} onAdded=${onAddedFeed} />`;
+  const model = overviewModel({ feeds, filter, query, marked });
+  const more = releaseAdd(null, null);
+  const addedRelease = (f, makeInfo) => {
+    setAdding(null);
+    onAddedFeed(f, makeInfo, adding && adding.from);
+  };
+  const renderTiles = (tiles) => tiles.length > 0 && html`<${RowList} as="ul" className="releases-list tiles" mode="grid" selector=":scope > li > button">
+    ${tiles.map((tile) => html`<li key=${tile.key} id=${`release-${tile.key}`} data-marked=${tile.marked ? 'true' : 'false'}>
+      <button class="releases-tile" type="button" onClick=${() => onOpen(tile.view)}>
+        <${ArtWithDot} dot=${tile.dot}><${ImageThumb} url=${tile.image} glow=${tile.glow} className="releases-cover" always /><//>
+        <span class="releases-text">
+          <span class="title">${tile.title}${changedFeeds.has(tile.id) && html`<span class="change-mark"><span class="visually-hidden"> Changes in the library folder</span></span>`}</span>
+          ${tile.date && html`<span class="sub">${tile.date}</span>`}
+          ${outsideMark(outside[tile.id]) && html`<span class=${`sub outside-mark ${outsideMark(outside[tile.id]).tone}`}><${Icon} name="alert" />${outsideMark(outside[tile.id]).text}</span>`}
+        </span>
+      </button>
+    </li>`)}
+  <//>`;
+  // A heading is a heading for assistive technology: level 2 for a label, an
+  // artist-less group or a curator, and level 3 for an artist below a label
+  // (ADR 0264 item 6). Only the name of a page opens that page.
+  const renderHeading = (heading, noun) => {
+    const Level = heading.level === 1 ? 'h2' : 'h3';
+    return html`<section class=${`overview-group level-${heading.level}`} key=${heading.id}>
+      <${Level} class="overview-heading">
+        ${heading.view
+          ? html`<button class="button link overview-name" type="button" onClick=${() => onOpen(heading.view)}>${heading.title}</button>`
+          : html`<span class="overview-name">${heading.title}</span>`}
+        <span class="overview-count">${heading.count}<span class="visually-hidden"> ${heading.count === 1 ? noun[0] : noun[1]}</span></span>
+      <//>
+      ${renderTiles(heading.tiles)}
+      ${heading.children.map((child) => renderHeading(child, noun))}
+    </section>`;
+  };
+  return html`<div>
+    <${Bar}><span class="bar-title">Overview</span><${DeleteUndoBar} /><//>
+    <section class="releases overview">
+      <div class="releases-head">
+        <h1>Overview</h1>
+        <div class="releases-tools"><${AddMenu} release=${more} head=${null} from=${undefined} onOpenForm=${setAdding} /></div>
+      </div>
+      ${model.countsText && html`<p class="overview-counts">${model.countsText}</p>`}
+      ${model.notices.length > 0 && html`<div class="group overview-notices">
+        ${model.notices.map((notice) => html`<button key=${notice.id} class="link-row overview-notice" type="button" onClick=${() => onOpen(notice.view)}>
+          <span class="text"><span class="label">${notice.text}</span></span>
+          <span class="go" aria-hidden="true">›</span>
+        </button>`)}
+      </div>`}
+      <${SearchField} label="Search the collection" value=${query} onInput=${(e) => onChange({ query: e.target.value })} />
+      <div class="segmented overview-filters" role="group" aria-label="Show" onKeyDown=${onSegmentKey}>
+        ${model.filters.map((item) => html`<button key=${item.id} class="segment" type="button" tabIndex=${item.current ? 0 : -1}
+          aria-pressed=${item.current ? 'true' : 'false'} onClick=${() => onChange({ filter: item.id })}>${item.label}</button>`)}
+      </div>
+      ${model.parts.map((part) => html`<div class="overview-part" key=${part.id}>
+        ${part.headings.map((heading) => renderHeading(heading, part.id === 'playlists' ? ['playlist', 'playlists'] : ['release', 'releases']))}
+      </div>`)}
+      ${model.empty && (query.trim()
+        ? html`<p class="hint">${model.emptyText}</p>`
+        : html`<div class="empty-releases"><p class="empty">${model.emptyText}</p></div>`)}
+    </section>
+    ${adding && html`<${AddFeedRowSheet} open=${adding.open} connectors=${connectors} feeds=${feeds}
+      start=${adding.start} onAdded=${addedRelease} onConnect=${onConnect} onClose=${() => setAdding(null)} />`}
+  </div>`;
+}
+
+// The add menu of Overview and a publisher page (ADR 0233 item 1). `head` is
+// the feed of the page head, or null on Overview (ADR 0240 item 4).
 function AddMenu({ release, head, from, onOpenForm }) {
   const items = addMenuEntries(release, head);
   return html`<${MenuControl} className="add-menu" buttonLabel="＋ Add" accessibleName="Add" menuLabel="Add" items=${items}
@@ -4257,7 +4316,8 @@ export function AddFeedRowSheet({ open, connectors, feeds, start, onAdded, onCon
 
 // The navigation state of the session (ADR 0258 item 9). A reload keeps it
 // in session storage. If the read fails, or the state is not valid, Studio
-// starts again at Releases.
+// starts again at Overview. An old record of the page Releases opens Overview
+// (ADR 0263 item 8).
 const NAV_KEY = 'studio-nav';
 
 // The shortest time between two loads of the feed list on a focus of the
@@ -4269,10 +4329,10 @@ function readNav() {
     const saved = JSON.parse(sessionStorage.getItem(NAV_KEY));
     if (saved && Array.isArray(saved.entries) && saved.entries.length > 0
       && Number.isInteger(saved.index) && saved.index >= 0 && saved.index < saved.entries.length) {
-      return saved;
+      return legacyNav(saved);
     }
   } catch (_) {}
-  return startNav({ name: 'releases' });
+  return startNav({ name: 'overview' });
 }
 
 // If the write fails, the state stays in memory only.
@@ -4307,7 +4367,6 @@ function Shell({ vault, onLock, version }) {
   const [nav, setNavState] = useState(() => navAtWidth(readNav(), narrow));
   // The newest state. A scroll change saves here, without a new render.
   const navRef = useRef(nav);
-  const [list, setList] = useState(() => listQuery(location.search));
   const [error, setError] = useState(null);
   // The Add a track sheet, by the left panel and by the album page (ADR 0029 item 7).
   const [adding, setAdding] = useState(false);
@@ -4407,11 +4466,11 @@ function Shell({ vault, onLock, version }) {
     commit(next);
     history.pushState({ scope: 'shell', index: next.index, mirrored: mirrored.current }, '');
   });
-  // The link "Releases" of an open feed. It opens Releases as a new view,
+  // The link to Overview of an open feed. It opens Overview as a new view,
   // and it does not go back in the history (ADR 0069). The view keeps the
-  // scroll of the nearest Releases entry.
+  // scroll, the filter and the search of the nearest Overview entry.
   const showReleases = (feedId) => {
-    go(releasesView(withScroll(), feedId));
+    go(overviewView(withScroll(), feedId));
   };
   // The browser Back and Forward buttons. The state moves until its index
   // agrees with the index of the history entry.
@@ -4485,7 +4544,7 @@ function Shell({ vault, onLock, version }) {
   useEffect(() => {
     const main = mainRef.current;
     if (!main) return;
-    const marked = view.name === 'releases' ? main.querySelector('[data-marked="true"]') : null;
+    const marked = view.name === 'releases' || view.name === 'overview' ? main.querySelector('[data-marked="true"]') : null;
     if (typeof view.scroll === 'number') {
       main.scrollTop = view.scroll;
       if (marked) marked.scrollIntoView({ block: 'nearest' });
@@ -4494,12 +4553,18 @@ function Shell({ vault, onLock, version }) {
     if (marked) marked.scrollIntoView({ block: 'center' });
     else main.scrollTop = 0;
   }, [nav.index, view, feeds === null]);
-  // The sort and the view write their query into the address. The hash stays.
-  const changeList = (patch) => {
-    const next = { ...list, ...patch };
-    setList(next);
-    const text = queryText(next);
-    history.replaceState(history.state, '', `${location.pathname}${text ? `?${text}` : ''}${location.hash}`);
+  // Overview has no query in its address. An old address with `sort`,
+  // `reversed` or `view` loses these keys (ADR 0263 item 8).
+  useEffect(() => {
+    const search = addressSearch(location.search);
+    if (search !== location.search) history.replaceState(history.state, '', `${location.pathname}${search}${location.hash}`);
+  }, []);
+  // The filter and the search of Overview are part of its view in the
+  // navigation record (ADR 0263 item 8). The change replaces the entry and
+  // keeps its scroll.
+  const changeOverview = (patch) => {
+    const base = withScroll();
+    go({ ...base.entries[base.index], ...patch }, { replace: true });
   };
 
   const load = useCallback(async () => {
@@ -4587,7 +4652,7 @@ function Shell({ vault, onLock, version }) {
     catch (error) { setCatalogError(error); }
     finally { catalogWorking.current = false; setCatalogBusy(false); }
   };
-  useUndoKeys(undoCatalog, () => {}, draftFeedId === null && ['root', 'releases', 'change-set'].includes(view.name) && catalogHistory.current.canUndo);
+  useUndoKeys(undoCatalog, () => {}, draftFeedId === null && ['root', 'overview', 'releases', 'change-set'].includes(view.name) && catalogHistory.current.canUndo);
 
   // Each draft answer gives the state of its feed. The row of that feed in
   // the list takes it, with no new read of the list (ADR 0259 item 21).
@@ -4612,10 +4677,11 @@ function Shell({ vault, onLock, version }) {
   }, [draftFeedId]);
   const collectionState = useCollectionMark();
   const collection = collectionState.mark;
-  // The Releases page checks again each time it opens (ADR 0259 item 18).
+  // Overview checks again each time it opens (ADR 0259 item 18, ADR 0263
+  // item 2).
   const releasesOpened = useRef({ shown: false, count: 0 });
-  if (view.name === 'releases' && !releasesOpened.current.shown) releasesOpened.current.count += 1;
-  releasesOpened.current.shown = view.name === 'releases';
+  if (view.name === 'overview' && !releasesOpened.current.shown) releasesOpened.current.count += 1;
+  releasesOpened.current.shown = view.name === 'overview';
   const { results, running, check } = useOutsideChecks(feeds, releasesOpened.current.count);
   const outsideValue = { feeds: feeds || [], results, running, check };
   const panel = leftPanel({
@@ -4630,7 +4696,7 @@ function Shell({ vault, onLock, version }) {
     if (makeInfo?.copyFailed) setCopyNotice(`Studio could not read the feed file of ${makeInfo.copyTitle || f?.title || 'the found feed'}. No tracks and no payment recipients are copied.`);
     if (f && makeInfo && !makeInfo.copied && shouldAddTracksAfterNewRelease(makeInfo.type)) setPendingAddTracks(f.id);
     if (f && from) setOpenRows((open) => revealRows(open, from));
-    go(f ? newFeedView(f.id, from) : { name: 'releases' });
+    go(f ? newFeedView(f.id, from) : { name: 'overview' });
   };
   const openAddFeedRow = (item) => item.gatherRole
     ? setGather({ id: item.from.group, role: item.gatherRole })
@@ -4754,18 +4820,24 @@ function Shell({ vault, onLock, version }) {
     main = html`<${FeedDetail} feed=${selected} feeds=${feeds} draft=${draft} view=${view} go=${go}
       adding=${adding} onAdding=${setAdding} importing=${importing} onImporting=${setImporting} onChanged=${() => load()}
       onListChanged=${() => load()}
-      onRemoved=${async () => { await load(); go({ name: 'releases' }, { replace: true }); }} connectors=${connectors}
+      onRemoved=${async () => { await load(); go({ name: 'overview' }, { replace: true }); }} connectors=${connectors}
       differences=${differences.filter((d) => d.feed_id === selected.id)} onRescan=${rescan} />`;
-  } else {
+  } else if (view.name === 'releases' && view.group !== undefined) {
     // A release of a level goes back to that level (ADR 0215 item 6).
-    const from = view.name === 'releases' && typeof view.group === 'number'
+    const from = typeof view.group === 'number'
       ? { group: view.group, trail: view.trail || [] } : undefined;
-    main = html`<${ReleasesPage} feeds=${feeds} connectors=${connectors} marked=${view.marked} list=${list}
-      group=${view.name === 'releases' ? view.group : undefined} groupSort=${view.sort} groupReversed=${view.reversed === true}
+    main = html`<${GroupPage} feeds=${feeds} connectors=${connectors} marked=${view.marked}
+      group=${view.group} groupSort=${view.sort} groupReversed=${view.reversed === true}
       onGroupSort=${(sort, reversed) => go({ ...view, sort, reversed }, { replace: true })}
-      changedFeeds=${changedFeeds} onQuery=${changeList}
+      changedFeeds=${changedFeeds}
       onOpen=${(id) => go(openFeedView(id, narrow, from))}
-      onAddedFeed=${addedFeed} onConnect=${() => go({ name: 'hosts' })} onListChanged=${() => load()} onGo=${go} from=${from} />`;
+      onAddedFeed=${addedFeed} onConnect=${() => go({ name: 'hosts' })} from=${from} />`;
+  } else {
+    main = html`<${OverviewPage} feeds=${feeds} connectors=${connectors} marked=${view.marked}
+      filter=${overviewFilter(view)} query=${typeof view.query === 'string' ? view.query : ''}
+      changedFeeds=${changedFeeds} onChange=${changeOverview}
+      onOpen=${(target) => go(target)}
+      onAddedFeed=${addedFeed} onConnect=${() => go({ name: 'hosts' })} />`;
   }
 
   const navValue = { coarse, canBack: canBack(nav), canForward: canForward(nav), back, forward, setLeaveGuard,

@@ -342,15 +342,17 @@ export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, 
     ? feeds.find((f) => f.id === view.id)
     : undefined;
   if (!feed || isPublisher(feed)) {
-    const all = (view.name === 'releases' && view.group === undefined) || inReleases(view);
+    const all = view.name === 'overview' || inReleases(view);
     return {
       kind: 'destinations',
       top: [
-        // The Add feeds page belongs to Releases (ADR 0072 item 5). On that
-        // page the row is current, and a click on it still opens Releases.
+        // Overview is the first row, with the icon of Releases (ADR 0263
+        // item 1). The Add feeds page belongs to it (ADR 0072 item 5). On
+        // that page the row is current, and a click on it still opens
+        // Overview.
         {
-          id: 'releases',
-          label: 'Releases',
+          id: 'overview',
+          label: 'Overview',
           icon: 'library',
           current: all,
           opens: !all,
@@ -693,7 +695,9 @@ function levelCounts(feed) {
 //   the pages below it, or the two numbers (item 6).
 // - `also`: the second line of a feed below two or more feeds (item 8).
 // - `current` and `view`: the page that a selection opens.
-export function groupDestinations(feeds, view, open = []) {
+// With `all` true, each row that has rows below it is open. Overview uses
+// this to read the whole sequence of the tree (ADR 0264 item 1).
+export function groupDestinations(feeds, view, open = [], { all = false } = {}) {
   const list = Array.isArray(feeds) ? feeds : [];
   const byId = new Map(list.map((feed) => [feed.id, feed]));
   const shown = (group) => view.name === 'releases' && view.group === group;
@@ -704,7 +708,7 @@ export function groupDestinations(feeds, view, open = []) {
   const add = (feed, path, heading) => {
     const key = rowKey(path);
     const kids = ranked((feed.child_ids || []).map((id) => byId.get(id)).filter((kid) => kid && isPublisher(kid) && !path.includes(kid.id)));
-    const isOpen = kids.length > 0 && openKeys.has(key);
+    const isOpen = kids.length > 0 && (all || openKeys.has(key));
     const { releases, pages } = levelCounts(feed);
     const parent = path.length > 1 ? path[path.length - 2] : null;
     const others = ranked((feed.parent_ids || []).filter((id) => id !== parent).map((id) => byId.get(id)).filter(Boolean));
@@ -904,17 +908,245 @@ export function sortEntries(sorts) {
   return sorts.flatMap((sort) => [false, true].map((reversed) => ({ sort, reversed, label: sortLabel(sort, reversed) })));
 }
 
-// The Releases list (ADR 0258 items 2 and 3). `marked` is the ID of the feed
-// that the last Back selection left marked. With no `group` it gives each
-// album and playlist (ADR 0085 item 6). With the ID of a feed with roles as
-// `group`, it gives the releases of that feed, and `head` gives the feed. The
-// group 'none' gives the releases with no link (ADR 0085 items 3 and 4).
+// ---- Overview (ADR 0263 items 3 to 5, ADR 0264) ----
+
+// The filters of Overview, in sequence (ADR 0263 item 3). The first one is the
+// default.
+export const OVERVIEW_FILTERS = [['all', 'All'], ['releases', 'Releases'], ['playlists', 'Playlists']];
+
+// The filter of an Overview view. A value that is not known gives "all".
+export const overviewFilter = (view) => (view && OVERVIEW_FILTERS.some(([id]) => id === view.filter) ? view.filter : 'all');
+
+// An album is a release in the words of Overview. A playlist is not a release
+// (ADR 0263 item 3).
+const isAlbum = (feed) => (feed.medium || '').toLowerCase() === 'music';
+
+// The pages of `feed` with `role` in its `publisher_ids`, as feeds.
+function pagesWithRole(feed, byId, role) {
+  return (feed.publisher_ids || []).map((id) => byId.get(id))
+    .filter((page) => page && isPublisher(page) && (page.publisher_roles || []).includes(role));
+}
+
+// The playlists with no link to a curator page of the collection (ADR 0263
+// item 11).
+export function unlinkedPlaylists(feeds) {
+  const byId = new Map((feeds || []).map((feed) => [feed.id, feed]));
+  return (feeds || []).filter((feed) => isPlaylist(feed) && pagesWithRole(feed, byId, 'curator').length === 0);
+}
+
+// The release date of a tile as a date text, such as "2026-10-29", from the
+// RFC 3339 text of the core. Studio does not change the zone of the date. A
+// value that is not a date gives null.
+const dateText = (value) => (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null);
+
+// The instant of a release date in milliseconds, or null (ADR 0264 item 4).
+function instantOf(feed) {
+  const at = Date.parse(feed.release_date);
+  return Number.isNaN(at) ? null : at;
+}
+
+// The order of two tiles below a heading (ADR 0264 item 4): the newest
+// instant first, then the tiles with no date, then A to Z for equal values.
+function compareTiles(a, b) {
+  const x = instantOf(a);
+  const y = instantOf(b);
+  if (x !== y && x !== null && y !== null) return y - x;
+  if ((x === null) !== (y === null)) return x === null ? 1 : -1;
+  return compareAz(a, b);
+}
+
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+// The model of Overview (ADR 0263 items 3 to 5, ADR 0264). `filter` is
+// "all", "releases" or "playlists". `query` is the text of the search, and
+// `marked` is the ID of the feed that the last Back selection left marked.
+// The function lists the feed list fields as they are (ADR 0065). It gives:
+// - `filters`: the segments of the filter, each with `id`, `label` and `current`.
+// - `countsText`: the counts line, with no count of zero.
+// - `notices`: the notice rows, each with `id`, `text` and the `view` that it opens.
+// - `parts`: the release part, then the playlist part. A part with no tile that
+//   shows is not in the list. A part has `id` and `headings`.
+// - `empty` and `emptyText`: true when no tile shows, and the text for it.
+// A heading has `id`, `level` (1 or 2), `title`, `feedId` (null for a heading
+// that opens nothing), `view`, `count`, `countLabel`, `tiles` and `children`.
+// A tile has `key`, `id`, `title`, `date`, `dot`, `glow`, `image`, `marked`
+// and `view`.
+export function overviewModel({ feeds, filter = 'all', query = '', marked = null }) {
+  const list = Array.isArray(feeds) ? feeds : [];
+  const byId = new Map(list.map((feed) => [feed.id, feed]));
+  // The sequence of the tree is the sequence of the Catalog rows, with each
+  // row open. A page below two pages has the place of its first row.
+  const place = new Map();
+  groupDestinations(list, { name: 'overview' }, [], { all: true })
+    .filter((row) => row.key !== undefined)
+    .forEach((row) => { if (!place.has(row.group)) place.set(row.group, place.size); });
+  const byTree = (a, b) => (place.has(a.id) ? place.get(a.id) : place.size) - (place.has(b.id) ? place.get(b.id) : place.size)
+    || compareAz(a, b);
+  const first = (pages) => pages.slice().sort(byTree)[0] || null;
+  const shown = { all: ['releases', 'playlists'], releases: ['releases'], playlists: ['playlists'] }[filter] || ['releases', 'playlists'];
+
+  const search = typeof query === 'string' ? query.trim() : '';
+  const needle = search.toLowerCase();
+  const matches = (feed) => {
+    if (!needle) return true;
+    const pages = ['artist', 'label', 'curator'].flatMap((role) => pagesWithRole(feed, byId, role));
+    return [feed, ...pages].some((item) => displayTitle(item).toLowerCase().includes(needle));
+  };
+  const tile = (feed, scope) => {
+    const kind = feedKind(feed);
+    const date = dateText(feed.release_date);
+    return {
+      key: `${scope}-${feed.id}`,
+      id: feed.id,
+      title: displayTitle(feed),
+      date,
+      dot: kind.dot,
+      glow: kindGlow(kind),
+      image: feedCover(feed),
+      marked: feed.id === marked,
+      view: openFeedView(feed.id, false, undefined),
+    };
+  };
+  const heading = (id, level, page, title, feedsBelow, children = []) => {
+    const tiles = children.length > 0 ? [] : feedsBelow.slice().sort(compareTiles).map((feed) => tile(feed, id));
+    const count = children.length > 0 ? children.reduce((sum, child) => sum + child.count, 0) : tiles.length;
+    return {
+      id,
+      level,
+      title,
+      feedId: page ? page.id : null,
+      view: page ? openFeedView(page.id, false, undefined) : null,
+      count,
+      tiles,
+      children,
+    };
+  };
+
+  // The release part (ADR 0264 items 1 to 3). Each album goes below the first
+  // artist page and the first label page of its links. A page that is the
+  // artist page of the album is not also its label page.
+  const albums = shown.includes('releases') ? list.filter((feed) => isAlbum(feed) && matches(feed)) : [];
+  const labels = new Map();
+  const independent = new Map();
+  const noArtist = [];
+  for (const album of albums) {
+    const artist = first(pagesWithRole(album, byId, 'artist'));
+    const label = first(pagesWithRole(album, byId, 'label').filter((page) => !artist || page.id !== artist.id));
+    const slot = artist ? artist.id : 'none';
+    if (label) {
+      if (!labels.has(label.id)) labels.set(label.id, new Map());
+      const artists = labels.get(label.id);
+      if (!artists.has(slot)) artists.set(slot, []);
+      artists.get(slot).push(album);
+    } else if (artist) {
+      if (!independent.has(slot)) independent.set(slot, []);
+      independent.get(slot).push(album);
+    } else {
+      noArtist.push(album);
+    }
+  }
+  const artistHeadings = (scope, artists) => {
+    const rows = [...artists.keys()].filter((key) => key !== 'none').map((id) => byId.get(id)).sort(byTree)
+      .map((page) => heading(`${scope}-artist-${page.id}`, 2, page, displayTitle(page), artists.get(page.id)));
+    if (artists.has('none')) rows.push(heading(`${scope}-no-artist`, 2, null, 'No artist yet', artists.get('none')));
+    return rows;
+  };
+  const releaseHeadings = [...labels.keys()].map((id) => byId.get(id)).sort(byTree)
+    .map((page) => heading(`label-${page.id}`, 1, page, displayTitle(page), [], artistHeadings(`label-${page.id}`, labels.get(page.id))));
+  if (independent.size > 0) releaseHeadings.push(heading('independent', 1, null, 'Independent', [], artistHeadings('independent', independent)));
+  if (noArtist.length > 0) releaseHeadings.push(heading('no-artist', 1, null, 'No artist yet', noArtist));
+
+  // The playlist part (ADR 0264 item 5). A playlist below two curator pages
+  // shows below each one.
+  const playlists = shown.includes('playlists') ? list.filter((feed) => isPlaylist(feed) && matches(feed)) : [];
+  const curators = new Map();
+  const noCurator = [];
+  for (const playlist of playlists) {
+    const pages = pagesWithRole(playlist, byId, 'curator');
+    if (pages.length === 0) noCurator.push(playlist);
+    for (const page of pages) {
+      if (!curators.has(page.id)) curators.set(page.id, []);
+      curators.get(page.id).push(playlist);
+    }
+  }
+  const playlistHeadings = [...curators.keys()].map((id) => byId.get(id)).sort(byTree)
+    .map((page) => heading(`curator-${page.id}`, 1, page, displayTitle(page), curators.get(page.id)));
+  if (noCurator.length > 0) playlistHeadings.push(heading('no-curator', 1, null, 'No curator yet', noCurator));
+
+  const parts = [{ id: 'releases', headings: releaseHeadings }, { id: 'playlists', headings: playlistHeadings }]
+    .filter((part) => part.headings.length > 0);
+
+  // The counts line and the notice rows (ADR 0263 item 3). The counts cover
+  // the whole collection, not the filter or the search.
+  const pages = list.filter(isPublisher);
+  const roleCount = (role) => pages.filter((feed) => (feed.publisher_roles || []).includes(role)).length;
+  const countsText = [
+    [roleCount('hosting'), 'publisher', 'publishers'],
+    [roleCount('label'), 'label', 'labels'],
+    [roleCount('artist'), 'artist', 'artists'],
+    [roleCount('curator'), 'curator', 'curators'],
+    [list.filter(isAlbum).length, 'release', 'releases'],
+    [list.filter(isPlaylist).length, 'playlist', 'playlists'],
+  ].filter(([n]) => n > 0).map(([n, one, many]) => plural(n, one, many)).join(' · ');
+  const notices = [];
+  const noArtistCount = unlinkedReleases(list).filter(isAlbum).length;
+  if (noArtistCount > 0) {
+    notices.push({
+      id: 'no-artist',
+      text: `${noArtistCount} ${noArtistCount === 1 ? 'release has' : 'releases have'} no artist yet.`,
+      view: { name: 'releases', group: 'none' },
+    });
+  }
+  const noCuratorCount = unlinkedPlaylists(list).length;
+  if (noCuratorCount > 0) {
+    notices.push({
+      id: 'no-curator',
+      text: `${noCuratorCount} ${noCuratorCount === 1 ? 'playlist has' : 'playlists have'} no curator yet.`,
+      view: { name: 'releases', group: 'no-curator' },
+    });
+  }
+  // A feed that Studio has not written has the draft state "new" or "changed"
+  // (ADR 0259 item 5). The notice opens the first one: the pages in the
+  // sequence of the tree, then the rows in the sequence of the list.
+  const unwritten = list.filter((feed) => feed.draft_state === 'new' || feed.draft_state === 'changed');
+  if (unwritten.length > 0) {
+    const target = unwritten.filter(isPublisher).sort(byTree)[0]
+      || unwritten.filter((feed) => !isPublisher(feed)).sort(compareTiles)[0];
+    notices.push({
+      id: 'not-written',
+      text: `${unwritten.length} ${unwritten.length === 1 ? 'page or release is' : 'pages and releases are'} not written.`,
+      view: openFeedView(target.id, false, undefined),
+    });
+  }
+
+  const empty = parts.length === 0;
+  return {
+    filter,
+    filters: OVERVIEW_FILTERS.map(([id, label]) => ({ id, label, current: id === filter })),
+    query,
+    countsText,
+    notices,
+    parts,
+    empty,
+    emptyText: search ? `Nothing has “${search}”.` : filter === 'playlists' ? 'No playlists yet.' : 'No releases yet.',
+  };
+}
+
+// The list of one group below the Catalog (ADR 0258 items 2 and 3).
+// `marked` is the ID of the feed that the last Back selection left marked.
+// `group` is the ID of a feed with roles, and the list is the releases of that
+// feed. Then `head` gives the feed. The group 'none' gives the releases with no
+// link (ADR 0085 items 3 and 4). The group 'no-curator' gives the playlists
+// with no curator page (ADR 0263 item 11). The group 'other' gives the feeds
+// that Studio does not edit. Overview has its own model, `overviewModel`.
+// Packets 256c and 256d replace this list with the list pages and the release
+// list of a page.
 export function releasesList({ feeds, connectors, sort, view, reversed, marked, group, query = '' }) {
   const list = Array.isArray(feeds) ? feeds : [];
-  const owner = group === undefined || group === 'none'
+  const owner = group === undefined || group === 'none' || group === 'no-curator'
     ? null
     : list.find((feed) => feed.id === group && isPublisher(feed)) || null;
-  let chosen;
+  let chosen = [];
   let head = null;
   if (owner) {
     const byId = new Map(list.map((feed) => [feed.id, feed]));
@@ -928,11 +1160,12 @@ export function releasesList({ feeds, connectors, sort, view, reversed, marked, 
   } else if (group === 'none') {
     chosen = unlinkedReleases(list);
     head = { id: null, title: 'No artist yet', typeLabel: null, dot: null, note: 'These releases have no artist page.' };
+  } else if (group === 'no-curator') {
+    chosen = unlinkedPlaylists(list);
+    head = { id: null, title: 'No curator yet', typeLabel: null, dot: null, note: 'These playlists have no curator page.' };
   } else if (group === 'other') {
     chosen = otherFeeds(list);
     head = { id: null, title: 'Other feeds', typeLabel: null, dot: null, note: 'Studio edits albums, playlists, and artist and label feeds. It shows only the facts of these feeds.' };
-  } else {
-    chosen = list.filter(isRelease);
   }
   const sorts = owner ? GROUP_SORTS : ALL_SORTS;
   const sortKey = sorts.includes(sort) ? sort : sorts[0];
@@ -1007,28 +1240,6 @@ export function releasesList({ feeds, connectors, sort, view, reversed, marked, 
   };
 }
 
-// The sort, the view and the reversed state of the Releases list from a query
-// text, such as "sort=az". A value that is missing or not known gives the
-// default.
-export function listQuery(search) {
-  const params = new URLSearchParams(typeof search === 'string' ? search : '');
-  return {
-    sort: params.get('sort') === 'az' ? 'az' : 'newest',
-    view: params.get('view') === 'tiles' ? 'tiles' : 'rows',
-    reversed: params.get('reversed') === '1',
-  };
-}
-
-// The query text of a sort, a view and a reversed state. It holds only the
-// values that are not the default. It is empty when each value is the default.
-export function queryText({ sort, view, reversed }) {
-  const params = new URLSearchParams();
-  if (sort === 'az') params.set('sort', 'az');
-  if (view === 'tiles') params.set('view', 'tiles');
-  if (reversed === true) params.set('reversed', '1');
-  return params.toString();
-}
-
 // ---- Navigation (musicindex ADR 0080 R-NAV-2) ----
 // The state is { entries, index }. Each function gives a new state and does
 // not change its argument.
@@ -1044,32 +1255,33 @@ export function pushNav(nav, view) {
   return { entries, index: entries.length - 1 };
 }
 
-// Back. From a feed or its outline, the Releases entry before it keeps its
+// Back. From a feed or its outline, the Overview entry before it keeps its
 // scroll and gets the feed as its marked row. From a feed or an outline at
-// index 0, a Releases entry with the marked feed goes before it.
+// index 0, an Overview entry with the marked feed goes before it.
 export function backNav(nav) {
   const { entries, index } = nav;
   const current = entries[index];
   if (current && isFeedView(current)) {
     if (index === 0) {
-      return { entries: [{ name: 'releases', marked: current.id }, ...entries], index: 0 };
+      return { entries: [{ name: 'overview', marked: current.id }, ...entries], index: 0 };
     }
     const next = entries.slice();
     const before = entries[index - 1];
-    if (before.name === 'releases') next[index - 1] = { ...before, marked: current.id };
+    if (before.name === 'overview' || before.name === 'releases') next[index - 1] = { ...before, marked: current.id };
     return { entries: next, index: index - 1 };
   }
   return { entries: entries.slice(), index: Math.max(0, index - 1) };
 }
 
-// The view that the link "Releases" opens (ADR 0069). The nearest Releases
-// entry at or before the index gives its scroll. The function does not
-// change `nav`.
-export function releasesView(nav, feedId) {
-  const view = { name: 'releases', marked: feedId };
+// The view that the link to Overview opens (ADR 0069, ADR 0263 item 1). The
+// nearest Overview entry at or before the index gives its scroll, its filter
+// and its search. The function does not change `nav`.
+export function overviewView(nav, feedId) {
+  const view = { name: 'overview', marked: feedId };
   for (let i = nav.index; i >= 0; i -= 1) {
     const entry = nav.entries[i];
-    if (entry && entry.name === 'releases') {
+    if (entry && entry.name === 'overview') {
+      for (const key of ['filter', 'query']) if (entry[key] !== undefined) view[key] = entry[key];
       if (entry.scroll !== undefined) view.scroll = entry.scroll;
       break;
     }
@@ -1112,18 +1324,20 @@ export function setScroll(nav, y) {
 // its "‹ Catalog" goes back to the tree.
 export function narrowStack(view, feeds = null) {
   const root = { name: 'root' };
-  const releases = { name: 'releases' };
+  const overview = { name: 'overview' };
   switch (view.name) {
     case 'root': return [root];
-    // A destination below Releases is a page of the root (ADR 0085 item 7).
-    case 'releases': return view.group === undefined ? [root, releases] : [root, view];
+    // Overview keeps its filter and its search (ADR 0263 item 8).
+    case 'overview': return [root, view];
+    // A list page below the Catalog is a page of the root (ADR 0085 item 7).
+    case 'releases': return view.group === undefined ? [root, overview] : [root, view];
     // The People area (ADR 0203 items 36 and 64).
     case 'person':
     case 'wallet':
     case 'change-set': return inHosts(view) ? [root, { name: 'hosts' }, view]
-      : inReleases(view) ? [root, releases, view] : [root, { name: 'people' }, view];
+      : inReleases(view) ? [root, overview, view] : [root, { name: 'people' }, view];
     case 'check': return [root, { name: 'people' }, { name: 'person', id: view.id }, view];
-    // The feed page is the page below Releases. The outline page is below the
+    // The feed page is the page below Overview. The outline page is below the
     // feed page (ADR 0223 item 8).
     case 'outline': {
       const feed = { name: 'feed', id: view.id, ...(view.from ? { from: view.from } : {}) };
@@ -1136,13 +1350,13 @@ export function narrowStack(view, feeds = null) {
       // that page.
       return view.from
         ? [root, openFeedView(view.from.group, true, fromPath(pathOfFrom(view.from).slice(0, -1))), view]
-        : [root, releases, view];
+        : [root, overview, view];
     }
     default: return [root, view];
   }
 }
 
-// The view of a feed on Releases. It is the feed view at each width
+// The view of a feed on Overview. It is the feed view at each width
 // (ADR 0223 item 8). The narrow page of the feed has the button Sections.
 export function openFeedView(id, narrow, from) {
   const view = { name: 'feed', id };
@@ -1150,11 +1364,37 @@ export function openFeedView(id, narrow, from) {
 }
 
 // The view at a wide width. The outline has no wide view, so it becomes the
-// feed, and the root page becomes Releases.
+// feed, and the root page becomes Overview.
 export function wideView(view) {
   if (view.name === 'outline') return { name: 'feed', id: view.id };
-  if (view.name === 'root') return { name: 'releases' };
+  if (view.name === 'root') return { name: 'overview' };
   return view;
+}
+
+// The view that an old record gives. A view `releases` with no group was the
+// page Releases, and it opens Overview now. It keeps its marked feed and its
+// scroll, and it drops `sort`, `reversed` and `view` (ADR 0263 item 8).
+export function legacyView(view) {
+  if (!view || view.name !== 'releases' || view.group !== undefined) return view;
+  const next = { name: 'overview' };
+  if (view.marked !== undefined) next.marked = view.marked;
+  if (view.scroll !== undefined) next.scroll = view.scroll;
+  return next;
+}
+
+// The navigation state of an old record, with `legacyView` for each entry.
+export function legacyNav(nav) {
+  return { ...nav, entries: nav.entries.map(legacyView) };
+}
+
+// The query text of an address without the keys that the page Releases used.
+// An old address with `sort`, `reversed` or `view` opens Overview, and the
+// address loses these keys (ADR 0263 item 8). Other keys stay.
+export function addressSearch(search) {
+  const params = new URLSearchParams(typeof search === 'string' ? search : '');
+  ['sort', 'reversed', 'view'].forEach((key) => params.delete(key));
+  const text = params.toString();
+  return text ? `?${text}` : '';
 }
 
 // The navigation state for a new width of the window. A narrow window gets

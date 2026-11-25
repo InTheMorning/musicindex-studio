@@ -1558,6 +1558,15 @@ pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
                 json!(catalog.releases.iter().map(|id| id.0).collect::<Vec<_>>());
             value["publisher_ids"] =
                 json!(catalog.publishers.iter().map(|id| id.0).collect::<Vec<_>>());
+            // The roles of each link, in the sequence of `publisher_ids`
+            // (ADR 0266 item 7). The UI does not read `rel`.
+            value["publisher_link_roles"] = json!(
+                catalog
+                    .link_roles
+                    .iter()
+                    .map(|roles| roles.iter().map(|role| role.as_str()).collect::<Vec<_>>())
+                    .collect::<Vec<_>>()
+            );
             // The two sides of a link give the first role (ADR 0087).
             value["roles_linked"] = json!(catalog.roles_linked);
             // The levels of the hierarchy (ADR 0215).

@@ -900,6 +900,11 @@ pub struct Catalog {
     /// one is first (ADR 0255 item 9). Then come the publisher feeds that
     /// only list it.
     pub publishers: Vec<FeedId>,
+    /// For a release: the roles of each link in `publishers`, in the same
+    /// sequence (ADR 0266 item 7). The `rel` of the two sides of a link
+    /// count together. The roles follow `PublisherRole::ALL`. A link with no
+    /// `rel` on each side gives an empty list.
+    pub link_roles: Vec<Vec<PublisherRole>>,
     /// For a publisher feed: the two sides of one link give its first role.
     /// Each side must give the role on the same release (ADR 0253 item 17).
     pub roles_linked: bool,
@@ -1010,6 +1015,10 @@ pub fn catalogs_with_kept(
             }
         }
         result[release].publishers = named.iter().map(|&index| feeds[index].0.id).collect();
+        result[release].link_roles = named
+            .iter()
+            .map(|&index| link_roles(feeds, row.id, index))
+            .collect();
     }
     link_levels(feeds, &mut result, kept);
     result

@@ -1370,6 +1370,91 @@ fn a_role_that_the_two_sides_of_a_link_give_is_linked() {
 }
 
 #[test]
+fn the_catalog_gives_the_roles_of_each_link_from_its_two_sides() {
+    let mut s = setup();
+    let page = new_feed(&mut s, "page.xml", "Page", "publisher");
+    let release_side = new_feed(&mut s, "one.xml", "One", "musicL");
+    let page_side = new_feed(&mut s, "two.xml", "Two", "musicL");
+    let both = new_feed(&mut s, "three.xml", "Three", "musicL");
+    let bare = new_feed(&mut s, "four.xml", "Four", "musicL");
+    let page_guid = model(&s, page).podcast_guid.unwrap();
+    // The release side: the `podcast:publisher` item of the release.
+    for (release, rel) in [
+        (release_side, Some("curator")),
+        (both, Some("artist")),
+        (bare, None),
+    ] {
+        pipeline::edit_draft(&s.collection, release, |feed| {
+            feed.publisher = Some(Publisher {
+                remote_items: vec![Entry::new(remote(
+                    "publisher",
+                    &page_guid,
+                    "https://music.example/page.xml",
+                    "Page",
+                    rel,
+                ))],
+            });
+        })
+        .unwrap();
+    }
+    // The page side: the channel item of the page that names the release.
+    for (release, path, rel) in [
+        (page_side, "two.xml", Some("curator")),
+        (both, "three.xml", Some("curator")),
+        (bare, "four.xml", None),
+    ] {
+        let guid = model(&s, release).podcast_guid.unwrap();
+        pipeline::edit_draft(&s.collection, page, |feed| {
+            feed.remote_items.push(Entry::new(remote(
+                "musicL",
+                &guid,
+                &format!("https://music.example/{path}"),
+                "Release",
+                rel,
+            )));
+        })
+        .unwrap();
+    }
+    let feeds: Vec<_> = s
+        .collection
+        .feeds()
+        .unwrap()
+        .into_iter()
+        .map(|row| {
+            let feed = model(&s, row.id);
+            (row, Some(feed))
+        })
+        .collect();
+    let catalogs = publisher::catalogs(&feeds);
+    let roles = |id: FeedId| {
+        let index = feeds.iter().position(|(row, _)| row.id == id).unwrap();
+        assert_eq!(
+            catalogs[index].link_roles.len(),
+            catalogs[index].publishers.len(),
+            "ADR 0266 item 7: link_roles has one list for each entry of publishers."
+        );
+        catalogs[index].link_roles.clone()
+    };
+    let message = "ADR 0266 items 2 and 7: the roles of a link come from the rel of each side, together. Fix catalogs_with_kept in crates/core/src/publisher.rs.";
+    assert_eq!(
+        roles(release_side),
+        vec![vec![PublisherRole::Curator]],
+        "{message}"
+    );
+    assert_eq!(
+        roles(page_side),
+        vec![vec![PublisherRole::Curator]],
+        "{message}"
+    );
+    assert_eq!(
+        roles(both),
+        vec![vec![PublisherRole::Artist, PublisherRole::Curator]],
+        "{message}"
+    );
+    assert_eq!(roles(bare), vec![Vec::<PublisherRole>::new()], "{message}");
+}
+
+#[test]
 fn the_levels_follow_the_rank_and_the_shared_releases() {
     let mut s = setup();
     let feed = |s: &mut Setup, name: &str, roles: &[PublisherRole]| {

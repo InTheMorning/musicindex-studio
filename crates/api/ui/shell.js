@@ -793,10 +793,11 @@ export function groupDestinations(feeds, view, open = [], { all = false } = {}) 
     const key = rowKey(path);
     const kids = ranked((feed.child_ids || []).map((id) => byId.get(id)).filter((kid) => kid && isPublisher(kid) && !path.includes(kid.id)));
     const counted = levelCounts(feed);
-    // The playlists of a curator page, in the sequence of its feed (ADR 0254
-    // item 4a, ADR 0263 item 10).
-    const playlists = (feed.release_ids || []).map((id) => byId.get(id)).filter((item) => item && isPlaylist(item));
-    const hasPlaylists = (feed.publisher_roles || []).includes('curator') && playlists.length > 0;
+    // The playlists with a curator link to this page, in the sequence of its
+    // feed (ADR 0266 item 5). The role set of the page has no effect.
+    const playlists = (feed.release_ids || []).map((id) => byId.get(id))
+      .filter((item) => item && isPlaylist(item) && curatorPages(item, byId).some((page) => page.id === feed.id));
+    const hasPlaylists = playlists.length > 0;
     // The count of a row below the heading "Curators" is the number of its
     // playlists (ADR 0263 item 10). The first level role of the feed gives
     // its heading (ADR 0253 item 15).
@@ -874,7 +875,7 @@ export function groupDestinations(feeds, view, open = [], { all = false } = {}) 
       count: unlinked, current: shown('none'), opens: !shown('none'),
     });
   }
-  // The playlists with no curator page (ADR 0263 item 11).
+  // The playlists with no curator link to a page (ADR 0266 item 6).
   const noCurator = unlinkedPlaylists(list).length;
   if (noCurator > 0) {
     rows.push({
@@ -1042,11 +1043,23 @@ function pagesWithRole(feed, byId, role) {
     .filter((page) => page && isPublisher(page) && (page.publisher_roles || []).includes(role));
 }
 
-// The playlists with no link to a curator page of the collection (ADR 0263
-// item 11).
+// The pages of a playlist whose link holds the role `curator`, as feeds. The
+// roles of each link come from `publisher_link_roles`, in the sequence of
+// `publisher_ids` (ADR 0266 item 7). The role set of the page has no effect
+// (ADR 0266 item 3). A feed with no `publisher_link_roles` has no page.
+function curatorPages(feed, byId) {
+  const roles = feed.publisher_link_roles || [];
+  return (feed.publisher_ids || [])
+    .filter((id, index) => (roles[index] || []).includes('curator'))
+    .map((id) => byId.get(id))
+    .filter((page) => page && isPublisher(page));
+}
+
+// The playlists with no curator link to a page of the collection (ADR 0266
+// item 6).
 export function unlinkedPlaylists(feeds) {
   const byId = new Map((feeds || []).map((feed) => [feed.id, feed]));
-  return (feeds || []).filter((feed) => isPlaylist(feed) && pagesWithRole(feed, byId, 'curator').length === 0);
+  return (feeds || []).filter((feed) => isPlaylist(feed) && curatorPages(feed, byId).length === 0);
 }
 
 // The release date of a tile as a date text, such as "2026-10-29", from the
@@ -1177,7 +1190,7 @@ export function overviewModel({ feeds, filter = 'all', query = '', marked = null
   const curators = new Map();
   const noCurator = [];
   for (const playlist of playlists) {
-    const pages = pagesWithRole(playlist, byId, 'curator');
+    const pages = curatorPages(playlist, byId);
     if (pages.length === 0) noCurator.push(playlist);
     for (const page of pages) {
       if (!curators.has(page.id)) curators.set(page.id, []);

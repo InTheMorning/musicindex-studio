@@ -1155,7 +1155,7 @@ test('the place of a feed uses music words (ADR 0254 item 11)', () => {
 // Overview (ADR 0263 and ADR 0264).
 const pg = (id, title, roles, extra = {}) => ({ id, title, medium: 'publisher', publisher_roles: roles, role_set: roles, ...extra });
 const rel = (id, title, pubs, extra = {}) => ({ id, title, medium: 'music', publisher_ids: pubs, ...extra });
-const pl = (id, title, pubs, extra = {}) => ({ id, title, medium: 'musicl', publisher_ids: pubs, ...extra });
+const pl = (id, title, pubs, extra = {}) => ({ id, title, medium: 'musicl', publisher_ids: pubs, publisher_link_roles: pubs.map(() => ['curator']), ...extra });
 const heads = (model, part) => (model.parts.find((p) => p.id === part) || { headings: [] }).headings;
 const tileIds = (h) => (h.children.length > 0 ? h.children.flatMap(tileIds) : h.tiles.map((t) => t.id));
 
@@ -1193,6 +1193,45 @@ test('ADR 0264 item 5: a playlist shows below each curator, and No curator yet c
   assert.deepEqual(tileIds(h[0]), [7]);
   assert.deepEqual(tileIds(h[1]), [7]);
   assert.deepEqual(tileIds(h[2]), [8]);
+});
+
+test('ADR 0266 item 1: a playlist with a curator link to an artist page shows below that page', () => {
+  const feeds = [pg(11, 'Artist B', ['artist']), pl(7, 'P7', [11])];
+  const h = heads(overviewModel({ feeds }), 'playlists');
+  assert.deepEqual(h.map((x) => x.title), ['Artist B'], 'ADR 0266 item 1: a playlist with a curator link to an artist page must show below that page. Use the curator pages function of crates/api/ui/shell.js.');
+  assert.deepEqual(tileIds(h[0]), [7]);
+  assert.deepEqual(unlinkedPlaylists(feeds), []);
+});
+
+test('ADR 0266 items 3 and 6: a playlist on a curator page with no curator link is in No curator yet', () => {
+  const message = 'ADR 0266 items 3 and 6: the role set of the page has no effect. Use the curator pages function of crates/api/ui/shell.js.';
+  const feeds = [pg(20, 'Cur 1', ['curator']), pl(7, 'P7', [20], { publisher_link_roles: [['artist']] }), pl(8, 'P8', [20], { publisher_link_roles: [[]] }), pl(9, 'P9', [20], { publisher_link_roles: undefined })];
+  const h = heads(overviewModel({ feeds }), 'playlists');
+  assert.deepEqual(h.map((x) => x.title), ['No curator yet'], message);
+  assert.deepEqual(tileIds(h[0]), [7, 8, 9], message);
+  assert.deepEqual(unlinkedPlaylists(feeds).map((f) => f.id), [7, 8, 9], message);
+});
+
+test('ADR 0266 item 4: a playlist with two curator links shows below each page, and a link without curator does not count', () => {
+  const message = 'ADR 0266 item 4: a playlist with two curator links must show below each page. Use the curator pages function of crates/api/ui/shell.js.';
+  const feeds = [pg(11, 'Artist B', ['artist']), pg(12, 'Label C', ['label']), pg(13, 'Host D', ['hosting']),
+    pl(7, 'P7', [11, 12, 13], { publisher_link_roles: [['curator'], ['artist', 'curator'], ['hosting']] })];
+  const h = heads(overviewModel({ feeds }), 'playlists');
+  assert.deepEqual(h.map((x) => x.title).sort(), ['Artist B', 'Label C'], message);
+  assert.deepEqual([tileIds(h[0]), tileIds(h[1])], [[7], [7]], message);
+});
+
+test('ADR 0266 item 5: the panel row of an artist page with a curator link shows the playlist row', () => {
+  const message = 'ADR 0266 item 5: the row of a page with a curator link must show the playlist row below it. Use groupDestinations of crates/api/ui/shell.js.';
+  const artist = pg(11, 'Artist B', ['artist'], { release_ids: [7, 8], added_at: 1 });
+  const list7 = pl(7, 'P7', [11]);
+  const list8 = pl(8, 'P8', [11], { publisher_link_roles: [['artist']] });
+  const feeds = [artist, list7, list8];
+  const closed = groupDestinations(feeds, { name: 'overview' }, []);
+  assert.equal(closed.find((r) => r.key === '11').expandable, true, message);
+  const rows = groupDestinations(feeds, { name: 'overview' }, ['11']);
+  assert.deepEqual(rows.filter((r) => r.typeLabel === 'Playlist').map((r) => r.group), [7], message);
+  assert.equal(groupDestinations([artist, list8], { name: 'overview' }, []).find((r) => r.key === '11').expandable, false, message);
 });
 
 test('ADR 0264 items 6 and 7: filters and search hide parts and empty headings', () => {
@@ -1241,12 +1280,12 @@ test('ADR 0263 item 8: an old Releases view and an old address open Overview', (
 
 const curator = { id: 60, title: 'Mix Curator', medium: 'publisher', publisher_roles: ['curator'], release_ids: [72, 71, 73], added_at: 1 };
 const curator2 = { id: 61, title: 'Other Curator', medium: 'publisher', publisher_roles: ['curator'], release_ids: [71], added_at: 2 };
-const listA = { id: 71, title: 'List A', medium: 'musicL', publisher_ids: [60, 61], added_at: 3, draft_state: 'none', author: 'DJ A' };
-const listB = { id: 72, title: 'List B', medium: 'musicL', publisher_ids: [60], added_at: 4, draft_state: 'none' };
+const listA = { id: 71, title: 'List A', medium: 'musicL', publisher_ids: [60, 61], publisher_link_roles: [['curator'], ['curator']], added_at: 3, draft_state: 'none', author: 'DJ A' };
+const listB = { id: 72, title: 'List B', medium: 'musicL', publisher_ids: [60], publisher_link_roles: [['curator']], added_at: 4, draft_state: 'none' };
 const album3 = { id: 73, title: 'Curated Album', medium: 'music', publisher_ids: [60], added_at: 5, draft_state: 'none' };
-const listC = { id: 74, title: 'List C', medium: 'musicL', publisher_ids: [], added_at: 6, draft_state: 'none' };
+const listC = { id: 74, title: 'List C', medium: 'musicL', publisher_ids: [], publisher_link_roles: [], added_at: 6, draft_state: 'none' };
 const onlyArtist = { id: 62, title: 'Some Artist', medium: 'publisher', publisher_roles: ['artist'], release_ids: [75], added_at: 7 };
-const listD = { id: 75, title: 'List D', medium: 'musicL', publisher_ids: [62], added_at: 8, draft_state: 'none' };
+const listD = { id: 75, title: 'List D', medium: 'musicL', publisher_ids: [62], publisher_link_roles: [['artist']], added_at: 8, draft_state: 'none' };
 const playlistFeeds = [curator, curator2, listA, listB, album3, listC, onlyArtist, listD];
 
 test('a curator row with a playlist has the open button and shows its playlists in the sequence of its feed (ADR 0263 item 10)', () => {

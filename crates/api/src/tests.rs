@@ -1504,6 +1504,15 @@ async fn the_feed_list_gives_the_link_of_each_feed() {
     );
     // ADR 0087 item 1: the release gives the role of the label feed.
     assert_eq!(listed(&app, label_id).await["roles_linked"], json!(true));
+    // ADR 0266 item 7: the roles of each link follow the sequence of
+    // `publisher_ids`. The link of the label gives the role `label`.
+    let release_row = listed(&app, release_id).await;
+    assert_eq!(
+        release_row["publisher_link_roles"].as_array().map(Vec::len),
+        release_row["publisher_ids"].as_array().map(Vec::len),
+        "ADR 0266 item 7: publisher_link_roles needs one list for each entry of publisher_ids."
+    );
+    assert_eq!(release_row["publisher_link_roles"], json!([["label"]]));
 }
 
 #[tokio::test]

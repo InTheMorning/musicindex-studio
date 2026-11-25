@@ -3,7 +3,12 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Levels And Moves".
 Decision: [ADR 0266](../adr/0266-a-playlist-shows-below-each-page-that-its-curator-link-names.md) items 1 to 7. Read [ADR 0264](../adr/0264-overview-groups-the-releases-below-label-artist-and-curator-headings.md) item 5 and [ADR 0263](../adr/0263-overview-is-the-start-page-and-each-page-keeps-the-sequence-of-its-feed.md) items 10 and 11 first.
 
-Status: open.
+Status: built. The screenshot check of Overview and the left panel passed in Light and in Dark at 1280 px.
+
+Operator choices (the main session):
+
+- `catalogs_with_kept` uses the existing `link_roles` function of `crates/core/src/publisher.rs`. That function already joins the `rel` of the two sides of a link.
+- The release part of Overview keeps the role set of the page (ADR 0264 items 1 to 3). Only the playlist part uses `publisher_link_roles`.
 
 ## Goal
 

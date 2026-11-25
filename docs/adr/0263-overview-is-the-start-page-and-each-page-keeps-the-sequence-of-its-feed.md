@@ -125,8 +125,8 @@ The map gives the rule of this ADR for each changed item.
 
 ## Open Points
 
-- musicindex ADR 0098 (musicindex commit 45073e1) decides the departures from the shared list rules:
-    - R-LIST-15: the group Releases of a page and the playlists of a curator page show the sequence of the feed, with no sort, no view icons, no reversed sequence and no "Reverse" toggle (items 12 and 17).
+- musicindex ADR 0098 (musicindex commits 45073e1 and 34c57c9) decides the departures from the shared list rules:
+    - R-LIST-15 items 1 to 3 and 6: the group Releases of a page and the playlists of a curator page show the sequence of the feed, with no sort, no reversed sequence and no "Reverse" toggle (items 12 and 17). R-LIST-15 item 4 permits view icons, and item 5 permits a one-time action "A to Z" or "Newest" that writes a new sequence. This ADR uses neither.
     - R-LIST-16: Overview is a list of the R-LIST-9 row "A catalog grouped by label, artist and curator, in an editor" (items 5 and 7, as ADR 0264 changes them).
     - R-LIST-17: the filters All, Releases and Playlists are not search scopes. They have no count, and they use the segmented control (item 3). The filter Releases holds albums, EPs and singles.
 - The name "‹ Sections" of item 18. The operator can select a different name.

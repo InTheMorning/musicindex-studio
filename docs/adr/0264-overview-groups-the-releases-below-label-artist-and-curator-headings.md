@@ -7,6 +7,7 @@
 - Technical choices: the main session selected items 4, 6 and 8 and the heading names "Independent", "No artist yet" and "No curator yet" of items 1 and 5. The operator did not receive them as a question.
 - Bar: opposite choice by mistake. Without this record, an agent can build the one list of ADR 0263.
 - Source: the operator choice of 2026-11-25, sent by the orchestrator session.
+- Changed by: [ADR 0266](0266-a-playlist-shows-below-each-page-that-its-curator-link-names.md) items 1 to 4, on 2026-11-25. The playlist part has a heading for each page that a link with `curator` in its `rel` names, not for each page with the role `curator` (item 5).
 - Changes: [ADR 0263](0263-overview-is-the-start-page-and-each-page-keeps-the-sequence-of-its-feed.md) items 5 and 7. Overview shows headings and tiles, not one list of rows. The rows of ADR 0263 item 7 stay on the list pages of ADR 0263 item 9a.
 - Uses: musicindex ADR 0098 R-LIST-16 and R-LIST-17. [ADR 0254](0254-the-catalog-is-a-tree-and-each-change-uses-music-words.md) items 3 and 5 for the sequence of the tree. [ADR 0257](0257-a-release-has-one-artist-one-label-and-one-publisher-in-its-fields.md) for the one artist page and the one label page of a release. ADR 0263 item 6 for the release date.
 

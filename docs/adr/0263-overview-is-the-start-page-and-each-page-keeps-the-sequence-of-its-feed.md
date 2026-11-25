@@ -31,7 +31,7 @@
 - Changes: [ADR 0253](0253-the-roles-of-a-feed-and-of-each-link.md) item 9. The type label shows in the list of Overview (item 7).
 - Changes: [ADR 0228](0228-undo-in-the-bar-a-notice-that-stays-and-the-rc28-check-findings.md) items 5 and 11. Studio opens Overview after Remove from Collection (item 2). The button that opens the outline page has the name "‹ Sections" (item 18).
 - Changes: [ADR 0157](0157-the-page-tabs-are-a-segmented-control.md) item 4. Releases has no view icons now. The filters of Overview are a segmented control (item 3).
-- Uses: musicindex ADR 0080 R-LIST-2 and R-LIST-3 for the drag handle and the insertion line of item 12. [ADR 0227](0227-undo-and-redo.md) for Undo. [ADR 0207](0207-recipients-change-sets-and-wallets.md) for a change set.
+- Uses: musicindex ADR 0080 R-LIST-2 and R-LIST-3 for the drag handle and the insertion line of item 12. musicindex ADR 0098 R-LIST-15, R-LIST-16 and R-LIST-17 for the lists with no sort and the filters with no count. [ADR 0227](0227-undo-and-redo.md) for Undo. [ADR 0207](0207-recipients-change-sets-and-wallets.md) for a change set.
 
 ## Context
 
@@ -49,7 +49,7 @@
 2. Each current rule for the page Releases or the destination Releases applies to Overview. This ADR can give a different rule. Examples are the button **＋ Add**, the feed checks when the page opens, and the import of an account into an empty collection. ADR 0069 items 6 to 8 stay replaced by ADR 0254 item 7: the first row of an outline is "‹ Catalog".
 3. The page shows, from the top:
     - The head: the title "Overview" and the button **＋ Add**.
-    - One line of counts, for example "1 publisher · 1 label · 1 artist · 1 curator · 4 releases · 3 playlists". In this ADR, a release is an album, and a playlist is not a release. A count of zero does not show.
+    - One line of counts, for example "1 publisher · 1 label · 1 artist · 1 curator · 4 releases · 3 playlists". In this ADR, a release is a feed with the medium `music`: an album, an EP or a single (musicindex ADR 0098 R-LIST-17 item 4). A playlist is not a release. A count of zero does not show.
     - The notice rows. Each row shows only when its count is more than zero, and it opens the place that it names. "{n} releases have no artist yet." opens the list page "No artist yet" (item 9a). "{n} playlists have no curator yet." opens the list page "No curator yet". "{n} pages and releases are not written." counts each feed of the collection with the state "Saved, not written" (ADR 0259). It opens the first of these feeds: first the pages in the sequence of the tree, then the rows in the sequence of item 5.
     - The search field of item 4.
     - The filters All, Releases and Playlists, as a segmented control. All is the default.
@@ -125,14 +125,12 @@ The map gives the rule of this ADR for each changed item.
 
 ## Open Points
 
-- Studio departs from these shared musicindex rules. The main session tells the orchestrator, and a musicindex record decides if they change:
-    - ADR 0053 R-LIST-9, row "Releases": the sorts "Newest" and "A to Z", the reversed sequence and the view icons. Overview has none of them.
-    - ADR 0053 R-LIST-9, row "The releases of an artist, a label or a name": the sorts "Newest", "A to Z" and "Page Order", with "Page Order" as the default in an editor, the reversed sequence and the view icons. The group Releases of a page has none of them. R-LIST-8 item 1 agrees with no sort for a list in the sequence of its source.
-    - ADR 0053 R-LIST-9, rows "Playlists, public" and "Playlists that a person curates" ("Curator Order"), and R-LIST-9 item 5.
-    - ADR 0054 R-LIST-14 item 1: a fixed sequence has a "Reverse" toggle. The group Releases has no toggle.
-    - ADR 0085 R-SCOPE-1 items 1, 2 and 6: a playlist is in the scope "Releases", and each scope shows a count. The filter Releases of Overview holds only albums, and the filters have no count.
+- musicindex ADR 0098 (musicindex commit 45073e1) decides the departures from the shared list rules:
+    - R-LIST-15: the group Releases of a page and the playlists of a curator page show the sequence of the feed, with no sort, no view icons, no reversed sequence and no "Reverse" toggle (items 12 and 17).
+    - R-LIST-16: Overview is a list of the R-LIST-9 row "A catalog grouped by label, artist and curator, in an editor" (items 5 and 7, as ADR 0264 changes them).
+    - R-LIST-17: the filters All, Releases and Playlists are not search scopes. They have no count, and they use the segmented control (item 3). The filter Releases holds albums, EPs and singles.
 - The name "‹ Sections" of item 18. The operator can select a different name.
-- The section "Linked releases" of a publisher page keeps its position menu (ADR 0081 item 1). The group Releases and the section then give two controls for one sequence. A subsequent decision can remove one.
+- The section "Linked releases" of a publisher page keeps its position menu (ADR 0081 item 1). The group Releases and the section then give two controls for one sequence. A subsequent Studio decision can remove one (musicindex ADR 0098 Open Point 2 gives this point to Studio).
 
 ## How This Decision Is Checked
 

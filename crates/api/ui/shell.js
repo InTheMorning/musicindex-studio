@@ -1032,8 +1032,8 @@ export const OVERVIEW_FILTERS = [['all', 'All'], ['releases', 'Releases'], ['pla
 // The filter of an Overview view. A value that is not known gives "all".
 export const overviewFilter = (view) => (view && OVERVIEW_FILTERS.some(([id]) => id === view.filter) ? view.filter : 'all');
 
-// An album is a release in the words of Overview. A playlist is not a release
-// (ADR 0263 item 3).
+// A feed with the medium `music` (an album, an EP or a single) is a release in
+// the words of Overview. A playlist is not a release (ADR 0263 item 3).
 const isAlbum = (feed) => (feed.medium || '').toLowerCase() === 'music';
 
 // The pages of `feed` with `role` in its `publisher_ids`, as feeds.

@@ -8,7 +8,7 @@
 - Bar: opposite choice by mistake. Without this record, an agent can build the one list of ADR 0263.
 - Source: the operator choice of 2026-11-25, sent by the orchestrator session.
 - Changes: [ADR 0263](0263-overview-is-the-start-page-and-each-page-keeps-the-sequence-of-its-feed.md) items 5 and 7. Overview shows headings and tiles, not one list of rows. The rows of ADR 0263 item 7 stay on the list pages of ADR 0263 item 9a.
-- Uses: [ADR 0254](0254-the-catalog-is-a-tree-and-each-change-uses-music-words.md) items 3 and 5 for the sequence of the tree. [ADR 0257](0257-a-release-has-one-artist-one-label-and-one-publisher-in-its-fields.md) for the one artist page and the one label page of a release. ADR 0263 item 6 for the release date.
+- Uses: musicindex ADR 0098 R-LIST-16 and R-LIST-17. [ADR 0254](0254-the-catalog-is-a-tree-and-each-change-uses-music-words.md) items 3 and 5 for the sequence of the tree. [ADR 0257](0257-a-release-has-one-artist-one-label-and-one-publisher-in-its-fields.md) for the one artist page and the one label page of a release. ADR 0263 item 6 for the release date.
 
 ## Context
 
@@ -45,7 +45,7 @@
 
 ## Open Points
 
-- musicindex ADR 0053 R-LIST-9 gives "Releases" the sorts "Newest" and "A to Z". The Open Points of ADR 0263 stay open, and the orchestrator has this record.
+- None. musicindex ADR 0098 R-LIST-16 adds the R-LIST-9 row "A catalog grouped by label, artist and curator, in an editor", and Overview is a list of that row. R-LIST-17 gives the filters with no count.
 
 ## How This Decision Is Checked
 

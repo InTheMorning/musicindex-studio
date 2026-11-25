@@ -3013,13 +3013,14 @@ export function PageChangeSheet({ page, action, above, feeds, prepare, onChanged
   </dialog>`;
 }
 
-// The sheet gathers writable pages under one level (ADR 0243 items 7 to 12).
-export function GatherPagesSheet({ page, role, feeds, onMoved, onAddHost, onOpenChanges, onClose }) {
+// The Add sheet signs or publishes pages (ADR 0254 items 18 to 21).
+export function GatherPagesSheet({ page, role, feeds, onMoved, onMake, renderSearch, onAddHost, onOpenChanges, onClose }) {
   const ref = useSheet(true);
   const { busy, error, run } = useAction();
-  const [selected, setSelected] = useState(null);
-  const view = gatherPagesModel(feeds, page, role, selected);
-  const selectedIds = view.rows.filter((row) => row.checked).map((row) => row.id);
+  const [selected, setSelected] = useState([]);
+  const [query, setQuery] = useState('');
+  const view = gatherPagesModel(feeds, page, role, selected, query);
+  const selectedIds = view.selectedIds;
   const toggle = (id) => setSelected((current) => {
     const before = current || view.rows.filter((row) => row.checked).map((row) => row.id);
     return before.includes(id) ? before.filter((value) => value !== id) : [...before, id];
@@ -3032,13 +3033,32 @@ export function GatherPagesSheet({ page, role, feeds, onMoved, onAddHost, onOpen
   return html`<dialog ref=${ref} class="sheet small" aria-labelledby="gather-pages-title" onClose=${onClose}>
     <header><h2 id="gather-pages-title">${view.title}</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button></header>
-    <div class="body"><div class="group rows">${view.rows.map((row) => html`<${FeedCheckRow} key=${row.id} title=${row.title}
-      text=${`${row.releases} ${row.releases === 1 ? 'release' : 'releases'} · ${row.role}`} checked=${row.checked} onChange=${() => toggle(row.id)} />`)}</div>
-      ${view.note && html`<p class="hint">${view.note}</p>`}
+    <div class="body"><div class="form">
+      <${Field} id="catalog-add-search" label="Search" type="search" placeholder="Name" autofocus
+        value=${query} onInput=${(event) => setQuery(event.target.value)} />
+      <section class="page-section" aria-labelledby="catalog-add-collection">
+        <h3 id="catalog-add-collection" class="page-change-heading">In your collection</h3>
+        <div class="group rows">${view.rows.map((row) => html`<${FeedCheckRow} key=${row.id} title=${row.title}
+          text=${`${row.role} · ${row.releases} ${row.releases === 1 ? 'release' : 'releases'} · ${row.place}`}
+          checked=${row.checked} onChange=${() => toggle(row.id)} />`)}</div>
+        ${!view.rows.length && html`<p class="empty">No other page of your collection matches.</p>`}
+      </section>
+      <section class="page-section" aria-labelledby="catalog-add-index">
+        <h3 id="catalog-add-index" class="page-change-heading">On Music Index</h3>
+        ${renderSearch(query)}
+      </section>
+      <section class="page-section" aria-labelledby="catalog-add-new">
+        <h3 id="catalog-add-new" class="page-change-heading">New</h3>
+        <button class="link-row add" type="button" disabled=${busy} onClick=${() => onMake(query.trim())}>${view.newLabel}</button>
+      </section>
+      <div aria-live="polite">
+        ${view.note && html`<p class="hint">${view.note}</p>`}
+        ${view.result && html`<p>${view.result}</p><p class="hint">${view.hint}</p>`}
+      </div>
       <${MoveRefusal} error=${error} feeds=${feeds} onAddHost=${onAddHost} onOpenChanges=${onOpenChanges} />
       <div class="actions"><button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
-        <button class="button primary" type="button" disabled=${busy || !selectedIds.length} onClick=${move}>${view.button}</button></div>
-    </div>
+        <button class="button primary" type="button" disabled=${busy || !view.ready} onClick=${move}>${view.button}</button></div>
+    </div></div>
   </dialog>`;
 }
 
@@ -4485,9 +4505,8 @@ export function PublisherPath({ feeds, feed, from, go }) {
 }
 
 // One group of the page of a publisher feed (ADR 0254 items 13 to 16). A row
-// opens its page. An add row with `ready` false is not available until task
-// 254 gives the Add sheet. The group Releases has a select menu of its sorts.
-function PageGroup({ group, sort, onSort, onOpen, onAddRelease }) {
+// opens its page. The group Releases has a select menu of its sorts.
+function PageGroup({ group, sort, onSort, onOpen, onAddRelease, onAddPage }) {
   const headingId = `page-group-${group.id}`;
   return html`<section class="page-section page-group" aria-labelledby=${headingId}>
     <h2 id=${headingId}>${group.heading}</h2>
@@ -4509,7 +4528,7 @@ function PageGroup({ group, sort, onSort, onOpen, onAddRelease }) {
           menuLabel=${`More for ${row.title}`} items=${[{ label: 'Open' }]} onSelect=${() => onOpen(row.view)} />
       </div>`)}
       ${group.add.map((add) => html`<button class="link-row add" type="button" key=${add.id} disabled=${!add.ready}
-        onClick=${add.id === 'add-release' ? onAddRelease : undefined}>
+        onClick=${add.id === 'add-release' ? onAddRelease : () => onAddPage(add)}>
         <span class="title">${add.label}</span></button>`)}
     </div>
   </section>`;
@@ -4776,7 +4795,8 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, view,
     <div class="page-tools"><${MenuControl} className="add-menu" buttonLabel="＋ Add" accessibleName="Add" menuLabel="Add"
       items=${headAdd} onSelect=${pickAdd} /></div>
     ${groups.map((group) => html`<${PageGroup} key=${group.id} group=${group} sort=${sort} onSort=${setSort}
-      onOpen=${(target) => go(target)} onAddRelease=${() => openReleaseForm(more && more.start)} />`)}
+      onOpen=${(target) => go(target)} onAddRelease=${() => openReleaseForm(more && more.start)}
+      onAddPage=${(add) => nav.addCatalogPage({ id: feed.id, role: add.id === 'publish-label' ? 'label' : 'artist' })} />`)}
     ${showSections(pageSequence('publisher'), shown)}`;
 }
 

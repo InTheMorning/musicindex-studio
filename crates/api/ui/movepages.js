@@ -207,29 +207,37 @@ export function pageChangeNotice(page, change) {
   return `${pageTitle(page)} is now ${lowerFirst(change.place)}. Not written yet.`;
 }
 
-// The rows and controls of the gather sheet (ADR 0243 items 8 to 10).
-export function gatherPagesModel(feeds, level, role, selected = null) {
+// The Add sheet shows writable pages and starts with no selection (ADR 0254 items 18 to 21).
+// Each page below the sheet page has no row, because the core refuses it.
+export function gatherPagesModel(feeds, level, role, selected = [], query = '') {
   const word = role === 'artist' ? 'Artist' : 'Label';
+  const signing = headingIndex(level) === LABEL_RANK;
+  const text = query.trim();
   const rows = (feeds || []).filter((feed) => isPublisher(feed) && feed.connector_id
     && ((feed.publisher_roles || []).length === 0 || (feed.publisher_roles || []).includes(role))
-    && !ancestors(feeds, feed).has(level.id) && feed.id !== level.id)
+    && !ancestors(feeds, feed).has(level.id) && !(level.child_ids || []).includes(feed.id) && feed.id !== level.id)
     .sort((a, b) => pageTitle(a).localeCompare(pageTitle(b)))
     .map((feed) => ({
       id: feed.id,
       title: pageTitle(feed),
       releases: (feed.release_ids || []).length,
-      role: (feed.publisher_roles || []).includes(role) ? word : 'No role',
-      checked: selected === null ? !(feed.publisher_roles || []).includes(role) : selected.includes(feed.id),
-      noRole: !(feed.publisher_roles || []).includes(role),
+      role: (feed.publisher_roles || []).length ? feedKind(feed).label : 'No role',
+      place: pageNow(feed, feeds),
+      checked: (selected || []).includes(feed.id),
+      noRole: (feed.publisher_roles || []).length === 0,
     }));
   const count = rows.filter((row) => row.checked).length;
   return {
-    title: `Move ${word.toLowerCase()}s to ${pageTitle(level)}`,
-    rows,
+    title: `${signing ? 'Sign an artist to' : `Publish ${role === 'artist' ? 'an artist' : 'a label'} on`} ${pageTitle(level)}`,
+    rows: rows.filter((row) => row.title.toLowerCase().includes(text.toLowerCase())),
+    selectedIds: rows.filter((row) => row.checked).map((row) => row.id),
     count,
-    button: `Move ${count} ${word}${count === 1 ? '' : 's'}`,
+    button: signing ? 'Sign' : 'Publish',
     ready: count > 0,
     note: rows.some((row) => row.checked && row.noRole) ? `A page with no role gets the role ${word}.` : null,
+    result: count ? `All releases of the selected ${role === 'artist' ? 'artists' : 'labels'} ${signing ? 'then come out on' : 'are then published by'} ${pageTitle(level)}.` : null,
+    hint: count ? `For only some releases, use ${signing ? 'Change label…' : 'Change publisher…'} in the ⋯ menu of the ${role}.` : null,
+    newLabel: `＋ Make a new ${role} page${text ? ` "${text}"` : ''}`,
   };
 }
 

@@ -16,28 +16,57 @@ const feeds = [
 ];
 const owner = 'ADR 0240 items 12 to 17: the model of the sheet. Fix crates/api/ui/movepages.js.';
 
-test('gather pages lists writable pages, their start selection, and the note (ADR 0243 items 8 to 10)', () => {
-  const level = page(40, 'Host A', ['hosting']);
+const ownerAdd = 'ADR 0254 items 18 to 21: the model of the Add sheet. Fix gatherPagesModel in crates/api/ui/movepages.js.';
+test('the Add sheet lists writable pages with no start selection (ADR 0254 items 18 to 21)', () => {
+  const level = page(40, 'Publisher A', ['hosting'], { child_ids: [3] });
   const candidates = [
     page(1, 'Artist A', ['artist'], { release_ids: [10, 11] }),
     page(2, 'No Role', [], { release_ids: [12] }),
-    page(3, 'Nested', ['artist'], { parent_ids: [40] }),
+    page(3, 'Direct child', ['artist'], { parent_ids: [40] }),
     page(4, 'Read Only', ['artist'], { connector_id: null }),
     page(5, 'Label A', ['label']),
+    page(6, 'Deeper artist', ['artist'], { parent_ids: [8] }),
+    page(8, 'Intermediate label', ['label'], { parent_ids: [40] }),
+    { id: 7, title: 'Release', medium: 'music', connector_id: 'c' },
   ];
-  const model = gatherPagesModel([level, ...candidates], level, 'artist');
-  assert.equal(model.title, 'Move artists to Host A', 'ADR 0243 item 8: fix gatherPagesModel in crates/api/ui/movepages.js.');
-  assert.deepEqual(model.rows.map(({ id, title, releases, role, checked }) => ({ id, title, releases, role, checked })), [
-    { id: 1, title: 'Artist A', releases: 2, role: 'Artist', checked: false },
-    { id: 2, title: 'No Role', releases: 1, role: 'No role', checked: true },
-  ], 'ADR 0243 items 8 to 10: fix gatherPagesModel in crates/api/ui/movepages.js.');
-  assert.equal(model.button, 'Move 1 Artist', 'ADR 0243 item 9: fix gatherPagesModel in crates/api/ui/movepages.js.');
-  assert.equal(model.ready, true, 'ADR 0243 item 9: fix gatherPagesModel in crates/api/ui/movepages.js.');
-  assert.equal(model.note, 'A page with no role gets the role Artist.', 'ADR 0243 item 10: fix gatherPagesModel in crates/api/ui/movepages.js.');
-  const empty = gatherPagesModel([level, candidates[0]], level, 'artist', []);
-  assert.equal(empty.button, 'Move 0 Artists', 'ADR 0243 item 9: fix gatherPagesModel in crates/api/ui/movepages.js.');
-  assert.equal(empty.ready, false, 'ADR 0243 item 9: fix gatherPagesModel in crates/api/ui/movepages.js.');
-  assert.equal(empty.note, null, 'ADR 0243 item 10: fix gatherPagesModel in crates/api/ui/movepages.js.');
+  const all = [level, ...candidates];
+  const model = gatherPagesModel(all, level, 'artist');
+  assert.equal(model.title, 'Publish an artist on Publisher A', ownerAdd);
+  assert.deepEqual(model.rows.map((row) => row.id), [1, 2], ownerAdd);
+  assert.ok(model.rows.every((row) => !row.checked), ownerAdd);
+  assert.equal(model.rows[0].role, 'Artist', ownerAdd);
+  assert.equal(model.rows[0].releases, 2, ownerAdd);
+  assert.equal(model.rows[0].place, 'Independent, not published', ownerAdd);
+  assert.equal(model.rows[1].role, 'No role', ownerAdd);
+  assert.equal(model.ready, false, ownerAdd);
+  assert.equal(model.button, 'Publish', ownerAdd);
+  assert.equal(model.note, null, ownerAdd);
+  assert.equal(model.result, null, ownerAdd);
+  assert.equal(model.hint, null, ownerAdd);
+  assert.deepEqual(model.selectedIds, [], ownerAdd);
+  const selected = gatherPagesModel(all, level, 'artist', [1, 2], ' ARTIST ');
+  assert.deepEqual(selected.rows.map((row) => row.id), [1], ownerAdd);
+  assert.deepEqual(selected.selectedIds, [1, 2], ownerAdd);
+  assert.equal(selected.count, 2, ownerAdd);
+  assert.equal(selected.ready, true, ownerAdd);
+  assert.equal(selected.note, 'A page with no role gets the role Artist.', ownerAdd);
+  assert.equal(selected.result, 'All releases of the selected artists are then published by Publisher A.', ownerAdd);
+  assert.equal(selected.hint, 'For only some releases, use Change publisher… in the ⋯ menu of the artist.', ownerAdd);
+  assert.equal(model.newLabel, '＋ Make a new artist page', ownerAdd);
+  assert.equal(selected.newLabel, '＋ Make a new artist page "ARTIST"', ownerAdd);
+  assert.equal(gatherPagesModel(all, level, 'label').title, 'Publish a label on Publisher A', ownerAdd);
+  const labels = gatherPagesModel(all, level, 'label', [2]);
+  assert.deepEqual(labels.rows.map((row) => row.id), [5, 2], ownerAdd);
+  assert.equal(labels.note, 'A page with no role gets the role Label.', ownerAdd);
+  assert.equal(labels.result, 'All releases of the selected labels are then published by Publisher A.', ownerAdd);
+  assert.equal(labels.hint, 'For only some releases, use Change publisher… in the ⋯ menu of the label.', ownerAdd);
+  assert.equal(labels.newLabel, '＋ Make a new label page', ownerAdd);
+  const sign = gatherPagesModel(all, candidates[4], 'artist', [1]);
+  assert.equal(sign.title, 'Sign an artist to Label A', ownerAdd);
+  assert.equal(sign.button, 'Sign', ownerAdd);
+  assert.equal(sign.result, 'All releases of the selected artists then come out on Label A.', ownerAdd);
+  assert.equal(sign.hint, 'For only some releases, use Change label… in the ⋯ menu of the artist.', ownerAdd);
+  assert.equal(sign.note, null, ownerAdd);
 });
 
 const owner254 = 'ADR 0254 items 22 to 28: the model of the sheets. Fix crates/api/ui/movepages.js.';

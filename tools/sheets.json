@@ -1187,6 +1187,22 @@
           "wait": 800
         }
       ]
+    },
+    {
+      "name": "Catalog Add",
+      "source": "editor.js GatherPagesSheet",
+      "open": [
+        {
+          "js": "$go('Label A')"
+        },
+        {
+          "wait": 1200,
+          "js": "$go('＋ Sign an artist', 'main')"
+        },
+        {
+          "wait": 800
+        }
+      ]
     }
   ]
 }

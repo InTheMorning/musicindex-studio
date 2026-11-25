@@ -4,13 +4,14 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Levels And Move
 Decisions: [ADR 0254](../adr/0254-the-catalog-is-a-tree-and-each-change-uses-music-words.md) items 18 to 28 and 34 to 39. [ADR 0257](../adr/0257-a-release-has-one-artist-one-label-and-one-publisher-in-its-fields.md) items 14 and 15.
 Prototype: `.studio-dev/design-brief/prototype/structure.html`. Git ignores it.
 
-Status: In progress. Packet 254a is done.
+Status: In progress. Packets 254a and 254b are done.
 
 Operator choices (the main session, in the approved ADR 0254):
 
 - Packet 254a: the place text of the core uses the roles of each link on the shared releases (ADR 0253). A kept link has no shared release, so the roles of the feed give it.
 - Packet 254a: a page action keeps the link of the release to the page with its first level role. The other removed roles of that link go (ADR 0254 item 26). Thus a label page that is also a publisher can change its publisher, and "Leave all" keeps its role `label`.
 - Packet 254a: the message of `role_taken` is the step of the error notice, as for `bad_address`.
+- Packet 254b: the Add sheet shows no row for a page below the sheet page, also when a different page is between the two pages (ADR 0254 item 19 gives only a page directly below). The core refuses each of these pages, and the place of such a page does not change.
 
 ## Goal
 

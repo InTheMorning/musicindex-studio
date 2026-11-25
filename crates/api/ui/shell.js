@@ -589,13 +589,13 @@ export function publisherGroups(feed, feeds, { sort = PAGE_SORTS[0], from = unde
     if (role === 'hosting') {
       groups.push({
         id: 'pages', heading: 'Labels and artists published here', empty: 'Nothing published here yet.',
-        add: [{ id: 'publish-label', label: '＋ Publish a label', ready: false }, { id: 'publish-artist', label: '＋ Publish an artist', ready: false }],
+        add: [{ id: 'publish-label', label: '＋ Publish a label', ready: true }, { id: 'publish-artist', label: '＋ Publish an artist', ready: true }],
         rows: claimedRows.hosting,
       });
     } else if (role === 'label') {
       groups.push({
         id: 'artists', heading: 'Artists on this label', empty: 'No artists on this label yet.',
-        add: [{ id: 'sign-artist', label: '＋ Sign an artist', ready: false }],
+        add: [{ id: 'sign-artist', label: '＋ Sign an artist', ready: true }],
         rows: claimedRows.label,
       });
     }

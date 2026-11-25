@@ -1492,9 +1492,10 @@ function ParentSheet({ choices, onChoose, onClose }) {
 
 // Find a feed to add to a form (ADR 0233 items 2 to 14). The results are the
 // one search of `SearchResults`, with the rows of the kind of the form.
-function AddFindSheet({ open, type, role, parent, connectors, onPick, onAdded, onOpen, onImport, onClose }) {
-  const ref = useSheet(open);
-  const [query, setQuery] = useState('');
+function AddFindSheet({ open, type, role, parent, connectors, onPick, onAdded, onOpen, onImport, onClose, embedded = false, query: sharedQuery }) {
+  const ref = useSheet(open && !embedded);
+  const [localQuery, setQuery] = useState('');
+  const query = embedded ? sharedQuery : localQuery;
   const [artist, setArtist] = useState(null);
   // ADR 0238 item 2: the pages that a found feed names.
   const [pages, setPages] = useState(null);
@@ -1506,7 +1507,7 @@ function AddFindSheet({ open, type, role, parent, connectors, onPick, onAdded, o
   useEffect(() => {
     if (open) { setArtist(null); setPages(null); setProblem(null); }
   }, [open]);
-  const close = () => ref.current.close();
+  const close = () => { if (!embedded) ref.current.close(); };
   const working = async (step) => {
     setProblem(null);
     setBusy(true);
@@ -1518,7 +1519,7 @@ function AddFindSheet({ open, type, role, parent, connectors, onPick, onAdded, o
     const added = result.added?.[0];
     // ADR 0249 item 10: an address of the collection with a different GUID gives its Notice.
     if (!added) throw new Error(result.notices?.[0] || result.failed?.[0]?.message || 'Studio could not add the feed at this address.');
-    onAdded(added, { type, copied: true });
+    await onAdded(added, { type, copied: true });
     close();
   });
   // ADR 0233 items 8 and 14: a different feed is copied. When Studio cannot
@@ -1568,6 +1569,8 @@ function AddFindSheet({ open, type, role, parent, connectors, onPick, onAdded, o
     close();
   });
   const pick = (row, isFeed) => {
+    if (embedded && row.in_studio_id != null) { working(() => onOpen(Number(row.in_studio_id))); return; }
+    if (embedded && row.yours && row.feed_url) { addAddress(row.feed_url); return; }
     if (type === 'publisher' && role && isFeed) { found(row); return; }
     if (row.in_studio_id != null) { onOpen(Number(row.in_studio_id)); close(); return; }
     if (row.yours && row.feed_url) { addAddress(row.feed_url); return; }
@@ -1581,10 +1584,7 @@ function AddFindSheet({ open, type, role, parent, connectors, onPick, onAdded, o
   const shown = artist
     ? { rows: [], feeds: artist.feeds, note: null, searched: true, searchedFor: query, error: null }
     : { ...search, rows: search.rows === null ? null : addSearchRows(search.rows, type, role) };
-  return html`<dialog ref=${ref} class="sheet search-sheet" aria-labelledby="add-find-title" onClose=${onClose}>
-    <header><h2 id="add-find-title">Find on Music Index</h2>
-      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${close}>✕</button></header>
-    <div class="body">
+  const content = html`
       ${pages && html`<section class="page-section"><${RowList}>
         <button class="link-row" type="button" onClick=${() => { setPages(null); setProblem(null); }}>
           <span class="text"><span class="label">‹ Results</span><span class="summary">${pages.picked.found.title}</span></span></button>
@@ -1597,17 +1597,22 @@ function AddFindSheet({ open, type, role, parent, connectors, onPick, onAdded, o
       ${pages ? null : artist
         ? html`<section class="page-section"><${RowList}><button class="link-row" type="button" onClick=${() => { setArtist(null); setProblem(null); }}>
             <span class="text"><span class="label">‹ Results</span><span class="summary">${artist.row.title || ''}</span></span></button><//></section>`
-        : html`<section class="page-section pinned-form"><div class="group rows"><${Field} id="add-find-query" label="Name or feed address" type="search" autofocus value=${query} ...${fields.input}>${fields.list}<//></div>
+        : !embedded && html`<section class="page-section pinned-form"><div class="group rows"><${Field} id="add-find-query" label="Name or feed address" type="search" autofocus value=${query} ...${fields.input}>${fields.list}<//></div>
           ${address && html`<div class="actions"><button class="button" type="button" disabled=${busy} onClick=${() => addAddress(query.trim())}>Add This Address</button></div>`}</section>`}
       <${ErrorNotice} error=${problem} />
       ${busy && html`<p class="empty" role="status">Reading the feed…</p>`}
       ${!pages && html`<${SearchResults} query=${artist ? 'artist' : query} search=${shown} listOpen=${!artist && fields.open} disabled=${busy}
         markOf=${addResultMark} onPick=${pick} />`}
-      <section class="page-section"><${RowList}>
+      ${!embedded && html`<section class="page-section"><${RowList}>
         ${addSheetRows(connectors.length > 0).map((row) => html`<button key=${row.id} class="link-row" type="button"
           onClick=${() => { onImport(row.id); close(); }}><span class="text"><span class="label">${row.title}</span></span><span class="go" aria-hidden="true">›</span></button>`)}
-      <//></section>
-    </div>
+      <//></section>`}`;
+  if (embedded) return html`${address && html`<button class="button" type="button" disabled=${busy}
+      onClick=${() => addAddress(query.trim())}>Add This Address</button>`}${content}`;
+  return html`<dialog ref=${ref} class="sheet search-sheet" aria-labelledby="add-find-title" onClose=${onClose}>
+    <header><h2 id="add-find-title">Find on Music Index</h2>
+      <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${close}>✕</button></header>
+    <div class="body">${content}</div>
     <footer><button class="button" type="button" onClick=${close}>Cancel</button></footer>
   </dialog>`;
 }
@@ -1672,6 +1677,8 @@ function MakeFeedForm({ connectors, feeds, startType, start = {}, onAdded, onKin
     setCopyPreview(preview);
     setFoundValues(values);
   };
+  // The Add sheet can supply the same result as the search of this form.
+  useEffect(() => { if (start.pick) pick(start.pick); }, []);
   // Open "Feed file" when the API gives an error for it.
   useEffect(() => { if (formError.field) setPathOpen(true); }, [formError.field]);
   const submit = (event) => {
@@ -4514,6 +4521,15 @@ function Shell({ vault, onLock, version }) {
   const openAddFeedRow = (item) => item.gatherRole
     ? setGather({ id: item.from.group, role: item.gatherRole })
     : setAddingFeed(item);
+  const makeCatalogPage = (title, pick) => {
+    setAddingFeed({ open: 'publisher', start: { role: gather.role, below_id: gather.id, title, pick }, from: view });
+    setGather(null);
+  };
+  const gatherFoundPage = async (id) => {
+    await api(`/feeds/${gather.id}/gather`, { method: 'POST', body: { role: gather.role, page_ids: [id] } });
+    setGather(null);
+    await load();
+  };
   const openChangeSet = (id) => go({ name: 'change-set', id });
   // After a change, the sheet is closed. The notice gives the result. The
   // change set does not open by itself (ADR 0254 item 35).
@@ -4573,7 +4589,7 @@ function Shell({ vault, onLock, version }) {
   }
 
   const navValue = { coarse, canBack: canBack(nav), canForward: canForward(nav), back, forward, setLeaveGuard,
-    rootButtons: showsRootButtons(nav, narrow), toRoot, go,
+    rootButtons: showsRootButtons(nav, narrow), toRoot, go, addCatalogPage: setGather,
     // A new release opens with the import sheet "Add tracks" (ADR 0224 item 7).
     addTracksNext: setPendingAddTracks };
   const panelProps = { panel, draft, changedFeeds, go, showReleases, onAdding: setAdding, onImporting: setImporting, onAddFeedRow: openAddFeedRow,
@@ -4609,8 +4625,13 @@ function Shell({ vault, onLock, version }) {
       onOpenChanges=${(id) => { setPageSheet(null); openChangeSet(id); }}
       onClose=${() => setPageSheet(null)} />`}
     ${gather && feeds.find((feed) => feed.id === gather.id) && html`<${GatherPagesSheet} page=${feeds.find((feed) => feed.id === gather.id)} role=${gather.role}
-      feeds=${feeds} onMoved=${async (answer) => { setGather(null); await load(); if (answer.change_set_id != null)
-        go(changeSetView({ id: answer.change_set_id, operation: { kind: 'move_pages' } })); }}
+      feeds=${feeds} onMoved=${async () => { setGather(null); await load(); }}
+      onMake=${(title) => makeCatalogPage(title)}
+      renderSearch=${(query) => html`<${AddFindSheet} open=${true} embedded=${true} query=${query}
+        type=${'publisher'} role=${gather.role} connectors=${connectors}
+        onPick=${(pick) => makeCatalogPage('', pick)}
+        onAdded=${(feed) => gatherFoundPage(feed.id)}
+        onOpen=${(id) => { setGather(null); go(openFeedView(id, false, view)); }} />`}
       onAddHost=${() => { setGather(null); go({ name: 'hosts', add: true }); }}
       onOpenChanges=${(id) => { setGather(null); openChangeSet(id); }}
       onClose=${() => setGather(null)} />`}

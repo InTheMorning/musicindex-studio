@@ -297,7 +297,15 @@ fn replace_page(
         }
     }
     let feeds = models(collection, None)?;
-    remove_page_roles(collection, &feeds, release, release, &[role], &[], None)?;
+    remove_page_roles(
+        collection,
+        &feeds,
+        (release, None),
+        release,
+        &[role],
+        &[],
+        None,
+    )?;
     if let Some(page) = page {
         add_release_pages(collection, release, &[(page, role)])?;
     }
@@ -396,7 +404,7 @@ pub fn remove_other_pages(
             remove_page_roles(
                 collection,
                 &feeds,
-                first.id.unwrap_or(release),
+                (first.id.unwrap_or(release), None),
                 release,
                 &[role],
                 &[],

@@ -21092,6 +21092,26 @@ async fn catalog_preview_uses_the_tree_parent_and_changes_no_draft() {
         assert_eq!(body["selected_releases"], json!([release]));
         assert_eq!(body["result"]["changed_releases"], 1);
     }
+    // A sheet that opens before the user selects a label gets its start
+    // selection, and nothing changes (ADR 0254 item 28).
+    let (status, body) = call(
+        &app,
+        "GET",
+        &format!("/api/v1/feeds/{artist}/page-change?action=change_label&above={first_label}"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["start_selection"], json!([first_release]));
+    assert_eq!(body["result"]["nothing_changes"], true);
+    // The line "Now" of the sheet comes from the same place text.
+    assert_eq!(body["now"], body["result"]["place"]);
+    assert!(
+        body["now"]
+            .as_str()
+            .is_some_and(|now| now.starts_with("On ")),
+        "{body}"
+    );
     let (status, body) = call(&app, "GET", &format!(
         "/api/v1/feeds/{artist}/page-change?action=change_publisher&page={host}&releases={first_release},{third_release}"), None).await;
     assert_eq!(status, StatusCode::OK, "{body}");

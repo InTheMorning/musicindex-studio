@@ -269,7 +269,13 @@ fn change_release_pages(
     let mut changed = remove_page_roles(
         collection,
         feeds,
-        page,
+        (
+            page,
+            feeds
+                .iter()
+                .find(|(row, _)| row.id == page)
+                .and_then(|(row, _)| row.publisher_roles.iter().min().copied()),
+        ),
         release,
         action.removed_roles(),
         additions,
@@ -379,7 +385,7 @@ pub(super) fn title(row: &FeedRow, model: Option<&Feed>) -> String {
 pub(super) fn remove_page_roles(
     collection: &Collection,
     feeds: &[(FeedRow, Option<Feed>)],
-    page: FeedId,
+    (page, own_link_keeps): (FeedId, Option<PublisherRole>),
     release: FeedId,
     removed: &[PublisherRole],
     additions: &[(FeedId, PublisherRole)],
@@ -390,8 +396,20 @@ pub(super) fn remove_page_roles(
     let mut changed = false;
     for (row, model) in feeds
         .iter()
-        .filter(|(row, _)| row.id != page && row.medium.as_deref() == Some("publisher"))
+        .filter(|(row, _)| row.medium.as_deref() == Some("publisher"))
     {
+        // With `own_link_keeps`, the link of the release to the page stays
+        // with that role and loses its other removed roles, so a label page
+        // that is also a publisher can change its publisher (ADR 0254 item
+        // 26, ADR 0253). Without it, the link to the page stays whole.
+        let own_role = if row.id == page {
+            match own_link_keeps {
+                Some(role) => Some(role),
+                None => continue,
+            }
+        } else {
+            None
+        };
         let page_party = party_of(row, model.as_ref());
         let channel = model
             .iter()
@@ -410,7 +428,7 @@ pub(super) fn remove_page_roles(
         let removed: Vec<_> = removed
             .iter()
             .copied()
-            .filter(|role| !additions.contains(&(row.id, *role)))
+            .filter(|role| !additions.contains(&(row.id, *role)) && own_role != Some(*role))
             .collect();
         if !current.iter().any(|role| removed.contains(role)) {
             continue;
@@ -431,6 +449,19 @@ pub(super) fn remove_page_roles(
         }
         changed = true;
     }
+    let outside_changes = remove_outside_roles(collection, feeds, release, removed, kept_item)?;
+    Ok(changed || outside_changes)
+}
+
+/// Remove the removed roles from the links of the release to pages outside
+/// the collection. The kept item and the pages of the collection stay.
+fn remove_outside_roles(
+    collection: &Collection,
+    feeds: &[(FeedRow, Option<Feed>)],
+    release: FeedId,
+    removed: &[PublisherRole],
+    kept_item: Option<&crate::feed::RemoteItem>,
+) -> Result<bool, PublisherError> {
     let feed = pipeline::draft_model(collection, release)?.0;
     let outside_changes = feed
         .publisher
@@ -482,7 +513,7 @@ pub(super) fn remove_page_roles(
             }
         })?;
     }
-    Ok(changed || outside_changes)
+    Ok(outside_changes)
 }
 
 fn place(feeds: &[(FeedRow, Option<Feed>)], kept: &[(FeedId, FeedId)], page: FeedId) -> String {
@@ -490,6 +521,16 @@ fn place(feeds: &[(FeedRow, Option<Feed>)], kept: &[(FeedId, FeedId)], page: Fee
     let mut above = vec![page];
     let mut labels = Vec::new();
     let mut publishers = Vec::new();
+    // The own links of the page can give the role hosting, so a page can
+    // publish its own releases (ADR 0253).
+    if let Some(page_index) = feeds.iter().position(|(row, _)| row.id == page)
+        && catalogs[page_index].releases.iter().any(|release| {
+            super::link_roles(feeds, *release, page_index).contains(&PublisherRole::Hosting)
+        })
+    {
+        let (row, model) = &feeds[page_index];
+        publishers.push(title(row, model.as_ref()));
+    }
     let mut index = 0;
     while index < above.len() {
         if let Some(feed_index) = feeds.iter().position(|(row, _)| row.id == above[index]) {
@@ -497,18 +538,28 @@ fn place(feeds: &[(FeedRow, Option<Feed>)], kept: &[(FeedId, FeedId)], page: Fee
                 if !above.contains(parent) {
                     above.push(*parent);
                 }
-                if let Some((row, model)) = feeds.iter().find(|(row, _)| row.id == *parent) {
-                    let titles = if row.publisher_roles.contains(&PublisherRole::Label) {
-                        &mut labels
-                    } else if row.publisher_roles.contains(&PublisherRole::Hosting) {
-                        &mut publishers
-                    } else {
-                        continue;
-                    };
-                    let name = title(row, model.as_ref());
-                    if !titles.contains(&name) {
-                        titles.push(name);
-                    }
+                let Some(parent_index) = feeds.iter().position(|(row, _)| row.id == *parent) else {
+                    continue;
+                };
+                let (row, model) = &feeds[parent_index];
+                // The roles of the links on the shared releases give the place
+                // (ADR 0253: each link has its own roles). A kept link has no
+                // shared release, so the roles of the feed give it.
+                let mut link_roles: Vec<PublisherRole> = catalogs[parent_index]
+                    .releases
+                    .iter()
+                    .filter(|release| catalogs[feed_index].releases.contains(release))
+                    .flat_map(|release| super::link_roles(feeds, *release, parent_index))
+                    .collect();
+                if link_roles.is_empty() {
+                    link_roles.clone_from(&row.publisher_roles);
+                }
+                let name = title(row, model.as_ref());
+                if link_roles.contains(&PublisherRole::Label) && !labels.contains(&name) {
+                    labels.push(name.clone());
+                }
+                if link_roles.contains(&PublisherRole::Hosting) && !publishers.contains(&name) {
+                    publishers.push(name);
                 }
             }
         }
@@ -516,6 +567,19 @@ fn place(feeds: &[(FeedRow, Option<Feed>)], kept: &[(FeedId, FeedId)], page: Fee
     }
     labels.sort_by_key(|title| title.to_lowercase());
     publishers.sort_by_key(|title| title.to_lowercase());
+    // A label page is not on a label, so its place names only its publishers.
+    let is_label = feeds
+        .iter()
+        .find(|(row, _)| row.id == page)
+        .and_then(|(row, _)| row.publisher_roles.iter().min())
+        == Some(&PublisherRole::Label);
+    if is_label {
+        return if publishers.is_empty() {
+            "Not published".to_owned()
+        } else {
+            format!("Published by {}", publishers.join(", "))
+        };
+    }
     let label = if labels.is_empty() {
         "Independent".to_owned()
     } else {
@@ -536,6 +600,8 @@ pub struct PageChangePreview {
     pub start_selection: Vec<FeedId>,
     /// The releases selected for this preview.
     pub selected_releases: Vec<FeedId>,
+    /// The place of the page before the change, for the line "Now".
+    pub now: String,
     /// The result after the selected change.
     pub result: PageChangeResult,
 }
@@ -578,8 +644,35 @@ where
     let feeds = models(collection, library).map_err(E::from)?;
     let start_selection = page_change_selection(&feeds, request.page, request.above);
     let selected = request.releases.as_ref().unwrap_or(&start_selection);
-    let before = draft_snapshot(collection)?;
     let kept = collection.kept_levels()?;
+    let now = place(&feeds, &kept, request.page);
+    // A sheet opens before the user selects a label. The preview then gives
+    // the start selection and the place now, and it changes nothing
+    // (ADR 0254 item 28).
+    if preview
+        && request.selected_page.is_none()
+        && matches!(
+            request.action,
+            PageAction::SignToLabel | PageAction::ChangeLabel
+        )
+    {
+        let result = PageChangeResult {
+            place: now.clone(),
+            changed_releases: 0,
+            kept_release_titles: Vec::new(),
+            nothing_changes: true,
+        };
+        let selected_releases = selected.clone();
+        tx.rollback()
+            .map_err(crate::collection::CollectionError::from)?;
+        return Ok(PageChangePreview {
+            start_selection,
+            selected_releases,
+            now,
+            result,
+        });
+    }
+    let before = draft_snapshot(collection)?;
     start_page_drafts(
         collection,
         &feeds,
@@ -604,6 +697,7 @@ where
         return Ok(PageChangePreview {
             start_selection,
             selected_releases,
+            now,
             result,
         });
     }
@@ -614,6 +708,7 @@ where
     Ok(PageChangePreview {
         start_selection,
         selected_releases,
+        now,
         result,
     })
 }

@@ -54,3 +54,8 @@ test('the step of bad_address is the message with the places (ADR 0245 item 8)',
     'Credit · The Doerfels · Information address is not correct.',
     'ADR 0245 item 8: the refusal names each place in words. Fix errorStep in crates/api/ui/errors.js.');
 });
+
+test('the step of role_taken is the message with the page (ADR 0257 item 10)', () => {
+  const message = 'White Triangles already has the publisher page Harbor Records. Change it in the fields of the release.';
+  assert.equal(errorStep({ code: 'role_taken', message }), message);
+});

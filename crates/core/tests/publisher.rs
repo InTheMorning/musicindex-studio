@@ -1948,6 +1948,81 @@ fn a_catalog_page_without_releases_replaces_its_kept_link() {
 }
 
 #[test]
+fn a_catalog_place_follows_the_roles_of_each_link() {
+    use PublisherRole::{Artist, Hosting, Label};
+    let mut s = setup();
+    let artist = catalog_page(&mut s, "Artist", &[Artist]);
+    let label = catalog_page(&mut s, "Label", &[Label, Hosting]);
+    let release = new_feed(&mut s, "release.xml", "Release", "music");
+    publisher::link(&s.collection, artist, release, Some(&[Artist])).unwrap();
+    publisher::link(&s.collection, label, release, Some(&[Label, Hosting])).unwrap();
+    // Go independent removes the role label only (ADR 0254 item 23). The
+    // link keeps the role hosting, so the page stays published by Label.
+    let result = publisher::change_page(
+        &s.collection,
+        None,
+        artist,
+        publisher::PageAction::GoIndependent,
+        None,
+        &[release],
+    )
+    .unwrap();
+    assert_eq!(
+        release_link_roles(&s, release, label).as_deref(),
+        Some("hosting")
+    );
+    assert_eq!(result.place, "Independent, published by Label");
+}
+
+#[test]
+fn a_catalog_label_that_is_a_publisher_can_change_its_publisher() {
+    use PublisherRole::{Artist, Hosting, Label};
+    let mut s = setup();
+    let artist = catalog_page(&mut s, "Artist", &[Artist]);
+    let label = catalog_page(&mut s, "Label", &[Label, Hosting]);
+    let new = catalog_page(&mut s, "New publisher", &[Hosting]);
+    let release = new_feed(&mut s, "release.xml", "Release", "music");
+    publisher::link(&s.collection, artist, release, Some(&[Artist])).unwrap();
+    publisher::link(&s.collection, label, release, Some(&[Label, Hosting])).unwrap();
+    // The link of the release to the page stays with the role label. Its
+    // role hosting goes to the new publisher (ADR 0254 item 26).
+    let result = publisher::change_page(
+        &s.collection,
+        None,
+        label,
+        publisher::PageAction::ChangePublisher,
+        Some(new),
+        &[release],
+    )
+    .unwrap();
+    assert_eq!(result.changed_releases, 1);
+    assert_eq!(
+        release_link_roles(&s, release, label).as_deref(),
+        Some("label")
+    );
+    assert_eq!(
+        release_link_roles(&s, release, new).as_deref(),
+        Some("hosting")
+    );
+    assert_eq!(result.place, "Published by New publisher");
+    // "Leave all" on a label page keeps the role label of its own link.
+    publisher::change_page(
+        &s.collection,
+        None,
+        label,
+        publisher::PageAction::LeaveAll,
+        None,
+        &[release],
+    )
+    .unwrap();
+    assert_eq!(
+        release_link_roles(&s, release, label).as_deref(),
+        Some("label")
+    );
+    assert_eq!(release_link_roles(&s, release, new), None);
+}
+
+#[test]
 fn a_catalog_change_to_the_same_label_changes_nothing() {
     use PublisherRole::{Artist, Hosting, Label};
     let mut s = setup();

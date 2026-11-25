@@ -1986,8 +1986,17 @@ button.outline-feed {
 .row-menu { display: inline-flex; align-items: center; gap: 6px; }
 .row-menu-icon { display: none; }
 .row-menu-icon .icon { display: block; width: 18px; height: 18px; }
-/* The change lines of a page move, one on each line (ADR 0240 item 22). */
-.move-changes { display: flex; flex-direction: column; gap: 4px; }
+/* The sheet of a page action (ADR 0254 items 24 and 25). */
+.page-change-now { display: grid; gap: 2px; margin: 0; }
+.page-change-now .label { color: var(--muted); font-size: var(--text-callout); font-weight: 600; }
+.page-change-heading { margin: 0; font-size: var(--text-headline); }
+.page-change-list { max-height: calc(var(--window-height) * .4); overflow-y: auto; }
+.pick-row[aria-pressed="true"] { background: var(--select); }
+.page-change-list .pick-row { align-items: center; }
+.page-change-list .pick-row .summary { text-align: left; }
+.pick-row .now-mark { color: var(--muted); font-size: var(--text-callout); border: 1px solid var(--sep); border-radius: 999px; padding: 0 8px; }
+.page-change-result { display: grid; gap: 4px; }
+.page-change-result p { margin: 0; }
 .panel-row-with-menu { display: flex; align-items: center; gap: 2px; min-width: 0; }
 .panel-row-with-menu > .row,
 .panel-row-with-menu > .node { flex: 1 1 0; min-width: 0; }

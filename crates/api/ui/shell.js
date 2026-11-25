@@ -796,11 +796,6 @@ export function unlinkedReleases(feeds) {
   }));
 }
 
-// The destination after a release move (ADR 0240 item 19).
-export function movedReleaseView(artistId) {
-  return { name: 'releases', group: artistId };
-}
-
 // The cover of a feed row. The row has the `itunes:image` as `image` and
 // the address of the RSS image as `rss_image_url`. The cover rule is in
 // `cover.js` (ADR 0060). A feed with no cover gives `null`.

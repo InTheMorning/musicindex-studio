@@ -70,6 +70,9 @@ function isInterfaceText(text, at) {
   if (text === 'A release has one publisher. A music file calls the label "Publisher". Here the label goes in Label.'
     || text === 'You selected the publisher.') return false;
   if (text === 'publisher' || text === 'publishers') return false;
+  // ADR 0254 items 23 to 25 give these exact texts to the sheet of a page action.
+  if (['Change Publisher', 'Search for a publisher', 'Releases that change publisher', 'Select a publisher.',
+    'Change publisher…', 'Choose a publisher…', 'No publisher matches.'].includes(text)) return false;
   // ADR 0250 item 5 gives this exact label to the medium repair menu.
   const repairLabel = 'Artist or label page (';
   if (text.slice(Math.max(0, at - repairLabel.length), at) === repairLabel && text[end] === ')') return false;

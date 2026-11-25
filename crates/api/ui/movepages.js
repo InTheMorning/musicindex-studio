@@ -1,6 +1,7 @@
-// The model of the sheet "Move {title}" (ADR 0240 items 12 to 17). The
-// functions have no Preact and no browser state. `editor.js` shows the sheet.
-import { isPublisher, roleWord } from './shell.js';
+// The models of the sheets of a page action (ADR 0254 items 22 to 28), of the
+// gather sheet and of the release credit fields. The functions have no Preact
+// and no browser state. `editor.js` shows the sheets.
+import { isPublisher, roleWord, headingIndex, placeText, feedKind } from './shell.js';
 
 // The prefix of the value that opens the form of a new page (ADR 0240 item
 // 14). The rest of the value is the role of the new page.
@@ -21,72 +22,7 @@ function pageTitle(feed) {
   return feed.title || feed.path || 'Untitled page';
 }
 
-// The title of the sheet for a publisher page (ADR 0240 item 21).
-export function movePageTitle(page) {
-  return `Move ${page.title || page.path || 'Untitled page'}`;
-}
-
-// The roles shown when an artist or label page moves (ADR 0240 item 21).
-export function pageMoveRoles(page) {
-  return (page.publisher_roles || []).includes('artist') ? ['label', 'hosting'] : ['hosting'];
-}
-
-// The body of a page move (ADR 0240 item 23).
-export function pageMoveBody(page, values) {
-  const id = (value) => (/^\d+$/.test(value || '') ? Number(value) : null);
-  return Object.fromEntries(pageMoveRoles(page).map((role) => [`${role}_id`, id(values[role])]));
-}
-
-// The menus for an artist or label page move (ADR 0240 item 21).
-export function pageMoveMenus(feeds, page, values) {
-  return pageMoveRoles(page).map((role) => ({
-    role,
-    label: roleWord(role),
-    value: values[role] ?? '',
-    options: [['', 'None'], ...pagesOf(feeds, role).map((feed) => [String(feed.id), pageTitle(feed)]),
-      [`${NEW_PAGE_PREFIX}${role}`, `New ${roleWord(role)} Page…`]],
-  }));
-}
-
-// The current pages above the page that moves (ADR 0240 item 21).
-export function pageMoveStart(feeds, page, roles = pageMoveRoles(page)) {
-  const byId = new Map((feeds || []).map((feed) => [feed.id, feed]));
-  const above = new Set();
-  const pending = [...(page.parent_ids || [])];
-  while (pending.length) {
-    const id = pending.shift();
-    if (above.has(id)) continue;
-    above.add(id);
-    pending.push(...((byId.get(id) && byId.get(id).parent_ids) || []));
-  }
-  return Object.fromEntries(roles.map((role) => [role, String(pagesOf(feeds, role).find((feed) => above.has(feed.id))?.id || '')]));
-}
-
-// The kept-link and release changes for the sheet (ADR 0240 item 22).
-export function pageMoveLines(feeds, page, values) {
-  const roleSet = new Set(pageMoveRoles(page));
-  const releaseIds = page.release_ids || [];
-  const byId = new Map((feeds || []).map((feed) => [feed.id, feed]));
-  const current = new Set();
-  const pending = [...(page.parent_ids || [])];
-  while (pending.length) {
-    const id = pending.shift();
-    if (current.has(id)) continue;
-    current.add(id);
-    pending.push(...((byId.get(id) && byId.get(id).parent_ids) || []));
-  }
-  const selected = Object.entries(values).filter(([role]) => roleSet.has(role)).map(([, id]) => id).filter(Boolean);
-  const pages = [...new Set([...current, ...selected])].map((id) => (feeds || []).find((feed) => String(feed.id) === String(id))).filter(Boolean);
-  const changed = pages.filter((feed) => current.has(feed.id) !== selected.some((id) => String(id) === String(feed.id)));
-  const lines = [
-    ...changed.filter((feed) => selected.some((id) => String(id) === String(feed.id))).map((feed) => `+ ${pageTitle(feed)}`),
-    ...changed.filter((feed) => !selected.some((id) => String(id) === String(feed.id))).map((feed) => `− ${pageTitle(feed)}`),
-  ];
-  return lines.length > 0
-    ? [`Changes ${releaseIds.length} ${releaseIds.length === 1 ? 'release' : 'releases'}:`, ...lines]
-    : ['Select a label or a publisher page.'];
-}
-
+// The IDs of the pages above `page`, at any depth.
 function ancestors(feeds, page) {
   const byId = new Map((feeds || []).map((feed) => [feed.id, feed]));
   const found = new Set();
@@ -98,6 +34,177 @@ function ancestors(feeds, page) {
     pending.push(...((byId.get(id) && byId.get(id).parent_ids) || []));
   }
   return found;
+}
+
+// The sheets of a page action (ADR 0254 items 22 to 28). Each action has the
+// question, the button, the role of the pages in the list, the list title and
+// the hint. The `action` is the name that the route of packet 251c reads.
+const PAGE_SHEETS = {
+  sign_to_label: {
+    question: (name) => `Which label releases ${name}?`, button: 'Change Label', pick: 'label', search: 'Search for a label',
+    list: 'Releases on the new label', none: 'Select a label.', keeps: 'label',
+  },
+  change_label: {
+    question: (name) => `Which label releases ${name}?`, button: 'Change Label', pick: 'label', search: 'Search for a label',
+    list: 'Releases on the new label', none: 'Select a label.', keeps: 'label',
+  },
+  go_independent: {
+    question: (name) => `Make ${name} independent`, button: 'Go Independent', pick: null, search: null,
+    list: 'Releases with no label after the change', none: '', keeps: 'label',
+  },
+  change_publisher: {
+    question: (name) => `Who publishes ${name}?`, button: 'Change Publisher', pick: 'hosting', search: 'Search for a publisher',
+    list: 'Releases that change publisher', none: 'Select a publisher.', keeps: 'publisher',
+  },
+};
+
+// The action names that a sheet can have.
+export const PAGE_ACTION_NAMES = Object.keys(PAGE_SHEETS);
+
+// The rank of a page, from `headingIndex`: 1 is a label and 3 is an artist.
+const LABEL_RANK = 1;
+const ARTIST_RANK = 3;
+
+function hasRole(feed, role) {
+  return (feed.publisher_roles || []).includes(role);
+}
+
+// The actions of the menu "More" of a page (ADR 0254 item 23), without
+// "Open". A publisher and a curator have none. The menu shows an entry with
+// `id` and `label`. "Choose a publisher…" and "Change publisher…" have the
+// same action. The core decides each rule of the change (ADR 0065). This
+// function reads only the pages that are above the page.
+export function pageActions(page, feeds) {
+  const rank = headingIndex(page);
+  if (rank !== ARTIST_RANK && rank !== LABEL_RANK) return [];
+  const above = [...ancestors(feeds, page)].map((id) => (feeds || []).find((feed) => feed.id === id)).filter(Boolean);
+  const publisher = {
+    id: 'change_publisher',
+    label: above.some((feed) => hasRole(feed, 'hosting')) ? 'Change publisher…' : 'Choose a publisher…',
+  };
+  if (rank === LABEL_RANK) return [publisher];
+  return (page.parent_ids || []).some((id) => hasRole((feeds || []).find((feed) => feed.id === id) || {}, 'label'))
+    ? [{ id: 'change_label', label: 'Change label…' }, { id: 'go_independent', label: 'Go independent…' }]
+    : [{ id: 'sign_to_label', label: 'Sign to a label…' }, publisher];
+}
+
+// The texts of the sheet of one action, or null for an unknown action.
+export function pageSheet(page, action) {
+  const sheet = PAGE_SHEETS[action];
+  if (!sheet) return null;
+  return {
+    action,
+    title: sheet.question(pageTitle(page)),
+    button: sheet.button,
+    role: sheet.pick,
+    searchLabel: sheet.search,
+    listTitle: sheet.list,
+    noneHint: sheet.none,
+    keeps: sheet.keeps,
+  };
+}
+
+// The line "Now" of the sheet: the place of the page in music words. The
+// preview route gives this line, and this text shows until its answer. A
+// page with the role hosting and no publisher above it publishes its own
+// releases, as in the place text of the core.
+export function pageNow(page, feeds) {
+  return placeText(page, feeds) || (hasRole(page, 'hosting') ? `Published by ${pageTitle(page)}` : 'Not published');
+}
+
+const countWords = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+// The rows of the list of pages (ADR 0254 item 25), A to Z. `query` is the
+// text of the search field. A publisher question starts with the row "Not
+// published", which has `id` null. The page above the page has `now`. The
+// pages below the page and the page itself are not in the list.
+export function pageChoiceRows(feeds, page, action, query = '') {
+  const sheet = PAGE_SHEETS[action];
+  if (!sheet || sheet.pick === null) return [];
+  const above = ancestors(feeds, page);
+  const text = query.trim().toLowerCase();
+  const rows = pagesOf(feeds, sheet.pick)
+    .filter((feed) => feed.id !== page.id && !ancestors(feeds, feed).has(page.id))
+    .filter((feed) => !text || pageTitle(feed).toLowerCase().includes(text))
+    .map((feed) => ({
+      id: feed.id,
+      title: pageTitle(feed),
+      dot: feedKind(feed).dot,
+      sub: sheet.pick === 'label' ? pageNow(feed, feeds) : countWords((feed.child_ids || []).length, 'page', 'pages'),
+      now: above.has(feed.id),
+    }));
+  if (sheet.pick !== 'hosting') return rows;
+  // A page with the role hosting publishes its own releases.
+  const none = !hasRole(page, 'hosting') && !(feeds || []).some((feed) => above.has(feed.id) && hasRole(feed, 'hosting'));
+  const label = 'Not published';
+  return !text || label.toLowerCase().includes(text) ? [{ id: null, title: label, dot: null, sub: '', now: none }, ...rows] : rows;
+}
+
+// The releases of the page, with their check marks (ADR 0254 item 25).
+export function pageReleaseRows(feeds, page, checked) {
+  const byId = new Map((feeds || []).map((feed) => [feed.id, feed]));
+  return (page.release_ids || []).map((id) => ({
+    id,
+    title: byId.has(id) ? pageTitle(byId.get(id)) : 'Untitled release',
+    checked: checked.includes(id),
+  }));
+}
+
+// The path and the query of the preview route (packet 251c). `releases` is
+// `undefined` for the start selection, or a list of IDs.
+export function previewPath(page, action, { selected = null, above = null, releases = undefined } = {}) {
+  const query = [`action=${action}`];
+  if (selected !== null && selected !== undefined) query.push(`page=${selected}`);
+  if (above !== null && above !== undefined) query.push(`above=${above}`);
+  if (releases !== undefined) query.push(`releases=${releases.join(',')}`);
+  return `/feeds/${page.id}/page-change?${query.join('&')}`;
+}
+
+// The body of the change route (packet 251c). `selected` is `undefined` when
+// the user selected no row, and `null` for "Not published".
+export function pageChangeBody(action, selected, releases) {
+  return { action, page: selected ?? null, releases };
+}
+
+// The start selection that the preview gives (ADR 0254 item 28).
+export function startSelection(preview) {
+  return [...(preview?.start_selection || [])];
+}
+
+function lowerFirst(text) {
+  return text ? `${text[0].toLowerCase()}${text.slice(1)}` : text;
+}
+
+function andNames(names) {
+  return names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+// The result part of the sheet (ADR 0254 item 25). The texts come from the
+// preview that the route gives. No link rule runs here (ADR 0065).
+// `selected` is `undefined` when the user selected no row. The result has
+// `hint` or the lines `after`, `changes` and `keeps`, and `ready` for the
+// button.
+export function pageSheetResult(page, action, selected, preview) {
+  const sheet = PAGE_SHEETS[action];
+  const none = { hint: null, after: null, changes: null, keeps: null, ready: false };
+  if (!sheet) return none;
+  if (sheet.pick !== null && selected === undefined) return { ...none, hint: sheet.none };
+  if (!preview) return none;
+  const result = preview.result;
+  if (result.nothing_changes) return { ...none, hint: 'Nothing changes. Select a different one or a release.' };
+  const kept = result.kept_release_titles || [];
+  return {
+    hint: null,
+    after: `After: ${pageTitle(page)} is ${lowerFirst(result.place)}.`,
+    changes: (page.release_ids || []).length > 0 ? `Changes ${countWords(result.changed_releases, 'release', 'releases')}.` : null,
+    keeps: kept.length > 0 ? `${andNames(kept)} ${kept.length === 1 ? 'keeps its' : 'keep their'} ${sheet.keeps}.` : null,
+    ready: true,
+  };
+}
+
+// The text of the notice after a change (ADR 0254 item 35).
+export function pageChangeNotice(page, change) {
+  return `${pageTitle(page)} is now ${lowerFirst(change.place)}. Not written yet.`;
 }
 
 // The rows and controls of the gather sheet (ADR 0243 items 8 to 10).

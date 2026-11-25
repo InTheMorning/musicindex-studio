@@ -1146,7 +1146,22 @@ fn shared_level(
 /// and a publisher feed gives. Each side of the link counts. A link with only
 /// credit roles has no rank.
 fn link_rank(feeds: &[(FeedRow, Option<Feed>)], release: FeedId, publisher: usize) -> Option<u8> {
-    let (release_row, release_model) = feeds.iter().find(|(row, _)| row.id == release)?;
+    link_roles(feeds, release, publisher)
+        .into_iter()
+        .filter_map(|role| rank(&[role]))
+        .max()
+}
+
+/// Give the roles of the link between a release and a publisher feed. Each
+/// side of the link counts (ADR 0253: each link has its own roles).
+pub(crate) fn link_roles(
+    feeds: &[(FeedRow, Option<Feed>)],
+    release: FeedId,
+    publisher: usize,
+) -> Vec<PublisherRole> {
+    let Some((release_row, release_model)) = feeds.iter().find(|(row, _)| row.id == release) else {
+        return Vec::new();
+    };
     let release_party = party_of(release_row, release_model.as_ref());
     let publisher_party = party_of(&feeds[publisher].0, feeds[publisher].1.as_ref());
     let channel = feeds[publisher]
@@ -1159,11 +1174,13 @@ fn link_rank(feeds: &[(FeedRow, Option<Feed>)], release: FeedId, publisher: usiz
         .flat_map(|feed| &feed.publisher)
         .flat_map(|publisher| &publisher.remote_items)
         .filter(|item| names(&item.value, &publisher_party));
-    channel
+    let mut roles: Vec<_> = channel
         .chain(release_side)
         .flat_map(|item| roles_from_rel(item.rel.as_deref().unwrap_or_default()))
-        .filter_map(|role| rank(&[role]))
-        .max()
+        .collect();
+    roles.sort();
+    roles.dedup();
+    roles
 }
 
 /// Select the pages of a new release (ADR 0257 item 16a).

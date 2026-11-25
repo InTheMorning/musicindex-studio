@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   NEW_PAGE_PREFIX, releaseCreditFields,
-  movePageTitle, pageMoveRoles, pageMoveBody, pageMoveMenus, pageMoveStart, pageMoveLines, gatherPagesModel,
+  pageActions, pageSheet, pageNow, pageChoiceRows, pageReleaseRows, previewPath, pageChangeBody,
+  startSelection, pageSheetResult, pageChangeNotice, gatherPagesModel,
 } from '../ui/movepages.js';
 
 const page = (id, title, roles, extra = {}) => ({ id, title, medium: 'publisher', publisher_roles: roles, connector_id: 'c', ...extra });
@@ -14,30 +15,6 @@ const feeds = [
   page(30, 'Read Only', ['artist'], { connector_id: null }),
 ];
 const owner = 'ADR 0240 items 12 to 17: the model of the sheet. Fix crates/api/ui/movepages.js.';
-
-test('page moves show the allowed roles, current parent, and changed page lines', () => {
-  const artist = { ...feeds[0], release_ids: [101, 102] };
-  const label = { ...feeds[2], release_ids: [101, 102] };
-  assert.equal(movePageTitle(artist), 'Move Zed', owner);
-  assert.equal(movePageTitle(label), 'Move Label A', owner);
-  assert.deepEqual(pageMoveRoles(artist), ['label', 'hosting'], owner);
-  assert.deepEqual(pageMoveRoles(label), ['hosting'], owner);
-  assert.deepEqual(pageMoveMenus(feeds, artist, { label: '10', hosting: '' }).map((menu) => menu.role), ['label', 'hosting'], owner);
-  assert.deepEqual(pageMoveMenus(feeds, label, { hosting: '' }).map((menu) => menu.role), ['hosting'], owner);
-  assert.deepEqual(pageMoveStart(feeds, artist), { label: '10', hosting: '20' }, owner);
-  assert.deepEqual(pageMoveStart(feeds, label), { hosting: '20' }, owner);
-  assert.deepEqual(pageMoveLines([...feeds, { id: 11, title: 'Label B' }], artist, { label: '11', hosting: '20' }),
-    ['Changes 2 releases:', '+ Label B', '− Label A'], owner);
-  assert.deepEqual(pageMoveLines([...feeds, page(21, 'Host B', ['hosting'])], label, { hosting: '21' }),
-    ['Changes 2 releases:', '+ Host B', '− Host A'], owner);
-});
-
-test('page move bodies use selected page ids and null for None', () => {
-  const artist = { ...feeds[0] };
-  const label = { ...feeds[2] };
-  assert.deepEqual(pageMoveBody(artist, { label: '12', hosting: '' }), { label_id: 12, hosting_id: null }, owner);
-  assert.deepEqual(pageMoveBody(label, { hosting: '12' }), { hosting_id: 12 }, owner);
-});
 
 test('gather pages lists writable pages, their start selection, and the note (ADR 0243 items 8 to 10)', () => {
   const level = page(40, 'Host A', ['hosting']);
@@ -63,10 +40,128 @@ test('gather pages lists writable pages, their start selection, and the note (AD
   assert.equal(empty.note, null, 'ADR 0243 item 10: fix gatherPagesModel in crates/api/ui/movepages.js.');
 });
 
-test('a page move with no link change has an instruction and no heading (ADR 0243 item 6)', () => {
-  const artist = { ...feeds[0], release_ids: [101] };
-  assert.deepEqual(pageMoveLines(feeds, artist, { label: '10', hosting: '20' }), ['Select a label or a publisher page.'],
-    'ADR 0243 item 6: fix pageMoveLines in crates/api/ui/movepages.js.');
+const owner254 = 'ADR 0254 items 22 to 28: the model of the sheets. Fix crates/api/ui/movepages.js.';
+const tree = [
+  page(1, 'Zed', ['artist'], { parent_ids: [10], release_ids: [101, 102] }),
+  page(2, 'Amy', ['artist'], { release_ids: [103] }),
+  page(3, 'Bob', ['artist'], { parent_ids: [20] }),
+  page(10, 'Label A', ['label'], { parent_ids: [20], child_ids: [1] }),
+  page(11, 'Label B', ['label'], { child_ids: [] }),
+  page(12, 'Label C', ['label'], { connector_id: null }),
+  page(20, 'Host A', ['hosting'], { child_ids: [10, 3] }),
+  page(21, 'Host B', ['hosting'], { child_ids: [] }),
+  page(30, 'Curator', ['curator']),
+  { id: 101, title: 'First', medium: 'music' },
+  { id: 102, title: 'Second', medium: 'music' },
+  { id: 103, title: 'Third', medium: 'music' },
+];
+const byId = (id) => tree.find((feed) => feed.id === id);
+
+test('the actions of each rank (ADR 0254 item 23), with no "Also on another label…"', () => {
+  const labels = (id) => pageActions(byId(id), tree).map((entry) => entry.label);
+  assert.deepEqual(labels(1), ['Change label…', 'Go independent…'], owner254);
+  assert.deepEqual(labels(2), ['Sign to a label…', 'Choose a publisher…'], owner254);
+  assert.deepEqual(labels(3), ['Sign to a label…', 'Change publisher…'], owner254);
+  assert.deepEqual(labels(10), ['Change publisher…'], owner254);
+  assert.deepEqual(labels(11), ['Choose a publisher…'], owner254);
+  assert.deepEqual(labels(20), [], owner254);
+  assert.deepEqual(labels(30), [], owner254);
+  assert.ok(!['1', '2', '10', '11'].some((id) => labels(Number(id)).some((text) => /Also on another label/.test(text))), owner254);
+  assert.deepEqual(pageActions(byId(1), tree).map((entry) => entry.id), ['change_label', 'go_independent'], owner254);
+  assert.deepEqual(pageActions(byId(2), tree).map((entry) => entry.id), ['sign_to_label', 'change_publisher'], owner254);
+});
+
+test('an artist with a publisher above it and no label gets Change publisher', () => {
+  const artist = page(5, 'Eve', ['artist'], { parent_ids: [20] });
+  assert.deepEqual(pageActions(artist, [...tree, artist]).map((entry) => entry.label), ['Sign to a label…', 'Change publisher…'], owner254);
+});
+
+test('each sheet has its question and its button (ADR 0254 item 24)', () => {
+  const zed = byId(1);
+  const sheet = (action) => { const { title, button, role, listTitle, noneHint } = pageSheet(zed, action); return { title, button, role, listTitle, noneHint }; };
+  assert.deepEqual(sheet('sign_to_label'), { title: 'Which label releases Zed?', button: 'Change Label', role: 'label',
+    listTitle: 'Releases on the new label', noneHint: 'Select a label.' }, owner254);
+  assert.deepEqual(sheet('change_label'), sheet('sign_to_label'), owner254);
+  assert.deepEqual(sheet('go_independent'), { title: 'Make Zed independent', button: 'Go Independent', role: null,
+    listTitle: 'Releases with no label after the change', noneHint: '' }, owner254);
+  assert.deepEqual(sheet('change_publisher'), { title: 'Who publishes Zed?', button: 'Change Publisher', role: 'hosting',
+    listTitle: 'Releases that change publisher', noneHint: 'Select a publisher.' }, owner254);
+  assert.equal(pageSheet(zed, 'add_label'), null, 'ADR 0257 item 14: no sheet "Also on another label…".');
+  assert.equal(pageNow(zed, tree), 'On Label A, published by Host A', owner254);
+});
+
+test('the list of labels has only writable pages, and marks the label now (ADR 0254 item 25)', () => {
+  const rows = pageChoiceRows(tree, byId(1), 'change_label');
+  assert.deepEqual(rows.map(({ id, title, now }) => ({ id, title, now })), [
+    { id: 10, title: 'Label A', now: true },
+    { id: 11, title: 'Label B', now: false },
+  ], owner254);
+  assert.equal(rows[0].sub, 'Published by Host A', owner254);
+  assert.deepEqual(pageChoiceRows(tree, byId(1), 'change_label', 'label b').map((row) => row.id), [11], owner254);
+  assert.deepEqual(pageChoiceRows(tree, byId(1), 'go_independent'), [], owner254);
+});
+
+test('the list of publishers starts with "Not published" and marks the publisher now', () => {
+  const rows = pageChoiceRows(tree, byId(1), 'change_publisher');
+  assert.deepEqual(rows.map(({ id, title, now }) => ({ id, title, now })), [
+    { id: null, title: 'Not published', now: false },
+    { id: 20, title: 'Host A', now: true },
+    { id: 21, title: 'Host B', now: false },
+  ], owner254);
+  assert.equal(rows[1].sub, '2 pages', owner254);
+  assert.equal(rows[2].sub, '0 pages', owner254);
+  assert.equal(pageChoiceRows(tree, byId(2), 'change_publisher')[0].now, true, owner254);
+  // A label that is also a publisher publishes its own releases.
+  const selfHost = page(50, 'Self Host', ['label', 'hosting']);
+  assert.equal(pageChoiceRows([...tree, selfHost], selfHost, 'change_publisher')[0].now, false, owner254);
+  assert.equal(pageNow(selfHost, [...tree, selfHost]), 'Published by Self Host', owner254);
+  assert.deepEqual(pageChoiceRows(tree, byId(2), 'change_publisher', 'host b').map((row) => row.id), [21], owner254);
+});
+
+test('a page below the page is not in the list', () => {
+  const rows = pageChoiceRows(tree, byId(20), 'change_publisher');
+  assert.ok(!rows.some((row) => row.id === 10), 'A label below the publisher cannot be its publisher.');
+});
+
+test('the release rows show the checks', () => {
+  assert.deepEqual(pageReleaseRows(tree, byId(1), [102]), [
+    { id: 101, title: 'First', checked: false }, { id: 102, title: 'Second', checked: true },
+  ], owner254);
+});
+
+test('the preview gives the start selection (ADR 0254 item 28)', () => {
+  assert.deepEqual(startSelection({ start_selection: [101] }), [101], owner254);
+  assert.deepEqual(startSelection(null), [], owner254);
+  assert.equal(previewPath(byId(1), 'change_label', { selected: 10, above: 10 }),
+    '/feeds/1/page-change?action=change_label&page=10&above=10', owner254);
+  assert.equal(previewPath(byId(1), 'change_publisher', { releases: [] }),
+    '/feeds/1/page-change?action=change_publisher&releases=', owner254);
+  assert.equal(previewPath(byId(1), 'change_publisher', { releases: [101, 102] }),
+    '/feeds/1/page-change?action=change_publisher&releases=101,102', owner254);
+  assert.deepEqual(pageChangeBody('change_publisher', null, [101]), { action: 'change_publisher', page: null, releases: [101] }, owner254);
+  assert.deepEqual(pageChangeBody('change_label', 11, [101]), { action: 'change_label', page: 11, releases: [101] }, owner254);
+});
+
+test('the hints and the result texts come from the preview (ADR 0254 item 25)', () => {
+  const zed = byId(1);
+  const preview = (extra) => ({ start_selection: [101], result: { place: 'On Label B, published by Host A', changed_releases: 1,
+    kept_release_titles: [], nothing_changes: false, ...extra } });
+  assert.deepEqual(pageSheetResult(zed, 'change_label', undefined, preview()), { hint: 'Select a label.', after: null, changes: null, keeps: null, ready: false }, owner254);
+  assert.equal(pageSheetResult(zed, 'change_publisher', undefined, preview()).hint, 'Select a publisher.', owner254);
+  assert.equal(pageSheetResult(zed, 'change_publisher', null, preview({ nothing_changes: true })).hint,
+    'Nothing changes. Select a different one or a release.', owner254);
+  assert.equal(pageSheetResult(zed, 'change_publisher', null, preview({ nothing_changes: true })).ready, false, owner254);
+  assert.equal(pageSheetResult(zed, 'go_independent', undefined, preview({ nothing_changes: true })).hint,
+    'Nothing changes. Select a different one or a release.', owner254);
+  const one = pageSheetResult(zed, 'change_label', 11, preview({ kept_release_titles: ['Second'] }));
+  assert.deepEqual(one, { hint: null, after: 'After: Zed is on Label B, published by Host A.', changes: 'Changes 1 release.',
+    keeps: 'Second keeps its label.', ready: true }, owner254);
+  const two = pageSheetResult(zed, 'change_publisher', 21, preview({ changed_releases: 0, place: 'Independent, published by Host B', kept_release_titles: ['A', 'B', 'C'] }));
+  assert.equal(two.after, 'After: Zed is independent, published by Host B.', owner254);
+  assert.equal(two.changes, 'Changes 0 releases.', owner254);
+  assert.equal(two.keeps, 'A, B and C keep their publisher.', owner254);
+  assert.equal(pageSheetResult(zed, 'change_label', 11, null).ready, false, owner254);
+  assert.equal(pageChangeNotice(zed, { place: 'On Label B, not published' }), 'Zed is now on Label B, not published. Not written yet.', owner254);
 });
 
 const credit = (id, title) => ({ id, title });

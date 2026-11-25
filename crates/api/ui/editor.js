@@ -6,7 +6,7 @@ import { html, useState, useEffect, useRef, createContext, useContext } from './
 import { useDeleteUndo, undoNoticeText, CatalogUndoNotice } from './undonotice.js';
 import { CONFIRMS } from './confirms.js';
 import { VIEWS, VIEW_LABELS, VIEW_HINTS, normalizeView, shownLines, localTimeNote, runs, commonIndent, stripIndent, moreLabel, fieldRows, guardRow, changeKeys, MERGE_TITLE, MERGE_INTRO, MERGE_HEADINGS, mergeRows, mergeReady, showsExamine, streamProblemRows } from './review.js';
-import { LoadErrorNotice, FeedCheckRow, onSegmentKey, dropAreaClass, useFileDrop, api, saveTicket, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ChoiceSelect, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext, Icon, AddFeedRowSheet, inDesktopApp, NavContext } from './app.js';
+import { LoadErrorNotice, FeedCheckRow, onSegmentKey, dropAreaClass, useFileDrop, api, saveTicket, useMedia, assetMode, askConfirm, CopyButton, RoleMenu, useRoleList, sendInParts, DateTimeField, DurationField, Field, ChoiceSelect, SearchField, ErrorNotice, useAction, addressSource, ImageThumb, useImage, useHeldFiles, heldFilesNow, SessionContext, Icon, AddFeedRowSheet, inDesktopApp, NavContext } from './app.js';
 import { AlbumPayments, TrackPayments } from './values.js';
 import { PickerLayout, PickFillRow, FindOneSheet, PickFold, TakenTag, useFieldList } from './pickers.js';
 import { PersonArt, useProfiles, useReviewFindings, ReviewPanels, ReviewCorrectSheet } from './peoplepages.js';
@@ -35,8 +35,8 @@ import { platformBlocks } from './listing.js';
 import { deleteWrite } from './feeddelete.js';
 import { pageSequence } from './pages.js';
 import { releaseKindOptions, shouldAddTracksAfterNewRelease, addMenuEntries } from './addfeeds.js';
-import { releaseCreditFields, NEW_PAGE_PREFIX,
-  movePageTitle, pageMoveBody, pageMoveMenus, pageMoveStart, pageMoveLines, gatherPagesModel } from './movepages.js';
+import { releaseCreditFields, NEW_PAGE_PREFIX, pageSheet, pageNow, pageChoiceRows, pageReleaseRows, previewPath,
+  pageChangeBody, startSelection, pageSheetResult, gatherPagesModel } from './movepages.js';
 import { nextStep, firstStart, releaseAdd, releaseArtistChoices, FIRST_STEPS, HOST_STEP } from './welcome.js';
 import {
   fileState, fileStatus, canDownloadToDevice, canCopyFile, missingCount, missingNotice, reviewNotice, dayText,
@@ -2591,8 +2591,8 @@ function toolbarStatus(draft) {
   return draft.changed ? { text: 'Saved, not written' } : { text: 'No changes' };
 }
 
-// The form of AddFeedRowSheet that makes a page of one role (the sheet "Move" of
-// ADR 0240 item 14 also uses it).
+// The form of AddFeedRowSheet that makes a page of one role (ADR 0240 item
+// 14).
 const ARTIST_PAGE_FORM = 'publisher';
 
 // The toolbar of the editor: the draft status, and the buttons that open
@@ -2927,47 +2927,90 @@ function MoveRefusal({ error, feeds, onAddHost, onOpenChanges }) {
   </div>`;
 }
 
-// The move sheet opens the change set review after Move (ADR 0243 item 3).
-// `prepare` runs before the call, and false stops the move.
-export function MoveSheet({ page, feeds, connectors, prepare, onMoved, onListChanged, onAddHost, onOpenChanges, onClose }) {
+// The sheet of a page action (ADR 0254 items 22 to 28). The sheet shows
+// "Now", the search field and the list of pages, the releases of the page
+// and the result. The preview route gives the start selection and the result
+// texts (ADR 0065). The button calls the change route. `action` is a name of
+// `PAGE_ACTION_NAMES`, and `above` is the page above the tree row that opened
+// the sheet, or null. `prepare` runs before the call, and false stops the
+// change.
+export function PageChangeSheet({ page, action, above, feeds, prepare, onChanged, onAddHost, onOpenChanges, onClose }) {
   const ref = useSheet(true);
   const { busy, error, run } = useAction();
-  const item = page;
-  const [values, setValues] = useState(() => pageMoveStart(feeds, page));
-  // The role of the page that the user makes, or null.
-  const [making, setMaking] = useState(null);
-  const select = (role) => (value) => {
-    if (value.startsWith(NEW_PAGE_PREFIX)) { setMaking(value.slice(NEW_PAGE_PREFIX.length)); return; }
-    setValues((current) => ({ ...current, [role]: value }));
-  };
-  const made = async (page) => {
-    const role = making;
-    setMaking(null);
-    await onListChanged();
-    setValues((current) => ({ ...current, [role]: String(page.id) }));
-  };
-  const move = () => run(async () => {
-    if (prepare && !(await prepare())) return;
-    const body = pageMoveBody(page, values);
-    const answer = await api(`/feeds/${item.id}/move-to`, { method: 'POST', body });
-    if (ref.current) ref.current.close();
-    await onMoved(answer, body, values);
+  const sheet = pageSheet(page, action);
+  const [query, setQuery] = useState('');
+  // `undefined` is no selected row, and `null` is the row "Not published".
+  const [selected, setSelected] = useState(undefined);
+  // The checked releases. `null` is the time before the start selection.
+  const [checked, setChecked] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [previewError, setPreviewError] = useState(null);
+  // The preview route gives the line "Now" (ADR 0065). The tree text shows
+  // until the first answer.
+  const [now, setNow] = useState(null);
+  const checkedKey = checked === null ? null : checked.join(',');
+  useEffect(() => {
+    let current = true;
+    // The first preview names no page and gives the start selection (ADR
+    // 0254 item 28). After it, a question with a list needs a selected row.
+    let target;
+    if (sheet.role === null) target = null;
+    else if (selected !== undefined) target = selected;
+    else target = checked === null ? null : undefined;
+    if (target === undefined) { setPreview(null); return undefined; }
+    const path = previewPath(page, action, { selected: target, above, releases: checked === null ? undefined : checked });
+    api(path).then((answer) => {
+      if (!current) return;
+      setPreviewError(null);
+      setPreview(answer);
+      if (answer?.now) setNow(answer.now);
+      if (checked === null) setChecked(startSelection(answer));
+    }).catch((failure) => {
+      if (current) { setPreview(null); setPreviewError(failure); }
+    });
+    return () => { current = false; };
+  }, [selected, checkedKey]);
+  const result = pageSheetResult(page, action, selected, preview);
+  const rows = pageChoiceRows(feeds, page, action, query);
+  const releases = pageReleaseRows(feeds, page, checked || []);
+  const toggle = (id) => setChecked((before) => {
+    const list = before || [];
+    return list.includes(id) ? list.filter((value) => value !== id) : [...list, id];
   });
-  return html`<dialog ref=${ref} class="sheet small" aria-labelledby="move-pages-title" onClose=${onClose}>
-    <header><h2 id="move-pages-title">${movePageTitle(page)}</h2>
+  const change = () => run(async () => {
+    if (prepare && !(await prepare())) return;
+    const answer = await api(`/feeds/${page.id}/page-change`, { method: 'POST', body: pageChangeBody(action, selected, checked || []) });
+    if (ref.current) ref.current.close();
+    await onChanged(answer);
+  });
+  return html`<dialog ref=${ref} class="sheet small page-change" aria-labelledby="page-change-title" onClose=${onClose}>
+    <header><h2 id="page-change-title">${sheet.title}</h2>
       <button class="button quiet icon-button" type="button" aria-label="Close" onClick=${() => ref.current.close()}>✕</button></header>
     <div class="body"><div class="form">
-      ${pageMoveMenus(feeds, page, values).map((menu) => html`<${ChoiceSelect} key=${menu.role} id=${`move-${menu.role}`} label=${menu.label}
-        value=${menu.value} options=${menu.options} onChange=${select(menu.role)} />`)}
-      ${(() => { const [head, ...lines] = pageMoveLines(feeds, page, values);
-        return html`<div class="move-changes"><strong>${head}</strong>${lines.map((line) => html`<span>${line}</span>`)}</div>`; })()}
-      <${MoveRefusal} error=${error} feeds=${feeds} onAddHost=${onAddHost} onOpenChanges=${onOpenChanges} />
+      <p class="page-change-now"><span class="label">Now</span><span>${now || pageNow(page, feeds)}</span></p>
+      ${sheet.role !== null && html`<${SearchField} label=${sheet.searchLabel} value=${query} onInput=${(event) => setQuery(event.target.value)} />
+        <div class="group rows page-change-list" role="group" aria-label=${sheet.role === 'label' ? 'Labels' : 'Publishers'}>
+          ${rows.map((row) => html`<button class="link-row pick-row" type="button" key=${row.id ?? 'none'} aria-pressed=${selected === row.id ? 'true' : 'false'}
+            onClick=${() => setSelected(row.id)}>
+            <span class=${row.dot ? `dot ${row.dot}` : 'dot-slot'} aria-hidden="true"></span>
+            <span class="text"><span class="label">${row.title}</span>${row.sub && html`<span class="summary">${row.sub}</span>`}</span>
+            ${row.now && html`<span class="now-mark">now</span>`}</button>`)}
+          ${rows.length === 0 && html`<p class="empty">${sheet.role === 'label' ? 'No label matches.' : 'No publisher matches.'}</p>`}
+        </div>`}
+      ${releases.length > 0 && html`<h3 class="page-change-heading">${sheet.listTitle}</h3>
+        <div class="group rows">${releases.map((row) => html`<${FeedCheckRow} key=${row.id} title=${row.title} checked=${row.checked}
+          onChange=${() => toggle(row.id)} />`)}</div>`}
+      <div class="page-change-result" aria-live="polite">
+        ${result.hint && html`<p class="hint">${result.hint}</p>`}
+        ${result.after && html`<p>${result.after}</p>`}
+        ${result.changes && html`<p>${result.changes}</p>`}
+        ${result.keeps && html`<p class="hint">${result.keeps}</p>`}
+      </div>
+      <${MoveRefusal} error=${error || previewError} feeds=${feeds} onAddHost=${onAddHost} onOpenChanges=${onOpenChanges} />
       <div class="actions"><button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
-        <button class="button primary" type="button" disabled=${busy} onClick=${move}>Move</button></div>
+        <button class="button primary" type="button" disabled=${busy || !result.ready} onClick=${change}>${sheet.button}</button></div>
     </div></div>
-  </dialog>
-  ${making && html`<${AddFeedRowSheet} open=${ARTIST_PAGE_FORM} connectors=${connectors} feeds=${feeds} start=${{ role: making }}
-    onAdded=${made} onClose=${() => setMaking(null)} />`}`;
+  </dialog>`;
 }
 
 // The sheet gathers writable pages under one level (ADR 0243 items 7 to 12).
@@ -4475,7 +4518,7 @@ function PageGroup({ group, sort, onSort, onOpen, onAddRelease }) {
 // The publisher page: the fields, the role and the releases (ADR 0255 item
 // 3). Each link changes the draft of this feed and the draft of the release,
 // so the page loads both drafts and names each release that changed.
-function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, view, onMove, onListChanged, onArtwork, onRemoved, connectors }) {
+function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, view, onListChanged, onArtwork, onRemoved, connectors }) {
   const field = (name) => (value) => update((m) => set(m, name, value));
   const nav = useContext(NavContext);
   const roleAction = useAction();
@@ -5674,7 +5717,7 @@ function CheckPage({ feed, model, check, go, onOpenFinding }) {
 // album, the credits, the recipients or one track (task 014c step 3). The
 // shell loads the draft and shows its toolbar. This component does not call
 // useDraft (ADR 0029 item 4).
-export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, importing, onImporting, onMove, onRemoved, connectors, onOpsChanged, filesReloadKey, differences, onRescan, onListChanged, artwork, onArtwork, check, addRecipient, onAddRecipientOpened, onOpenFinding }) {
+export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, importing, onImporting, onRemoved, connectors, onOpsChanged, filesReloadKey, differences, onRescan, onListChanged, artwork, onArtwork, check, addRecipient, onAddRecipientOpened, onOpenFinding }) {
   const { model, update } = draft;
   const page = view.page || 'album';
   const trackIndex = model && page === 'track' ? model.items.findIndex((item) => isTrack(item, view.track)) : -1;
@@ -5734,7 +5777,7 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
     body = html`<${SettingsPage} model=${model} update=${update} album=${!publisher && !playlist}
       op3Tracks=${draft.op3Tracks} />`;
   } else if (publisher && page !== 'files' && page !== 'credits' && page !== 'recipients') {
-    body = html`<${PublisherPage} feed=${feed} feeds=${feeds} model=${model} update=${update} bad=${draft.bad} onMove=${onMove}
+    body = html`<${PublisherPage} feed=${feed} feeds=${feeds} model=${model} update=${update} bad=${draft.bad}
       draft=${draft} go=${go} from=${pageLevel(feed.id, view.from)} view=${view}
       onListChanged=${onListChanged} onArtwork=${onArtwork} onRemoved=${onRemoved} connectors=${connectors} />`;
   } else if (playlist && page === 'tracks') {

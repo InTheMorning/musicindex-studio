@@ -7,7 +7,7 @@ import { UI_SCALES, SCALE_KEY, normalizeScale, measureWindowUnits } from './uisc
 import { LOCK_HINT, START_HINT, lockChoiceText } from './vaultlock.js';
 import { serverFilesRows, sizeText, SERVER_FILES_NOTE } from './assets.js';
 import { failedLine } from './failures.js';
-import { OPEN_REVIEW, OPEN_MERGE, OPEN_FEED_MOVE, PublisherPath, MoveAllSheet, MoveSheet, GatherPagesSheet, AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, OUTSIDE_RECHECK, restoreDeletedFile, checkDeletedAgain, AnnounceChoice, UndoButtons, useUndoKeys, DeleteUndoBar, removeFeedFromCollection } from './editor.js';
+import { OPEN_REVIEW, OPEN_MERGE, OPEN_FEED_MOVE, PublisherPath, MoveAllSheet, PageChangeSheet, GatherPagesSheet, AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, OUTSIDE_RECHECK, restoreDeletedFile, checkDeletedAgain, AnnounceChoice, UndoButtons, useUndoKeys, DeleteUndoBar, removeFeedFromCollection } from './editor.js';
 import {
   recipientKey,
   outcomeText, blockedText, operationLine, nameOf, writableIds, firstOpenId, initialStatuses, refreshedStatuses, startWrite,
@@ -55,7 +55,8 @@ import {
   mediumKind, feedKind, FIRST_CLASS_ROLES, roleWord, kindGlow, isEditable, isReadOnly, isPublisher, trackKey, isTrack,
   placeText, draftLabel, leftPanel, releasesList, listQuery, queryText, sortLabel, sortEntries, mosaicCells, otherFeedText, mediumProblemView, mediumProblemCause, feedCover,
   startNav, pushNav, backNav, forwardNav, releasesView, canBack, canForward, setScroll,
-  isFeedView, openFeedView, newFeedView, navAtWidth, toggleRow, revealRows, pageTabs, tabsFit, showsRootButtons, rootNav, segmentKey, isTabChange, movedReleaseView } from './shell.js';
+  isFeedView, openFeedView, newFeedView, navAtWidth, toggleRow, revealRows, pageTabs, tabsFit, showsRootButtons, rootNav, segmentKey, isTabChange } from './shell.js';
+import { pageActions, pageChangeNotice } from './movepages.js';
 import {
   eventsToSign, signErrorText,
   npubOf, addressLines, linesText, invalidConfigField, blossomDefaultName, siteAddress, siteNameFromGuid, isNsec,
@@ -2183,6 +2184,8 @@ export function Icon({ name, mirrored = false }) {
 // `check` reads a list of feeds (ADR 0230 items 17 and 18).
 // The handler of the button before a tree row of the Catalog (ADR 0254 item 5).
 const CatalogContext = createContext(() => {});
+// The function that opens the sheet of a page action: `({ id, action, above })`.
+const PageActionContext = createContext(() => {});
 const OutsideContext = createContext({ feeds: [], results: {}, running: new Set(), check: () => {} });
 
 // The state mark of a row of the left panel, for the feeds that `ids` covers
@@ -2576,7 +2579,7 @@ function Crumb({ feed, view, draft }) {
 
 // An editable album: the compact header, not the hero (ADR 0029 item 10).
 // The toolbar stays in view at each scroll position (ADR 0029 item 1).
-function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importing, onImporting, onMove, onChanged, onListChanged, onRemoved, connectors, differences, onRescan }) {
+function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importing, onImporting, onChanged, onListChanged, onRemoved, connectors, differences, onRescan }) {
   const { busy, error, run } = useAction();
   const [outsideCheck, setOutsideCheck] = useState(null);
   const kind = feedKind(feed);
@@ -2633,17 +2636,17 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
     }
   };
   // The header buttons wrap as one group (finding 11 of 2026-11-23).
-  const canMovePage = isPublisher(feed) && (feed.publisher_roles || []).some((role) => role === 'artist' || role === 'label');
   // The head of the page of a publisher feed (ADR 0254 items 11 to 12a): the
   // path above it, the place in music words and the state of this feed. The
-  // button ⋯ has "Move To…" until task 254 gives its actions (item 23).
+  // button ⋯ has the actions of item 23 for the rank of the feed, then "Open".
   const publisher = isPublisher(feed);
   const { results: outside } = useContext(OutsideContext);
   const place = publisher ? placeText(feed, feeds) : null;
   const stateMarkOfFeed = publisher ? outsideMark(outside[feed.id]) : null;
-  // The button "Open Feed File" is next to the menu, so the menu does not
-  // repeat it.
-  const headMenu = canMovePage ? [{ id: 'move', label: 'Move To…' }] : [];
+  // The menu of the head gives the actions of the page (ADR 0254 item 23).
+  // The page is open, so the menu has no item "Open".
+  const onPageAction = useContext(PageActionContext);
+  const headMenu = publisher ? pageActions(feed, feeds) : [];
   return html`<div>
     <${Bar}>
       <${Crumb} feed=${feed} view=${view} draft=${draft} />
@@ -2666,12 +2669,13 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
             : html`<p class="sub mono">This feed has no public address yet.</p>`}
           ${musicIndexLink && html`<a class="button link index-link" href=${musicIndexLink.href} target="_blank" rel="noopener">${musicIndexLink.text}</a>`}
         </div>
-        ${(canMovePage || publisher || feed.last_version !== null) && html`<div class="head-actions">
+        ${(publisher || feed.last_version !== null) && html`<div class="head-actions">
           ${publisher
             ? html`${headMenu.length > 0 && html`<${MenuControl} buttonLabel="⋯" accessibleName=${`More for ${feed.title || 'Untitled feed'}`}
-                menuLabel="More" items=${headMenu} onSelect=${() => onMove(feed.id)} />`}
+                menuLabel="More" items=${headMenu}
+                onSelect=${(entry) => onPageAction({ id: feed.id, action: entry.id, above: view.from ? view.from.group : null })} />`}
               ${feed.public_url && html`<a class="button" href=${feed.public_url} target="_blank" rel="noopener">Open Feed File</a>`}`
-            : canMovePage && html`<button class="button" type="button" onClick=${() => onMove(feed.id)}>Move To…</button>`}
+            : null}
           ${feed.last_version !== null && html`<button class="button" type="button" disabled=${busy} onClick=${refresh}>
             ${busy ? 'Reading…' : 'Read Again'}</button>`}
         </div>`}
@@ -2696,7 +2700,7 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
     </div>
     <${PageTabs} feed=${feed} view=${view} go=${go} checkCount=${check.count} />
     <${AlbumEditor} key=${feed.id} feed=${feed} feeds=${feeds} draft=${draft} view=${view} go=${go}
-      adding=${adding} onAdding=${onAdding} importing=${importing} onImporting=${onImporting} onMove=${onMove} onRemoved=${onRemoved}
+      adding=${adding} onAdding=${onAdding} importing=${importing} onImporting=${onImporting} onRemoved=${onRemoved}
       connectors=${connectors} onOpsChanged=${opsChanged} filesReloadKey=${filesReloadKey}
       differences=${differences} onRescan=${onRescan} onListChanged=${onListChanged}
       artwork=${artwork} onArtwork=${setArtwork} check=${check} addRecipient=${addRecipient}
@@ -2706,10 +2710,10 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
 
 // The feed open in the main pane: the editor for an editable album, or the
 // read-only view for every other feed (ADR 0029 item 10).
-function FeedDetail({ feed, feeds, draft, view, go, adding, onAdding, importing, onImporting, onMove, onChanged, onListChanged, onRemoved, connectors, differences, onRescan }) {
+function FeedDetail({ feed, feeds, draft, view, go, adding, onAdding, importing, onImporting, onChanged, onListChanged, onRemoved, connectors, differences, onRescan }) {
   if (isEditable(feed)) {
     return html`<${EditableFeed} feed=${feed} feeds=${feeds} draft=${draft} view=${view} go=${go}
-      adding=${adding} onAdding=${onAdding} importing=${importing} onImporting=${onImporting} onMove=${onMove}
+      adding=${adding} onAdding=${onAdding} importing=${importing} onImporting=${onImporting}
       onChanged=${onChanged} onListChanged=${onListChanged} onRemoved=${onRemoved} connectors=${connectors}
       differences=${differences} onRescan=${onRescan} />`;
   }
@@ -3599,7 +3603,7 @@ function ChangeSetPage({ id, go, onChanged, feeds }) {
 // At 760 px or less the left panel is not shown: its content is the root
 // page and the outline page of the stack (ADR 0206 item 13, musicindex ADR
 // 0030 R-SHELL-2).
-function LeftPanel({ panel, draft, changedFeeds, go, showReleases, onAdding, onImporting, onAddFeedRow, onMove, onLock, collections }) {
+function LeftPanel({ panel, draft, changedFeeds, go, showReleases, onAdding, onImporting, onAddFeedRow, onLock, collections }) {
   if (panel.kind === 'destinations') {
     return html`<header><${Brand} /><${ThemeToggle} /></header>
       <div class="sidebar-scroll">${destinationRows(panel.top, go)}</div>
@@ -3608,13 +3612,20 @@ function LeftPanel({ panel, draft, changedFeeds, go, showReleases, onAdding, onI
   return html`<header><${Brand} /><${ThemeToggle} /></header>
     <div class="sidebar-scroll">
       <${Outline} panel=${panel} draft=${draft} changedFeeds=${changedFeeds} go=${go} showReleases=${showReleases}
-        onAdding=${onAdding} onImporting=${onImporting} onAddFeedRow=${onAddFeedRow} onMove=${onMove} />
+        onAdding=${onAdding} onImporting=${onImporting} onAddFeedRow=${onAddFeedRow} />
     </div>
     <${LeftPanelFooter} panel=${panel} go=${go} onLock=${onLock} collections=${collections} />`;
 }
 
 // The current row of a list gets aria-current.
 const currentAttr = (item) => (item.current ? 'page' : undefined);
+
+// The page above a tree row: the second last ID of its key, or null for a top
+// row (ADR 0254 item 28).
+const aboveOf = (key) => {
+  const path = String(key).split('/');
+  return path.length > 1 ? Number(path[path.length - 2]) : null;
+};
 
 // One destination row. A row below Releases shows the state mark of the
 // feeds that it covers, between the name and the count (ADR 0165 items 1 to 4).
@@ -3626,6 +3637,7 @@ const currentAttr = (item) => (item.current ? 'page' : undefined);
 function DestinationRow({ item, open }) {
   const { feeds } = useContext(OutsideContext);
   const onToggle = useContext(CatalogContext);
+  const onPageAction = useContext(PageActionContext);
   const set = item.group === undefined ? [] : panelSet(feeds, item.group);
   const mark = useStateMark(set);
   const click = useOpenAndCheck(set, mark, () => open(item));
@@ -3643,6 +3655,8 @@ function DestinationRow({ item, open }) {
   </button>`;
   if (item.group === undefined) return row;
   const feed = item.key !== undefined;
+  // The actions of ADR 0254 item 23 for the rank of the feed, then "Open".
+  const rowMenu = feed ? [...pageActions((feeds || []).find((f) => f.id === item.group) || {}, feeds), { label: 'Open' }] : [];
   return html`<div class=${`tree-row${feed ? ' panel-row-with-menu' : ''}`} style=${`--depth:${item.depth || 0}`}>
     ${item.expandable
       ? html`<button class="tree-toggle" type="button" aria-expanded=${item.open ? 'true' : 'false'}
@@ -3650,8 +3664,8 @@ function DestinationRow({ item, open }) {
       : html`<span class="tree-toggle" aria-hidden="true"></span>`}
     ${row}
     ${feed && html`<${MenuControl} row=${true} Icon=${Icon} buttonLabel="More"
-      accessibleName=${`More for ${item.label}`} menuLabel=${`More for ${item.label}`} items=${[{ label: 'Open' }]}
-      onSelect=${() => open(item, true)} />`}
+      accessibleName=${`More for ${item.label}`} menuLabel=${`More for ${item.label}`} items=${rowMenu}
+      onSelect=${(entry) => (entry.id ? onPageAction({ id: item.group, action: entry.id, above: aboveOf(item.key) }) : open(item, true))} />`}
   </div>`;
 }
 
@@ -3692,7 +3706,7 @@ function AddTreeRow({ item, attrs, onAdd }) {
 // type label, then one row for each item. The left panel shows it at a wide
 // width, and the outline page shows it at a narrow width. `showReleases` is
 // given at a wide width only, where the item "Releases" is in the panel.
-function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImporting, onAddFeedRow = () => {}, onMove = () => {} }) {
+function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImporting, onAddFeedRow = () => {} }) {
   const [current, setCurrent] = useState(null);
   const { feeds } = useContext(OutsideContext);
   const feed = panel.feed;
@@ -3761,9 +3775,7 @@ function Outline({ panel, draft, changedFeeds, go, showReleases, onAdding, onImp
           ${item.status && html`<span class="sub">${item.status}</span>`}
           ${numbered && hasBadAddress(item.number) && html`<span class="field-error">Address not correct</span>`}
         </button>`;
-        return html`<li key=${item.id}>${item.move ? html`<div class="panel-row-with-menu">${row}<${MenuControl} row=${true} Icon=${Icon} buttonLabel="More"
-          accessibleName=${`More for ${item.label}`} menuLabel=${`More for ${item.label}`} items=${[{ label: 'Move To…' }]}
-          onSelect=${() => onMove(Number(item.id.split(':').pop()))} /></div>` : row}</li>`;
+        return html`<li key=${item.id}>${row}</li>`;
       })}
     </ul></div>`;
 }
@@ -3855,7 +3867,7 @@ function RootPage({ panel, go, onLock, collections }) {
 
 // The outline page of a narrow window (ADR 0206 item 14). Its bar has the
 // back control, the title of the feed and the draft toolbar of the feed.
-function OutlinePage({ feed, panel, draft, changedFeeds, feeds, go, onAdding, onImporting, onAddFeedRow, onMove, onChanged, onListChanged, connectors }) {
+function OutlinePage({ feed, panel, draft, changedFeeds, feeds, go, onAdding, onImporting, onAddFeedRow, onChanged, onListChanged, connectors }) {
   // A host operation can change the draft XML. After it, the shell saves the
   // edits of the user and loads the draft again (ADR 0036 item 14).
   const opsChanged = async () => {
@@ -3868,7 +3880,7 @@ function OutlinePage({ feed, panel, draft, changedFeeds, feeds, go, onAdding, on
     <//>
     <section class="section outline-page">
       <${Outline} panel=${panel} draft=${draft} changedFeeds=${changedFeeds} go=${go} showReleases=${null}
-        onAdding=${onAdding} onImporting=${onImporting} onAddFeedRow=${onAddFeedRow} onMove=${onMove} />
+        onAdding=${onAdding} onImporting=${onImporting} onAddFeedRow=${onAddFeedRow} />
     </section>
   </div>`;
 }
@@ -4204,7 +4216,8 @@ function Shell({ vault, onLock, version }) {
   const [adding, setAdding] = useState(false);
   const [addingFeed, setAddingFeed] = useState(null);
   const [gather, setGather] = useState(null);
-  const [moveId, setMoveId] = useState(null);
+  // The sheet of a page action that is open, or null: `{ id, action, above }`.
+  const [pageSheet, setPageSheet] = useState(null);
   const [copyNotice, setCopyNotice] = useState(null);
   // The import sheet, by the left panel and by the album page (task 018d).
   const [importing, setImporting] = useState(false);
@@ -4450,8 +4463,7 @@ function Shell({ vault, onLock, version }) {
 
   const lock = async () => { await api('/vault/lock', { method: 'POST' }).catch(() => {}); onLock(); };
   const selected = isFeedView(view) && feeds ? feeds.find((f) => f.id === view.id) : null;
-  const movingFeed = moveId === null || !feeds ? null : feeds.find((feed) => feed.id === moveId);
-  const movingPage = movingFeed && (movingFeed.publisher_roles || []).some((role) => role === 'artist' || role === 'label');
+  const sheetFeed = pageSheet === null || !feeds ? null : feeds.find((feed) => feed.id === pageSheet.id);
   // The shell holds the one draft of the selected feed (ADR 0029 item 4).
   // A feed with no connector, or a feed that is not an album, needs no draft.
   const draftFeedId = selected && isEditable(selected) ? selected.id : null;
@@ -4503,15 +4515,13 @@ function Shell({ vault, onLock, version }) {
     ? setGather({ id: item.from.group, role: item.gatherRole })
     : setAddingFeed(item);
   const openChangeSet = (id) => go({ name: 'change-set', id });
-  const openMoveReview = async (answer, body, values) => {
+  // After a change, the sheet is closed. The notice gives the result. The
+  // change set does not open by itself (ADR 0254 item 35).
+  const pageChanged = async (answer) => {
+    const changed = sheetFeed;
+    setPageSheet(null);
     await load();
-    if (answer.change_set_id != null) {
-      go(changeSetView({ id: answer.change_set_id, operation: { kind: 'move_pages' } }));
-    } else if (body.artist_id !== undefined) go(movedReleaseView(body.artist_id));
-    else {
-      const upper = values.label || values.hosting;
-      go(upper ? { name: 'releases', group: Number(upper) } : { name: 'releases' });
-    }
+    if (changed) setCopyNotice(pageChangeNotice(changed, answer));
   };
   let main;
   // A screen with no bar of its own gets one.
@@ -4542,11 +4552,11 @@ function Shell({ vault, onLock, version }) {
     main = html`<${ChangeSetPage} key=${view.id} id=${view.id} go=${go} feeds=${feeds} onChanged=${() => load()} />`;
   } else if (selected && view.name === 'outline' && panel.kind === 'outline') {
     main = html`<${OutlinePage} feed=${selected} panel=${panel} draft=${draft} changedFeeds=${changedFeeds} feeds=${feeds} go=${go}
-      onAdding=${setAdding} onImporting=${setImporting} onAddFeedRow=${openAddFeedRow} onMove=${setMoveId}
+      onAdding=${setAdding} onImporting=${setImporting} onAddFeedRow=${openAddFeedRow}
       onChanged=${() => load()} onListChanged=${() => load()} connectors=${connectors} />`;
   } else if (selected) {
     main = html`<${FeedDetail} feed=${selected} feeds=${feeds} draft=${draft} view=${view} go=${go}
-      adding=${adding} onAdding=${setAdding} importing=${importing} onImporting=${setImporting} onMove=${setMoveId} onChanged=${() => load()}
+      adding=${adding} onAdding=${setAdding} importing=${importing} onImporting=${setImporting} onChanged=${() => load()}
       onListChanged=${() => load()}
       onRemoved=${async () => { await load(); go({ name: 'releases' }, { replace: true }); }} connectors=${connectors}
       differences=${differences.filter((d) => d.feed_id === selected.id)} onRescan=${rescan} />`;
@@ -4568,8 +4578,8 @@ function Shell({ vault, onLock, version }) {
     addTracksNext: setPendingAddTracks };
   const panelProps = { panel, draft, changedFeeds, go, showReleases, onAdding: setAdding, onImporting: setImporting, onAddFeedRow: openAddFeedRow,
     collections: collectionState.collections,
-    onMove: setMoveId, onLock: lock };
-  return html`<${NavContext.Provider} value=${navValue}><${OutsideContext.Provider} value=${outsideValue}><${CatalogContext.Provider} value=${toggleOpenRow}><div class="shell">
+    onLock: lock };
+  return html`<${NavContext.Provider} value=${navValue}><${OutsideContext.Provider} value=${outsideValue}><${CatalogContext.Provider} value=${toggleOpenRow}><${PageActionContext.Provider} value=${setPageSheet}><div class="shell">
     ${!narrow && html`<nav class="sidebar" aria-label="Collection">
       <${LeftPanel} ...${panelProps} />
     </nav>`}
@@ -4590,20 +4600,21 @@ function Shell({ vault, onLock, version }) {
       start=${addingFeed.start} onAdded=${(f, info) => { setAddingFeed(null); addedFeed(f, info, addingFeed.from); }}
       onConnect=${() => go({ name: 'hosts' })}
       onClose=${() => setAddingFeed(null)} />`}
-    ${movingPage && html`<${MoveSheet} key=${moveId} page=${movingPage ? { ...movingFeed, parent_ids: movingFeed.parent_ids || [], release_ids: movingFeed.release_ids || [] } : undefined}
-      feeds=${feeds} connectors=${connectors} onListChanged=${load}
-      prepare=${selected && selected.id === moveId && draftFeedId === moveId ? () => draft.flush() : undefined}
-      onMoved=${openMoveReview}
-      onAddHost=${() => { setMoveId(null); go({ name: 'hosts', add: true }); }}
-      onOpenChanges=${(id) => { setMoveId(null); openChangeSet(id); }}
-      onClose=${() => setMoveId(null)} />`}
+    ${pageSheet && sheetFeed && html`<${PageChangeSheet} key=${`${pageSheet.id}-${pageSheet.action}`}
+      page=${{ ...sheetFeed, parent_ids: sheetFeed.parent_ids || [], release_ids: sheetFeed.release_ids || [] }}
+      action=${pageSheet.action} above=${pageSheet.above} feeds=${feeds}
+      prepare=${selected && selected.id === pageSheet.id && draftFeedId === pageSheet.id ? () => draft.flush() : undefined}
+      onChanged=${pageChanged}
+      onAddHost=${() => { setPageSheet(null); go({ name: 'hosts', add: true }); }}
+      onOpenChanges=${(id) => { setPageSheet(null); openChangeSet(id); }}
+      onClose=${() => setPageSheet(null)} />`}
     ${gather && feeds.find((feed) => feed.id === gather.id) && html`<${GatherPagesSheet} page=${feeds.find((feed) => feed.id === gather.id)} role=${gather.role}
       feeds=${feeds} onMoved=${async (answer) => { setGather(null); await load(); if (answer.change_set_id != null)
         go(changeSetView({ id: answer.change_set_id, operation: { kind: 'move_pages' } })); }}
       onAddHost=${() => { setGather(null); go({ name: 'hosts', add: true }); }}
       onOpenChanges=${(id) => { setGather(null); openChangeSet(id); }}
       onClose=${() => setGather(null)} />`}
-  </div><//><//><//>`;
+  </div><//><//><//><//>`;
 }
 
 // ---- Sign-in and sign-up on a server (ADR 0204, ADR 0056) ----

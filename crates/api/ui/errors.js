@@ -26,9 +26,12 @@ export function canTryAgain(error) {
 }
 
 // ADR 0245 item 8: the message of `bad_address` names each place in words,
-// so it is the step of the user.
+// so it is the step of the user. The message of `role_taken` names the page
+// that has the role and the place to change it (ADR 0257 item 10).
+const MESSAGE_IS_STEP = new Set(['bad_address', 'role_taken']);
+
 export function errorStep(error) {
-  if (error?.code === 'bad_address' && error.message) return error.message;
+  if (MESSAGE_IS_STEP.has(error?.code) && error.message) return error.message;
   return ERROR_STEPS[error?.code]?.step || 'Try again. If the error stays, restart Studio.';
 }
 

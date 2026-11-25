@@ -495,7 +495,7 @@ pub fn app(collection: &Collection, id: i64) -> Result<Option<ConnectedApp>, Col
 }
 
 /// Set each app to the state `token` after an import, and end each grant
-/// (ADR 0110 item 41, ADR 0107). An app keeps its name. It loses its key,
+/// (ADR 0110 item 41, ADR 0262). An app keeps its name. It loses its key,
 /// its code, its live value origin and its use. The draft grants go out
 /// too. The caller makes the grant vaults go with the next sync.
 ///

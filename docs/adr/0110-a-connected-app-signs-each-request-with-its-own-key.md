@@ -7,7 +7,7 @@
 - Revised: 2026-11-01 by the operator, from the security review of the plan on the same day. The mockups of screens 1 to 3, 6 to 6c and 7 to 11 give its screens. The amendment changes each section of the decision, and closes SEC-09. The app gets a pairing text from Studio, and a grant names one app and fixes its live value address. A shared client crate does the protocol for the app.
 - Changes: [ADR 0054](../archive/adr/0054-live-items-connected-apps-and-show-grants.md) item 9 (the token of a connected app) and item 12 (the apps of a grant).
 - Changes: [ADR 0058](0058-grant-vaults-and-connected-apps-on-the-server.md) items 4, 5, 8, 9, 11, 15, 17, 18, 19 and 20 (the app key, the wrappers, a new app, a removed app, the granted write, the apps from before, the routes, the index, the limits and the text of ADR 0003 item 4).
-- Changes: [ADR 0107](0107-a-user-can-export-and-import-an-account.md) items 2 and 14 (the index of app tokens and the apps after an import).
+- Changes: [ADR 0107](../archive/adr/0107-a-user-can-export-and-import-an-account.md) items 2 and 14 (the index of app tokens and the apps after an import).
 - Changes: [ADR 0003](0003-user-unlocked-secret-vault.md), Each User Unlocks A Secret Vault. ADR 0003 names the changed items.
 - Changed: 2026-11-15 by the operator, through musicindex ADR 0076 (musicindex `a08dc01`). Item 18 gives the short key the form of R-ADDRESS-1.
 - Uses: [ADR 0056](0056-server-sign-in-methods-and-vault-wrappers.md) item 6 (a signed event of kind 27235), [ADR 0013](0013-vault-format-and-cryptography.md) (the vault format), ADR 0106 (a recent unlock, written by [task 069](../tasks/studio-v1-task-069-account-protection.md)) and the [research note on host secrets under a show grant](../research/2026-11-01-connected-app-host-secrets.md).
@@ -114,7 +114,7 @@
 
 39. `server.sqlite` keeps an index from each public key to its account, and from each code hash to its waiting app. The server makes the index again from the collections at each start, in place of the index of token hashes (ADR 0058 item 18, ADR 0107 item 2).
 40. The server permits 60 requests for each app public key in each minute. It permits 20 requests with an unknown key, a signature that is not correct or a wrong code, for each client address in each hour. After that, it gives 429 `too_many_attempts`.
-41. An import of an account (ADR 0107) keeps the name of each app, and sets each app to "Connect Again". The import keeps no grant. The account page lists the apps with this notice, in place of the notice of ADR 0107 item 14.
+41. An import of an account (ADR 0262) keeps the name of each app, and sets each app to "Connect Again". The import keeps no grant. The account page lists the apps with this notice, in place of the notice of ADR 0107 item 14.
 
 ### Signals To The User
 

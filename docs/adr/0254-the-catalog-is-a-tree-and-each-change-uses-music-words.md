@@ -16,14 +16,14 @@
 - Supersedes: [ADR 0240](../archive/adr/0240-hosting-is-a-first-role-and-a-stray-release-moves-to-its-pages.md), Hosting Is A First Role, And A Stray Release Moves To Its Pages.
 - Changed by: [ADR 0257](0257-a-release-has-one-artist-one-label-and-one-publisher-in-its-fields.md) items 1 to 16, on 2026-11-24. Items 20, 23, 24, 26 to 33: the fields of a release replace the sheet "Artist and label…", a release has one label and one publisher, and "Also on another label…" is removed.
 - Changes: [ADR 0243](0243-a-move-is-a-change-set-and-a-level-gathers-its-pages.md) items 1, 3, 5 and 7 to 12. The changes of the tree go into one change set (item 34). Review does not open after each change (item 35). The Add sheet replaces the menus of the add rows (items 18 to 21).
-- Changes: [ADR 0206](0206-the-shell-and-the-editor-pages.md) items 6 to 8. A publisher feed has no outline. The first row of an outline is "‹ Catalog" (item 7).
+- Changes: [ADR 0206](../archive/adr/0206-the-shell-and-the-editor-pages.md) items 6 to 8. A publisher feed has no outline. The first row of an outline is "‹ Catalog" (item 7).
 - Changes: [ADR 0090](0090-studio-names-the-feeds-that-it-does-not-edit.md) item 2. "No artist yet" replaces "Not linked", and the heading "No role" is a heading of the top rows (items 2 and 3).
-- Changes: [ADR 0165](0165-the-left-panel-marks-the-state-of-each-feed.md) item 3. The marks of a tree row are in item 6a.
-- Changes: [ADR 0221](0221-the-welcome-page-and-the-first-steps.md) item 8. The page of a new label has no row "Find an artist that is online" (item 46).
+- Changes: [ADR 0165](../archive/adr/0165-the-left-panel-marks-the-state-of-each-feed.md) item 3. The marks of a tree row are in item 6a.
+- Changes: [ADR 0221](../archive/adr/0221-the-welcome-page-and-the-first-steps.md) item 8. The page of a new label has no row "Find an artist that is online" (item 46).
 - Changes: [ADR 0239](0239-the-panel-holds-the-content-and-the-page-has-tabs.md) item 4. The panel shows the tree for a publisher feed. Only a release and a playlist have an outline (item 7).
 - Uses: [ADR 0253](0253-the-roles-of-a-feed-and-of-each-link.md) items 7, 11, 15, 16 and 20 to 23 for the roles, the levels and the word "Publisher". [ADR 0207](0207-recipients-change-sets-and-wallets.md) items 24 to 33 for a change set. [ADR 0227](0227-undo-and-redo.md) for Undo.
-- Uses: [ADR 0233](0233-each-add-form-finds-on-music-index-and-copies-the-found-feed.md) items 2 to 14 for a search on Music Index. [ADR 0230](0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 1 to 5 for the menu **＋ Add** and the forms.
-- Uses: [ADR 0089](0089-the-left-panel-shows-the-art-of-each-publisher-feed.md) for the art of a row, and [ADR 0165](0165-the-left-panel-marks-the-state-of-each-feed.md) items 1, 2 and 4 for the marks. [ADR 0090](0090-studio-names-the-feeds-that-it-does-not-edit.md) item 2 for "Other feeds". [ADR 0065](0065-the-core-applies-each-feed-rule.md) for the rules that the core applies.
+- Uses: [ADR 0233](0233-each-add-form-finds-on-music-index-and-copies-the-found-feed.md) items 2 to 14 for a search on Music Index. [ADR 0261](0261-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 1 to 3 and 5 for the menu **＋ Add** and the forms.
+- Uses: [ADR 0089](0089-the-left-panel-shows-the-art-of-each-publisher-feed.md) for the art of a row, and [ADR 0259](0259-studio-checks-each-feed-and-the-left-panel-marks-its-state.md) items 14, 15 and 17 for the marks. [ADR 0090](0090-studio-names-the-feeds-that-it-does-not-edit.md) item 2 for "Other feeds". [ADR 0065](0065-the-core-applies-each-feed-rule.md) for the rules that the core applies.
 - Uses: musicindex ADR 0080 R-LIST-2 and R-LIST-3 items 1 to 4 for the drag handle and the drop marks of item 38.
 - Uses: Stophammer ADR 0069 §"A direct link between a label feed and an artist feed" (rejected).
 - Source: observations 6 to 9, 11 and 14 to 19 of the [desktop walk of 2026-11-23](../reviews/2026-11-23-desktop-check-walk.md). The design brief and its two reviews are in `.studio-dev/design-brief/`. The roles are in the [note of 2026-11-24](../notes/2026-11-24-roles-levels-and-words.md).
@@ -49,7 +49,7 @@
 4a. The core gives the links of each feed of the collection, as `release_ids` and `publisher_ids`. A link counts when one of the two feeds names the other. A publisher feed gives first the releases of its channel, in that sequence, then the releases that only name it. A release gives first the feeds of its `podcast:publisher`, in that sequence, then the feeds that only list it.
 5. A row with feeds directly below it has a button before its title. The button has the accessible name "Open {name}" or "Close {name}", and it gives `aria-expanded`. Below an open row, the tree shows the feeds directly below it, in the rank of ADR 0253 item 15, then A to Z. Each depth adds an indent of 16 px. A feed below two feeds shows below each one.
 6. A row shows the art and the dot of the feed (ADR 0089 items 1 to 4), its title, and the number of its releases. A row of a feed with the role `hosting` shows the number of the pages below it. A row of a feed with a different level role shows the number of its releases. A feed with the two kinds of roles shows the two numbers. The row ends with the button **⋯**, with the accessible name "More for {name}".
-6a. A row has the marks of ADR 0165 items 1, 2 and 4. A tree row covers its feed and each release that it shows, also when the row is open. It does not cover the rows below it, because these rows have their own marks. "No artist yet" and "Other feeds" cover the feeds that they hold. This changes ADR 0165 item 3.
+6a. A row has the marks of ADR 0259 items 14, 15 and 17. A tree row covers its feed and each release that it shows, also when the row is open. It does not cover the rows below it, because these rows have their own marks. "No artist yet" and "Other feeds" cover the feeds that they hold. This changes ADR 0165 item 3.
 6b. A feed with two or more level roles is one row, at the rank of its first level role (ADR 0253 item 15). For example, a feed with the roles `artist hosting` is at the artist rank. Its page shows the groups of item 13 for each of its level roles, with their add rows, from the highest rank. Its menu **⋯** has the actions of item 23 for its rank.
 7. A selection of a row opens the page of the feed in the main pane, and the row shows as current (`aria-current`). The tree keeps its open rows. A release or a playlist that opens shows its outline in the panel (ADR 0239 items 1 and 4). The first row of the outline is "‹ Catalog". It shows the tree again, with the same open rows. A publisher feed has no outline.
 8. A row of a feed that is directly below two or more feeds has a second line in the tree. Below a label, the line names the other labels: "Also on {names}". When no other label exists, the line names the other publishers: "Also published by {names}".
@@ -70,7 +70,7 @@
     - A group of a different role heading shows only when it has rows, and it has no add row.
 13a. The group Releases has the sorts "Feed order", the default, then "Newest" and "A to Z". "Feed order" is the sequence of item 4a. The page keeps its sort in the navigation record of the session. The address keeps only the sort and the view of Releases.
 14. An empty group says "Nothing published here yet.", "No artists on this label yet." or "No releases on this page."
-15. **＋ Add release** opens the form of a release with that artist as the parent (ADR 0230 item 3). It shows only on an artist page, so a release starts only on the page of its artist. The add row **＋ Add a Release** in the body of an artist page stays (ADR 0230 item 5).
+15. **＋ Add release** opens the form of a release with that artist as the parent (ADR 0261 item 3). It shows only on an artist page, so a release starts only on the page of its artist. The add row **＋ Add a Release** in the body of an artist page stays (ADR 0261 item 5).
 16. Each row of a group shows the dot, the name, the type label and the number of releases or pages. It has the button **⋯** of item 23. Each release row has the button **⋯** of item 29.
 17. The menu **＋ Add** of a page head has no Release on a label page or on a publisher page. On a publisher page, Artist and Label make a page below that publisher page. On a label page, Artist makes a page below that label page. A menu value of a role with the same rank or a higher rank is not in the menu of a page head.
 
@@ -80,7 +80,7 @@
 19. Below the field, the sheet has three groups, in this sequence:
     - "In your collection": a row with a check box for each writable page of the collection with the role of the sheet or with no role. A page that is directly below the page of the sheet now has no row. A row shows the name, the type label or "No role", the number of releases, and the place in music words. No row starts selected. The search field filters the rows.
     - "On Music Index": the search of ADR 0233 items 2 and 4 for the kind of the role. A selection adds the feed as ADR 0233 items 6 to 14 give, and the new page goes below the page of the sheet (item 40).
-    - "New": the row **＋ Make a new {artist or label} page**, with the typed name in quotes when the field has text. It opens the form of a publisher page with the role of the sheet and the typed name (ADR 0230). The new page goes below the page of the sheet (item 40).
+    - "New": the row **＋ Make a new {artist or label} page**, with the typed name in quotes when the field has text. It opens the form of a publisher page with the role of the sheet and the typed name (ADR 0261). The new page goes below the page of the sheet (item 40).
 20. When a selected row has no role, the sheet says "A page with no role gets the role Artist." or "A page with no role gets the role Label." When a row is selected, the sheet says: "All releases of the selected {artists or labels} then come out on {label}." On a publisher page, it says "… are then published by {publisher}." It adds: "For only some releases, use {action} in the ⋯ menu of the {artist or label}." The action is "Also on another label…" or "Change publisher…".
 21. The button is **Sign** on a label page and **Publish** on a publisher page. With no selected row, the button is not available. The button gives each selected page with no role the role of the sheet (ADR 0253 items 5 and 10). Then it applies item 26 to each selected page, with all its releases and the page of the sheet as the selected page.
 
@@ -214,7 +214,7 @@
 ## Open Points
 
 - The rank of curator relative to label (musicindex ADR 0097 open point 1).
-- The place of the menu **＋ Add** stays on the page Releases (ADR 0230 item 1). The prototype shows it in the head of the panel.
+- The place of the menu **＋ Add** stays on the page Releases (ADR 0261 item 1). The prototype shows it in the head of the panel.
 
 ## How This Decision Is Checked
 

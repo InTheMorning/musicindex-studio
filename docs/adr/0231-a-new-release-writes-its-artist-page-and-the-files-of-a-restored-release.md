@@ -6,7 +6,7 @@
 - Accepted: 2026-11-20 by the operator, after the desktop check of tasks 205 to 209 (`docs/reviews/2026-11-20-rc29-human-check.md`, section "Desktop Check Of Tasks 205 To 209", findings 2, 3, 4, 7 and 8). The operator selected items 1 to 10 from drawings in the questionnaire.
 - Technical choices: the main session selected items 11 to 17 from the causes that a research agent found. The main session examined each code citation. The operator did not receive them as a question.
 - Bar: crosses modules. It changes the core links, the remote records, the download source, the move plan, the routes and the UI. Without this record, an agent can use ADR 0230 item 9 against item 6, or ADR 0205 item 8 against item 7.
-- Changes: [ADR 0230](0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 9, 11, 27, 31 and 32 (items 1 to 6 and items 14 to 17).
+- Changes: [ADR 0230](../archive/adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 9, 11, 27, 31 and 32 (items 1 to 6 and items 14 to 17).
 - Changes: [ADR 0205](../archive/adr/0205-publisher-feeds-announcements-and-show-grants.md) item 8, the write of the two feeds of a link (items 7 to 10).
 - Changes: [ADR 0179](0179-a-release-keeps-one-library-record-for-each-file.md) items 3 and 4, the join of a remote row and a local row (items 11 to 13).
 - Changes: [ADR 0155](0155-the-sort-menu-names-both-directions.md) item 1 and [ADR 0153](0153-the-people-list-has-a-sort-and-names-sort-with-numbers.md) item 7, the name of the sort "Feed Order" (items 4 and 5).

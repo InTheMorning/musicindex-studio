@@ -1,5 +1,5 @@
-//! The export of an account (ADR 0107 items 3 to 8) and the recovery key
-//! that it can need (ADR 0107 item 4).
+//! The export of an account (ADR 0262 items 3 to 8) and the recovery key
+//! that it can need (ADR 0262 item 4).
 
 use std::time::Instant;
 
@@ -27,7 +27,7 @@ pub(crate) async fn recovery_key(State(shared): State<Shared>) -> ApiResult {
 }
 
 /// True when a method of the vault opens it on a different server: a
-/// passphrase, a recovery key or a Nostr signer (ADR 0107 item 4).
+/// passphrase, a recovery key or a Nostr signer (ADR 0262 item 4).
 pub(crate) fn movable(methods: &[VaultMethod]) -> bool {
     methods.iter().any(|m| {
         matches!(
@@ -58,7 +58,7 @@ fn library_of(w: &Workspace) -> Result<Option<std::path::PathBuf>, ApiError> {
 }
 
 /// The facts of the export sheet for the account in `folder`, with its
-/// `library`, `counts` and `methods` (ADR 0107 items 4 and 5).
+/// `library`, `counts` and `methods` (ADR 0262 items 4 and 5).
 pub(crate) fn facts_of(
     w: &Workspace,
     folder: &std::path::Path,
@@ -86,7 +86,7 @@ pub(crate) fn facts_of(
     }))
 }
 
-/// `GET /account/export-facts`: what the export sheet shows (ADR 0107
+/// `GET /account/export-facts`: what the export sheet shows (ADR 0262
 /// items 4 and 5). It needs no unlock.
 pub(crate) async fn export_facts(State(shared): State<Shared>) -> ApiResult {
     blocking(shared, |w| {
@@ -116,7 +116,7 @@ fn yes() -> bool {
     true
 }
 
-/// `POST /account/export`: make a media ticket for the archive (ADR 0107
+/// `POST /account/export`: make a media ticket for the archive (ADR 0262
 /// items 3, 4 and 7). The route needs a recent unlock. A vault that no
 /// different server can open gives 409 `vault_not_movable`. The ticket
 /// works one time, on `GET /media/download`.
@@ -140,7 +140,7 @@ pub(crate) async fn export(
     .await
 }
 
-/// Make the ticket of an archive of the collection in `folder` (ADR 0107
+/// Make the ticket of an archive of the collection in `folder` (ADR 0262
 /// items 3, 4 and 7). `closed` is the folder of a collection that is not
 /// open, and `None` for the collection of the workspace. The vault that must
 /// show a recent unlock is the vault that is open, in both cases.
@@ -157,7 +157,7 @@ pub(crate) fn issue_export(
         return Err(ApiError::new(
             StatusCode::CONFLICT,
             "vault_not_movable",
-            "ADR 0107 item 4: only passkeys open this vault, and a passkey does not work on a different server. Make a recovery key first",
+            "ADR 0262 item 4: only passkeys open this vault, and a passkey does not work on a different server. Make a recovery key first",
         ));
     }
     let include_assets = if w.holds_assets() {

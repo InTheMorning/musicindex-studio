@@ -75,7 +75,7 @@ const MIGRATIONS: &[&str] = &[
     );
 ",
     // An account that came from an import shows a notice until the user
-    // adds a passkey or closes it (ADR 0107 item 14).
+    // adds a passkey or closes it (ADR 0262 item 14).
     "
     CREATE TABLE import_notices (
         account_id INTEGER PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
@@ -379,7 +379,7 @@ impl Accounts {
             .map_err(|e| e.to_string())
     }
 
-    /// Record that an account came from an import (ADR 0107 item 14).
+    /// Record that an account came from an import (ADR 0262 item 14).
     ///
     /// # Errors
     ///

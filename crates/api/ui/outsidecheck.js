@@ -2,18 +2,18 @@ import { unlinkedReleases, otherFeeds } from './shell.js';
 import { INDEX_READ_AGAIN_MS, INDEX_READ_AGAIN_MAX } from './releasemove.js';
 import { musicindexFeedUrl } from './people.js';
 
-// The check for a change from outside Studio (ADR 0150). This module has no
+// The check for a change from outside Studio (ADR 0259). This module has no
 // Preact and no browser state. The core makes the comparison and gives the
 // result, and these functions give only the words.
 
-// The Releases page reads at most this many feeds at one time (ADR 0150
+// The Releases page reads at most this many feeds at one time (ADR 0259
 // item 11).
 export const OUTSIDE_LIMIT = 4;
 
 export const OUTSIDE_SETTING_LABEL = 'Check for outside changes';
 export const OUTSIDE_SETTING_HINT = 'When a page opens, Studio reads the public address of the feed, and a feed page also asks Music Index. The file hosts and Music Index can see these requests. Studio writes nothing because of this check.';
 
-// The mark on a tile or a row of Releases, or null (ADR 0150 items 2, 3 and 5).
+// The mark on a tile or a row of Releases, or null (ADR 0259 items 2, 3 and 5).
 // A different address at musicindex has no mark on the tile.
 export function outsideMark(check) {
   if (!check || !check.state) return null;
@@ -74,7 +74,7 @@ export function readOnlyHostNotice(feed) {
   };
 }
 
-// The notice of a different address at musicindex, or null (ADR 0150 item 5).
+// The notice of a different address at musicindex, or null (ADR 0259 item 5).
 export function indexNotice(check) {
   if (!check || !check.index_url) return null;
   return {
@@ -232,7 +232,7 @@ export async function eachLimited(items, limit, work) {
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, runner));
 }
 
-// The feeds that a row of the left panel covers (ADR 0165 item 3). A number
+// The feeds that a row of the left panel covers (ADR 0259 item 16). A number
 // is a publisher feed: the feed and each release of it. 'none' is "Not
 // linked" and 'other' is "Other feeds". A feed that is not in the list is
 // left out.
@@ -246,7 +246,7 @@ export function panelSet(feeds, group) {
   return [owner, ...(owner.release_ids || []).map((id) => byId.get(id)).filter(Boolean)];
 }
 
-// The marks of the left panel, from the most urgent (ADR 0165 item 2).
+// The marks of the left panel, from the most urgent (ADR 0259 item 15).
 const STATE_MARKS = {
   outside: { icon: 'cloud-alert', tone: 'warning' },
   pending: { icon: 'pencil', tone: 'accent', text: 'Changes not written' },
@@ -255,7 +255,7 @@ const STATE_MARKS = {
 };
 
 // A feed is not checked when it has no result, or the read did not succeed
-// (ADR 0165 item 2). A feed with a done delete has no file to read, so it is
+// (ADR 0259 item 15). A feed with a done delete has no file to read, so it is
 // never not checked (task 210 item 1).
 function isUnchecked(results, feed) {
   if (feed.host_deleted === true) return false;
@@ -264,16 +264,16 @@ function isUnchecked(results, feed) {
 }
 
 // The feeds of a set that a click on a row checks: each feed that is not
-// checked (ADR 0230 item 17).
+// checked (ADR 0261 item 17).
 export function feedsToCheck(feeds, results) {
   return (Array.isArray(feeds) ? feeds : []).filter((feed) => isUnchecked(results, feed));
 }
 
-// The mark of a set of feeds, or null when each feed is up to date (ADR 0165
-// items 2 and 3). `results` maps a feed ID to the answer of the check. The
+// The mark of a set of feeds, or null when each feed is up to date (ADR 0259
+// items 15 and 16). `results` maps a feed ID to the answer of the check. The
 // answer has `text`, `icon` and `tone`. A set with a moved feed says "Moved".
 // `running` is a Set of the IDs of the feeds that a check reads now. While a
-// feed of the set is in it, the mark is "Checking" (ADR 0230 item 18).
+// feed of the set is in it, the mark is "Checking" (ADR 0261 item 18).
 export function stateMark(feeds, results, running) {
   const list = Array.isArray(feeds) ? feeds : [];
   const states = list.map((feed) => results && results[feed.id] && results[feed.id].state);

@@ -226,7 +226,7 @@ function isCurrentPage(view, page, track) {
 // tree again (ADR 0254 items 7 and 43). The head of the outline opens the
 // first page of the feed, so no entry is for that page (ADR 0069). At narrow
 // width there is no "Catalog" row, because Back opens the page before it
-// (ADR 0206 item 14).
+// (ADR 0258 item 14).
 function outlineItems(feed, view, model, narrow) {
   const above = view.from ? openFeedView(view.from.group, narrow, fromPath(pathOfFrom(view.from).slice(0, -1))) : null;
   const items = narrow ? [] : [{ id: 'catalog', label: 'Catalog', ...(above ? { target: above } : {}) }];
@@ -307,14 +307,14 @@ export function isTabChange(current, target) {
 const inHosts = (view) => view.name === 'hosts' || (view.name === 'change-set' && view.area === 'hosts');
 const inReleases = (view) => view.name === 'change-set' && view.area === 'releases';
 
-// The left panel (ADR 0206 items 1, 6 and 7, ADR 0254 items 2 and 7). With
+// The left panel (ADR 0258 items 1, 6 and 7, ADR 0254 items 2 and 7). With
 // no open feed, or with the page of a publisher feed, it gives the
 // destinations and the Catalog tree. With an open release or playlist, or the
 // outline view of one, it gives the outline of that feed. `model` is the
 // typed model of the draft of the open feed, or null before it loads. `open`
 // is the set of the keys of the open tree rows. `narrow` is true at 760 px or
 // less. `vaultLocked` is true on a server with a locked vault: the row
-// "Unlock Studio" then takes the place of "Lock Studio" (ADR 0206 item 1).
+// "Unlock Studio" then takes the place of "Lock Studio" (ADR 0258 item 1).
 export function leftPanel({ view, feeds, model, vaultOpen, vaultLocked = false, narrow = false, collection = null,
   serverMode = false, collectionCount = 0, open = [] }) {
   const bottom = [
@@ -804,7 +804,7 @@ export function feedCover(feed) {
   return coverOf({ image: feed.image ?? null, rss_image: rssImage }) || null;
 }
 
-// The label of each draft state in the Releases list (ADR 0206 item 2).
+// The label of each draft state in the Releases list (ADR 0258 item 2).
 const DRAFT_LABELS = {
   new: 'New, not written',
   changed: 'Saved, not written',
@@ -854,7 +854,7 @@ function compareAz(a, b) {
     || Number(a.id) - Number(b.id);
 }
 
-// The first letter of each group of rows, in sequence (ADR 0206 item 3).
+// The first letter of each group of rows, in sequence (ADR 0258 item 3).
 // Each row has a `title` and an `id`.
 export function letterGroups(rows) {
   const groups = [];
@@ -867,12 +867,12 @@ export function letterGroups(rows) {
   return groups;
 }
 
-// The sorts of each list (ADR 0206 item 3, ADR 0085 item 4). The first
+// The sorts of each list (ADR 0258 item 3, ADR 0085 item 4). The first
 // sort is the default.
 const ALL_SORTS = ['newest', 'az'];
 const GROUP_SORTS = ['order', 'newest', 'az'];
 
-// The names of each sort (ADR 0206 item 3, ADR 0085 item 4). A reversed list
+// The names of each sort (ADR 0258 item 3, ADR 0085 item 4). A reversed list
 // names its reversed order (musicindex ADR 0043 R-LIST-7 item 5).
 const SORT_LABELS = { order: 'Page Order', newest: 'Newest', az: 'A to Z' };
 const REVERSED_SORT_LABELS = { order: 'Page Order, Reversed', newest: 'Oldest', az: 'Z to A' };
@@ -904,7 +904,7 @@ export function sortEntries(sorts) {
   return sorts.flatMap((sort) => [false, true].map((reversed) => ({ sort, reversed, label: sortLabel(sort, reversed) })));
 }
 
-// The Releases list (ADR 0206 items 2 and 3). `marked` is the ID of the feed
+// The Releases list (ADR 0258 items 2 and 3). `marked` is the ID of the feed
 // that the last Back selection left marked. With no `group` it gives each
 // album and playlist (ADR 0085 item 6). With the ID of a feed with roles as
 // `group`, it gives the releases of that feed, and `head` gives the feed. The
@@ -1103,7 +1103,7 @@ export function setScroll(nav, y) {
   return { entries, index: nav.index };
 }
 
-// ---- Narrow width (musicindex ADR 0080 R-SHELL-2, ADR 0206 items 11 to 14) ----
+// ---- Narrow width (musicindex ADR 0080 R-SHELL-2, ADR 0258 items 11 to 14) ----
 
 // The stack that a narrow window shows for one view. The entries go from the
 // root page to the view, and the view is the last entry. The root page shows

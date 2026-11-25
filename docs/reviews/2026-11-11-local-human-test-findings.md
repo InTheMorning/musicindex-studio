@@ -98,7 +98,7 @@ On 2026-11-12 the operator selected this answer in the questionnaire: the file r
 
 Decision: [ADR 0181](../archive/adr/0181-a-level-shows-the-state-of-its-own-feed.md).
 
-Owner: [ADR 0165](../adr/0165-the-left-panel-marks-the-state-of-each-feed.md) items 1 to 4.
+Owner: [ADR 0165](../archive/adr/0165-the-left-panel-marks-the-state-of-each-feed.md) items 1 to 4.
 
 The row "HeyCitizen" in the left panel showed the pencil and the number 4. The operator read it as "4 changes not written", and could not find the changes. The number is the count of releases. The pencil tells that at least one feed of the group has a draft that is not written.
 
@@ -129,7 +129,7 @@ In **Examine the Changes**, the field "Credits" was in "Both changed. Select one
 
 Decision: [ADR 0184](../adr/0184-after-a-move-studio-shows-the-podping-of-the-move.md).
 
-Owner: [ADR 0150](../adr/0150-studio-shows-a-change-from-outside-when-a-page-opens.md) item 5.
+Owner: [ADR 0150](../archive/adr/0150-studio-shows-a-change-from-outside-when-a-page-opens.md) item 5.
 
 Right after the move of the feed file, the release page showed "Music Index reads this feed from a different address." The notice ended with "A different collection or a different tool can hold this feed." Studio itself had moved the feed a few seconds before. Music Index needs time to read the new address. The notice does not tell this, and it points to a cause that is not correct.
 

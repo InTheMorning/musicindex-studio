@@ -1,4 +1,4 @@
-// The model of the export and the import of an account (ADR 0107, ADR 0042).
+// The model of the export and the import of an account (ADR 0262, ADR 0042).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -18,7 +18,7 @@ test('screen 1: a server that keeps no audio shows the facts and no check box', 
   assert.equal(view.screen, 'plain');
   assert.equal(view.title, 'Export Account');
   assert.equal(view.primary, 'Export Account');
-  assert.equal(view.checkbox, null, 'ADR 0107 item 6: a server with --hold-assets off gives the user no choice. Fix exportView in crates/api/ui/move.js.');
+  assert.equal(view.checkbox, null, 'ADR 0262 item 6: a server with --hold-assets off gives the user no choice. Fix exportView in crates/api/ui/move.js.');
   assert.deepEqual(view.notice, EXPORT_NOTICE);
   assert.deepEqual(view.rows.map((r) => r.summary), [
     '12 feeds · 3 drafts · 41 versions',
@@ -82,7 +82,7 @@ test('screen 8: the notice after an import', () => {
   assert.ok(!importedNotice({ origin: 'https://a.example', passkeys: false }).text.includes('passkey'));
   assert.equal(showsImportNotice({ imported: true }), true);
   assert.equal(showsImportNotice({ imported: false }), false);
-  assert.equal(showsImportNotice({}), false, 'ADR 0107 item 14: the notice shows only while the session says imported.');
+  assert.equal(showsImportNotice({}), false, 'ADR 0262 item 14: the notice shows only while the session says imported.');
 });
 
 const check = (extra) => ({
@@ -148,7 +148,7 @@ test('the email field shows on a server only when the file has no email and the 
 
 test('the error texts name the cause of a refused file', () => {
   assert.match(importErrorText('archive_invalid', 'newer_schema: the collection is newer'), /newer Studio/);
-  assert.match(importErrorText('archive_invalid', 'no_portable_method: ADR 0107 item 4'), /only passkeys/);
+  assert.match(importErrorText('archive_invalid', 'no_portable_method: ADR 0262 item 4'), /only passkeys/);
   assert.match(importErrorText('archive_invalid', 'something new'), /cannot use this file/);
   assert.match(importErrorText('account_exists'), /Sign in/);
   assert.equal(importErrorText('nothing_like_this'), null);

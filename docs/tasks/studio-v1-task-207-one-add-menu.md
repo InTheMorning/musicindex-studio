@@ -1,6 +1,6 @@
 # Studio v1 Task 207: One Add Menu
 
-Decision: [ADR 0230](../adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 1 to 7.
+Decision: [ADR 0230](../archive/adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 1 to 7.
 
 Status: Done.
 

@@ -445,7 +445,7 @@ impl WorkspaceHandle {
     }
 
     /// Set each app to "Connect Again" and end each grant, after the import
-    /// of an account (ADR 0110 item 41, ADR 0107). The grant vaults go at
+    /// of an account (ADR 0110 item 41, ADR 0262). The grant vaults go at
     /// the next sync.
     ///
     /// # Errors
@@ -765,7 +765,7 @@ impl std::fmt::Debug for AppHook {
 }
 
 /// The sign-in identity of a server account. The manifest of an export
-/// holds it (ADR 0107 item 6). The desktop has none.
+/// holds it (ADR 0262 item 6). The desktop has none.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct AccountIdentity {
     /// The email address of the account.
@@ -782,7 +782,7 @@ pub struct Workspace {
     /// The sign-in identity of the account. Empty on the desktop.
     pub(crate) identity: AccountIdentity,
     /// The imports of an account that wait for a check or an open. Only the
-    /// desktop uses it (ADR 0107 item 9).
+    /// desktop uses it (ADR 0262 item 9).
     pub(crate) imports: Arc<crate::import::ImportStore>,
     vault_path: PathBuf,
     device_store: Option<Arc<dyn DeviceKeyStore>>,
@@ -1119,7 +1119,7 @@ impl Workspace {
     }
 
     /// Give the workspace the sign-in identity of its account, for the
-    /// manifest of an export (ADR 0107 item 6).
+    /// manifest of an export (ADR 0262 item 6).
     #[must_use]
     pub fn with_identity(mut self, identity: AccountIdentity) -> Self {
         self.identity = identity;
@@ -1686,7 +1686,7 @@ impl Workspace {
     }
 
     /// Make a new recovery key, replace the older one and save the vault.
-    /// The key is in the result only (ADR 0107 item 4). The last unlock
+    /// The key is in the result only (ADR 0262 item 4). The last unlock
     /// must be recent (ADR 0106 item 2).
     pub(crate) fn new_recovery_key(&mut self) -> Result<Zeroizing<String>, ApiError> {
         self.require_recent_unlock()?;
@@ -1702,7 +1702,7 @@ impl Workspace {
 
     /// Replace the collection, the vault, the grant vaults and the library
     /// of the data folder with the unpacked files of an archive, and open
-    /// the vault with `key` (ADR 0107 items 9 and 12). The desktop calls it
+    /// the vault with `key` (ADR 0262 items 9 and 12). The desktop calls it
     /// for a collection with no feed. The library of the archive moves to
     /// `library` in the data folder, and that folder must be empty or absent.
     pub(crate) fn replace_account(&mut self, staged: &Path, key: &str) -> Result<(), ApiError> {
@@ -1717,7 +1717,7 @@ impl Workspace {
                         return Err(ApiError::new(
                             StatusCode::CONFLICT,
                             "library_not_empty",
-                            "ADR 0107 item 9: the folder library in the data folder has files. Use a new data folder",
+                            "ADR 0262 item 9: the folder library in the data folder has files. Use a new data folder",
                         ));
                     }
                     std::fs::remove_dir(&library_to).map_err(|e| io("library", &e))?;
@@ -2210,7 +2210,7 @@ impl Workspace {
                 return Ok(());
             }
             // A feed with a done delete has no file on a host. Its media
-            // files stay as they are (ADR 0230 item 29).
+            // files stay as they are (ADR 0261 item 29).
             if self
                 .collection
                 .feed_host_delete(id)

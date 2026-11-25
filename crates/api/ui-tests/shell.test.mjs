@@ -1,4 +1,4 @@
-// The shell models (ADR 0042). Each test checks one rule of ADR 0206 and of
+// The shell models (ADR 0042). Each test checks one rule of ADR 0258 and of
 // musicindex ADR 0080 R-NAV-2.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -403,7 +403,7 @@ test('the navigation functions do not change their argument', () => {
   assert.equal(JSON.stringify(nav), before);
 });
 
-test('the narrow stack gives the root page below each view (ADR 0206 item 13)', () => {
+test('the narrow stack gives the root page below each view (ADR 0258 item 13)', () => {
   const root = { name: 'root' };
   const releases = { name: 'releases' };
   assert.deepEqual(narrowStack({ name: 'root' }), [root]);

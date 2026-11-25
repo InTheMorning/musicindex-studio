@@ -720,8 +720,8 @@ input[type="checkbox"]:disabled { opacity: .5; cursor: default; }
 .row.collection-mark { color: var(--accent); }
 .row .row-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row .count { color: var(--muted); font-size: var(--text-callout); font-variant-numeric: tabular-nums; }
-/* The state mark of a row, between the name and the count (ADR 0165 items 1
-   and 2). The icon has a fixed size, so the count does not move. The color
+/* The state mark of a row, between the name and the count (ADR 0259 items 14
+   and 15). The icon has a fixed size, so the count does not move. The color
    rules name the icon, because a row sets the color of its icon. */
 .state-mark { display: inline-flex; flex: none; align-items: center; }
 .state-mark .icon { width: 16px; height: 16px; }
@@ -1101,9 +1101,9 @@ dialog.sheet > *, .sheet .body > * { min-width: 0; }
      the main pane (musicindex ADR 0080 R-SHELL-2). */
   .shell { grid-template-columns: 1fr; }
   /* The root page holds the destinations, with Hosts and Lock Studio at its
-     bottom (ADR 0206 item 13). */
+     bottom (ADR 0258 item 13). */
   /* The root page and the outline page show the left panel, so they keep
-     the color of the panel. The bar keeps its own color (ADR 0206 items 13 and 14). */
+     the color of the panel. The bar keeps its own color (ADR 0258 items 13 and 14). */
   .panel-page { min-height: 100%; background: var(--sidebar); }
   /* The root page and the outline page are the left panel at this width, so they have
      the glow. .main scrolls, so a sticky layer keeps the glow at the top. The layer
@@ -1125,7 +1125,7 @@ dialog.sheet > *, .sheet .body > * { min-width: 0; }
   .stack-page header { display: flex; align-items: center; justify-content: space-between; padding: 0 6px 8px; }
   .stack-page footer { margin-top: auto; display: grid; gap: 2px; padding-top: 8px; border-top: 1px solid var(--sep); }
   /* The bar of a feed has two rows at this width: the back control and the
-     title, then the draft status with "Versions" and "Review" (ADR 0206
+     title, then the draft status with "Versions" and "Review" (ADR 0258
      item 10a). At 320 px a long status such as "Saved, not written" and both
      buttons are wider than the row, so the status wraps and the buttons stay
      in the window (finding 9 of the rc.21 human test). */
@@ -1398,7 +1398,7 @@ select option { background: var(--level-3); color: var(--text); }
 .share-stack > span:last-child { border-radius: 0 var(--share-stack-end-radius) var(--share-stack-end-radius) 0; }
 .share-stack > span:only-child { border-radius: var(--share-stack-end-radius); }
 
-/* The Value routes page is at most 560 px wide (ADR 0206 item 15). Each
+/* The Value routes page is at most 560 px wide (ADR 0258 item 15). Each
    group of recipients has a heading row in the group, like the heading of
    the picker. */
 .value-routes { max-width: 560px; }
@@ -1801,7 +1801,7 @@ select.position:focus { background: var(--fill); }
 .feed-address .icon { display: block; width: 16px; height: 16px; }
 .pager { display: flex; gap: 8px; flex: none; }
 
-/* ---- The outline of an open feed (ADR 0206 item 7). ---- */
+/* ---- The outline of an open feed (ADR 0258 item 7). ---- */
 .tree { list-style: none; display: grid; gap: 1px; }
 /* A grid item does not shrink below the width of its text by default. Let
    each row shrink, so that a long track title gets an ellipsis instead of
@@ -1862,7 +1862,7 @@ button.outline-feed {
 .outline-feed .sub { color: var(--muted); font-size: var(--text-callout); }
 .outline-feed .change-mark { display: inline-block; margin-left: 6px; vertical-align: middle; }
 /* The state mark is at the right side of the row, as in a level row
-   (ADR 0165 item 2). */
+   (ADR 0259 item 15). */
 .outline-feed .state-mark { margin-left: auto; }
 .outline-cover {
   width: 40px;
@@ -1884,7 +1884,7 @@ button.outline-feed {
 .outline-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
 /* The Releases page: a list at the full width of the content area
-   (ADR 0206 items 2 and 3). A marked row has the fill of an open entry. */
+   (ADR 0258 items 2 and 3). A marked row has the fill of an open entry. */
 .releases { padding: 8px 32px 32px; display: grid; gap: 16px; }
 .releases-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 /* The base size of the heading is its text width, so the tools wrap to a new
@@ -1899,7 +1899,7 @@ button.outline-feed {
    the sort is at the left edge, so its menu opens to the right. */
 .releases-tools .sort-menu { right: auto; left: 0; }
 /* In the wide layout the add menu is near the right edge, so its menu opens
-   to the left (ADR 0230 item 1). In the narrow layout the tools wrap below
+   to the left (ADR 0261 item 1). In the narrow layout the tools wrap below
    the heading, so the menu opens to the right as the sort menu does. */
 .releases-tools .add-menu .sort-menu { left: auto; right: 0; }
 @media (max-width: 760px) {
@@ -2096,7 +2096,7 @@ button.outline-feed {
    its menu opens to the right and does not go below the sidebar. */
 .empty-releases .add-menu .sort-menu { right: auto; left: 0; }
 
-/* The Welcome page and its first steps (ADR 0221). The large rows have an icon
+/* The Welcome page and its first steps (ADR 0260). The large rows have an icon
    box of 2.75rem, which is 44 px at the default size. The step line shows each step as done, now or later. */
 .welcome { max-width: 640px; }
 .welcome h1 { margin-top: 0; }
@@ -2655,7 +2655,7 @@ button.outline-feed {
 .suggest-gap { margin-top: 12px; }
 
 
-/* The mark of a change from outside on a row of Releases (ADR 0150 items 2
+/* The mark of a change from outside on a row of Releases (ADR 0259 items 2
    and 3). */
 .releases-text .outside-mark.warning { color: var(--warning); }
 .outside-mark .icon { width: 14px; height: 14px; vertical-align: -2px; margin-inline-end: 4px; }

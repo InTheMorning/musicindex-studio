@@ -1,4 +1,4 @@
-// The explicit switch (ADR 0206 item 19, ADR 0065). This module gives the
+// The explicit switch (ADR 0258 item 19, ADR 0065). This module gives the
 // display value of the switch only. The core keeps the form of the feed at
 // the draft save, so a change of the switch sends `true` or `false`.
 

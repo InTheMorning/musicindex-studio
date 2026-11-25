@@ -134,7 +134,7 @@ impl ChallengeLimits {
     }
 }
 
-/// The imports that one client address can start in one window (ADR 0107
+/// The imports that one client address can start in one window (ADR 0262
 /// item 9). The routes of an import need no session.
 pub const IMPORT_START_LIMIT: usize = 5;
 /// The length of the window of the import starts.

@@ -222,29 +222,29 @@ test('a leftover copy shows the row of the delete and the line of ADR 0228 item 
 test('the first delete sheet does not show the error of an earlier try', () => {
   const source = readFileSync(new URL('../ui/editor.js', import.meta.url), 'utf8');
   assert.match(source, /dismissed\.current = errorNow\.current/,
-    'ADR 0230 item 24: the open handler of FeedDelete must keep the error that is there when the first sheet opens. Restore it in crates/api/ui/editor.js.');
+    'ADR 0261 item 24: the open handler of FeedDelete must keep the error that is there when the first sheet opens. Restore it in crates/api/ui/editor.js.');
   assert.match(source, /error=\$\{action\.error === dismissed\.current \? null : action\.error\}/,
-    'ADR 0230 item 24: the first sheet must hide the dismissed error. Restore it in crates/api/ui/editor.js.');
+    'ADR 0261 item 24: the first sheet must hide the dismissed error. Restore it in crates/api/ui/editor.js.');
 });
 
-test('ADR 0230 items 25 and 26: the sheets say that Music Index does not hold the feed', () => {
+test('ADR 0261 items 25 and 26: the sheets say that Music Index does not hold the feed', () => {
   const fix = 'Fix DELETE_CHOICES and DELETE_POINTS in crates/api/ui/feeddelete.js.';
   for (const text of [deleteChoices({ removal_done: true })[2].text, DELETE_POINTS[0].text]) {
     assert.match(text, /^Music Index does not hold this feed\.?$/,
-      `ADR 0230 items 25 and 26: a plain 404 is not a removal by Music Index. ${fix}`);
+      `ADR 0261 items 25 and 26: a plain 404 is not a removal by Music Index. ${fix}`);
   }
 });
 
-test('ADR 0230 item 27: the Retire block shows for a feed with a done delete that is not hidden', () => {
+test('ADR 0261 item 27: the Retire block shows for a feed with a done delete that is not hidden', () => {
   const fix = 'Fix retireBlockShown in crates/api/ui/feeddelete.js and its use in crates/api/ui/editor.js.';
   assert.equal(retireBlockShown({ ask: 'no', delete: 'done' }, true), true,
-    `ADR 0230 item 27: Put the File Back must show for a deleted feed that the draft does not hide. ${fix}`);
+    `ADR 0261 item 27: Put the File Back must show for a deleted feed that the draft does not hide. ${fix}`);
   assert.equal(retireBlockShown({ ask: 'no', delete: 'not_done' }, false), false,
-    `ADR 0230 item 27: a feed that is not retiring and not deleted has no block. ${fix}`);
+    `ADR 0261 item 27: a feed that is not retiring and not deleted has no block. ${fix}`);
   assert.equal(retireBlockShown(null, true), false,
-    `ADR 0230 item 27: the block waits for the retire state. ${fix}`);
+    `ADR 0261 item 27: the block waits for the retire state. ${fix}`);
   assert.deepEqual(retireActions({ ask: 'no', delete: 'done' }), ['restore', 'check'],
-    `ADR 0198 item 6 and ADR 0230 item 27: a deleted feed has no Stop Retiring. ${fix}`);
+    `ADR 0198 item 6 and ADR 0261 item 27: a deleted feed has no Stop Retiring. ${fix}`);
 });
 
 test('ADR 0231 item 1: a deleted feed has a notice with two actions, a feed that is not deleted has none', () => {

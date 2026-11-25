@@ -10,7 +10,7 @@ Status: advisory. This review records findings from the use of Studio on 2026-11
 
 Decision: none at this time.
 
-Owner: [ADR 0150](../adr/0150-studio-shows-a-change-from-outside-when-a-page-opens.md) item 5, and [ADR 0184](../adr/0184-after-a-move-studio-shows-the-podping-of-the-move.md) item 9.
+Owner: [ADR 0150](../archive/adr/0150-studio-shows-a-change-from-outside-when-a-page-opens.md) item 5, and [ADR 0184](../adr/0184-after-a-move-studio-shows-the-podping-of-the-move.md) item 9.
 
 The release page of "Some Songs" showed this notice in the plain style:
 

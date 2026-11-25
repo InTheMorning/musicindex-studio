@@ -86,7 +86,6 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0104: Key material stays off the disk](adr/0104-key-material-stays-off-the-disk.md)
 - [ADR 0105: A public server holds no assets](adr/0105-a-public-server-holds-no-assets.md)
 - [ADR 0106: A sensitive account change needs a recent unlock](adr/0106-a-sensitive-account-change-needs-a-recent-unlock.md)
-- [ADR 0107: A user can export and import an account](adr/0107-a-user-can-export-and-import-an-account.md)
 - [ADR 0108: People data at rest stays plain](adr/0108-people-data-at-rest-stays-plain.md)
 - [ADR 0109: Images and audio load from their hosts](adr/0109-images-and-audio-load-from-their-hosts.md)
 - [ADR 0110: A connected app signs each request with its own key](adr/0110-a-connected-app-signs-each-request-with-its-own-key.md)
@@ -124,7 +123,6 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0147: The Nostr and Artwork rows show a preview](adr/0147-the-nostr-and-artwork-rows-show-a-preview.md)
 - [ADR 0148: A move keeps the old files until the user reviews the deletion](adr/0148-a-move-keeps-the-old-files-until-the-user-reviews-the-deletion.md)
 - [ADR 0149: The desktop app has many collections](adr/0149-the-desktop-app-has-many-collections.md)
-- [ADR 0150: Studio shows a change from outside when a page opens](adr/0150-studio-shows-a-change-from-outside-when-a-page-opens.md)
 - [ADR 0151: The search fields read the shared query text](adr/0151-the-search-fields-read-the-shared-query-text.md)
 - [ADR 0152: Text names the product "Music Index"](adr/0152-text-names-the-product-music-index.md)
 - [ADR 0153: The People list has a sort, and names sort with numbers](adr/0153-the-people-list-has-a-sort-and-names-sort-with-numbers.md)
@@ -137,7 +135,6 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0162: Studio fills and checks the stream of a live show](adr/0162-studio-fills-and-checks-the-stream-of-a-live-show.md)
 - [ADR 0163: One sheet finds and links a page on Music Index](adr/0163-one-sheet-finds-and-links-a-page-on-music-index.md)
 - [ADR 0164: The releases of a publisher feed have an add row](adr/0164-the-releases-of-a-publisher-feed-have-an-add-row.md)
-- [ADR 0165: The left panel marks the state of each feed](adr/0165-the-left-panel-marks-the-state-of-each-feed.md)
 - [ADR 0166: Settings has tabs and one Save bar](adr/0166-settings-has-tabs-and-one-save-bar.md)
 - [ADR 0167: Each release has an editable library folder](adr/0167-each-release-has-an-editable-library-folder.md)
 - [ADR 0168: A search sheet keeps its field still](adr/0168-a-search-sheet-keeps-its-field-still.md)
@@ -177,7 +174,6 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0203: People](adr/0203-people.md)
 - [ADR 0204: Feed files, feed moves and the server shell](adr/0204-feed-files-moves-and-the-server.md)
 - [ADR 0255: Publisher feeds, announcements and show grants](adr/0255-publisher-feeds-announcements-and-show-grants.md)
-- [ADR 0206: The shell and the editor pages](adr/0206-the-shell-and-the-editor-pages.md)
 - [ADR 0207: Recipients, change sets and wallets](adr/0207-recipients-change-sets-and-wallets.md)
 - [ADR 0211: Studio follows a move that a different Studio made](adr/0211-studio-follows-a-move-that-a-different-studio-made.md)
 - [ADR 0212: The add pages](adr/0212-the-add-pages.md)
@@ -188,7 +184,6 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0218: A page link in Review, and a suggestion starts with no person](adr/0218-a-page-link-in-review-and-a-suggestion-starts-with-no-person.md)
 - [ADR 0219: A release checklist, and a check of the address type](adr/0219-a-release-checklist-and-a-check-of-the-address-type.md)
 - [ADR 0220: A release page links its page on Music Index](adr/0220-a-release-page-links-its-page-on-music-index.md)
-- [ADR 0221: The Welcome page and the first steps](adr/0221-the-welcome-page-and-the-first-steps.md)
 - [ADR 0222: Errors give a step, terms get a hint, and the first run has two stages](adr/0222-errors-give-a-step-terms-get-a-hint-and-the-first-run-has-two-stages.md)
 - [ADR 0223: A split in shares or percent, a release search, and one tap on a phone](adr/0223-a-split-in-shares-or-percent-a-release-search-and-one-tap-on-a-phone.md)
 - [ADR 0224: A finding that stops the write, and a new release opens Add tracks](adr/0224-a-finding-that-stops-the-write-and-a-new-release-opens-add-tracks.md)
@@ -197,7 +192,6 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0227: Undo and redo](adr/0227-undo-and-redo.md)
 - [ADR 0228: Undo in the bar, a notice that stays, and the rc.28 check findings](adr/0228-undo-in-the-bar-a-notice-that-stays-and-the-rc28-check-findings.md)
 - [ADR 0229: The media host after a follow, a podping again, and empty folders](adr/0229-the-media-host-after-a-follow-a-podping-again-and-empty-folders.md)
-- [ADR 0230: One add menu, the parent of a new release, and the check after rc.29](adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md)
 - [ADR 0231: A new release writes its artist page, and the files of a restored release](adr/0231-a-new-release-writes-its-artist-page-and-the-files-of-a-restored-release.md)
 - [ADR 0233: Each add form finds on Music Index and copies the found feed](adr/0233-each-add-form-finds-on-music-index-and-copies-the-found-feed.md)
 - [ADR 0234: A new release is written with its pages, and a one-sided link is reported](adr/0234-a-new-release-is-written-with-its-pages-and-a-one-sided-link-is-reported.md)
@@ -220,6 +214,12 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0252: A publisher link with no role gets a repair](adr/0252-a-publisher-link-with-no-role-gets-a-repair.md)
 - [ADR 0253: The roles of a feed and of each link](adr/0253-the-roles-of-a-feed-and-of-each-link.md)
 - [ADR 0254: The Catalog is a tree, and each change uses music words](adr/0254-the-catalog-is-a-tree-and-each-change-uses-music-words.md)
+- [ADR 0258: The shell and the editor pages](adr/0258-the-shell-and-the-editor-pages.md)
+- [ADR 0259: Studio checks each feed and the left panel marks its state](adr/0259-studio-checks-each-feed-and-the-left-panel-marks-its-state.md)
+- [ADR 0260: The Welcome page and the first steps](adr/0260-the-welcome-page-and-the-first-steps.md)
+- [ADR 0261: One Add menu, the parent of a new release, and the check after rc.29](adr/0261-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md)
+- [ADR 0262: A user can export and import an account](adr/0262-a-user-can-export-and-import-an-account.md)
+
 
 ## Plans
 
@@ -527,6 +527,8 @@ This is the index of the project documents. The user guide is in the root [READM
 
 ## Reviews
 
+- [Five ADR consolidations, 2026-11-25](reviews/2026-11-25-five-adr-consolidations.md)
+
 - [Phase 4 visual check, 2026-10-22](reviews/2026-10-22-phase-4-visual-check.md)
 - [Task 009 visual check, 2026-10-22](reviews/2026-10-22-task-009-visual-check.md)
 - [Task 011 visual check, 2026-10-22](reviews/2026-10-22-task-011-visual-check.md)
@@ -668,3 +670,9 @@ Superseded decisions. Read them for research only. They bind no change.
 - [ADR 0121: A folder with no public address holds practice pages](archive/adr/0121-a-folder-with-no-public-address-holds-practice-pages.md), superseded by ADR 0122
 - [ADR 0156: The page of a person lists where the person is](archive/adr/0156-the-page-of-a-person-lists-where-the-person-is.md), superseded by ADR 0203
 - [ADR 0158: A hidden suggestion can come back](archive/adr/0158-a-hidden-suggestion-can-come-back.md), superseded by ADR 0203
+- [ADR 0206: The shell and the editor pages](archive/adr/0206-the-shell-and-the-editor-pages.md), superseded by ADR 0258
+- [ADR 0150: Studio shows a change from outside when a page opens](archive/adr/0150-studio-shows-a-change-from-outside-when-a-page-opens.md), superseded by ADR 0259
+- [ADR 0165: The left panel marks the state of each feed](archive/adr/0165-the-left-panel-marks-the-state-of-each-feed.md), superseded by ADR 0259
+- [ADR 0221: The welcome page and the first steps](archive/adr/0221-the-welcome-page-and-the-first-steps.md), superseded by ADR 0260
+- [ADR 0230: One add menu the parent of a new release and the check after rc29](archive/adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md), superseded by ADR 0261
+- [ADR 0107: A user can export and import an account](archive/adr/0107-a-user-can-export-and-import-an-account.md), superseded by ADR 0262

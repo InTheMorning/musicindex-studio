@@ -6,7 +6,7 @@
 - Accepted: 2026-11-19 by the operator, through the questionnaire, from drawings. The operator selected "Header, when held".
 - Technical choices: the main session selected items 2, 4 and 5.
 - Bar: crosses repositories. The address form belongs to musicindex ADR 0085 R-LINK-1, and HitIt uses the same form. An agent can also make the opposite choice by mistake: a link that shows before Music Index holds the feed.
-- Uses: [ADR 0150](0150-studio-shows-a-change-from-outside-when-a-page-opens.md) for the outside check of the release page. [ADR 0124](0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md) item 5 for a link to another origin. [ADR 0175](0175-the-check-shows-what-music-index-holds.md) item 1 for the reads of Music Index.
+- Uses: [ADR 0259](0259-studio-checks-each-feed-and-the-left-panel-marks-its-state.md) for the outside check of the release page. [ADR 0124](0124-the-desktop-app-is-a-tauri-window-on-the-local-api.md) item 5 for a link to another origin. [ADR 0175](0175-the-check-shows-what-music-index-holds.md) item 1 for the reads of Music Index.
 - Source: [analysis of two journeys for a new independent artist](../research/2026-11-18-user-journeys/analysis.md), theme T1 and observation O8.
 
 ## Context

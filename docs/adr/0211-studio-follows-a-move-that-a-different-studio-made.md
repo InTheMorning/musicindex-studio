@@ -5,8 +5,8 @@
 - Owner: operator, with the technical choices of the planning model
 - Accepted: 2026-11-14 by the operator, through the questionnaire, from drawings. The operator selected "One warning with 'Follow the Move'" for the feed page. The operator selected "Follow as read-only, and offer to connect" for a move to a file host with no connection. The operator selected "Warning for a change and for a move" for the colors.
 - Technical choices: the planning model selected items 2 to 5, 8 to 12, 14, 16 to 19 and 21 to 23.
-- Changes: [ADR 0150](0150-studio-shows-a-change-from-outside-when-a-page-opens.md) items 2 to 4: the color of each result, and the notice of a move.
-- Changes: [ADR 0165](0165-the-left-panel-marks-the-state-of-each-feed.md) item 2: the color of the mark of an outside change.
+- Changes: [ADR 0150](../archive/adr/0150-studio-shows-a-change-from-outside-when-a-page-opens.md) items 2 to 4: the color of each result, and the notice of a move.
+- Changes: [ADR 0165](../archive/adr/0165-the-left-panel-marks-the-state-of-each-feed.md) item 2: the color of the mark of an outside change.
 - Uses: [ADR 0021](0021-public-address-of-a-feed.md) for the sources of a feed address. [ADR 0067](0067-a-read-only-feed-opens-in-the-editor.md) for a read-only feed. [ADR 0129](0129-a-draft-takes-a-change-of-the-hosted-file.md) for the comparison. [ADR 0128](0128-a-moved-feed-names-its-own-address.md) and [ADR 0190](0190-review-gives-the-return-wait-of-music-index.md) for a return. [ADR 0191](0191-a-return-warning-has-the-warning-color-and-a-sent-podping-can-go-again.md) item 1 and musicindex ADR 0068 R-STATUS-1 for the style of a warning.
 - Changed by: [ADR 0229](0229-the-media-host-after-a-follow-a-podping-again-and-empty-folders.md) items 1 to 3, on 2026-11-20. Items 11 and 16: the release files host follows when one connected file host gives each media address.
 - Changed: 2026-11-14 by the operator, after the build. The operator selected "Build the return function" for **Move It Back…**. Items 7, 17 and 18 give its form, which is a technical choice of the planning model. Item 16 has its own text.
@@ -31,16 +31,16 @@ The tile of the feed said "Changed outside Studio" in blue. The left panel showe
 ### The Result "Moved"
 
 1. A feed has the result "moved" when the file at its folder address is a pointer file. A pointer file names a different address in `itunes:new-feed-url`.
-2. The folder address is the address that the file host gives for the path of the feed (ADR 0021). The check reads it as a public address, so it needs no vault (ADR 0150 item 6).
-3. The result "moved" also includes the case of ADR 0150 item 3: the file at the public address of the feed names a new address.
-4. The core gives the result and the new address. The UI adds no rule (ADR 0150 item 9).
+2. The folder address is the address that the file host gives for the path of the feed (ADR 0021). The check reads it as a public address, so it needs no vault (ADR 0259 item 6).
+3. The result "moved" also includes the case of ADR 0259 item 3: the file at the public address of the feed names a new address.
+4. The core gives the result and the new address. The UI adds no rule (ADR 0259 item 9).
 5. The result "moved" comes before the result "changed". A feed with the result "moved" shows no notice "Other sources give a different address" for the same address.
 
 ### The Warning On The Feed Page
 
 6. One warning replaces the notices: "A different Studio moved this feed." It shows the label "New address", the address, and the name of the connected file host that gives it, when one does. It says "The old address has a pointer file."
-7. The warning has **Follow the Move**, **Move It Back…** and **Show the Difference**. **Show the Difference** shows in the conditions of ADR 0150 item 4. **Move It Back…** shows in the conditions of item 18.
-8. **Keep This File Host** of ADR 0150 item 4 stays in the warning, after the other buttons.
+7. The warning has **Follow the Move**, **Move It Back…** and **Show the Difference**. **Show the Difference** shows in the conditions of ADR 0259 item 4. **Move It Back…** shows in the conditions of item 18.
+8. **Keep This File Host** of ADR 0259 item 4 stays in the warning, after the other buttons.
 
 ### Follow The Move
 
@@ -65,9 +65,9 @@ The tile of the feed said "Changed outside Studio" in blue. The left panel showe
 ### The Colors
 
 20. An outside change and an outside move have the Warning color in each place: the mark of a tile, the mark of the left panel, and the notice on the feed page. The mark of a tile and the notice have the triangle icon.
-21. The mark of the left panel keeps its cloud icon and its place in the sequence of ADR 0165 item 2. Only its color changes.
+21. The mark of the left panel keeps its cloud icon and its place in the sequence of ADR 0259 item 15. Only its color changes.
 22. The notice "The hosted file changed outside Studio." is a warning, with **Read Again**.
-23. The notice "Music Index reads this feed from a different address." of ADR 0150 item 5 does not change in this ADR.
+23. The notice "Music Index reads this feed from a different address." of ADR 0259 item 5 does not change in this ADR.
 
 ## Alternatives Considered
 

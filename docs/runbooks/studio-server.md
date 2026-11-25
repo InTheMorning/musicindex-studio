@@ -212,7 +212,7 @@ Studio does not encrypt these data at rest, and the operator can read them ([ADR
 The People page of a user tells the user this.
 
 The backups of the data folder hold the same data. Keep each backup as safe as the server.
-The archive of "Export Account" holds the collection with no encryption too ([ADR 0107](../adr/0107-a-user-can-export-and-import-an-account.md)).
+The archive of "Export Account" holds the collection with no encryption too ([ADR 0262](../adr/0262-a-user-can-export-and-import-an-account.md)).
 The server sends the archive to the user and keeps no copy of it.
 
 ## 7. Memory

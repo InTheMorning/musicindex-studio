@@ -1,4 +1,4 @@
-//! The check for a change from outside Studio (ADR 0150).
+//! The check for a change from outside Studio (ADR 0259).
 //!
 //! The check reads the public address of a feed, so it needs no vault. It
 //! compares the bytes with the last file that Studio read or wrote. It writes
@@ -206,7 +206,7 @@ pub enum OutsideResult {
     },
 }
 
-/// True unless the user cleared the check box of ADR 0150 item 10.
+/// True unless the user cleared the check box of ADR 0259 item 10.
 ///
 /// # Errors
 ///
@@ -218,7 +218,7 @@ pub fn is_on(collection: &Collection) -> Result<bool, CollectionError> {
         .unwrap_or(true))
 }
 
-/// Set the check box of ADR 0150 item 10.
+/// Set the check box of ADR 0259 item 10.
 ///
 /// # Errors
 ///
@@ -227,7 +227,7 @@ pub fn set_on(collection: &Collection, on: bool) -> Result<(), CollectionError> 
     collection.set_setting(SETTING, &serde_json::Value::Bool(on))
 }
 
-/// The address to read, or `None` for a feed with no public address (ADR 0150
+/// The address to read, or `None` for a feed with no public address (ADR 0259
 /// item 6).
 #[must_use]
 pub fn address_of(row: &FeedRow) -> Option<String> {
@@ -362,7 +362,7 @@ pub fn follow_move_read(
 }
 
 /// Read the hosted file. A failed read gives `None`, and the earlier result
-/// stays (ADR 0150 item 7).
+/// stays (ADR 0259 item 7).
 #[must_use]
 pub fn read_hosted(web: &Web, url: &str) -> Option<Vec<u8>> {
     let limit = u64::try_from(MAX_FEED_BYTES).unwrap_or(u64::MAX);
@@ -460,7 +460,7 @@ pub fn apply_result(
     let mut check = collection.outside_check(id)?.unwrap_or_default();
     let sha = sha256_hex(&[bytes]);
     // "Keep This File Host" hides the result until the file changes again
-    // (ADR 0150 item 4).
+    // (ADR 0259 item 4).
     let result = if check.kept_sha.as_deref() == Some(sha.as_str()) {
         OutsideResult::Same
     } else {
@@ -509,7 +509,7 @@ pub fn stored_move_address(
 }
 
 /// "Keep This File Host": hide the result until the hosted file changes again
-/// (ADR 0150 item 4).
+/// (ADR 0259 item 4).
 ///
 /// # Errors
 ///
@@ -568,7 +568,7 @@ pub fn compare_folder(row: &FeedRow, bytes: &[u8], folder_url: &str) -> OutsideR
 }
 
 /// The address that musicindex gives for this feed when it is different from
-/// the public address (ADR 0150 item 5). No address gives `None`.
+/// the public address (ADR 0259 item 5). No address gives `None`.
 #[must_use]
 pub fn index_difference(row: &FeedRow, found: &IndexFeed) -> Option<String> {
     let own = address_of(row)?;
@@ -1010,14 +1010,14 @@ mod tests {
             OutsideResult::Moved {
                 url: "https://other.example/a.xml".to_owned()
             },
-            "ADR 0150 item 3"
+            "ADR 0259 item 3"
         );
         assert_eq!(
             stored_result(&collection, row.id).unwrap(),
             OutsideResult::Moved {
                 url: "https://other.example/a.xml".to_owned()
             },
-            "ADR 0150 item 7: a failed read keeps the earlier result."
+            "ADR 0259 item 7: a failed read keeps the earlier result."
         );
     }
 
@@ -1096,7 +1096,7 @@ mod tests {
         assert_eq!(
             apply_read(&collection, &row, &moved).unwrap(),
             OutsideResult::Same,
-            "ADR 0150 item 4"
+            "ADR 0259 item 4"
         );
         assert_eq!(
             apply_read(&collection, &row, &body("<description>y</description>")).unwrap(),
@@ -1115,7 +1115,7 @@ mod tests {
             Some("https://r2.example/a.xml")
         );
         row.public_url = None;
-        assert_eq!(address_of(&row), None, "ADR 0150 item 6");
+        assert_eq!(address_of(&row), None, "ADR 0259 item 6");
     }
 
     #[test]
@@ -1125,7 +1125,7 @@ mod tests {
         apply_read(&collection, &row, &body("<description>x</description>")).unwrap();
         assert!(
             collection.draft(row.id).unwrap().is_none(),
-            "ADR 0150 item 8"
+            "ADR 0259 item 8"
         );
     }
 }

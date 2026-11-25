@@ -84,7 +84,7 @@ impl Users {
     }
 
     /// The most bytes in the folder of a user (ADR 0204 item 43). The import
-    /// uses it as the limit of the archive (ADR 0107 item 15).
+    /// uses it as the limit of the archive (ADR 0262 item 15).
     #[must_use]
     pub fn storage_limit(&self) -> u64 {
         self.settings.storage_limit
@@ -205,7 +205,7 @@ fn open_user(
     #[cfg(test)] pass_all: bool,
     #[cfg(test)] clock: Option<studio_api::Clock>,
 ) -> Result<OpenUser, ApiError> {
-    // The manifest of an export holds the email and the Nostr key (ADR 0107
+    // The manifest of an export holds the email and the Nostr key (ADR 0262
     // item 6).
     let identity = AccountIdentity {
         email: settings.accounts.email_of(account_id).ok().flatten(),

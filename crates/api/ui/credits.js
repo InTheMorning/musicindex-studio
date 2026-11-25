@@ -1,4 +1,4 @@
-// The credits of a track (ADR 0206 item 23). A track with no persons uses the
+// The credits of a track (ADR 0258 item 23). A track with no persons uses the
 // album credits. This module has no Preact and no browser state.
 
 // Does the track use the album credits? It does when it has no persons.

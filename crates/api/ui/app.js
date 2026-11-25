@@ -1423,7 +1423,7 @@ export function RoleMenu({ id, label = 'Role', role, group, hint, status, pendin
 
 // The first choice is the type of the host. The form below it follows the
 // type (ADR 0045 item 4). A server has no folder host (ADR 0204).
-// `start` is the type that the form opens with (ADR 0221 item 6). `showType`
+// `start` is the type that the form opens with (ADR 0260 item 6). `showType`
 // hides the choice when the sheet shows the rows of step 2 (ADR 0122 item 2).
 // `startRoot` and `submitLabel` go to the folder form (ADR 0122 item 3).
 function AddHostForm({ feeds, connectors = [], onAdded, start, showType = true, startRoot = '', submitLabel = null, busyLabel = null }) {
@@ -1458,7 +1458,7 @@ function AddHostForm({ feeds, connectors = [], onAdded, start, showType = true, 
   </div>`;
 }
 
-// The card of the parent page of a new release (ADR 0230 items 9 and 10). With
+// The card of the parent page of a new release (ADR 0261 items 9 and 10). With
 // no parent, it says so, and the button selects one.
 function ParentCard({ card, onChange }) {
   return html`<section class="page-section"><div class="group"><div class="link-row static parent-card">
@@ -1470,7 +1470,7 @@ function ParentCard({ card, onChange }) {
 }
 
 // The sheet that selects the parent of a new release. The list has the
-// artist pages that can receive the release (ADR 0230 item 9).
+// artist pages that can receive the release (ADR 0261 item 9).
 function ParentSheet({ choices, onChoose, onClose }) {
   const ref = useSheet(true);
   return html`<dialog ref=${ref} class="sheet small" aria-labelledby="release-parent-title" onClose=${onClose}>
@@ -1621,9 +1621,9 @@ function AddFindSheet({ open, type, role, parent, connectors, onPick, onAdded, o
 // One form makes each new page or release, as a draft with no file on the host
 // yet (ADR 0212 items 6, 7, 9, 10 and 12, ADR 0032 items 6 to 9, ADR 0255 item 2, ADR 0053
 // item 2). "Feed file" starts from the title until the user types in it.
-// `start` gives `title`, `author`, `role` and `publisher_id` (ADR 0221 item 8, ADR 0256 item 7,
+// `start` gives `title`, `author`, `role` and `publisher_id` (ADR 0260 item 8, ADR 0256 item 7,
 // ADR 0218 item 6). A release shows the parent card first, and the row "Find on
-// Music Index" fills the form from a release (ADR 0230 items 9 to 15).
+// Music Index" fills the form from a release (ADR 0261 items 9 to 15).
 // `onKind` gets the type, the role and the name of the parent, for the title of the sheet.
 function MakeFeedForm({ connectors, feeds, startType, start = {}, onAdded, onKind }) {
   const [type, setType] = useState(startType);
@@ -2121,12 +2121,12 @@ function useNarrow() {
   return useMedia('(max-width: 760px)');
 }
 
-// The back and forward state of the shell, for each Bar (ADR 0206 item 10).
+// The back and forward state of the shell, for each Bar (ADR 0258 item 10).
 export const NavContext = createContext(null);
 
 // The toolbar of a screen. Each screen gives its own content, such as a
 // title or a breadcrumb, after the back control. The root page has no back
-// control (ADR 0206 item 13), so `back` is false there. The kind of pointer
+// control (ADR 0258 item 13), so `back` is false there. The kind of pointer
 // sets the back control: `‹ ›` with a mouse, and one circular `‹` named
 // "Back" by touch (musicindex ADR 0080 R-NAV-2 and R-NAV-3,
 // R-PROFILE-1).
@@ -2188,9 +2188,9 @@ export function Icon({ name, mirrored = false }) {
 }
 
 // The results of the check for a change from outside, with the feeds. The
-// shell gives them to the left panel (ADR 0165 item 6).
+// shell gives them to the left panel (ADR 0259 item 19).
 // `running` is a Set of the feed IDs that a click-started check reads now.
-// `check` reads a list of feeds (ADR 0230 items 17 and 18).
+// `check` reads a list of feeds (ADR 0261 items 17 and 18).
 // The handler of the button before a tree row of the Catalog (ADR 0254 item 5).
 const CatalogContext = createContext(() => {});
 // The function that opens the sheet of a page action: `({ id, action, above })`.
@@ -2201,7 +2201,7 @@ const CatalogDragContext = createContext({ narrow: true, busy: false, page: null
 const OutsideContext = createContext({ feeds: [], results: {}, running: new Set(), check: () => {} });
 
 // The state mark of a row of the left panel, for the feeds that `ids` covers
-// (ADR 0165 items 1 to 4). `set` is a list of feeds. It gives nothing for a
+// (ADR 0259 items 14 to 17). `set` is a list of feeds. It gives nothing for a
 // set that is up to date. The text is a tooltip and an accessible name.
 function useStateMark(set) {
   const { results, running } = useContext(OutsideContext);
@@ -2210,7 +2210,7 @@ function useStateMark(set) {
 
 // The click handler of a row with a mark. A row with the mark "Not checked"
 // also checks its feeds that are not checked. A row with a different mark, or
-// no mark, starts no check (ADR 0230 items 17 and 19).
+// no mark, starts no check (ADR 0261 items 17 and 19).
 function useOpenAndCheck(set, mark, open) {
   const { results, check } = useContext(OutsideContext);
   return () => {
@@ -3368,7 +3368,7 @@ function SettingsPage({ view, go, version }) {
 }
 
 // The mark of a setting or a tab with a change that is not saved (ADR 0166
-// item 9): the pencil of ADR 0165 item 2.
+// item 9): the pencil of ADR 0259 item 15.
 const NOT_SAVED_MARK = { icon: 'pencil', tone: 'accent', text: 'Not saved' };
 function SettingsPencil({ pending }) {
   return pending && html` <${StateMark} mark=${NOT_SAVED_MARK} />`;
@@ -3629,12 +3629,12 @@ function CatalogChangeCount({ set, go }) {
     <div class="actions"><button class="button action" type="button" onClick=${() => go({ name: 'change-set', id: set.id })}>Review</button></div></div>`;
 }
 
-// The left panel (ADR 0206 items 1, 6 and 7). It shows the destinations, or
+// The left panel (ADR 0258 items 1, 6 and 7). It shows the destinations, or
 // the outline of the open feed, and Hosts, Settings and Lock Studio at the
 // bottom. `panel` is the value of `leftPanel()`. Only the scroll area scrolls,
 // so that the brand and the footer stay in view (visual check of task 022).
 // At 760 px or less the left panel is not shown: its content is the root
-// page and the outline page of the stack (ADR 0206 item 13, musicindex ADR
+// page and the outline page of the stack (ADR 0258 item 13, musicindex ADR
 // 0030 R-SHELL-2).
 function LeftPanel({ panel, draft, changedFeeds, go, showReleases, onAdding, onImporting, onAddFeedRow, onLock, collections, catalogSet }) {
   if (panel.kind === 'destinations') {
@@ -3690,7 +3690,7 @@ function CatalogDropTop() {
 }
 
 // One destination row. A row below Releases shows the state mark of the
-// feeds that it covers, between the name and the count (ADR 0165 items 1 to 4).
+// feeds that it covers, between the name and the count (ADR 0259 items 14 to 17).
 // A tree row of a feed shows the open button before its title when rows are
 // below it, the second line, and the button "More" at its end (ADR 0254 items
 // 5 to 8). Each depth adds 16 px. A row with no open button keeps its space,
@@ -3787,7 +3787,7 @@ function AddTreeRow({ item, attrs, onAdd }) {
     <span class="num">＋</span><span class="row-label">${item.label}</span></button>`;
 }
 
-// The outline of an open feed (ADR 0206 item 7): the cover, the title and the
+// The outline of an open feed (ADR 0258 item 7): the cover, the title and the
 // type label, then one row for each item. The left panel shows it at a wide
 // width, and the outline page shows it at a narrow width. `showReleases` is
 // given at a wide width only, where the item "Releases" is in the panel.
@@ -3951,7 +3951,7 @@ function RootPage({ panel, go, onLock, collections, catalogSet }) {
   </div>`;
 }
 
-// The outline page of a narrow window (ADR 0206 item 14). Its bar has the
+// The outline page of a narrow window (ADR 0258 item 14). Its bar has the
 // back control, the title of the feed and the draft toolbar of the feed.
 function OutlinePage({ feed, panel, draft, changedFeeds, feeds, go, onAdding, onImporting, onAddFeedRow, onChanged, onListChanged, connectors }) {
   // A host operation can change the draft XML. After it, the shell saves the
@@ -3997,7 +3997,7 @@ export function LetterBar({ letters, idOf }) {
   </nav>`;
 }
 
-// The Releases page, the start page (ADR 0206 items 2 to 4, musicindex
+// The Releases page, the start page (ADR 0258 items 2 to 4, musicindex
 // ADR 0080 R-LIST-1). `list` is the sort and the view from the address.
 // `marked` is the feed that the last Back selection left marked. With a
 // `group`, the page shows the releases of one destination below Releases,
@@ -4020,7 +4020,7 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
   const headFeed = inGroup && head && head.id !== null ? feeds.find((f) => f.id === head.id) : null;
   const more = releaseAdd(headFeed, headFeed && headFeed.title);
   const [adding, setAdding] = useState(null);
-  // The groups "Not linked" and "Other" have no add menu (ADR 0230 item 2
+  // The groups "Not linked" and "Other" have no add menu (ADR 0261 item 2
   // names the top page and the pages of a publisher).
   const hideAdd = inGroup && !headFeed;
   const addedRelease = (f, makeInfo) => {
@@ -4037,7 +4037,7 @@ function ReleasesPage({ feeds, connectors, marked, list, group, groupSort, group
   const viewButton = (name, label, icon) => html`<button class="button quiet icon-button view-button" type="button"
     aria-label=${label} title=${label} aria-pressed=${list.view === name ? 'true' : 'false'}
     onClick=${() => onQuery({ view: name })}>${icon}</button>`;
-  // A collection with no feed starts at the Welcome page (ADR 0221 item 1).
+  // A collection with no feed starts at the Welcome page (ADR 0260 item 1).
   if (!inGroup && showWelcome(feeds)) return html`<${WelcomePage} connectors=${connectors} feeds=${feeds} onAdded=${onAddedFeed} />`;
   return html`<div>
     <${Bar}><span class="bar-title">${title}</span><${DeleteUndoBar} /><//>
@@ -4115,12 +4115,12 @@ function LevelFeedTile({ tile, view, outside, onOpen }) {
   </button></li></ul>`;
 }
 
-// The Welcome page of a collection with no feed (ADR 0221 items 1 to 3). Each
+// The Welcome page of a collection with no feed (ADR 0260 items 1 to 3). Each
 // row opens a sheet. The page writes nothing.
 function WelcomePage({ connectors, feeds, onAdded }) {
   const [sheet, setSheet] = useState(null);
   const [importing, setImporting] = useState(false);
-  // The import is offered where the shell permits it (ADR 0221 item 3).
+  // The import is offered where the shell permits it (ADR 0260 item 3).
   const canImport = !assetMode().server;
   return html`<div>
     <${Bar}><span class="bar-title">Welcome</span><//>
@@ -4159,7 +4159,7 @@ function WelcomeRow({ row, primary = false, selected = null, onClick }) {
   </button>`;
 }
 
-// The sheet of a musician, a label or a host (ADR 0240 item 3, ADR 0221 items 4 to 7, ADR 0122 item 2).
+// The sheet of a musician, a label or a host (ADR 0240 item 3, ADR 0260 items 4 to 7, ADR 0122 item 2).
 // Step 1 asks the name. Step 2 always shows. It has the select menu of the
 // connected file hosts, when one exists, and the rows of the file host types.
 // Then the draft of the publisher feed is made. Studio writes nothing (ADR 0007).
@@ -4255,13 +4255,13 @@ export function AddFeedRowSheet({ open, connectors, feeds, start, onAdded, onCon
     onClose=${() => { setFound(null); onClose(); }} />`;
 }
 
-// The navigation state of the session (ADR 0206 item 9). A reload keeps it
+// The navigation state of the session (ADR 0258 item 9). A reload keeps it
 // in session storage. If the read fails, or the state is not valid, Studio
 // starts again at Releases.
 const NAV_KEY = 'studio-nav';
 
 // The shortest time between two loads of the feed list on a focus of the
-// window (ADR 0165 item 10).
+// window (ADR 0259 item 22).
 const FOCUS_RELOAD_MS = 30000;
 
 function readNav() {
@@ -4466,7 +4466,7 @@ function Shell({ vault, onLock, version }) {
     addEventListener('popstate', onPop);
     return () => removeEventListener('popstate', onPop);
   }, []);
-  // A change of width makes the state of the new width (ADR 0206 item 14).
+  // A change of width makes the state of the new width (ADR 0258 item 14).
   // The current view stays. A state that already fits the width is kept.
   useEffect(() => {
     const current = navRef.current;
@@ -4528,7 +4528,7 @@ function Shell({ vault, onLock, version }) {
   }, [load]);
   // The list loads again when the window gets the focus again, so that a
   // change from a different window shows. At most one load runs in each
-  // FOCUS_RELOAD_MS (ADR 0165 item 10).
+  // FOCUS_RELOAD_MS (ADR 0259 item 22).
   const loadedAt = useRef(0);
   useEffect(() => {
     const again = () => {
@@ -4590,7 +4590,7 @@ function Shell({ vault, onLock, version }) {
   useUndoKeys(undoCatalog, () => {}, draftFeedId === null && ['root', 'releases', 'change-set'].includes(view.name) && catalogHistory.current.canUndo);
 
   // Each draft answer gives the state of its feed. The row of that feed in
-  // the list takes it, with no new read of the list (ADR 0165 item 9).
+  // the list takes it, with no new read of the list (ADR 0259 item 21).
   useEffect(() => {
     const given = draft.draftState;
     if (!given || given.id !== draftFeedId) return;
@@ -4612,7 +4612,7 @@ function Shell({ vault, onLock, version }) {
   }, [draftFeedId]);
   const collectionState = useCollectionMark();
   const collection = collectionState.mark;
-  // The Releases page checks again each time it opens (ADR 0165 item 5).
+  // The Releases page checks again each time it opens (ADR 0259 item 18).
   const releasesOpened = useRef({ shown: false, count: 0 });
   if (view.name === 'releases' && !releasesOpened.current.shown) releasesOpened.current.count += 1;
   releasesOpened.current.shown = view.name === 'releases';
@@ -5450,7 +5450,7 @@ function AccountPanel() {
   </div></section>`;
 }
 
-// ---- Export and import of an account (ADR 0107) ----
+// ---- Export and import of an account (ADR 0262) ----
 
 // The sheet that exports the account (screens 1 to 3). It reads the facts,
 // asks for a recovery key when no method opens the vault on a different
@@ -5604,7 +5604,7 @@ function WindowPanel({ draft, draftState, changed, causes }) {
 // The one store of the results of the check for a change from outside (ADR
 // 0165 items 5 and 6). It checks each feed after the list loads, and again
 // each time the Releases page opens (`key` changes). At most 4 reads run at
-// one time (ADR 0150 item 11). No worker runs. A failed request keeps the
+// one time (ADR 0259 item 11). No worker runs. A failed request keeps the
 // result before it.
 function useOutsideChecks(feeds, key) {
   const [results, setResults] = useState({});
@@ -5649,7 +5649,7 @@ function useOutsideChecks(feeds, key) {
   return { results, running, check };
 }
 
-// The notices of the check on a feed page (ADR 0150 items 2 to 5). Each new
+// The notices of the check on a feed page (ADR 0259 items 2 to 5). Each new
 // read of the feed checks again.
 function OutsideNotices({ feed, busy, refresh, onChanged, onCheck, onListChanged }) {
   const [check, setCheck] = useState(null);
@@ -5805,7 +5805,7 @@ function PodpingLines({ lines, disabled, send }) {
         ${line.action && html`<button class="button action" type="button" disabled=${disabled} onClick=${send}>${line.action}</button>`}</p>`);
 }
 
-// The check box of the check for a change from outside (ADR 0150 item 10).
+// The check box of the check for a change from outside (ADR 0259 item 10).
 function OutsidePanel({ draft, draftState, changed, causes }) {
   const [enabled, setEnabled] = useState(null);
   useEffect(() => { api('/settings/outside-check').then((r) => setEnabled(draftState.values.outside ?? r.enabled), () => {}); }, []);
@@ -6000,7 +6000,7 @@ function CollectionsPanel() {
   </div></section>`;
 }
 
-// The section "Move Studio" of the Settings page on the desktop (ADR 0107
+// The section "Move Studio" of the Settings page on the desktop (ADR 0262
 // item 3). A server has "Export Account" in the Account panel.
 function MovePanel() {
   const [open, setOpen] = useState(false);
@@ -6086,7 +6086,7 @@ function ImportShell({ title, intro, onClose, children }) {
   </dialog>`;
 }
 
-// "Import an Account" (ADR 0107 items 9 to 14, screens 5 to 7). The first
+// "Import an Account" (ADR 0262 items 9 to 14, screens 5 to 7). The first
 // step selects the file and sends it. The second step opens the vault of the
 // file. On a server, `onDone` follows the new session. The desktop reads its
 // state again.
@@ -6261,7 +6261,7 @@ function Studio({ epoch }) {
   if (library.root === null) {
     return html`<${LibrarySheet} defaultRoot=${library.default_root} onDone=${load} />`;
   }
-  // A new user with no feed sees the Welcome page in the Shell (ADR 0221
+  // A new user with no feed sees the Welcome page in the Shell (ADR 0260
   // item 11). The vault comes when the user first adds a secret (ADR 0020).
   return html`<${Shell} vault=${status.vault} onLock=${load} version=${status.version_line} />`;
 }

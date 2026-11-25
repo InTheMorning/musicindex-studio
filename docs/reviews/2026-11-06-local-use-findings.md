@@ -262,4 +262,4 @@ Corrected ([ADR 0146](../adr/0146-link-words-already-marks-and-credit-edits.md) 
 
 ### 38. Studio Does Not Tell The User About A Change From Outside
 
-Corrected ([ADR 0150](../adr/0150-studio-shows-a-change-from-outside-when-a-page-opens.md), task 098). Studio found a change from outside only at "Read Again" or as a refused write. The Releases page and each feed page now show it when they open, and a feed page also compares the address of musicindex.
+Corrected ([ADR 0150](../archive/adr/0150-studio-shows-a-change-from-outside-when-a-page-opens.md), task 098). Studio found a change from outside only at "Read Again" or as a refused write. The Releases page and each feed page now show it when they open, and a feed page also compares the address of musicindex.

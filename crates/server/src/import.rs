@@ -1,4 +1,4 @@
-//! The import of an account at sign-up (ADR 0107 items 9 to 14).
+//! The import of an account at sign-up (ADR 0262 items 9 to 14).
 //!
 //! The routes `/auth/v1/import` need no session. The browser starts an
 //! import, sends the archive in parts (ADR 0059), asks for a check, and
@@ -54,8 +54,8 @@ struct StartBody {
 }
 
 /// `POST /auth/v1/import`: start an import. A server with invite codes needs
-/// an unused code, as a sign-up does (ADR 0107 item 9). The size of the file
-/// must fit the storage limit of a new account (ADR 0107 item 15).
+/// an unused code, as a sign-up does (ADR 0262 item 9). The size of the file
+/// must fit the storage limit of a new account (ADR 0262 item 15).
 pub async fn start(State(state): State<Shared>, request: Request) -> Response {
     let address = limits::client_address(state.client_header.as_deref(), &request);
     if !state.import_starts.allow(&address) {
@@ -120,7 +120,7 @@ pub async fn cancel(State(state): State<Shared>, Path(upload): Path<String>) -> 
 
 /// `POST /auth/v1/import/{upload}/check`: unpack the file, and give the
 /// facts of the screen "Open the vault of the file", or 422
-/// `archive_invalid` with the cause (ADR 0107 item 11).
+/// `archive_invalid` with the cause (ADR 0262 item 11).
 pub async fn check(State(state): State<Shared>, Path(upload): Path<String>) -> Response {
     let limit = state.users.storage_limit();
     match store(&state, move |store| {
@@ -141,7 +141,7 @@ enum Identity {
 
 /// The identity of the new account: the Nostr key of the body, or the
 /// email of the manifest, or the email of the body when the manifest has
-/// none (ADR 0107 item 12).
+/// none (ADR 0262 item 12).
 fn identity_of(
     staged: &Staged,
     body: &ImportOpen,
@@ -266,7 +266,7 @@ async fn signer_credential(
 /// `POST /auth/v1/import/{upload}/open`: open the vault of the file with a
 /// passphrase, a recovery key, a vault key from a NIP-07 signer or a NIP-46
 /// connection. The server then makes the account, moves the files to its
-/// user folder and starts a session (ADR 0107 items 12 and 13).
+/// user folder and starts a session (ADR 0262 items 12 and 13).
 pub async fn open(
     State(state): State<Shared>,
     Path(upload): Path<String>,
@@ -433,7 +433,7 @@ async fn make_account(
             )
         }
         Err(response) => {
-            // ADR 0107 item 13 and task 071c item 4: a failed import leaves
+            // ADR 0262 item 13 and task 071c item 4: a failed import leaves
             // no account and no user folder.
             state.users.forget(account_id).await;
             let _ = state.accounts.undo_sign_up(account_id, invite);
@@ -507,7 +507,7 @@ async fn open_new_user(
 }
 
 /// `POST /auth/v1/import-notice/close`: close the notice of an import
-/// (ADR 0107 item 14). The route needs a session and the CSRF header.
+/// (ADR 0262 item 14). The route needs a session and the CSRF header.
 pub async fn close_notice(State(state): State<Shared>, request: Request) -> Response {
     let session = match session::active_session(&state, request.headers()).await {
         Ok(session) => session,

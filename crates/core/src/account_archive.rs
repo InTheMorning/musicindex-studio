@@ -1,4 +1,4 @@
-//! The archive of an account (ADR 0107 items 6 and 11).
+//! The archive of an account (ADR 0262 items 6 and 11).
 //!
 //! An archive is one `tar` stream. It holds `manifest.json` first, then
 //! `vault.json`, `grants/`, `collection.sqlite` and `library/`. The vault
@@ -31,7 +31,7 @@ const GRANTS: &str = "grants";
 const LIBRARY: &str = "library";
 
 /// The limits of one archive. A hostile archive cannot fill the disk
-/// without bound (ADR 0107 item 15).
+/// without bound (ADR 0262 item 15).
 ///
 /// The server also applies its storage limit before it calls the core. These
 /// limits are the backstop of the core.
@@ -54,7 +54,7 @@ impl Limits {
 /// The largest size of the manifest entry, in bytes.
 const MAX_MANIFEST_BYTES: u64 = 64 * 1024;
 
-/// `manifest.json`. It holds no secret and no wrapper (ADR 0107 item 6).
+/// `manifest.json`. It holds no secret and no wrapper (ADR 0262 item 6).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Manifest {
@@ -94,7 +94,7 @@ impl Manifest {
     }
 }
 
-/// The cause of a refusal (ADR 0107 item 11).
+/// The cause of a refusal (ADR 0262 item 11).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum ArchiveCause {
@@ -108,7 +108,7 @@ pub enum ArchiveCause {
     LinkEntry,
     /// An entry is a device file, a pipe or another special file.
     SpecialEntry,
-    /// An entry is not one of the files of ADR 0107 item 6.
+    /// An entry is not one of the files of ADR 0262 item 6.
     UnexpectedEntry,
     /// Two entries have the same path.
     DuplicateEntry,
@@ -244,7 +244,7 @@ pub fn write_archive<W: Write>(
 /// in `library`.
 ///
 /// The files of `library` go into `library/` of the archive, also when
-/// `library` is outside `folder` (the desktop, ADR 0107 item 6). With
+/// `library` is outside `folder` (the desktop, ADR 0262 item 6). With
 /// `None`, or a path that is not a folder, the archive has no `library/`.
 /// `collection.sqlite` goes through the SQLite backup command into a
 /// temporary file in `folder`, and Studio removes the file at the end, also
@@ -440,7 +440,7 @@ fn tar_file_bytes(size: u64) -> u64 {
 }
 
 /// Estimate the size of the archive that [`write_archive_from`] writes for
-/// the same arguments (ADR 0107 items 5 and 6).
+/// the same arguments (ADR 0262 items 5 and 6).
 ///
 /// # Errors
 ///
@@ -508,7 +508,7 @@ pub enum LibraryPolicy {
 fn invalid(e: rusqlite::Error) -> ArchiveError {
     ArchiveError::new(
         ArchiveCause::InvalidCollection,
-        format!("ADR 0107 item 11: collection.sqlite cannot be read: {e}"),
+        format!("ADR 0262 item 11: collection.sqlite cannot be read: {e}"),
     )
 }
 
@@ -516,7 +516,7 @@ fn invalid(e: rusqlite::Error) -> ArchiveError {
 /// run before Studio opens it. The archive is hostile data, so the
 /// connection does not trust the schema (no function of the file runs),
 /// and Studio loads no extension. A trigger or a view that the Studio
-/// schema does not define is a refusal (ADR 0107 item 11).
+/// schema does not define is a refusal (ADR 0262 item 11).
 fn open_unpacked(folder: &Path) -> Result<rusqlite::Connection, ArchiveError> {
     let db = rusqlite::Connection::open_with_flags(
         folder.join(COLLECTION),
@@ -541,7 +541,7 @@ fn open_unpacked(folder: &Path) -> Result<rusqlite::Connection, ArchiveError> {
         return Err(ArchiveError::new(
             ArchiveCause::InvalidCollection,
             format!(
-                "ADR 0107 item 11: collection.sqlite has the trigger or view {name}, which the schema of Studio does not define"
+                "ADR 0262 item 11: collection.sqlite has the trigger or view {name}, which the schema of Studio does not define"
             ),
         ));
     }
@@ -551,7 +551,7 @@ fn open_unpacked(folder: &Path) -> Result<rusqlite::Connection, ArchiveError> {
 /// Remove the waiting announcements and the queued downloads of the
 /// unpacked collection. The workspace of the new account resumes both
 /// queues at its start, and an import must send no podping and start no
-/// download (ADR 0107 item 13). Call it before Studio opens the collection.
+/// download (ADR 0262 item 13). Call it before Studio opens the collection.
 ///
 /// # Errors
 ///
@@ -579,7 +579,7 @@ pub fn clear_queues(folder: &Path) -> Result<(), ArchiveError> {
 }
 
 /// Fix the `library_root` setting in the unpacked `collection.sqlite` of
-/// `folder` (ADR 0107 items 1 and 13). Call it before Studio opens the
+/// `folder` (ADR 0262 items 1 and 13). Call it before Studio opens the
 /// collection, so that a hostile archive cannot make Studio read or write
 /// outside the new folder. A collection with no `settings` table has no
 /// `library_root` to fix.
@@ -634,7 +634,7 @@ pub fn reset_library_root(folder: &Path, policy: LibraryPolicy) -> Result<(), Ar
 
 /// Read each entry of the archive, and give the manifest.
 ///
-/// This is the check of ADR 0107 item 11. It writes nothing. It uses
+/// This is the check of ADR 0262 item 11. It writes nothing. It uses
 /// [`Limits::DEFAULT`].
 ///
 /// # Errors
@@ -657,7 +657,7 @@ pub fn check_archive_with<R: Read>(reader: R, limits: Limits) -> Result<Manifest
 /// Write each entry of the archive into `folder`.
 ///
 /// `folder` must not exist, or must be an empty folder. Each entry gets the
-/// checks of ADR 0107 item 11 before Studio writes it. `manifest.json` is
+/// checks of ADR 0262 item 11 before Studio writes it. `manifest.json` is
 /// checked and not written. On Unix, folders get the mode 0700, and
 /// `vault.json` and the grant vaults get 0600 (ADR 0104). After a refusal or
 /// a failure, `folder` has no file (it stays only when it existed before).
@@ -698,14 +698,14 @@ fn prepare_target(folder: &Path) -> Result<bool, ArchiveError> {
             if children.next().is_some() {
                 return Err(ArchiveError::new(
                     ArchiveCause::BadTarget,
-                    "ADR 0107 item 9: an import writes only into a new, empty folder",
+                    "ADR 0262 item 9: an import writes only into a new, empty folder",
                 ));
             }
             Ok(false)
         }
         Ok(_) => Err(ArchiveError::new(
             ArchiveCause::BadTarget,
-            "ADR 0107 item 9: the target is not a folder",
+            "ADR 0262 item 9: the target is not a folder",
         )),
         Err(e) if e.kind() == io::ErrorKind::NotFound => {
             make_dir(folder).map_err(|e| ArchiveError::io(&e))?;
@@ -751,12 +751,12 @@ enum Place {
     Other,
 }
 
-/// Check the path of an entry against the files of ADR 0107 item 6.
+/// Check the path of an entry against the files of ADR 0262 item 6.
 fn place(path: &Path, is_dir: bool) -> Result<(Vec<String>, Place), ArchiveError> {
     let unsafe_path = |why: &str| {
         ArchiveError::new(
             ArchiveCause::UnsafePath,
-            format!("ADR 0107 item 11: the entry {} {why}", path.display()),
+            format!("ADR 0262 item 11: the entry {} {why}", path.display()),
         )
     };
     let mut parts = Vec::new();
@@ -787,7 +787,7 @@ fn place(path: &Path, is_dir: bool) -> Result<(Vec<String>, Place), ArchiveError
             return Err(ArchiveError::new(
                 ArchiveCause::UnexpectedEntry,
                 format!(
-                    "ADR 0107 item 11: the entry {} is not a file of an account archive",
+                    "ADR 0262 item 11: the entry {} is not a file of an account archive",
                     path.display()
                 ),
             ));
@@ -817,7 +817,7 @@ fn walk<R: Read>(
         if count > limits.max_entries {
             return Err(ArchiveError::new(
                 ArchiveCause::TooManyEntries,
-                "ADR 0107 item 15: the archive has too many entries",
+                "ADR 0262 item 15: the archive has too many entries",
             ));
         }
         let path = entry
@@ -830,14 +830,14 @@ fn walk<R: Read>(
             tar::EntryType::Symlink | tar::EntryType::Link => {
                 return Err(ArchiveError::new(
                     ArchiveCause::LinkEntry,
-                    format!("ADR 0107 item 11: the entry {} is a link", path.display()),
+                    format!("ADR 0262 item 11: the entry {} is a link", path.display()),
                 ));
             }
             _ => {
                 return Err(ArchiveError::new(
                     ArchiveCause::SpecialEntry,
                     format!(
-                        "ADR 0107 item 11: the entry {} is not a plain file or folder",
+                        "ADR 0262 item 11: the entry {} is not a plain file or folder",
                         path.display()
                     ),
                 ));
@@ -848,14 +848,14 @@ fn walk<R: Read>(
         if total > limits.max_total_bytes {
             return Err(ArchiveError::new(
                 ArchiveCause::TooLarge,
-                "ADR 0107 item 15: the archive is larger than the limit",
+                "ADR 0262 item 15: the archive is larger than the limit",
             ));
         }
         if manifest.is_none() {
             if found != Place::Manifest {
                 return Err(ArchiveError::new(
                     ArchiveCause::MissingManifest,
-                    "ADR 0107 item 6: manifest.json must be the first entry",
+                    "ADR 0262 item 6: manifest.json must be the first entry",
                 ));
             }
             let size = entry.size();
@@ -866,14 +866,14 @@ fn walk<R: Read>(
         if found == Place::Manifest {
             return Err(ArchiveError::new(
                 ArchiveCause::DuplicateEntry,
-                "ADR 0107 item 11: manifest.json is in the archive two times",
+                "ADR 0262 item 11: manifest.json is in the archive two times",
             ));
         }
         if !is_dir && !seen.insert(parts.clone()) {
             return Err(ArchiveError::new(
                 ArchiveCause::DuplicateEntry,
                 format!(
-                    "ADR 0107 item 11: the entry {} is in the archive two times",
+                    "ADR 0262 item 11: the entry {} is in the archive two times",
                     path.display()
                 ),
             ));
@@ -890,13 +890,13 @@ fn walk<R: Read>(
     let manifest = manifest.ok_or_else(|| {
         ArchiveError::new(
             ArchiveCause::MissingManifest,
-            "ADR 0107 item 6: the archive has no manifest.json",
+            "ADR 0262 item 6: the archive has no manifest.json",
         )
     })?;
     if !(has_vault && has_collection) {
         return Err(ArchiveError::new(
             ArchiveCause::MissingFile,
-            "ADR 0107 item 6: the archive needs vault.json and collection.sqlite",
+            "ADR 0262 item 6: the archive needs vault.json and collection.sqlite",
         ));
     }
     Ok(manifest)
@@ -920,7 +920,7 @@ fn read_manifest<R: Read>(entry: &mut R, size: u64) -> Result<Manifest, ArchiveE
         return Err(ArchiveError::new(
             ArchiveCause::UnknownFormat,
             format!(
-                "ADR 0107 item 11: the archive has format version {}, and this Studio reads version {}",
+                "ADR 0262 item 11: the archive has format version {}, and this Studio reads version {}",
                 manifest.format_version,
                 Manifest::FORMAT_VERSION
             ),
@@ -930,7 +930,7 @@ fn read_manifest<R: Read>(entry: &mut R, size: u64) -> Result<Manifest, ArchiveE
         return Err(ArchiveError::new(
             ArchiveCause::NewerSchema,
             format!(
-                "ADR 0107 item 11: the collection has schema version {}, and this Studio knows only {SCHEMA_VERSION}",
+                "ADR 0262 item 11: the collection has schema version {}, and this Studio knows only {SCHEMA_VERSION}",
                 manifest.schema_version
             ),
         ));
@@ -967,7 +967,7 @@ fn write_entry<R: Read>(
         if e.kind() == io::ErrorKind::AlreadyExists {
             ArchiveError::new(
                 ArchiveCause::DuplicateEntry,
-                "ADR 0107 item 11: an entry is in the archive two times",
+                "ADR 0262 item 11: an entry is in the archive two times",
             )
         } else {
             ArchiveError::io(&e)
@@ -1036,7 +1036,7 @@ mod tests {
         let unpacked = unpack_archive(&bytes[..], &target).unwrap();
         assert_eq!(
             manifest, unpacked,
-            "ADR 0107 item 6: check and unpack must read one manifest"
+            "ADR 0262 item 6: check and unpack must read one manifest"
         );
         assert_eq!(
             fs::read(target.join("vault.json")).unwrap(),
@@ -1054,13 +1054,13 @@ mod tests {
             assert_eq!(
                 fs::read(source.join(name)).unwrap(),
                 fs::read(target.join(name)).unwrap(),
-                "ADR 0107 item 6: {name} must arrive as it is"
+                "ADR 0262 item 6: {name} must arrive as it is"
             );
         }
         assert_eq!(
             listing(&target),
             listing(&source),
-            "ADR 0107 item 6: the export must leave no temporary file, and the import must write the same files"
+            "ADR 0262 item 6: the export must leave no temporary file, and the import must write the same files"
         );
         let json = serde_json::to_value(&manifest).unwrap();
         let mut keys: Vec<&str> = json
@@ -1080,7 +1080,7 @@ mod tests {
                 "schema_version",
                 "studio_version"
             ],
-            "ADR 0107 item 6: the manifest must hold no secret and no wrapper. Do not add a field."
+            "ADR 0262 item 6: the manifest must hold no secret and no wrapper. Do not add a field."
         );
     }
 
@@ -1095,7 +1095,7 @@ mod tests {
         assert!(target.join("library/album/album.xml").is_file());
         assert!(
             !target.join("library/album/track.mp3").exists(),
-            "ADR 0107 item 6: include_assets false must leave out audio and images"
+            "ADR 0262 item 6: include_assets false must leave out audio and images"
         );
     }
 
@@ -1125,7 +1125,7 @@ mod tests {
             listing(dir.path())
                 .iter()
                 .all(|n| !n.starts_with(".collection-export")),
-            "ADR 0107 item 6: write_archive must remove its temporary copy of collection.sqlite after a failure"
+            "ADR 0262 item 6: write_archive must remove its temporary copy of collection.sqlite after a failure"
         );
     }
 
@@ -1251,12 +1251,12 @@ mod tests {
             assert_eq!(
                 error.cause(),
                 cause,
-                "ADR 0107 item 11: {label} must be refused with its cause. Check the entry before the write in walk()."
+                "ADR 0262 item 11: {label} must be refused with its cause. Check the entry before the write in walk()."
             );
             assert!(error.is_refusal());
             assert!(
                 !target.exists() && !dir.path().join("escape.txt").exists(),
-                "ADR 0107 item 11: {label}: a refused archive must leave no file. Clean the target in unpack_archive_with()."
+                "ADR 0262 item 11: {label}: a refused archive must leave no file. Clean the target in unpack_archive_with()."
             );
             // An existing empty folder stays, and stays empty.
             let again = dir.path().join("empty");
@@ -1264,11 +1264,11 @@ mod tests {
             assert!(unpack_archive(&bytes[..], &again).is_err());
             assert!(
                 listing(&again).is_empty(),
-                "ADR 0107 item 11: {label}: the empty folder must have no file after a refusal"
+                "ADR 0262 item 11: {label}: the empty folder must have no file after a refusal"
             );
             assert!(
                 check_archive(&bytes[..]).is_err(),
-                "ADR 0107 item 11: {label}: check_archive must refuse it too"
+                "ADR 0262 item 11: {label}: check_archive must refuse it too"
             );
         }
     }
@@ -1293,7 +1293,7 @@ mod tests {
             let error = unpack_archive(&bytes[..], &target).unwrap_err();
             assert!(
                 !target.exists(),
-                "ADR 0107 item 11: {name}: a refused archive must leave no folder"
+                "ADR 0262 item 11: {name}: a refused archive must leave no folder"
             );
             error.cause()
         };
@@ -1311,7 +1311,7 @@ mod tests {
                 "c"
             ),
             ArchiveCause::InvalidManifest,
-            "ADR 0107 item 6: the manifest must refuse a field it does not know"
+            "ADR 0262 item 6: the manifest must refuse a field it does not know"
         );
         let mut raw = Raw(Vec::new());
         raw.entry(b"vault.json", b'0', b"", b"{}");
@@ -1336,7 +1336,7 @@ mod tests {
         assert_eq!(
             error.cause(),
             ArchiveCause::BadTarget,
-            "ADR 0107 item 9: refuse a folder with a file"
+            "ADR 0262 item 9: refuse a folder with a file"
         );
         assert_eq!(fs::read(full.join("keep.txt")).unwrap(), b"mine");
         assert_eq!(listing(&full), ["keep.txt"]);
@@ -1368,7 +1368,7 @@ mod tests {
                 .unwrap_err()
                 .cause(),
             ArchiveCause::TooLarge,
-            "ADR 0107 item 15: a hostile archive must not fill the disk. Keep the total size limit."
+            "ADR 0262 item 15: a hostile archive must not fill the disk. Keep the total size limit."
         );
         assert!(!target.exists());
     }
@@ -1411,12 +1411,12 @@ mod tests {
         assert_eq!(
             collection.setting("library_root").unwrap(),
             Some(json!("library")),
-            "ADR 0107 item 1: the archive must keep the library path relative"
+            "ADR 0262 item 1: the archive must keep the library path relative"
         );
         assert_eq!(
             collection.library_root().unwrap(),
             Some(target.join("library")),
-            "ADR 0107 item 1: a relative library_root must read against the new data folder"
+            "ADR 0262 item 1: a relative library_root must read against the new data folder"
         );
     }
 
@@ -1428,7 +1428,7 @@ mod tests {
             collection.set_setting("library_root", &json!(bad)).unwrap();
             assert!(
                 collection.library_root().is_err(),
-                "ADR 0107 item 1: an imported library_root must not leave the data folder. Refuse {bad:?}."
+                "ADR 0262 item 1: an imported library_root must not leave the data folder. Refuse {bad:?}."
             );
         }
     }
@@ -1452,7 +1452,7 @@ mod tests {
         assert_eq!(
             fs::read(target.join("library/album/track.mp3")).unwrap(),
             b"audio",
-            "ADR 0107 item 6: a library outside the data folder must go into library/ of the archive. Pass the library path to write_archive_from."
+            "ADR 0262 item 6: a library outside the data folder must go into library/ of the archive. Pass the library path to write_archive_from."
         );
     }
 
@@ -1468,7 +1468,7 @@ mod tests {
             let actual = pack(&source, assets).len() as u64;
             assert!(
                 actual.abs_diff(estimate) <= 8192,
-                "ADR 0107 item 4: the size estimate {estimate} must be near the archive size {actual} (assets {assets})"
+                "ADR 0262 item 4: the size estimate {estimate} must be near the archive size {actual} (assets {assets})"
             );
         }
         assert!(sizes.without_assets < sizes.with_assets);
@@ -1511,7 +1511,7 @@ mod tests {
                 assert_eq!(
                     read().as_deref(),
                     Some(own.as_str()),
-                    "ADR 0107 item 1: an imported library_root {bad:?} must become library ({policy:?}). Call reset_library_root after the unpack."
+                    "ADR 0262 item 1: an imported library_root {bad:?} must become library ({policy:?}). Call reset_library_root after the unpack."
                 );
             }
         }
@@ -1538,7 +1538,7 @@ mod tests {
         let error = reset_library_root(dir.path(), LibraryPolicy::Own).unwrap_err();
         assert!(
             error.is_refusal() && error.cause() == ArchiveCause::InvalidCollection,
-            "ADR 0107 item 11: a collection.sqlite that is not a database must be a refusal, not a 500: {error}"
+            "ADR 0262 item 11: a collection.sqlite that is not a database must be a refusal, not a 500: {error}"
         );
     }
 
@@ -1560,7 +1560,7 @@ mod tests {
         assert_eq!(
             live.setting("marker").unwrap(),
             Some(json!("new")),
-            "ADR 0107 item 9: the desktop import must replace the content of the open collection"
+            "ADR 0262 item 9: the desktop import must replace the content of the open collection"
         );
         assert_eq!(live.account_counts().unwrap().feeds, 0);
     }
@@ -1594,12 +1594,12 @@ mod tests {
         assert_eq!(
             count("SELECT COUNT(*) FROM announcements WHERE state = 'waiting'"),
             0,
-            "ADR 0107 item 13: an import must not send a waiting announcement. Call clear_queues after the unpack."
+            "ADR 0262 item 13: an import must not send a waiting announcement. Call clear_queues after the unpack."
         );
         assert_eq!(
             count("SELECT COUNT(*) FROM downloads WHERE state = 'queued'"),
             0,
-            "ADR 0107 item 13: an import must not start a queued download. Call clear_queues after the unpack."
+            "ADR 0262 item 13: an import must not start a queued download. Call clear_queues after the unpack."
         );
         assert_eq!(count("SELECT COUNT(*) FROM announcements"), 2);
         assert_eq!(count("SELECT COUNT(*) FROM downloads"), 1);
@@ -1626,7 +1626,7 @@ mod tests {
             ] {
                 assert!(
                     error.is_refusal() && error.cause() == ArchiveCause::InvalidCollection,
-                    "ADR 0107 item 11: a trigger or view that the Studio schema does not define must be a refusal ({sql}): {error}"
+                    "ADR 0262 item 11: a trigger or view that the Studio schema does not define must be a refusal ({sql}): {error}"
                 );
             }
             let db = rusqlite::Connection::open(source.join("collection.sqlite")).unwrap();

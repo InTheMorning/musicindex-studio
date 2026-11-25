@@ -1348,7 +1348,7 @@ function ImportSheet({ feedId, open, hasAlbumImage, onClose, onAdd, onAddress })
           });
           // The import sheet takes audio files and image files only. The
           // upload route also accepts a lyrics file, so remove it and show
-          // the error of an unsupported file (ADR 0206 item 24).
+          // the error of an unsupported file (ADR 0258 item 24).
           if (facts.kind !== 'audio' && facts.kind !== 'image') {
             removeFiles(facts);
             throw { code: 'unsupported_media' };
@@ -1946,7 +1946,7 @@ export async function removeFeedFromCollection(feed, deleteUndo, onRemoved) {
   await onRemoved?.();
   return true;
 }
-// Opens the Review sheet on the merge of the hosted file (ADR 0150 item 4).
+// Opens the Review sheet on the merge of the hosted file (ADR 0259 item 4).
 export const OPEN_MERGE = 'studio-open-merge';
 export const OPEN_FEED_MOVE = 'studio-open-feed-move';
 export const OPEN_DELETE_REVIEW = 'studio-open-delete-review';
@@ -2759,7 +2759,7 @@ function FeedDelete({ feed, draft, onListChanged }) {
   const keepDeleteDraft = useRef(false);
   const deleteDraftStarted = useRef(false);
   const action = useAction();
-  // The first sheet shows no error of an earlier try (ADR 0230 item 24).
+  // The first sheet shows no error of an earlier try (ADR 0261 item 24).
   // `errorNow` is the error of the last render. `dismissed` is the error
   // that was there when the sheet opened.
   const errorNow = useRef(null);
@@ -3186,7 +3186,7 @@ function ArtworkRow({ summary, image, onOpen }) {
 }
 
 // The channel fields that the album page and the playlist page share. The
-// list `fields` gives the sequence of the page (ADR 0206). The language is
+// list `fields` gives the sequence of the page (ADR 0258). The language is
 // on the page "Feed settings".
 // The row "Nostr profile" of the album, the publisher feed and the playlist:
 // the feed key, a `podcast:txt` with `purpose="npub"` (ADR 0074).
@@ -3305,7 +3305,7 @@ const showSections = (list, shown) => list.map((section) => shown[section.id](se
 // function that gives its markup.
 const showEach = (ids, shown) => ids.map((id) => shown[id]());
 
-// The explicit switch of a channel (ADR 0206 item 19, ADR 0065). The switch
+// The explicit switch of a channel (ADR 0258 item 19, ADR 0065). The switch
 // shows off when the feed has no `itunes:explicit`, and Studio sets no value
 // until the user changes it. A change sends `true` or `false`. The core
 // keeps the form of the feed at the draft save.
@@ -3358,7 +3358,7 @@ function ReleaseKindField({ feed, draft, onListChanged }) {
 const isLocked = (locked) => !!locked && (locked.value || '').trim().toLowerCase() === 'yes';
 
 // The page "Feed settings": the language, the owner, the keywords, the lock
-// and the two editor fields (ADR 0206 items 18 to 22, ADR 0206 item 37). An empty field gives `null`, so that
+// and the two editor fields (ADR 0258 items 18 to 22, ADR 0258 item 37). An empty field gives `null`, so that
 // Studio writes no empty element. No field refuses a value that is not an
 // email address. The core removes the space at the ends of each text.
 function SettingsPage({ model, update, album, op3Tracks }) {
@@ -3683,11 +3683,11 @@ function PlaylistPickerSheet({ open, remoteItems, onAdd, onClose }) {
   </dialog>`;
 }
 
-// ---- The artwork list (ADR 0206 items 25 to 27) ----
+// ---- The artwork list (ADR 0258 items 25 to 27) ----
 
 const BLANK_IMAGE = { href: '', alt: null, aspect_ratio: null, width: null, height: null, media_type: null, purpose: null };
 
-// The facts of the image at an address (ADR 0206 items 25 to 27, ADR 0109).
+// The facts of the image at an address (ADR 0258 items 25 to 27, ADR 0109).
 // The browser reads the size of the image from its host. The core reads the
 // type of the response (item 7 of the ADR). A held file comes through
 // Studio. A failure gives `null`.
@@ -3867,7 +3867,7 @@ function CreditsPage({ model, update, bad }) {
 
 // The Value routes page: the album recipients, with no details around them
 // (task 014c step 3, ADR 0029 item 9). The page is at most 560 px wide
-// (ADR 0206 item 15).
+// (ADR 0258 item 15).
 function RecipientsPage({ model, update, openAdd, onAddOpened, wrongAddresses }) {
   return html`<div class="value-routes"><p class="hint">Value Routes tell podcast apps where to send the payments of listeners.</p><${AlbumPayments} model=${model} update=${update} openAdd=${openAdd} onAddOpened=${onAddOpened} wrongAddresses=${wrongAddresses} /></div>`;
 }
@@ -4552,7 +4552,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, view,
   // check boxes do not move (task 254 check, finding 1).
   const [roleChanged, setRoleChanged] = useState([]);
   const [chosen, setChosen] = useState('');
-  // The row of the Add feeds page that is open, from the first steps (ADR 0221).
+  // The row of the Add feeds page that is open, from the first steps (ADR 0260).
   const [addOpen, setAddOpen] = useState(null);
   // The start role of the form that a row of a new hosting page opens (ADR 0240 item 3).
   const [addRole, setAddRole] = useState(null);
@@ -4773,7 +4773,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, view,
       </div>
     </section>`,
   };
-  // The first steps of a new publisher feed with no release (ADR 0221 item 8),
+  // The first steps of a new publisher feed with no release (ADR 0260 item 8),
   // and the add row of the Releases section (ADR 0164). Each row opens a
   // sheet of the Add feeds page. A new album or playlist becomes a release
   // of this feed before its page opens (ADR 0164 item 3). When the link

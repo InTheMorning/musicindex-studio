@@ -463,7 +463,7 @@ ALTER TABLE library_files ADD COLUMN imported_at INTEGER;
 ALTER TABLE library_files ADD COLUMN removed_at INTEGER;
 UPDATE library_files SET imported_at = CAST(strftime('%s', 'now') AS INTEGER);
 ",
-    // ADR 0107 item 1: `library_root` becomes a path relative to the data
+    // ADR 0262 item 1: `library_root` becomes a path relative to the data
     // folder. SQL cannot do it. `run_migrations` does it after this entry.
     "SELECT 1;",
     // ADR 0110 items 37 and 38: a connected app has a key pair. Each app from
@@ -692,7 +692,7 @@ CREATE TABLE delete_undo (
     snapshot TEXT NOT NULL
 );
 ",
-    // ADR 0230 items 20 and 21: the file host of the release before the
+    // ADR 0261 items 20 and 21: the file host of the release before the
     // first move of a draft. NULL means that the draft kept no value, and 0
     // means that the release had no file host.
     r"
@@ -705,7 +705,7 @@ CREATE TABLE kept_levels (
     PRIMARY KEY (upper_id, lower_id)
 );
 ",
-    // ADR 0230 item 21: a change set restores the media host state that it
+    // ADR 0261 item 21: a change set restores the media host state that it
     // changed, including a saved value from before the change set.
     r"
 ALTER TABLE change_set_feeds ADD COLUMN before_files_connector_id INTEGER;
@@ -794,7 +794,7 @@ const ASSETS_OFF_SINCE: &str = "assets_off_since";
 const PEOPLE_MIGRATION: usize = 20;
 
 /// The index in `MIGRATIONS` of the migration that makes `library_root`
-/// relative (ADR 0107 item 1). SQL cannot read the data folder, so the
+/// relative (ADR 0262 item 1). SQL cannot read the data folder, so the
 /// migration has no statement. Studio does the change after it, in code.
 const RELATIVE_LIBRARY_MIGRATION: usize = 23;
 
@@ -1110,7 +1110,7 @@ pub fn rel_of(roles: &[PublisherRole]) -> String {
         .join(" ")
 }
 
-/// The record of the check for a change from outside (ADR 0150). The module
+/// The record of the check for a change from outside (ADR 0259). The module
 /// `outside` owns the rules.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct OutsideRow {
@@ -1447,11 +1447,11 @@ pub struct Collection {
     /// workspace holds assets (ADR 0105 item 1).
     asset_rules: Option<AssetRules>,
     /// The folder of the collection file. A relative `library_root` is
-    /// relative to it (ADR 0107 item 1). `None` for a collection in memory.
+    /// relative to it (ADR 0262 item 1). `None` for a collection in memory.
     data_dir: Option<PathBuf>,
 }
 
-/// The counts of an account (ADR 0107 items 4 and 5).
+/// The counts of an account (ADR 0262 items 4 and 5).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct AccountCounts {
     /// The feeds in the collection.
@@ -1619,7 +1619,7 @@ impl Collection {
     }
 
     /// The library folder, from the setting `library_root`. A relative
-    /// setting is relative to the data folder (ADR 0107 item 1).
+    /// setting is relative to the data folder (ADR 0262 item 1).
     ///
     /// A relative setting with a segment other than a plain name is
     /// refused, because an imported collection is not trusted.
@@ -1645,7 +1645,7 @@ impl Collection {
                 .all(|c| matches!(c, std::path::Component::Normal(_)));
         if !plain {
             return Err(CollectionError::new(
-                "ADR 0107 item 1: a relative library_root must hold plain folder names only",
+                "ADR 0262 item 1: a relative library_root must hold plain folder names only",
             ));
         }
         Ok(Some(match &self.data_dir {
@@ -1656,7 +1656,7 @@ impl Collection {
 
     /// The text that Studio stores for `root` as `library_root`: a path
     /// relative to the data folder when `root` is in it, else `root` as it
-    /// is (ADR 0107 item 1).
+    /// is (ADR 0262 item 1).
     #[must_use]
     pub fn library_root_setting(&self, root: &Path) -> String {
         relative_to_data(self.data_dir.as_deref(), root)
@@ -2140,7 +2140,7 @@ impl Collection {
             .optional()?)
     }
 
-    /// The counts that the export and the import show (ADR 0107 items 4
+    /// The counts that the export and the import show (ADR 0262 items 4
     /// and 5).
     ///
     /// # Errors
@@ -2162,7 +2162,7 @@ impl Collection {
     }
 
     /// Replace the whole content of this collection with the collection
-    /// file at `source` (ADR 0107 item 9). The source is opened first, so
+    /// file at `source` (ADR 0262 item 9). The source is opened first, so
     /// that an older schema migrates. The settings of this collection that
     /// belong to the process, such as the asset rules, stay.
     ///
@@ -3238,7 +3238,7 @@ impl Collection {
     }
 
     /// Keep the file host of the release before a move of a draft changes
-    /// it (ADR 0230 item 20). A kept value stays, so two moves in one draft
+    /// it (ADR 0261 item 20). A kept value stays, so two moves in one draft
     /// keep the value from before the first move.
     ///
     /// # Errors
@@ -3267,7 +3267,7 @@ impl Collection {
     }
 
     /// Put back the file host that [`Self::keep_files_connector`] kept, and
-    /// clear the kept value (ADR 0230 item 21). With no kept value, nothing
+    /// clear the kept value (ADR 0261 item 21). With no kept value, nothing
     /// changes. A file host that Studio removed in the meantime gives no
     /// file host.
     ///
@@ -3451,7 +3451,7 @@ impl Collection {
         // (ADR 0255 item 47).
         self.remove_draft_grants(id)?;
         // A write ends the draft, so the kept file host goes out with it
-        // (ADR 0230 item 21). A discard puts the value back before this.
+        // (ADR 0261 item 21). A discard puts the value back before this.
         self.db.execute(
             "UPDATE feeds SET files_connector_kept = NULL WHERE id = ?1",
             [id.0],
@@ -4484,7 +4484,7 @@ impl Collection {
         Ok(SnapshotId(self.db.last_insert_rowid()))
     }
 
-    /// The record of the check for a change from outside (ADR 0150).
+    /// The record of the check for a change from outside (ADR 0259).
     ///
     /// # Errors
     ///
@@ -5996,7 +5996,7 @@ mod tests {
     fn the_relative_library_migration_has_its_index() {
         assert_eq!(
             MIGRATIONS[RELATIVE_LIBRARY_MIGRATION], "SELECT 1;",
-            "ADR 0107 item 1: RELATIVE_LIBRARY_MIGRATION must be the index of its entry in MIGRATIONS"
+            "ADR 0262 item 1: RELATIVE_LIBRARY_MIGRATION must be the index of its entry in MIGRATIONS"
         );
     }
 
@@ -6011,7 +6011,7 @@ mod tests {
         assert_eq!(
             collection.setting("library_root").unwrap(),
             Some(serde_json::json!("library")),
-            "ADR 0107 item 1: a library in the data folder must become a relative path"
+            "ADR 0262 item 1: a library in the data folder must become a relative path"
         );
         assert_eq!(
             collection.library_root().unwrap(),
@@ -6029,7 +6029,7 @@ mod tests {
         assert_eq!(
             collection.setting("library_root").unwrap(),
             Some(serde_json::json!(outside.to_str().unwrap())),
-            "ADR 0107 item 1: a library outside the data folder must stay absolute"
+            "ADR 0262 item 1: a library outside the data folder must stay absolute"
         );
     }
 

@@ -2,7 +2,7 @@
 
 Status: Complete, with its screenshot visual check. Its human test is open.
 
-Owner of the rules: [ADR 0150](../adr/0150-studio-shows-a-change-from-outside-when-a-page-opens.md).
+Owner of the rules: [ADR 0150](../archive/adr/0150-studio-shows-a-change-from-outside-when-a-page-opens.md).
 
 ## Goal
 

@@ -1,4 +1,4 @@
-//! The import of an account (ADR 0107 items 9 to 13).
+//! The import of an account (ADR 0262 items 9 to 13).
 //!
 //! The browser sends the archive in parts, as ADR 0059 does for a music
 //! file. [`ImportStore`] keeps the open imports of one place: the server
@@ -6,7 +6,7 @@
 //! workspace. A check unpacks the archive into a staging folder. The open
 //! step moves the staged files to their place after the vault opened.
 //!
-//! The import writes nothing to a host and changes no feed (ADR 0107
+//! The import writes nothing to a host and changes no feed (ADR 0262
 //! item 13).
 
 use std::collections::{BTreeSet, HashMap};
@@ -133,7 +133,7 @@ impl ImportStore {
     }
 
     /// Start an import of `size` bytes. `limit` is the storage limit
-    /// (ADR 0107 item 15). `invite` is kept for the open step.
+    /// (ADR 0262 item 15). `invite` is kept for the open step.
     ///
     /// # Errors
     ///
@@ -281,7 +281,7 @@ impl ImportStore {
     }
 
     /// Check the file of an import: unpack it into the staging folder
-    /// (ADR 0107 item 11), fix its library path, and read its facts. A
+    /// (ADR 0262 item 11), fix its library path, and read its facts. A
     /// refusal removes the import.
     ///
     /// # Errors
@@ -359,7 +359,7 @@ impl ImportStore {
             }
         };
         reset_library_root(staging, policy).map_err(refuse)?;
-        // ADR 0107 item 13: the import sends no podping and starts no
+        // ADR 0262 item 13: the import sends no podping and starts no
         // download, so the queues of the file do not come in.
         clear_queues(staging).map_err(refuse)?;
         let invalid = |cause: &str, message: &str| {
@@ -377,7 +377,7 @@ impl ImportStore {
                 VaultFile::from_json(&text).map_err(|_| {
                     invalid(
                         ArchiveCause::MissingFile.code(),
-                        "ADR 0107 item 6: vault.json is not a vault of Studio",
+                        "ADR 0262 item 6: vault.json is not a vault of Studio",
                     )
                 })
             })?;
@@ -391,7 +391,7 @@ impl ImportStore {
         if !portable {
             return Err(invalid(
                 "no_portable_method",
-                "ADR 0107 item 4: the vault has only passkeys, and a passkey does not work on a different server. Make a recovery key on the old server, and export again",
+                "ADR 0262 item 4: the vault has only passkeys, and a passkey does not work on a different server. Make a recovery key on the old server, and export again",
             ));
         }
         let counts = Collection::open(&staging.join("collection.sqlite"))
@@ -399,7 +399,7 @@ impl ImportStore {
             .map_err(|e| {
                 invalid(
                     ArchiveCause::InvalidCollection.code(),
-                    &format!("ADR 0107 item 11: collection.sqlite cannot be read: {e}"),
+                    &format!("ADR 0262 item 11: collection.sqlite cannot be read: {e}"),
                 )
             })?;
         let mut kinds = Vec::new();
@@ -465,7 +465,7 @@ fn status_of(id: &str, item: &Item) -> Value {
     })
 }
 
-/// How the user opens the vault of an archive (ADR 0107 item 12).
+/// How the user opens the vault of an archive (ADR 0262 item 12).
 #[derive(Debug)]
 pub enum Credential {
     /// The passphrase of the vault.
@@ -564,13 +564,13 @@ fn desktop_only(w: &crate::workspace::Workspace) -> Result<(), ApiError> {
 }
 
 /// Give 409 `collection_not_empty` when the collection has a feed
-/// (ADR 0107 item 9).
+/// (ADR 0262 item 9).
 fn require_empty(w: &crate::workspace::Workspace) -> Result<(), ApiError> {
     if w.collection.account_counts()?.feeds > 0 {
         return Err(ApiError::new(
             StatusCode::CONFLICT,
             "collection_not_empty",
-            "ADR 0107 item 9: an import cannot replace feeds. Use a new data folder",
+            "ADR 0262 item 9: an import cannot replace feeds. Use a new data folder",
         ));
     }
     Ok(())
@@ -663,7 +663,7 @@ pub(crate) async fn check_import(
 
 /// `POST /import/{upload}/open`: open the vault of the file, and replace
 /// the vault, the grant vaults, the collection and the library of the data
-/// folder with the files of the archive (ADR 0107 items 9 and 12).
+/// folder with the files of the archive (ADR 0262 items 9 and 12).
 pub(crate) async fn open_import(
     State(shared): State<Shared>,
     UrlPath(upload): UrlPath<String>,
@@ -674,7 +674,7 @@ pub(crate) async fn open_import(
         require_empty(w)?;
         // The import replaces the vault and the host secrets of the owner.
         // An existing vault must show a recent unlock first (ADR 0106
-        // item 2, ADR 0107 item 9).
+        // item 2, ADR 0262 item 9).
         if w.vault_state() != crate::workspace::VaultState::Absent {
             w.require_recent_unlock()?;
         }

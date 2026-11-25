@@ -8,9 +8,9 @@
 - Technical choices from ADR 0213: the planning model selected items 3 to 6, 8, 10 to 16, 19 to 22 and 24 to 27.
 - Supersedes: [ADR 0213](../archive/adr/0213-a-release-starts-on-the-page-of-its-artist.md), A Release Starts On The Page Of Its Artist.
 - Revised: 2026-11-15 by operator decision, from the [walk notes of 2026-11-15](../reviews/2026-11-15-walk-notes.md). Item 13 moves the menu "Kind" from the tab **Settings** to the first tab. Item 16 gives the hint of that menu.
-- Uses: [ADR 0014](0014-collection-in-sqlite.md) for the collection. [ADR 0065](0065-the-core-applies-each-feed-rule.md) for the feed rules. [ADR 0174](0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md) for the findings of the tab **Check**. [ADR 0205](../archive/adr/0205-publisher-feeds-announcements-and-show-grants.md) items 5 to 8 for the links of a publisher feed. [ADR 0221](0221-the-welcome-page-and-the-first-steps.md) item 8 for the first-step rows. [ADR 0007](0007-draft-diff-write-and-announce.md) for the review.
+- Uses: [ADR 0014](0014-collection-in-sqlite.md) for the collection. [ADR 0065](0065-the-core-applies-each-feed-rule.md) for the feed rules. [ADR 0174](0174-a-feed-check-gives-findings-and-repairs-through-the-draft.md) for the findings of the tab **Check**. [ADR 0205](../archive/adr/0205-publisher-feeds-announcements-and-show-grants.md) items 5 to 8 for the links of a publisher feed. [ADR 0260](0260-the-welcome-page-and-the-first-steps.md) item 8 for the first-step rows. [ADR 0007](0007-draft-diff-write-and-announce.md) for the review.
 - Source: design item 7 of the [human check walk of 2026-11-14](../reviews/2026-11-14-human-check-walk.md).
-- Restates: the changes of ADR 0213 by [ADR 0218](0218-a-page-link-in-review-and-a-suggestion-starts-with-no-person.md) items 1 to 9, [ADR 0223](0223-a-split-in-shares-or-percent-a-release-search-and-one-tap-on-a-phone.md) items 11 and 12 and [ADR 0230](0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 1 to 13, and the revision of 2026-11-15.
+- Restates: the changes of ADR 0213 by [ADR 0218](0218-a-page-link-in-review-and-a-suggestion-starts-with-no-person.md) items 1 to 9, [ADR 0223](0223-a-split-in-shares-or-percent-a-release-search-and-one-tap-on-a-phone.md) items 11 and 12 and [ADR 0261](0261-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 1 to 13, and the revision of 2026-11-15.
 - Changed by: [ADR 0257](0257-a-release-has-one-artist-one-label-and-one-publisher-in-its-fields.md) items 16a, 17 and 18, on 2026-11-24. Item 8: one label and one publisher. Items 9 and 19: a release has the fields Artist, Label and Publisher in place of the section "Linked artist and label pages".
 
 ## Context
@@ -25,12 +25,12 @@ The form has no release kind. The operator wants a select menu with album, EP an
 
 ### Where A Release Starts
 
-1. A release starts from **＋ Add** on Releases or on an artist page. On Releases, **＋ Add** opens a menu with Release, Artist, Label, Publisher, Show and Playlist, in that order (ADR 0254 item 44). On an artist page, Release gets that artist as its parent. The artist page also keeps the add row **＋ Add a Release** of ADR 0164, and the first-step row of ADR 0221 item 8.
+1. A release starts from **＋ Add** on Releases or on an artist page. On Releases, **＋ Add** opens a menu with Release, Artist, Label, Publisher, Show and Playlist, in that order (ADR 0254 item 44). On an artist page, Release gets that artist as its parent. The artist page also keeps the add row **＋ Add a Release** of ADR 0164, and the first-step row of ADR 0260 item 8.
 2. The head of a label page and of a publisher page has the **＋ Add** menu of ADR 0254 item 17, with no Release. The page "Add a Feed" has no option that makes a release.
 3. The menu "Type" of the form of ADR 0212 item 6 has Artist or label, Show and Playlist.
 4. The page of a label and the page of a publisher feed have no add row for a release. The list view of a group of ADR 0164 item 6 has the action only for an artist.
 5. The first-step row "Add a release" of a label page opens the list of the artist pages of the collection. A selection opens the form on the page of that artist. With no artist page, the row opens the form that makes an artist page.
-6. The form of a release has no menu "Type" and no "Start from" field. Its title, its parent card, the card with no parent, the row "Find on Music Index" and its fields "Title", "Kind", "Artist name", "File host" and "Feed file" follow ADR 0230 items 8 to 12. **Change…** of the parent card lists only the artist pages (ADR 0231 item 6). "Artist name" starts with the name of the parent. The form follows ADR 0212 items 8 to 12 for the file host and feed file.
+6. The form of a release has no menu "Type" and no "Start from" field. Its title, its parent card, the card with no parent, the row "Find on Music Index" and its fields "Title", "Kind", "Artist name", "File host" and "Feed file" follow ADR 0261 items 8 to 12. **Change…** of the parent card lists only the artist pages (ADR 0231 item 6). "Artist name" starts with the name of the parent. The form follows ADR 0212 items 8 to 12 for the file host and feed file.
 
 ### The Pages Of The New Release
 
@@ -66,7 +66,7 @@ The form has no release kind. The operator wants a select menu with album, EP an
 
 24. A feed in the collection with no artist page stays as it is. Studio changes no feed because of this ADR.
 25. The route that makes a feed still can make an album, because the form of item 6 uses it. The route gets the kind and the publisher feed of the new release.
-26. The form has no copy of a release. The copy of ADR 0077, its route field `from` and its core code go (ADR 0230 item 13).
+26. The form has no copy of a release. The copy of ADR 0077, its route field `from` and its core code go (ADR 0261 item 13).
 27. The Welcome page and the first-step row of a musician do not change.
 
 ## Item Map

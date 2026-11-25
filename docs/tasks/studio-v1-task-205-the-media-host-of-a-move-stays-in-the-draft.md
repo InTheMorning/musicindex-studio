@@ -1,6 +1,6 @@
 # Studio v1 Task 205: The Media Host Of A Move Stays In The Draft
 
-Decision: [ADR 0230](../adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 20 to 24.
+Decision: [ADR 0230](../archive/adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 20 to 24.
 
 Status: Done. The human check on real data is open.
 

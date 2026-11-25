@@ -9,7 +9,7 @@
 - Changes: [ADR 0231](0231-a-new-release-writes-its-artist-page-and-the-files-of-a-restored-release.md) item 10, the write of a new release without its pages (items 3 and 4).
 - Changes: [ADR 0233](0233-each-add-form-finds-on-music-index-and-copies-the-found-feed.md) item 15, the remove of a release that was never written (item 10).
 - Changed by: [ADR 0251](0251-review-writes-the-two-sides-of-a-changed-link.md) items 4 and 6, on 2026-11-23. Item 3: the check box is on and locked for each linked feed, and the text under the rows changes.
-- Uses: [ADR 0227](0227-undo-and-redo.md), the undo of a remove. [ADR 0230](0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 20 and 21, the media host of a move. [ADR 0007](0007-draft-diff-write-and-announce.md), the write of a draft.
+- Uses: [ADR 0227](0227-undo-and-redo.md), the undo of a remove. [ADR 0261](0261-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 20 and 21, the media host of a move. [ADR 0007](0007-draft-diff-write-and-announce.md), the write of a draft.
 
 ## Context
 
@@ -51,7 +51,7 @@ The operator did the desktop check of 9af319b on 2026-11-20. These findings need
 
 ### A Move That Adds Nothing To The Draft (Finding 5)
 
-12. When **Move This Release…** adds no operation and no feed move to the draft, it sets the media host to the target and clears the kept media host. Studio keeps no earlier host, because no discard can follow. A move that adds an operation keeps the earlier host as before (ADR 0230 item 20).
+12. When **Move This Release…** adds no operation and no feed move to the draft, it sets the media host to the target and clears the kept media host. Studio keeps no earlier host, because no discard can follow. A move that adds an operation keeps the earlier host as before (ADR 0261 item 20).
 13. A migration clears each kept media host of a feed with no draft operation and no draft feed move. It repairs the collections that a move of item 12 changed before this decision.
 
 ## Item Map

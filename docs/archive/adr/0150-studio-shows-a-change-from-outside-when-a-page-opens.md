@@ -1,14 +1,16 @@
+> Archived: superseded by [ADR 0259](../../adr/0259-studio-checks-each-feed-and-the-left-panel-marks-its-state.md) on 2026-11-25. The new ADR restates each live rule and gives its Item Map.
+
 # ADR 0150: Studio Shows A Change From Outside When A Page Opens
 
-- Status: Accepted
+- Status: Superseded by ADR 0259
 - Date: 2026-11-06
 - Owner: operator
 - Accepted: 2026-11-06 by the operator, from a mockup and a questionnaire. The operator selected a check box for the setting.
 - Technical choices: items 4, 6, 11, 12 and 13 are choices of the planning model.
 - Changed by: [ADR 0165](0165-the-left-panel-marks-the-state-of-each-feed.md) item 5: the check runs for each feed after the feed list loads and at each open of Releases.
-- Source: [open items after `0.1.0-rc.19`, the request to detect a feed move, and the feed that two collections hold](../reviews/2026-11-06-local-use-findings.md)
-- Changed by: [ADR 0184](0184-after-a-move-studio-shows-the-podping-of-the-move.md). Item 5: after a move by Studio, the notice gives the podping of the move.
-- Changed by: [ADR 0211](0211-studio-follows-a-move-that-a-different-studio-made.md) items 1 to 8 and 20 to 22: the result "moved", its warning and the Warning color.
+- Source: [open items after `0.1.0-rc.19`, the request to detect a feed move, and the feed that two collections hold](../../reviews/2026-11-06-local-use-findings.md)
+- Changed by: [ADR 0184](../../adr/0184-after-a-move-studio-shows-the-podping-of-the-move.md). Item 5: after a move by Studio, the notice gives the podping of the move.
+- Changed by: [ADR 0211](../../adr/0211-studio-follows-a-move-that-a-different-studio-made.md) items 1 to 8 and 20 to 22: the result "moved", its warning and the Warning color.
 
 ## Context
 

@@ -6,7 +6,7 @@
 - Accepted: 2026-11-19 by the operator, through the questionnaire, from drawings. The operator selected "Step + Try Again", "Try Again in both", "Hint line under it" and "Two stages, clear button". Then the operator selected "Fold, change the shared rule" for the raw text of an error.
 - Technical choices: the main session selected items 2, 5, 7 and 10, and the texts of the task files.
 - Bar: crosses repositories. Items 1 to 4 apply musicindex ADR 0085 R-MSG-1, and the Studio fold of item 3 is in the app table of that ADR. An agent can also make the opposite choice by mistake: a failed load that shows an empty list.
-- Changes: [ADR 0221](0221-the-welcome-page-and-the-first-steps.md) item 4. The sheet has two stages (item 8).
+- Changes: [ADR 0221](../archive/adr/0221-the-welcome-page-and-the-first-steps.md) item 4. The sheet has two stages (item 8).
 - Uses: musicindex ADR 0085 R-MSG-1 for the words of an error. [ADR 0018](0018-passphrase-strength-and-error-color.md) item 10 for an error of one field. [ADR 0122](0122-a-new-user-starts-with-a-default-file-host.md) items 1 to 4 for the rows of step 2. [ADR 0217](0217-a-new-artist-sees-the-result-of-a-write-the-payment-types-and-an-undo-of-a-merge.md) item 9 and [ADR 0144](0144-recipients-use-one-picker-and-sort-by-split.md) item 1 for the payment words.
 - Source: [analysis of two journeys for a new independent artist](../research/2026-11-18-user-journeys/analysis.md), themes T5, T8, T9 and T10, and observations O7 and O9.
 
@@ -42,7 +42,7 @@
 8. The first-run sheet has two stages:
     - Musician: "Your name", "Where it lives".
     - Label: "Label name", "Where it lives".
-    The first-step row of ADR 0221 item 8 is the next step after the sheet. It is not a stage of the sheet.
+    The first-step row of ADR 0260 item 8 is the next step after the sheet. It is not a stage of the sheet.
 9. In step 2, the button that makes the page is "Make the Page", and "Making the Page…" while it works. This applies to each row and to the select menu of the connected file hosts.
 10. The library result shows only the counts that are more than zero. When each count is zero, it shows "The folder has no releases yet.".
 

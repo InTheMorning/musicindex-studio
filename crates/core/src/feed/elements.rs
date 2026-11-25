@@ -313,7 +313,7 @@ impl Modeled for RssImage {
 
 /// `itunes:owner`: the name and the email address of the owner of the feed.
 /// A child that this type does not model stays in the tree. The core does
-/// not check the email address (ADR 0206 item 20).
+/// not check the email address (ADR 0258 item 20).
 #[derive(Debug, Clone, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub struct Owner {
     /// `itunes:name`.

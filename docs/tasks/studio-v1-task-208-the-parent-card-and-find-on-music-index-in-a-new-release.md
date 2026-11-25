@@ -1,6 +1,6 @@
 # Studio v1 Task 208: The Parent Card And Find On Music Index In A New Release
 
-Decision: [ADR 0230](../adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 8 to 16 and item 33.
+Decision: [ADR 0230](../archive/adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 8 to 16 and item 33.
 
 Status: Done. A human check of the Music Index search stays open. Refer to the Result.
 

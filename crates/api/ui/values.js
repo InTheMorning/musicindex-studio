@@ -128,7 +128,7 @@ function RecipientAddressActions({ recipient, onChange }) {
 // Recipients returns its rows with no wrapper div, so that each recipient
 // and the add row sit as direct rows of the group, each with the group's
 // own inset separator (review of task 014c, defect 3). The rows form two
-// groups: "Recipients", then "Fees" (ADR 0206 item 15). A recipient with
+// groups: "Recipients", then "Fees" (musicindex ADR 0082 R-ROUTES-3 item 2). A recipient with
 // a fee (`isFee`) is in "Fees". The screen sorts each group by split (ADR 0144).
 function Recipients({ id, recipients, defaultType, onChange, openAdd = false, onAddOpened, onEmptyClose, wrongAddresses = new Set() }) {
   const percent = percentages(recipients).map((value, i) => (shares(recipients[i]) === null ? null : value));

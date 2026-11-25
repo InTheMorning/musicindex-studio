@@ -1,4 +1,4 @@
-// The check for a change from outside Studio (ADR 0150).
+// The check for a change from outside Studio (ADR 0259).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -6,7 +6,7 @@ import { outsideMark, outsideNotice, readOnlyHostNotice, indexNotice, releaseMus
 import { pageSequence, tierError } from '../ui/pages.js';
 import { INDEX_READ_AGAIN_MS } from '../ui/releasemove.js';
 
-test('A tile has a mark for a change and a move, and none for an index difference (ADR 0150 items 2, 3 and 5)', () => {
+test('A tile has a mark for a change and a move, and none for an index difference (ADR 0259 items 2, 3 and 5)', () => {
   assert.equal(outsideMark({ state: 'changed' }).text, 'Changed outside Studio');
   assert.equal(outsideMark({ state: 'moved' }).text, 'Moved outside Studio');
   assert.equal(outsideMark({ state: 'moved' }).tone, 'warning');
@@ -14,7 +14,7 @@ test('A tile has a mark for a change and a move, and none for an index differenc
   assert.equal(outsideMark(null), null);
 });
 
-test('The notice of a move names the address and has Keep This File Host (ADR 0150 items 3 and 4)', () => {
+test('The notice of a move names the address and has Keep This File Host (ADR 0259 items 3 and 4)', () => {
   const notice = outsideNotice({ state: 'moved', new_url: 'https://x/a.xml', connected: true });
   assert.equal(notice.address, 'https://x/a.xml');
   assert.equal(notice.keep, true);
@@ -24,7 +24,7 @@ test('The notice of a move names the address and has Keep This File Host (ADR 01
   assert.equal(outsideNotice({ state: null }), null);
 });
 
-test('The index notice gives both addresses (ADR 0150 item 5)', () => {
+test('The index notice gives both addresses (ADR 0259 item 5)', () => {
   const notice = indexNotice({ index_url: 'https://a/x.xml', own_url: 'https://b/x.xml' });
   assert.deepEqual([notice.index, notice.own], ['https://a/x.xml', 'https://b/x.xml']);
   assert.equal(indexNotice({ index_url: null }), null);
@@ -199,7 +199,7 @@ test('ADR 0175 item 1: a write check uses the move read limit and delay', () => 
   assert.equal((source.match(/export const INDEX_READ_AGAIN_MAX\s*=/g) || []).length, 1, 'ADR 0175 item 1: one read-limit definition. Fix: keep the shared constant in releasemove.js.');
 });
 
-test('eachLimited runs at most the limit and continues after a failure (ADR 0150 item 11)', async () => {
+test('eachLimited runs at most the limit and continues after a failure (ADR 0259 item 11)', async () => {
   assert.equal(OUTSIDE_LIMIT, 4);
   let running = 0;
   let most = 0;
@@ -216,7 +216,7 @@ test('eachLimited runs at most the limit and continues after a failure (ADR 0150
   assert.equal(done.length, 8);
 });
 
-test('The setting is a check box, and the section has a tier (ADR 0150 item 10, ADR 0071)', () => {
+test('The setting is a check box, and the section has a tier (ADR 0259 item 10, ADR 0071)', () => {
   const source = readFileSync(new URL('../ui/app.js', import.meta.url), 'utf8');
   const start = source.indexOf('function OutsidePanel');
   assert.ok(start > 0);
@@ -231,7 +231,7 @@ test('The setting is a check box, and the section has a tier (ADR 0150 item 10, 
 const feedOf = (id, extra = {}) => ({ id, draft_state: 'unchanged', release_ids: [], publisher_ids: [], ...extra });
 const read = (state = null) => ({ read: true, state });
 
-test('The mark of a set ranks outside, pending and unchecked (ADR 0165 item 2)', () => {
+test('The mark of a set ranks outside, pending and unchecked (ADR 0259 item 15)', () => {
   const feeds = [feedOf(1), feedOf(2, { draft_state: 'new' }), feedOf(3)];
   const results = { 1: read(), 2: read(), 3: read('changed') };
   assert.equal(stateMark(feeds, results).kind, 'outside');
@@ -249,7 +249,7 @@ test('The mark of a set ranks outside, pending and unchecked (ADR 0165 item 2)',
   assert.equal(stateMark([], {}), null);
 });
 
-test('The mark is Checking while a feed of the set has a running check (ADR 0230 item 18)', () => {
+test('The mark is Checking while a feed of the set has a running check (ADR 0261 item 18)', () => {
   const feeds = [feedOf(1), feedOf(2)];
   const mark = stateMark(feeds, { 1: read() }, new Set([2]));
   assert.deepEqual([mark.kind, mark.icon, mark.tone, mark.text], ['checking', 'spinner', 'muted', 'Checking']);
@@ -259,7 +259,7 @@ test('The mark is Checking while a feed of the set has a running check (ADR 0230
   assert.equal(stateMark(feeds, { 1: read(), 2: read() }, new Set()), null);
 });
 
-test('A click checks only the feeds that are not checked (ADR 0230 items 17 and 19)', () => {
+test('A click checks only the feeds that are not checked (ADR 0261 items 17 and 19)', () => {
   const feeds = [feedOf(1), feedOf(2), feedOf(3), feedOf(4)];
   const results = { 1: read(), 2: { read: false, state: null }, 4: read('changed') };
   assert.deepEqual(feedsToCheck(feeds, results).map((feed) => feed.id), [2, 3]);
@@ -267,7 +267,7 @@ test('A click checks only the feeds that are not checked (ADR 0230 items 17 and 
   assert.deepEqual(feedsToCheck([], {}), []);
 });
 
-test('A single-feed mark shows outside changes and hides an up-to-date feed (ADR 0165 item 2)', () => {
+test('A single-feed mark shows outside changes and hides an up-to-date feed (ADR 0259 item 15)', () => {
   assert.deepEqual(
     stateMark([feedOf(1)], { 1: read('changed') }),
     { kind: 'outside', text: 'Changed outside Studio', icon: 'cloud-alert', tone: 'warning' },
@@ -275,17 +275,17 @@ test('A single-feed mark shows outside changes and hides an up-to-date feed (ADR
   assert.equal(stateMark([feedOf(1)], { 1: read() }), null);
 });
 
-test('The open feed outline uses its single-feed state mark (ADR 0165 items 2 and 6)', () => {
+test('The open feed outline uses its single-feed state mark (ADR 0259 items 15 and 19)', () => {
   const source = readFileSync(new URL('../ui/app.js', import.meta.url), 'utf8');
   const start = source.indexOf('function Outline');
   const end = source.indexOf('function LeftPanelFooter', start);
   const outline = source.slice(start, end);
-  const fix = 'ADR 0165 items 2 and 6: the open feed outline shows its state mark. Fix Outline in crates/api/ui/app.js.';
+  const fix = 'ADR 0259 items 15 and 19: the open feed outline shows its state mark. Fix Outline in crates/api/ui/app.js.';
   assert.match(outline, /useStateMark\(feeds\.filter\(\(item\) => item\.id === feed\.id\)\)/, fix);
   assert.match(outline, /<\$\{StateMark\} mark=\$\{feedMark\} \/>/, fix);
 });
 
-test('A row covers the feed and each release, and a group covers its feeds (ADR 0165 item 3)', () => {
+test('A row covers the feed and each release, and a group covers its feeds (ADR 0259 item 16)', () => {
   const feeds = [
     feedOf(1, { release_ids: [2, 3], roles: ['artist'] }),
     feedOf(2, { publisher_ids: [1] }),
@@ -298,7 +298,7 @@ test('A row covers the feed and each release, and a group covers its feeds (ADR 
   assert.ok(Array.isArray(panelSet(feeds, 'other')));
 });
 
-test('The style of a mark sets the color of the icon, not only of the row (ADR 0165 item 2)', () => {
+test('The style of a mark sets the color of the icon, not only of the row (ADR 0259 item 15)', () => {
   const css = readFileSync(new URL('../ui/styles.css', import.meta.url), 'utf8');
   for (const [tone, token] of [['error', '--error'], ['accent', '--accent'], ['muted', '--muted']]) {
     assert.ok(css.includes(`.state-mark.${tone} .icon { color: var(${token}); }`), tone);
@@ -328,7 +328,7 @@ test('ADR 0211: read-only host notice gives its text and action', () => {
     { text: 'A connected file host gives the address of this feed. Use it to edit the feed here.', button: 'Use This File Host', use: true },
     `ADR 0211 item 16: a connected file host for the address gives Use This File Host. ${fix}`);
   assert.equal(readOnlyHostNotice(feedOf(1, { host_deleted: true, host_for_address: false })), null,
-    `ADR 0230 item 28: a feed with a done delete has no Use This File Host notice. The API gives host_for_address false for it. Fix host_for_address in crates/api/src/routes.rs.`);
+    `ADR 0261 item 28: a feed with a done delete has no Use This File Host notice. The API gives host_for_address false for it. Fix host_for_address in crates/api/src/routes.rs.`);
   assert.equal(readOnlyHostNotice(feedOf(1)), null,
     `ADR 0211 item 15: a different read-only feed has no notice. ${fix}`);
   assert.equal(readOnlyHostNotice(feedOf(1, { connector_id: 3 })), null);

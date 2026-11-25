@@ -42,7 +42,7 @@ const BLOCK_BYTES: usize = 64 * 1024;
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Target {
     File(i64),
-    /// The archive of the account (ADR 0107 item 7). The flag says if the
+    /// The archive of the account (ADR 0262 item 7). The flag says if the
     /// archive holds the audio and the images. `folder` is the folder of a
     /// collection that is not open (ADR 0176 item 7), or `None` for the
     /// collection of the workspace.
@@ -82,7 +82,7 @@ impl Tickets {
         self.insert(Target::File(file), now)
     }
 
-    /// Make a ticket for the archive of the account (ADR 0107 item 7), or
+    /// Make a ticket for the archive of the account (ADR 0262 item 7), or
     /// of the collection in `folder` (ADR 0176 item 7).
     pub(crate) fn issue_archive(
         &mut self,
@@ -402,7 +402,7 @@ pub(crate) async fn download(
     State(shared): State<Shared>,
     Query(query): Query<AudioQuery>,
 ) -> Result<Response, ApiError> {
-    // The ticket of an archive is single use (ADR 0107 item 7).
+    // The ticket of an archive is single use (ADR 0262 item 7).
     let job = {
         let (shared, ticket) = (Arc::clone(&shared), query.ticket.clone());
         tokio::task::spawn_blocking(move || {
@@ -491,7 +491,7 @@ fn archive_job(w: &mut Workspace, ticket: &str) -> Result<Option<ArchiveJob>, Ap
         return closed_archive_job(&folder, include_assets).map(Some);
     }
     // The manifest holds the email of the account and the public key of
-    // each Nostr method. It holds no secret (ADR 0107 item 6).
+    // each Nostr method. It holds no secret (ADR 0262 item 6).
     let mut keys: Vec<String> = w.identity.pubkey.iter().cloned().collect();
     for method in w.vault_methods()? {
         if let studio_core::vault::VaultMethod::Nostr { pubkey } = method
@@ -540,7 +540,7 @@ fn closed_archive_job(
 }
 
 /// A writer that sends its bytes to the body of the response in blocks.
-/// The archive never lands in a file (ADR 0107 item 7).
+/// The archive never lands in a file (ADR 0262 item 7).
 struct ChannelWriter {
     sender: tokio::sync::mpsc::Sender<std::io::Result<Bytes>>,
     block: Vec<u8>,

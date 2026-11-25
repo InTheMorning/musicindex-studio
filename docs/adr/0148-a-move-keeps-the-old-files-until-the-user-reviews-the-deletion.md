@@ -11,7 +11,7 @@
 - Changed by: [ADR 0177](0177-the-files-page-has-one-way-to-move.md). Item 1: the sheet has "What moves", and the button is in the section "File hosts".
 - Source: [findings of local use, finding 14](../reviews/2026-11-06-local-use-findings.md)
 - Changed by: [ADR 0180](0180-the-files-page-has-a-folder-picker-and-one-step-for-each-copy.md). Item 7: one file has no **Move to**. Item 8: the section has the name "Old files to delete".
-- Changed by: [ADR 0230](0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 20 to 23, on 2026-11-20. Item 4: a discard puts back the media host. Item 5: the plan counts the old copies of a file that is already on the target.
+- Changed by: [ADR 0230](../archive/adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 20 to 23, on 2026-11-20. Item 4: a discard puts back the media host. Item 5: the plan counts the old copies of a file that is already on the target.
 
 ## Context
 

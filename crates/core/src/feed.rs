@@ -79,10 +79,10 @@ pub struct Feed {
     pub link: Option<String>,
     /// `language`.
     pub language: Option<String>,
-    /// `managingEditor`, as the source wrote it (ADR 0206).
+    /// `managingEditor`, as the source wrote it (ADR 0258).
     #[serde(default)]
     pub managing_editor: Option<String>,
-    /// `webMaster`, as the source wrote it (ADR 0206).
+    /// `webMaster`, as the source wrote it (ADR 0258).
     #[serde(default)]
     pub web_master: Option<String>,
     /// `lastBuildDate`, as the source wrote it (ADR 0127). Only the core sets
@@ -101,13 +101,13 @@ pub struct Feed {
     pub locked: Option<Locked>,
     /// `itunes:author`.
     pub author: Option<String>,
-    /// `itunes:explicit`, as the source wrote it (ADR 0206).
+    /// `itunes:explicit`, as the source wrote it (ADR 0258).
     #[serde(default)]
     pub explicit: Option<String>,
-    /// `itunes:owner` (ADR 0206).
+    /// `itunes:owner` (ADR 0258).
     #[serde(default)]
     pub owner: Option<Owner>,
-    /// `itunes:keywords`, as the source wrote it (ADR 0206).
+    /// `itunes:keywords`, as the source wrote it (ADR 0258).
     #[serde(default)]
     pub keywords: Option<String>,
     /// The `href` of `itunes:image`.
@@ -677,10 +677,10 @@ pub struct Item {
     /// value at the draft save.
     #[serde(default)]
     pub duration_seconds: Option<u64>,
-    /// `itunes:explicit`, as the source wrote it (ADR 0206).
+    /// `itunes:explicit`, as the source wrote it (ADR 0258).
     #[serde(default)]
     pub explicit: Option<String>,
-    /// `podcast:season` (ADR 0206).
+    /// `podcast:season` (ADR 0258).
     #[serde(default)]
     pub season: Option<Season>,
     /// The text of `podcast:episode`: the track number of an album track.

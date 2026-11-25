@@ -150,7 +150,7 @@ export function useDraft(feedId) {
   // Whether the feed has a host, or a host choice (ADR 0067 item 6).
   const [hasHost, setHasHost] = useState(true);
   // The state of the feed list for this feed, as the core gives it with
-  // each draft (ADR 0165 item 9), with the feed ID. The shell puts it in
+  // each draft (ADR 0259 item 21), with the feed ID. The shell puts it in
   // the feed list. The ID stops a state of the feed before from going to
   // a different feed.
   const [draftState, setDraftState] = useState(null);

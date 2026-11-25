@@ -1416,7 +1416,7 @@ fn set_connector_base_url(
 }
 
 /// The feeds of the collection. Each row has its draft state and its cover
-/// image (ADR 0206 item 2, task 026a).
+/// image (ADR 0258 item 2, task 026a).
 #[expect(
     clippy::too_many_lines,
     reason = "Feed rows combine stored fields and derived feed values."
@@ -1517,7 +1517,7 @@ pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
                 row.connector_id.is_none() && !w.collection.pointers_of_feed(row.id)?.is_empty()
             );
             // A feed with a done delete has no file on a host, so no host
-            // can take its address (ADR 0230 item 28).
+            // can take its address (ADR 0261 item 28).
             value["host_for_address"] = json!(
                 row.connector_id.is_none()
                     && !row.host_deleted
@@ -1631,7 +1631,7 @@ pub(crate) fn unlisted_pages(
 }
 
 /// The draft state of a feed: `none`, `new`, `changed` or `unchanged`.
-/// A failed change check gives `changed` (ADR 0206 item 2, task 026a).
+/// A failed change check gives `changed` (ADR 0258 item 2, task 026a).
 fn draft_state(w: &Workspace, row: &FeedRow) -> Result<&'static str, ApiError> {
     if w.collection.draft(row.id)?.is_none() {
         return Ok("none");
@@ -1701,7 +1701,7 @@ pub(crate) struct NewAlbumFeed {
     /// The publisher feed above a new publisher feed (ADR 0232 item 9).
     below_id: Option<i64>,
     /// The description of a release that the user found on Music Index
-    /// (ADR 0230 item 15).
+    /// (ADR 0261 item 15).
     description: Option<String>,
     /// The artwork address of that release.
     image: Option<String>,
@@ -2314,7 +2314,7 @@ pub(crate) struct OutsideQuery {
 }
 
 /// `GET /feeds/{id}/outside`: read the public address, and compare it with
-/// the last file that Studio knows (ADR 0150). With `index=true`, the route
+/// the last file that Studio knows (ADR 0259). With `index=true`, the route
 /// also asks musicindex. The network part holds no lock of the workspace, and
 /// the check writes nothing to a host.
 pub(crate) async fn outside_check(
@@ -2380,7 +2380,7 @@ pub(crate) async fn outside_check(
         held,
     } = reads;
     blocking(shared, move |w| {
-        // True only when this request read the hosted file (ADR 0165 item 7).
+        // True only when this request read the hosted file (ADR 0259 item 20).
         let read = hosted.is_some();
         let result = outside_apply_result(
             &w.collection,
@@ -2512,7 +2512,7 @@ fn result_new_host(w: &Workspace, result: &outside::OutsideResult) -> Option<Str
         .map(|row| row.name)
 }
 
-/// `POST /feeds/{id}/outside/keep`: "Keep This File Host" (ADR 0150 item 4).
+/// `POST /feeds/{id}/outside/keep`: "Keep This File Host" (ADR 0259 item 4).
 pub(crate) async fn outside_keep(State(shared): State<Shared>, Path(id): Path<i64>) -> ApiResult {
     blocking(shared, move |w| {
         outside::keep(&w.collection, FeedId(id))?;
@@ -2612,7 +2612,7 @@ pub(crate) async fn outside_use_host(
     .await
 }
 
-/// The check box "Check for outside changes" (ADR 0150 item 10).
+/// The check box "Check for outside changes" (ADR 0259 item 10).
 pub(crate) async fn get_outside_setting(State(shared): State<Shared>) -> ApiResult {
     blocking(shared, |w| {
         Ok(Json(json!({ "enabled": outside::is_on(&w.collection)? })))
@@ -4405,7 +4405,7 @@ pub(crate) fn draft_json(w: &Workspace, id: FeedId) -> ApiResult {
     let row = w.collection.feed(id)?;
     let has_host = row.connector_id.is_some() || w.collection.draft_feed_move(id)?.is_some();
     // The state of the feed list, so that the UI updates the row of this
-    // feed with no read of the list (ADR 0165 item 9).
+    // feed with no read of the list (ADR 0259 item 21).
     let draft_state = draft_state(w, &row)?;
     let (model, revision) = pipeline::draft_model(&w.collection, id)?;
     let changed = pipeline::draft_changed(&w.collection, id)?;
@@ -7086,7 +7086,7 @@ fn release_move_json(plan: &ReleaseMovePlan) -> Value {
     };
     let starts = |f: &FileMove, prefix: &str| f.file.media_type.starts_with(prefix);
     // The old copies of a file that is on the target already count too
-    // (ADR 0230 item 22).
+    // (ADR 0261 item 22).
     let mut from: Vec<i64> = plan
         .files
         .iter()

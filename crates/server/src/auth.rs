@@ -226,7 +226,7 @@ async fn get_session(State(state): State<Shared>, request: Request) -> Response 
         "recovery": session.restricted,
         "signer": state.nip46.has_signer(&accounts::sha256_hex(&session.token)),
         // The account came from an import, and the user has not added a
-        // passkey or closed the notice (ADR 0107 item 14).
+        // passkey or closed the notice (ADR 0262 item 14).
         "imported": passkeys.is_empty()
             && state.accounts.has_import_notice(session.account_id).unwrap_or(false),
     }))
@@ -1722,7 +1722,7 @@ async fn passkey_add(State(state): State<Shared>, request: Request) -> Response 
     {
         return internal("the account database failed");
     }
-    // A passkey closes the notice of an import (ADR 0107 item 14).
+    // A passkey closes the notice of an import (ADR 0262 item 14).
     let _ = state.accounts.clear_import_notice(session.account_id);
     (
         StatusCode::CREATED,

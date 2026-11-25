@@ -1,6 +1,6 @@
 # Studio v1 Task 210: The Check Mark After A Delete, A Write And A Click On The Head
 
-Decision: [ADR 0230](../adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 17 and 18. This task corrects defects of task 209. It makes no new decision.
+Decision: [ADR 0230](../archive/adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 17 and 18. This task corrects defects of task 209. It makes no new decision.
 
 Status: Done. The human check is open.
 

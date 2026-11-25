@@ -219,8 +219,8 @@ export function PickFold({ id, title, note, lead, rows, startOpen = foldStartsOp
 // title, the summary and `onOpen` of its row, and an optional `note` below the
 // row. Each entry of `lists` has a
 // title and rows. `lead` is a section before the form, as the parent card of a
-// new release (ADR 0230 item 9). With `musicindexFirst`, the row of Music Index
-// comes before the form (ADR 0230 item 11).
+// new release (ADR 0261 item 9). With `musicindexFirst`, the row of Music Index
+// comes before the form (ADR 0261 item 11).
 export function PickerLayout({ id, onSubmit, fields, notice, musicindex, lists, lead, musicindexFirst = false }) {
   const form = useRef(null);
   // A selection fills the form, so the form must be in view. At narrow width it

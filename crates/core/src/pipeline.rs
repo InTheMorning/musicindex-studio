@@ -1157,7 +1157,7 @@ pub fn new_feed(
 }
 
 /// The optional values that a new feed gets in its first draft, for example
-/// from a release that the user found on Music Index (ADR 0230 item 15). An
+/// from a release that the user found on Music Index (ADR 0261 item 15). An
 /// empty value is left out.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct FirstValues {
@@ -2181,7 +2181,7 @@ fn keep_cover_form(current: &Feed, sent: &mut Feed) {
     }
 }
 
-/// Keep the form of each `itunes:explicit` text (ADR 0206 item 19). The UI
+/// Keep the form of each `itunes:explicit` text (ADR 0258 item 19). The UI
 /// sends `true` or `false`. A sent value that differs from the draft value
 /// becomes `yes` or `no` when the draft value is `yes` or `no` in any letter
 /// case, after a trim. A capital first letter of the draft value stays a
@@ -3617,7 +3617,7 @@ fn remove_draft_move(
 ) -> Result<(), PipelineError> {
     let had_move = collection.draft_feed_move(id)?.is_some();
     collection.remove_draft_feed_move(id)?;
-    // ADR 0230 item 21: the media host goes back only when no move of the
+    // ADR 0261 item 21: the media host goes back only when no move of the
     // media files stays in the draft.
     if had_move && collection.draft_operations(id)?.is_empty() {
         collection.restore_files_connector(id)?;
@@ -6984,7 +6984,7 @@ pub fn discard_draft(collection: &Collection, id: FeedId) -> Result<(), Pipeline
     collection.remove_signing_plan(id)?;
     collection.remove_draft_grants(id)?;
     // A move of the draft changed the file host of the release. The discard
-    // puts back the earlier value (ADR 0230 item 21).
+    // puts back the earlier value (ADR 0261 item 21).
     collection.restore_files_connector(id)?;
     // A delete record that is still there means that a restore write did not
     // finish (a write removes the record). The feed goes back to the state

@@ -1,4 +1,4 @@
-// The model of the export and the import of an account (ADR 0107, ADR 0042).
+// The model of the export and the import of an account (ADR 0262, ADR 0042).
 // This module has no Preact and no browser state. The Node tests in
 // `ui-tests/move.test.mjs` examine it. Each function gives the text of a
 // screen from the data of the API. The core owns the rules, for example
@@ -122,7 +122,7 @@ export const EXPORT_DONE = {
 // The text above the recovery key in the export sheet.
 export const RECOVERY_KEY_TEXT = 'Studio shows this key one time only. With it, you can open the vault on a different server or in a different Studio.';
 
-// The notice of the Account panel after an import (ADR 0107 item 14,
+// The notice of the Account panel after an import (ADR 0262 item 14,
 // screen 8). `origin` is the address of this server. The session has the
 // flag `imported` until the user adds a passkey or closes the notice.
 export function importedNotice({ origin, passkeys }) {
@@ -166,7 +166,7 @@ export function importFacts(check) {
 
 // The ways to open the vault of the file, in sequence. `check.methods` has
 // `passphrase`, `recovery` and `nostr`. The extension needs `hasNip07`. The
-// remote signer is only on a server (ADR 0107 item 12).
+// remote signer is only on a server (ADR 0262 item 12).
 export function importMethods(check, { server, hasNip07 }) {
   const has = (name) => (check.methods || []).includes(name);
   const methods = [];

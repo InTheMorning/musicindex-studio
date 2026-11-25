@@ -1,6 +1,6 @@
 # Studio v1 Task 160: The Mark Before Back In The Narrow Shell
 
-Decision: musicindex ADR 0080, "The Interface Rules And The Shell Of The Three Apps, With The Mark Before Back" (musicindex `72b4e4a`), R-SHELL-2 item 6, R-TITLE-1 and R-TITLE-2. It supersedes musicindex ADR 0069 and ADR 0079, and keeps each rule ID. [ADR 0206](../adr/0206-the-shell-and-the-editor-pages.md) items 10 to 12 name it for the narrow shell of Studio. Studio adds no rule, so this task has no Studio ADR.
+Decision: musicindex ADR 0080, "The Interface Rules And The Shell Of The Three Apps, With The Mark Before Back" (musicindex `72b4e4a`), R-SHELL-2 item 6, R-TITLE-1 and R-TITLE-2. It supersedes musicindex ADR 0069 and ADR 0079, and keeps each rule ID. [ADR 0206](../archive/adr/0206-the-shell-and-the-editor-pages.md) items 10 to 12 name it for the narrow shell of Studio. Studio adds no rule, so this task has no Studio ADR.
 
 Status: Complete on 2026-11-16, with its screenshot visual check. The visual gate for the operator is open. The orchestrator session sent this task on 2026-11-16.
 

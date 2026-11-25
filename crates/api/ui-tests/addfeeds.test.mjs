@@ -56,7 +56,7 @@ test('the add menu of an artist page keeps Release and no publisher role actions
 });
 
 test('the add menu of an artist page gives that artist as the start parent of Release', () => {
-  const owner = 'ADR 0230 items 2 and 3: Release has the artist page as its parent, and no parent on the top page. Fix addMenuEntries and releaseAdd.';
+  const owner = 'ADR 0261 items 2 and 3: Release has the artist page as its parent, and no parent on the top page. Fix addMenuEntries and releaseAdd.';
   const onArtist = addMenuEntries(releaseAdd(artistPage, 'Pixel Palace'));
   assert.equal(onArtist[0].start.publisher_id, 9, owner);
   assert.equal(onArtist[0].start.author, 'Pixel Palace', owner);
@@ -66,7 +66,7 @@ test('the add menu of an artist page gives that artist as the start parent of Re
 });
 
 test('no label of an add control has the word "feed" except "feed file"', () => {
-  const owner = 'ADR 0230 item 6: a user action does not use the word "feed". Change the label in addfeeds.js or app.js.';
+  const owner = 'ADR 0261 item 6: a user action does not use the word "feed". Change the label in addfeeds.js or app.js.';
   const labels = [
     ...addMenuEntries(null).map((e) => e.label),
     ...['album', 'publisher', 'show', 'playlist'].flatMap((t) => [makeFields(t).button, makeFields(t).busyLabel, makeFields(t).titleLabel]),
@@ -76,7 +76,7 @@ test('no label of an add control has the word "feed" except "feed file"', () => 
   for (const label of labels) assert.doesNotMatch(label.replace(/feed file/gi, ''), /feed/i, `${owner} Label: ${label}`);
   const source = readFileSync(new URL('../ui/app.js', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /＋ Add a Feed|>Add a Feed<|Open the Feed/, owner);
-  assert.match(source, /\$\{head\.typeLabel\} Page/, 'ADR 0230 item 7: the head button is {Type} Page.');
+  assert.match(source, /\$\{head\.typeLabel\} Page/, 'ADR 0261 item 7: the head button is {Type} Page.');
 });
 
 test('makeFields gives the fields of each type', () => {
@@ -117,16 +117,16 @@ test('MAKE_TYPES leaves out album, and release fields have a kind menu', () => {
   assert.match(source, /body\.publisher_id = parentId/, owner);
   assert.match(source, /label="Kind" value=\$\{releaseKind\}/, owner);
   const form = source.slice(source.indexOf('function MakeFeedForm'), source.indexOf('// Choose a feed file'));
-  // ADR 0230 item 12: the fields follow the parent card and the row of Music Index.
+  // ADR 0261 item 12: the fields follow the parent card and the row of Music Index.
   const release = form.slice(form.lastIndexOf('if (isRelease) {'));
   const fieldOrder = [release.indexOf('<${ParentCard'), release.indexOf('Find on Music Index'), release.indexOf('${titleField}'),
     release.indexOf('label="Kind"'), release.indexOf('${authorField}'), release.indexOf('${hostField}'), release.indexOf('${feedFile}')];
   assert.ok(fieldOrder.every((position, index) => position >= 0 && (index === 0 || fieldOrder[index - 1] < position)),
-    'ADR 0230 items 9, 11 and 12: the release form shows the parent card, the row Find on Music Index, then Title, Kind, Artist name, File host and Feed file. Fix MakeFeedForm in crates/api/ui/app.js.');
+    'ADR 0261 items 9, 11 and 12: the release form shows the parent card, the row Find on Music Index, then Title, Kind, Artist name, File host and Feed file. Fix MakeFeedForm in crates/api/ui/app.js.');
 });
 
-test('the sheet title names the parent, or has no parent (ADR 0230 item 8)', () => {
-  const owner = 'ADR 0230 item 8: the title is "New release for {parent}", or "New release" with no parent. Fix makeTitle in crates/api/ui/addfeeds.js.';
+test('the sheet title names the parent, or has no parent (ADR 0261 item 8)', () => {
+  const owner = 'ADR 0261 item 8: the title is "New release for {parent}", or "New release" with no parent. Fix makeTitle in crates/api/ui/addfeeds.js.';
   assert.equal(makeTitle('album', null, 'Pixel Palace'), 'New release for Pixel Palace', owner);
   assert.equal(makeTitle('album', null, null), 'New release', owner);
   assert.equal(makeTitle('album'), 'New release', owner);
@@ -134,8 +134,8 @@ test('the sheet title names the parent, or has no parent (ADR 0230 item 8)', () 
     'ADR 0253 item 11: name the publisher page. Fix makeTitle in crates/api/ui/addfeeds.js.');
 });
 
-test('the parent card shows the page, and no card when there is no parent (ADR 0230 items 9 and 10)', () => {
-  const owner = 'ADR 0230 items 9 and 10: the parent card gives the name and the type of the page, or null with no parent. Fix parentCard in crates/api/ui/addfeeds.js.';
+test('the parent card shows the page, and no card when there is no parent (ADR 0261 items 9 and 10)', () => {
+  const owner = 'ADR 0261 items 9 and 10: the parent card gives the name and the type of the page, or null with no parent. Fix parentCard in crates/api/ui/addfeeds.js.';
   const feeds = [{ id: 9, medium: 'publisher', connector_id: 1, publisher_roles: ['artist'], roles_confirmed: true, title: 'Pixel Palace' }];
   const card = parentCard(feeds, 9);
   assert.equal(card.title, 'Pixel Palace', owner);
@@ -145,8 +145,8 @@ test('the parent card shows the page, and no card when there is no parent (ADR 0
   assert.equal(parentCard(feeds, 77), null, owner);
 });
 
-test('the release form cannot make a release with no parent (ADR 0230 item 10)', () => {
-  const owner = 'ADR 0230 item 10: with no parent the card says "No artist page", has Select…, and Make the Release stays off. Fix MakeFeedForm in crates/api/ui/app.js.';
+test('the release form cannot make a release with no parent (ADR 0261 item 10)', () => {
+  const owner = 'ADR 0261 item 10: with no parent the card says "No artist page", has Select…, and Make the Release stays off. Fix MakeFeedForm in crates/api/ui/app.js.';
   const source = readFileSync(new URL('../ui/app.js', import.meta.url), 'utf8');
   const form = source.slice(source.indexOf('function ParentCard'), source.indexOf('// Choose a feed file'));
   assert.match(form, /'No artist page'/, owner);
@@ -155,8 +155,8 @@ test('the release form cannot make a release with no parent (ADR 0230 item 10)',
   assert.match(form, /if \(isRelease && parentId === null\) return;/, owner);
 });
 
-test('the release form has no "Start from" and no route field from (ADR 0230 item 13)', () => {
-  const owner = 'ADR 0230 item 13: the copy of a release is gone. Remove "Start from", startChoices and the field from. Do not bring them back.';
+test('the release form has no "Start from" and no route field from (ADR 0261 item 13)', () => {
+  const owner = 'ADR 0261 item 13: the copy of a release is gone. Remove "Start from", startChoices and the field from. Do not bring them back.';
   const source = readFileSync(new URL('../ui/app.js', import.meta.url), 'utf8');
   const addfeeds = readFileSync(new URL('../ui/addfeeds.js', import.meta.url), 'utf8');
   assert.doesNotMatch(source, /Start from|startChoices|body\.from(?!_found)\b/, owner);

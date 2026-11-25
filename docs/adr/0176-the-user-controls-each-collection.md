@@ -6,7 +6,7 @@
 - Accepted: 2026-11-11 by the operator, from the drawings of a questionnaire. The operator added Rename.
 - Technical choices: items 4, 6, 8, 9 and 12 are choices of the planning model.
 - Changes: [ADR 0149](0149-the-desktop-app-has-many-collections.md) items 2, 6, 11, 12 and 17.
-- Changes: [ADR 0107](0107-a-user-can-export-and-import-an-account.md) item 3 and item 9 on the desktop app.
+- Changes: [ADR 0107](../archive/adr/0107-a-user-can-export-and-import-an-account.md) item 3 and item 9 on the desktop app.
 - Source: the human checks of 2026-11-11.
 - Changed by: [ADR 0183](0183-each-collection-row-has-one-actions-menu.md). Items 2, 3 and 10: one **Actions** menu on each row, and the badge "✓ Current".
 - Changed by: [ADR 0242](0242-the-collection-row-of-the-footer-opens-switch-collection.md). Item 12: the row also shows with one collection, as "Switch Collection…".
@@ -33,8 +33,8 @@ The export was in the section "Move Studio", and the import was in the section "
 ### Delete And Replace
 
 6. A delete and a replace each need a confirmation sheet. The sheet gives the name, the count of feeds and the parts that go: the feeds, the drafts, the versions, the people and the vault. It says that nothing changes on a file host.
-7. The sheet has "Export First…", which makes an account file of that collection. The export rules of ADR 0107 items 4 and 5 apply.
-8. "Replace with a File…" reads the account file into a new folder first, with the checks of ADR 0107 item 11. After a good read, one write of the list file moves the entry to the new folder. Then Studio removes the previous folder. The name of the collection stays. A read that is not good changes nothing. After a stop, a folder that the list does not name can stay, and Studio does not delete it.
+7. The sheet has "Export First…", which makes an account file of that collection. The export rules of ADR 0262 items 4 and 5 apply.
+8. "Replace with a File…" reads the account file into a new folder first, with the checks of ADR 0262 item 11. After a good read, one write of the list file moves the entry to the new folder. Then Studio removes the previous folder. The name of the collection stays. A read that is not good changes nothing. After a stop, a folder that the list does not name can stay, and Studio does not delete it.
 9. The vault of the replaced collection is the vault of the file. The user opens it with a method of the file.
 
 ### Export Next To Import

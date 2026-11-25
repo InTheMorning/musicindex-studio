@@ -543,7 +543,7 @@ fn change_stored_paths(root: &Path, main: &Path) -> Result<(), CollectionsError>
             .map_err(fail)?;
         let old = value.and_then(|text| serde_json::from_str::<String>(&text).ok());
         if let Some(inside) = old.as_deref().and_then(moved) {
-            // A library in the data folder is a relative path (ADR 0107 item 1).
+            // A library in the data folder is a relative path (ADR 0262 item 1).
             let text = inside.to_string_lossy().into_owned();
             db.execute(
                 "UPDATE settings SET value = ?1 WHERE key = 'library_root'",

@@ -9,7 +9,7 @@
 - Applies: musicindex ADR 0059 R-SET-1 to R-SET-5, at musicindex `9c81ccd`.
 - Revised: 2026-11-10. Items 17 and 18 apply musicindex ADR 0059 R-SET-3 item 6.
 - Changes: [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) item 10.
-- Uses: [ADR 0239](0239-the-panel-holds-the-content-and-the-page-has-tabs.md) item 6 for the narrow tabs. [ADR 0116](0116-the-page-of-a-person-has-save-and-discard.md) items 8 and 10 for the leave question. [ADR 0165](0165-the-left-panel-marks-the-state-of-each-feed.md) item 2 for the pencil.
+- Uses: [ADR 0239](0239-the-panel-holds-the-content-and-the-page-has-tabs.md) item 6 for the narrow tabs. [ADR 0116](0116-the-page-of-a-person-has-save-and-discard.md) items 8 and 10 for the leave question. [ADR 0259](0259-studio-checks-each-feed-and-the-left-panel-marks-its-state.md) item 15 for the pencil.
 
 ## Context
 
@@ -40,7 +40,7 @@ musicindex ADR 0059 gives the shared layout of Settings for Studio and v4vmm. Th
 
 7. These settings are part of the draft: the UI scale, the lock time, the close of the window, the check of outside changes, the Nostr search relay and the two library limits. A change of one of them stays pending until Save (musicindex ADR 0059 R-SET-3).
 8. The bar shows the state, **Discard** and **Save**, with the texts of the page of a person: "No changes", "1 change not saved", "N changes not saved". After a save, it shows "Saved".
-9. A changed row and a tab with a pending change show the pencil of ADR 0165 item 2, in the `--accent` color (musicindex ADR 0059 R-SET-3 item 4). Its accessible name is "Not saved".
+9. A changed row and a tab with a pending change show the pencil of ADR 0259 item 15, in the `--accent` color (musicindex ADR 0059 R-SET-3 item 4). Its accessible name is "Not saved".
 10. The draft stays when the user goes to a different tab. A change of the tab does not ask the leave question.
 11. When the user leaves Settings with a pending change, Studio opens the sheet "Leave without saving?" (ADR 0116 item 8). A close or a load of the page asks through `beforeunload` (ADR 0116 item 10).
 12. Save sends each pending setting to its current route. When a route refuses a value, that setting stays pending, and its row shows the cause. The other settings keep their save.

@@ -6,7 +6,7 @@
 - Accepted: 2026-11-20 by the operator, after the desktop check of rc.30 (`docs/reviews/2026-11-20-rc29-human-check.md`, section "Desktop Check Of rc.30", findings 1, 2, 4 and 5). The operator selected items 1, 3, 4, 6 and 10 from drawings in the questionnaire. The operator asked for items 9 and 13 in the chat.
 - Technical choices: the main session selected items 2, 5, 7, 8, 11, 12, 14 and 15. The operator did not receive them as a question.
 - Bar: crosses modules. It changes the Music Index client, the feed reader, the make of a feed, the remove of a feed, the routes and the UI. Without this record, an agent can keep the scope of ADR 0230 item 16 and copy no tracks.
-- Changes: [ADR 0230](0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 1, 4, 11, 14, 15 and 16, the add menu and the scope of a selection (items 1 to 12).
+- Changes: [ADR 0230](../archive/adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 1, 4, 11, 14, 15 and 16, the add menu and the scope of a selection (items 1 to 12).
 - Changes: [ADR 0212](0212-the-add-pages.md) item 1, the page with the rows "By address or name", "From a file host folder" and "From MSP 2.0 backups" (items 3 and 4).
 - Changes: [ADR 0232](../archive/adr/0232-each-group-below-an-open-feed-has-an-add-row.md) item 8, the page **Add One You Have** as a start of a new feed (item 3).
 - Changed by: [ADR 0234](0234-a-new-release-is-written-with-its-pages-and-a-one-sided-link-is-reported.md) item 11, on 2026-11-20. Item 15: the remove also clears a link that only a draft has for a written release.
@@ -43,7 +43,7 @@ The operator did the desktop check of rc.30 on 2026-11-20. Four findings need a 
 
 8. A selection of a different result reads the feed file of the found feed. The form then shows the line "Copies {n} tracks and {m} payment recipients from {title}."
 9. The new feed gets each value of the found feed: the title, the author, the description, the artwork, the website, the value recipients of the feed, and each item with its title, enclosure, duration, artwork, description and value recipients. A publisher feed also gets the remote items of the found feed.
-10. The parent of the form stays the parent of the new release (ADR 0230 item 9). The artist name of the found feed fills "Artist name".
+10. The parent of the form stays the parent of the new release (ADR 0261 item 9). The artist name of the found feed fills "Artist name".
 11. The new feed gets its own identity: a new `podcast:guid` from its address, its own self link and a new guid for each item. The enclosure addresses stay the addresses of the found feed. Studio copies no audio file. **Move This Release…** can copy the files later.
 12. When the author of the found feed is not the name of the parent, the form shows: "The payments go to the recipients of {title}. Examine them on **Value Routes** before the write." Review shows each copied value before the first write.
 13. In the form of a release, a selection of an artist row shows the releases of that artist on Music Index, with the back row **‹ Results**. A selection of one of these releases follows items 6 to 12 (finding 1).

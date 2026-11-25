@@ -1,6 +1,6 @@
 # Studio v1 Task 206: A Deleted Release Can Come Back
 
-Decision: [ADR 0230](../adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 25 to 30.
+Decision: [ADR 0230](../archive/adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 25 to 30.
 
 Status: Done. The human check is open.
 

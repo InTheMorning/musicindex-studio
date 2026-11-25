@@ -1,22 +1,24 @@
+> Archived: superseded by [ADR 0261](../../adr/0261-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) on 2026-11-25. The new ADR restates each live rule and gives its Item Map.
+
 # ADR 0230: One Add Menu, The Parent Of A New Release, And The Check After rc.29
 
-- Status: Accepted
+- Status: Superseded by ADR 0261
 - Date: 2026-11-20
 - Owner: operator
 - Accepted: 2026-11-20 by the operator, in the desktop check after rc.29 (`docs/reviews/2026-11-20-rc29-human-check.md`, section "Desktop Check Of The Fixes After rc.29", findings 2 to 12). The operator selected items 1 to 13 and items 17 to 19 from drawings in the questionnaire. In the chat, the operator said that labels of user actions must not use the word "feed". The operator also said that a new item must show its parent clearly.
 - Technical choices: the main session selected items 14 to 16 and items 20 to 33 from the causes that two research agents found. The operator did not receive them as a question. Items 16 and 21 are open for a review by the operator.
 - Bar: crosses modules: the core drafts, the delete records, the remote records, the routes and the UI. An agent can also add the word "feed" to a new button by mistake. The earlier ADRs 0212 and 0213 give the opposite of items 1 to 13.
-- Changes: [ADR 0212](0212-the-add-pages.md) items 1, 5, 6 and 8, the add controls of the page Releases and the form (items 1 to 13).
-- Changes: [ADR 0213](../archive/adr/0213-a-release-starts-on-the-page-of-its-artist.md) items 1, 2, 5 and 6, where a release starts and the fields of its form (items 1 to 13).
+- Changes: [ADR 0212](../../adr/0212-the-add-pages.md) items 1, 5, 6 and 8, the add controls of the page Releases and the form (items 1 to 13).
+- Changes: [ADR 0213](0213-a-release-starts-on-the-page-of-its-artist.md) items 1, 2, 5 and 6, where a release starts and the fields of its form (items 1 to 13).
 - Changes: [ADR 0165](0165-the-left-panel-marks-the-state-of-each-feed.md) item 2, the click on a row with the mark "Not checked" (items 17 to 19).
-- Changes: [ADR 0148](0148-a-move-keeps-the-old-files-until-the-user-reviews-the-deletion.md) items 4 and 5, the media host and the old files of a move in the draft (items 20 to 24).
-- Changes: [ADR 0131](0131-delete-a-feed-from-its-file-host.md) items 4 and 10, the text about Music Index (items 25 and 26).
-- Changes: [ADR 0198](0198-the-review-of-a-delete-names-the-delete-and-a-deleted-feed-shows-only-what-it-can-do.md) items 6 and 9, **Put the File Back** after each done delete (items 27 to 29).
-- Changes: [ADR 0077](../archive/adr/0077-a-new-album-can-start-from-an-album.md), the copy of a release in "Start from". Item 13 removes the copy, and ADR 0077 has no other live rule. ADR 0077 goes to the archive in the commit that removes the copy.
-- Uses: [ADR 0164](0164-the-releases-of-a-publisher-feed-have-an-add-row.md), the add row of a publisher page. [ADR 0211](0211-studio-follows-a-move-that-a-different-studio-made.md) item 16, the notice **Use This File Host**. [ADR 0036](0036-library-records-host-inventory-and-host-operations.md), the remote records.
-- Changed by: [ADR 0231](0231-a-new-release-writes-its-artist-page-and-the-files-of-a-restored-release.md) items 1 to 6 and 14 to 17, on 2026-11-20. Item 9: the parent list has artist pages only. Item 11: the sheet says "Release". Item 27: a notice under the head shows the actions. Items 31 and 32: the corrected repair and the join of the rows with " 2".
-- Changed by: [ADR 0233](0233-each-add-form-finds-on-music-index-and-copies-the-found-feed.md) items 1 to 14, on 2026-11-20. Items 1, 4 and 11: **Add One You Have…** leaves the menu, and each form gets the search. Items 14 to 16: a selection copies the tracks and the payment recipients.
-- Changed by: [ADR 0240](../archive/adr/0240-hosting-is-a-first-role-and-a-stray-release-moves-to-its-pages.md) items 1 and 4, on 2026-11-21. Item 1: the menu gets Hosting after Label. Item 2: the menu of a label page or a hosting page has no Release.
+- Changes: [ADR 0148](../../adr/0148-a-move-keeps-the-old-files-until-the-user-reviews-the-deletion.md) items 4 and 5, the media host and the old files of a move in the draft (items 20 to 24).
+- Changes: [ADR 0131](../../adr/0131-delete-a-feed-from-its-file-host.md) items 4 and 10, the text about Music Index (items 25 and 26).
+- Changes: [ADR 0198](../../adr/0198-the-review-of-a-delete-names-the-delete-and-a-deleted-feed-shows-only-what-it-can-do.md) items 6 and 9, **Put the File Back** after each done delete (items 27 to 29).
+- Changes: [ADR 0077](0077-a-new-album-can-start-from-an-album.md), the copy of a release in "Start from". Item 13 removes the copy, and ADR 0077 has no other live rule. ADR 0077 goes to the archive in the commit that removes the copy.
+- Uses: [ADR 0164](../../adr/0164-the-releases-of-a-publisher-feed-have-an-add-row.md), the add row of a publisher page. [ADR 0211](../../adr/0211-studio-follows-a-move-that-a-different-studio-made.md) item 16, the notice **Use This File Host**. [ADR 0036](../../adr/0036-library-records-host-inventory-and-host-operations.md), the remote records.
+- Changed by: [ADR 0231](../../adr/0231-a-new-release-writes-its-artist-page-and-the-files-of-a-restored-release.md) items 1 to 6 and 14 to 17, on 2026-11-20. Item 9: the parent list has artist pages only. Item 11: the sheet says "Release". Item 27: a notice under the head shows the actions. Items 31 and 32: the corrected repair and the join of the rows with " 2".
+- Changed by: [ADR 0233](../../adr/0233-each-add-form-finds-on-music-index-and-copies-the-found-feed.md) items 1 to 14, on 2026-11-20. Items 1, 4 and 11: **Add One You Have…** leaves the menu, and each form gets the search. Items 14 to 16: a selection copies the tracks and the payment recipients.
+- Changed by: [ADR 0240](0240-hosting-is-a-first-role-and-a-stray-release-moves-to-its-pages.md) items 1 and 4, on 2026-11-21. Item 1: the menu gets Hosting after Label. Item 2: the menu of a label page or a hosting page has no Release.
 
 ## Context
 

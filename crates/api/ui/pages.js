@@ -1,5 +1,5 @@
 // The sequence, the tiers and the fields of the sections of each page
-// (ADR 0071, ADR 0206, ADR 0042). This list is the sequence of the pages. The
+// (ADR 0071, ADR 0258, ADR 0042). This list is the sequence of the pages. The
 // functions have no Preact and no browser state. `editor.js` maps each ID to a
 // render function.
 
@@ -80,7 +80,7 @@ const PAGES = {
     // The panel shows only in the desktop app (ADR 0149 item 5).
     ...(server || !collections ? [] : [{ id: 'collections', tier: 'setup', tab: 'data' }]),
     // A shell with no list of collections moves its data from here (ADR 0176
-    // item 11). A server has "Export Account" in the Account panel (ADR 0107
+    // item 11). A server has "Export Account" in the Account panel (ADR 0262
     // item 3), and the desktop app has the export in "Collections".
     ...(server || collections ? [] : [{ id: 'move', tier: 'setup', tab: 'data' }]),
     // A server with `--hold-assets off` has no downloads into the library, so

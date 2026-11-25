@@ -1,6 +1,6 @@
 # Studio v1 Task 071: Account Export And Import
 
-Decision: [ADR 0107](../adr/0107-a-user-can-export-and-import-an-account.md) and [ADR 0108](../adr/0108-people-data-at-rest-stays-plain.md). It uses ADR 0013, ADR 0014 item 3, ADR 0056, ADR 0058 item 18, ADR 0059 and ADR 0105.
+Decision: [ADR 0107](../archive/adr/0107-a-user-can-export-and-import-an-account.md) and [ADR 0108](../adr/0108-people-data-at-rest-stays-plain.md). It uses ADR 0013, ADR 0014 item 3, ADR 0056, ADR 0058 item 18, ADR 0059 and ADR 0105.
 
 Status: Complete, with its screenshot visual check. Its human test is open (ADR 0107).
 

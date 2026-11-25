@@ -3034,7 +3034,7 @@ async fn the_31st_challenge_of_one_address_in_five_minutes_gives_429() {
     assert_eq!(send(&app, other).await.status, StatusCode::OK);
 }
 
-// ---- Export and import of an account (task 071b, 071c, ADR 0107) ----
+// ---- Export and import of an account (task 071b, 071c, ADR 0262) ----
 
 /// Send a request and give the status and the raw body.
 async fn send_bytes(app: &App, call: Call<'_>) -> (StatusCode, Vec<u8>) {
@@ -3177,7 +3177,7 @@ async fn an_export_from_one_server_imports_into_a_second_server_and_opens_with_t
     assert_eq!(
         manifest.email.as_deref(),
         Some("heycitizen@example.org"),
-        "ADR 0107 item 6: the manifest of a server export must hold the email of the account. Pass the identity to the workspace."
+        "ADR 0262 item 6: the manifest of a server export must hold the email of the account. Pass the identity to the workspace."
     );
 
     let two = app(Signup::Invite);
@@ -3223,7 +3223,7 @@ async fn an_export_from_one_server_imports_into_a_second_server_and_opens_with_t
     assert_eq!(
         feeds.json.as_array().map(Vec::len),
         Some(1),
-        "ADR 0107 item 13: the feeds of the archive must be in the new account: {:?}",
+        "ADR 0262 item 13: the feeds of the archive must be in the new account: {:?}",
         feeds.json
     );
     // The invite was used, and a second import of the same file has no folder.
@@ -3245,7 +3245,7 @@ async fn an_export_from_one_server_imports_into_a_second_server_and_opens_with_t
     assert_eq!(
         session_json(&two, &who_two).await["imported"],
         false,
-        "ADR 0107 item 14: the user must be able to close the notice"
+        "ADR 0262 item 14: the user must be able to close the notice"
     );
     // The old server still has the account: the export changes nothing.
     assert_eq!(one.state.accounts.folders().unwrap().len(), 1);
@@ -3271,14 +3271,14 @@ async fn an_import_with_the_email_of_an_existing_account_gives_account_exists_an
     assert_eq!(
         early.code(),
         "account_exists",
-        "ADR 0107 item 12: the server must refuse an account that exists before it derives a key"
+        "ADR 0262 item 12: the server must refuse an account that exists before it derives a key"
     );
     let opened = import_open(&one, &upload, json!({ "passphrase": PASS_ONE })).await;
     assert_eq!(opened.status, StatusCode::CONFLICT, "{:?}", opened.json);
     assert_eq!(
         opened.code(),
         "account_exists",
-        "ADR 0107 item 12: an email in use must give 409 account_exists"
+        "ADR 0262 item 12: an email in use must give 409 account_exists"
     );
     assert_eq!(
         user_folders(&one),
@@ -3357,12 +3357,12 @@ async fn an_archive_with_a_hostile_library_root_does_not_make_the_workspace_use_
         assert_eq!(
             collection.library_root().unwrap(),
             Some(own.join("library")),
-            "ADR 0107 item 1: on a server the library of an imported account must be its own library folder, not {hostile_value:?}. Call reset_library_root with LibraryPolicy::Own."
+            "ADR 0262 item 1: on a server the library of an imported account must be its own library folder, not {hostile_value:?}. Call reset_library_root with LibraryPolicy::Own."
         );
         assert_eq!(
             collection.setting("library_root").unwrap(),
             Some(json!("library")),
-            "ADR 0107 item 1: the path must be relative"
+            "ADR 0262 item 1: the path must be relative"
         );
         let who_two = (
             opened.token(),
@@ -3411,7 +3411,7 @@ async fn an_import_of_a_vault_with_only_a_passkey_wrapper_is_refused_with_the_ca
     assert_eq!(
         checked.code(),
         "archive_invalid",
-        "ADR 0107 item 4: a vault with only passkeys cannot open on another server"
+        "ADR 0262 item 4: a vault with only passkeys cannot open on another server"
     );
     assert!(
         checked.message().contains("no_portable_method")
@@ -3422,7 +3422,7 @@ async fn an_import_of_a_vault_with_only_a_passkey_wrapper_is_refused_with_the_ca
     assert_eq!(
         user_folders(&two),
         Vec::<String>::new(),
-        "ADR 0107 item 11: a refused import must leave no user folder"
+        "ADR 0262 item 11: a refused import must leave no user folder"
     );
     let gone = send(
         &two,
@@ -3453,7 +3453,7 @@ async fn the_import_obeys_the_storage_limit_and_refuses_a_bad_file() {
     assert_eq!(
         big.code(),
         "storage_full",
-        "ADR 0107 item 15: an archive over the storage limit must be refused at the start"
+        "ADR 0262 item 15: an archive over the storage limit must be refused at the start"
     );
     let (_, upload) = import_upload(&two, &[7_u8; 3000], None).await;
     let checked = import_check(&two, &upload).await;
@@ -3462,7 +3462,7 @@ async fn the_import_obeys_the_storage_limit_and_refuses_a_bad_file() {
     assert_eq!(
         user_folders(&two),
         Vec::<String>::new(),
-        "ADR 0107 item 11: a refused import must leave no user folder"
+        "ADR 0262 item 11: a refused import must leave no user folder"
     );
     // The size of the entries counts against the limit, too.
     let one = app(Signup::Open);
@@ -3495,11 +3495,11 @@ async fn an_export_from_a_server_needs_a_recent_unlock_and_a_movable_vault() {
     assert_eq!(
         old.status,
         StatusCode::UNAUTHORIZED,
-        "ADR 0107 item 3: the export needs an unlock in the last 5 minutes. Call require_recent_unlock in the route."
+        "ADR 0262 item 3: the export needs an unlock in the last 5 minutes. Call require_recent_unlock in the route."
     );
     assert_eq!(old.code(), "unlock_required");
     let key = api(&one, &who, "POST", "/api/v1/vault/recovery-key", None).await;
-    assert_eq!(key.code(), "unlock_required", "ADR 0107 item 4");
+    assert_eq!(key.code(), "unlock_required", "ADR 0262 item 4");
     let unlock = api(
         &one,
         &who,
@@ -3692,7 +3692,7 @@ async fn the_queues_of_an_archive_do_not_come_in_on_a_server() {
         .unwrap();
     assert_eq!(
         left, 0,
-        "ADR 0107 item 13: an import must not bring a waiting announcement or a queued download. Call clear_queues in the check."
+        "ADR 0262 item 13: an import must not bring a waiting announcement or a queued download. Call clear_queues in the check."
     );
 }
 
@@ -3719,7 +3719,7 @@ async fn an_address_can_start_only_a_few_imports_in_an_hour() {
     assert_eq!(
         over.status,
         StatusCode::TOO_MANY_REQUESTS,
-        "ADR 0107 item 9: an address must have a limit of import starts. Call import_starts.allow in start."
+        "ADR 0262 item 9: an address must have a limit of import starts. Call import_starts.allow in start."
     );
     assert_eq!(over.code(), "too_many_attempts");
     let other = start("10.0.0.8:4000").await;

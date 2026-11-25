@@ -1,6 +1,6 @@
 # Studio v1 Task 218: The Media Host After Each End Of A Move, And No Empty Review Row
 
-Decision: [ADR 0230](../adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 20 and 21. This task corrects defects. It makes no new decision.
+Decision: [ADR 0230](../archive/adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 20 and 21. This task corrects defects. It makes no new decision.
 
 Status: Done.
 

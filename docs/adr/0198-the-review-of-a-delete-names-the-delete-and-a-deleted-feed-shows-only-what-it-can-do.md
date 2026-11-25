@@ -10,7 +10,7 @@
 - Source: finding 5 and finding 6 of the [human test findings of 0.1.0-rc.22](../reviews/2026-11-13-rc22-human-test-findings.md).
 - Revised: 2026-11-15 by operator decision. Items 9 to 11 give **Put the File Back**, and items 12 to 15 give the write of only deletions. The operator selected them on 2026-11-14, from drawings. These rules were in ADR 0208 and ADR 0209, which are deleted. Item 6 names item 9.
 - Revised: 2026-11-17 by operator decision. Items 16 and 17 give the podping of a write of only deletions. The operator selected "No podping" on 2026-11-17, from drawings.
-- Changed by: [ADR 0230](0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 27 to 30, on 2026-11-20. Items 6 and 9: each feed with a done delete shows **Put the File Back**, also when it is not hidden.
+- Changed by: [ADR 0230](../archive/adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 27 to 30, on 2026-11-20. Items 6 and 9: each feed with a done delete shows **Put the File Back**, also when it is not hidden.
 
 ## Context
 

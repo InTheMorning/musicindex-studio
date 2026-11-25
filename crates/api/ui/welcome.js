@@ -1,11 +1,11 @@
 // The Welcome page of a new user and the first steps of an artist page or a
-// label page (ADR 0221, task 083). The functions have no Preact and no browser
+// label page (ADR 0260, task 083). The functions have no Preact and no browser
 // state. `app.js` and `editor.js` show the rows and the sheets.
 import { isPublisher, releaseStart } from './shell.js';
 import { feedFileStart } from './addfeeds.js';
 import { writablePages } from './movepages.js';
 
-// The texts of the Welcome page (ADR 0221 items 2 and 3).
+// The texts of the Welcome page (ADR 0260 items 2 and 3).
 export const WELCOME = {
   title: 'Welcome to Studio',
   intro: 'Studio publishes your music so that every music app can play it. What do you want to start with?',
@@ -30,7 +30,7 @@ export const HOST_STEP = {
   placeholderAddress: 'Studio cannot make the address of this file yet. The address comes from the public address of the feed, and this file host has none. Studio sets the address when the feed gets a public address.',
 };
 
-// The texts and the step names of each path (ADR 0221 items 4 to 6).
+// The texts and the step names of each path (ADR 0260 items 4 to 6).
 const PATHS = {
   music: {
     role: 'artist',
@@ -76,7 +76,7 @@ export function pathTexts(path) {
   };
 }
 
-// Is the Welcome page shown? It is shown when the collection has no feed (ADR 0221 item 1).
+// Is the Welcome page shown? It is shown when the collection has no feed (ADR 0260 item 1).
 export function showWelcome(feeds) {
   return (feeds || []).length === 0;
 }
@@ -147,7 +147,7 @@ export function welcomeBody(path, name, connectorId) {
   };
 }
 
-// The next step of the page of a publisher feed (ADR 0221 item 8, ADR 0240
+// The next step of the page of a publisher feed (ADR 0260 item 8, ADR 0240
 // item 3). It is `album` for an artist with no release, `label` for a label
 // with no release, `hosting` for a hosting page with no page below it, and
 // `null` for any other feed. `release_ids` holds the releases
@@ -177,7 +177,7 @@ export function releaseArtistChoices(feeds) {
     .map((feed) => [String(feed.id), feed.title || feed.path || 'Untitled feed']);
 }
 
-// The rows of the page of a new publisher feed (ADR 0221 item 8). `open` is
+// The rows of the page of a new publisher feed (ADR 0260 item 8). `open` is
 // the row of the Add feeds page that the row opens.
 export const FIRST_STEPS = {
   album: {
@@ -199,7 +199,7 @@ export const FIRST_STEPS = {
   ],
 };
 
-// The start values of the form that a first-step row opens (ADR 0221 item
+// The start values of the form that a first-step row opens (ADR 0260 item
 // 8). An album of an artist starts with the artist as its author. A new
 // artist of a label starts with the role `artist`. A new page of a hosting
 // page starts with the role of its row, below the hosting page (ADR 0240 item

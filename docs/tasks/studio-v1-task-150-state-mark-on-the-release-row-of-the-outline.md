@@ -1,6 +1,6 @@
 # Studio v1 Task 150: The State Mark On The Release Row Of The Outline
 
-Decision: none. This is Note 14 of the walk. [ADR 0165](../adr/0165-the-left-panel-marks-the-state-of-each-feed.md) items 1, 2 and 6 own the state marks and their store, and they do not change. The outline is a part of the left panel.
+Decision: none. This is Note 14 of the walk. [ADR 0165](../archive/adr/0165-the-left-panel-marks-the-state-of-each-feed.md) items 1, 2 and 6 own the state marks and their store, and they do not change. The outline is a part of the left panel.
 
 Status: Complete on 2026-11-15, with the screenshot visual check. The visual gate for the operator is open.
 

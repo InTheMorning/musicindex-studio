@@ -1,4 +1,4 @@
-> Archived: superseded by [ADR 0206](../../adr/0206-the-shell-and-the-editor-pages.md) on 2026-11-14. ADR 0206 restates each live rule of this ADR. Its item map gives the new item of each item.
+> Archived: superseded by [ADR 0206](0206-the-shell-and-the-editor-pages.md) on 2026-11-14. ADR 0206 restates each live rule of this ADR. Its item map gives the new item of each item.
 
 # ADR 0064: The Editor Edits The Fields That MSP 2.0 Edits
 

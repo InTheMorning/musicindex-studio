@@ -61,7 +61,7 @@ export const DELETE_POINTS = [
 ];
 
 // The Retire block shows when the feed asks to be removed, and for each feed
-// with a done delete, also when its draft does not hide the feed (ADR 0230
+// with a done delete, also when its draft does not hide the feed (ADR 0261
 // item 27).
 export function retireBlockShown(state, hostDeleted) {
   if (!state) return false;

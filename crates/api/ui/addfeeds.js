@@ -2,8 +2,8 @@
 // Preact and no browser state. `app.js` shows their rows and forms.
 import { feedKind, kindGlow, publisherArt, headingIndex } from './shell.js';
 
-// The entries of the add menu of Releases and of a page head (ADR 0230 items
-// 1 to 4, ADR 0240 items 1 and 4). `release` is the add action of the artist
+// The entries of the add menu of Releases and of a page head (ADR 0261 items
+// 1 to 3, ADR 0240 items 1 and 4). `release` is the add action of the artist
 // of the page, or null when Release has no start parent. `head` is the feed of
 // the page head, or null on the page Releases. On a hosting page or a label
 // page, the menu has no Release and no role of the same rank or a higher rank,
@@ -187,7 +187,7 @@ export function makeTitle(type, role, parent) {
   return parent ? `New release for ${parent}` : 'New release';
 }
 
-// The parent card of the form that makes a release (ADR 0230 items 9 and 10):
+// The parent card of the form that makes a release (ADR 0261 items 9 and 10):
 // the art, the name and the type of the parent page. It gives `null` when
 // `publisherId` names no page of the list.
 export function parentCard(feeds, publisherId) {

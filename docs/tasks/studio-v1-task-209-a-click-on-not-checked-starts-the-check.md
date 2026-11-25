@@ -1,6 +1,6 @@
 # Studio v1 Task 209: A Click On "Not Checked" Starts The Check
 
-Decision: [ADR 0230](../adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 17 to 19.
+Decision: [ADR 0230](../archive/adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) items 17 to 19.
 
 Status: Done. One point for the narrow layout is open. Refer to the Result.
 

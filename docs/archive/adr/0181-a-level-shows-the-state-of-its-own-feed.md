@@ -8,7 +8,7 @@
 - Accepted: 2026-11-12 by the operator, through a drawing in the questionnaire of the human checks.
 - Technical choices: items 2 and 4 are choices of the planning model. The operator selected the design for an artist. Item 2 applies it to each level.
 - Changes: [ADR 0088](0088-the-left-panel-shows-the-levels-of-the-publisher-feeds.md) item 5, the content area of a level.
-- Uses: [ADR 0165](../../adr/0165-the-left-panel-marks-the-state-of-each-feed.md) items 1 to 4 for the marks.
+- Uses: [ADR 0165](0165-the-left-panel-marks-the-state-of-each-feed.md) items 1 to 4 for the marks.
 - Source: finding 6 of the [human checks of 2026-11-11](../../reviews/2026-11-11-local-human-test-findings.md).
 
 ## Context

@@ -94,7 +94,7 @@
 ### The Export
 
 34. The route `GET /people/export` gives a JSON file of the people. Each link has its evidence and the time of the link. The evidence is the statement of the user, the keysend lookup or a Nostr signature. The file gives the nickname (ADR 0182 item 18). It gives the defaults in `img` and `href`, and the lists in `pictures` and `websites` with their sources (ADR 0196 item 16).
-35. The export holds no secret. An import of people is not a part of this ADR. [ADR 0107](0107-a-user-can-export-and-import-an-account.md) imports a full account.
+35. The export holds no secret. An import of people is not a part of this ADR. [ADR 0262](0262-a-user-can-export-and-import-an-account.md) imports a full account.
 
 ### The People Destination
 

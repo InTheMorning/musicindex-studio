@@ -5,7 +5,7 @@
 - Owner: operator
 - Accepted: 2026-11-12 by the operator, through the questionnaire. The operator asked for a notice that tells the user to examine the podping. The operator selected the drawing with the podping state and a send button. The button of a podping that was not sent has no word "Again".
 - Technical choices: items 1, 2, 4, 6 and 9 are choices of the planning model.
-- Changes: [ADR 0150](0150-studio-shows-a-change-from-outside-when-a-page-opens.md) item 5, the notice after a move by Studio.
+- Changes: [ADR 0150](../archive/adr/0150-studio-shows-a-change-from-outside-when-a-page-opens.md) item 5, the notice after a move by Studio.
 - Changes: [ADR 0052](../archive/adr/0052-announcements-through-the-podcast-index-hub.md) item 21, a send with no write.
 - Uses: [ADR 0128](0128-a-moved-feed-names-its-own-address.md) for the tag `itunes:new-feed-url`. [ADR 0052](../archive/adr/0052-announcements-through-the-podcast-index-hub.md) items 8 and 13 to 20 for the queue. [ADR 0136](0136-one-announcement-choice-at-the-write.md) for the choice at the write.
 - Changed by: [ADR 0189](0189-a-move-sends-one-podping-of-the-old-address.md). Item 6: the notice gives one line, for the address before the move. Item 10: the button sends that address.
@@ -28,7 +28,7 @@ After a move of the feed file, the release page showed "Music Index reads this f
 
 ### The Notice After A Move By Studio
 
-3. The check of ADR 0150 item 5 can give an address at Music Index that is the source address of a move. That move is the last written move of this feed in this collection. Then the release page shows the notice of a move by Studio in place of the notice of a different address.
+3. The check of ADR 0259 item 5 can give an address at Music Index that is the source address of a move. That move is the last written move of this feed in this collection. Then the release page shows the notice of a move by Studio in place of the notice of a different address.
 4. The notice starts with "You moved this feed at {time}. Music Index reads the new address after it gets the podping." It has the information style, not the error style.
 5. The notice then gives the state of the podping of the move write, from the announcement queue (ADR 0052 item 20):
     - "Podping: waiting, sends at {time}."
@@ -37,8 +37,8 @@ After a move of the feed file, the release page showed "Music Index reads this f
     - "Podping: not sent."
 6. A move write announces two addresses (ADR 0052 item 8). The notice gives one line for each address, with the address first.
 7. A failed podping has the button **Send the Podping Again**. A podping that was not sent has the button **Send the Podping**. A podping that waits or that is sent has no button.
-8. The notice goes when the check of ADR 0150 item 5 gives the new address, or no different address.
-9. An address at Music Index can be different and not the source of a move by Studio. Then the page keeps the notice of ADR 0150 item 5 and its text.
+8. The notice goes when the check of ADR 0259 item 5 gives the new address, or no different address.
+9. An address at Music Index can be different and not the source of a move by Studio. Then the page keeps the notice of ADR 0259 item 5 and its text.
 
 ### A Send With No Write
 
@@ -61,7 +61,7 @@ After a move of the feed file, the release page showed "Music Index reads this f
 Mechanical:
 
 - A Node test: the model of the Files page gives the line of item 1 only for a tag of the draft that differs from the hosted tag.
-- A Node test: the notice model gives the notice of item 3 when the address at Music Index is the source of the last move. It gives the notice of ADR 0150 item 5 for each other address.
+- A Node test: the notice model gives the notice of item 3 when the address at Music Index is the source of the last move. It gives the notice of ADR 0259 item 5 for each other address.
 - A Node test: the notice model gives the four podping lines and the buttons of item 7.
 - A Rust test: a send with no write puts one announcement of the public address into the queue. A feed with no public address gives a refusal.
 

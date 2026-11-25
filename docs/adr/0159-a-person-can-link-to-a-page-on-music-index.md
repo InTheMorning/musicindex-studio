@@ -44,7 +44,7 @@ A person could link only to an artist or label feed of the collection. A collabo
 
 ### The Export
 
-12. The export of the people (ADR 0098 item 24) gives each read-only link of a person with its feed GUID, its title and the time of the link. A save keeps the time of each link that stays. The account archive of ADR 0107 holds the pages because it holds the collection.
+12. The export of the people (ADR 0098 item 24) gives each read-only link of a person with its feed GUID, its title and the time of the link. A save keeps the time of each link that stays. The account archive of ADR 0262 holds the pages because it holds the collection.
 
 ### The Wallets Of A Page
 

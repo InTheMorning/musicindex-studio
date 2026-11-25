@@ -1,6 +1,6 @@
 # Studio v1 Task 146: The Edge Indicator Of The Narrow Shell
 
-Decision: musicindex ADR 0071, "The Edge Indicator Shows That A Swipe Goes Back" (musicindex `054a539`). [ADR 0206](../adr/0206-the-shell-and-the-editor-pages.md) item 11 names it for the narrow shell of Studio. Studio adds no rule, so this task has no Studio ADR.
+Decision: musicindex ADR 0071, "The Edge Indicator Shows That A Swipe Goes Back" (musicindex `054a539`). [ADR 0206](../archive/adr/0206-the-shell-and-the-editor-pages.md) item 11 names it for the narrow shell of Studio. Studio adds no rule, so this task has no Studio ADR.
 
 Status: Superseded on 2026-11-16 by musicindex ADR 0079. [Task 159](studio-v1-task-159-title-button-and-brand-mark.md) removes the edge indicator. The open finding below is closed, and its visual gate for the operator is closed with no test.
 

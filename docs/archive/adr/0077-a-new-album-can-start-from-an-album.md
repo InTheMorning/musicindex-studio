@@ -1,4 +1,4 @@
-> Archived: replaced by [ADR 0230](../../adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) item 13 on 2026-11-20. The form of a release has no "Start from", and the copy is removed. This ADR has no other live rule.
+> Archived: replaced by [ADR 0230](0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) item 13 on 2026-11-20. The form of a release has no "Start from", and the copy is removed. This ADR has no other live rule.
 
 # ADR 0077: A New Album Can Start From An Album
 
@@ -7,7 +7,7 @@
 - Owner: operator
 - Accepted: 2026-10-28 by the operator.
 - Changes: [ADR 0073](0073-the-add-pages-ask-one-question-at-a-time.md) items 5 and 6, which give the fields of the form that makes a new feed.
-- Changed by: [ADR 0230](../../adr/0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) item 13, on 2026-11-20. The form of a release has no "Start from", and the copy goes. This ADR goes to the archive with the code of the copy (task 208).
+- Changed by: [ADR 0230](0230-one-add-menu-the-parent-of-a-new-release-and-the-check-after-rc29.md) item 13, on 2026-11-20. The form of a release has no "Start from", and the copy goes. This ADR goes to the archive with the code of the copy (task 208).
 
 ## Context
 

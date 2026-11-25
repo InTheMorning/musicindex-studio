@@ -5740,7 +5740,7 @@ async fn the_feed_list_gives_the_draft_state_and_the_cover_image() {
     let draft_path = format!("/api/v1/feeds/{id}/draft");
     let (_, opened) = call(&app, "GET", &draft_path, None).await;
     assert_eq!(listed(&app, id).await["draft_state"], "unchanged");
-    // Each draft answer gives the state of the list (ADR 0165 item 9).
+    // Each draft answer gives the state of the list (ADR 0259 item 21).
     assert_eq!(opened["draft_state"], "unchanged");
 
     // A feed in the DeMu form gives the address of its RSS image (ADR 0060).
@@ -5916,7 +5916,7 @@ async fn a_draft_is_edited_examined_written_and_rolled_back() {
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
-/// ADR 0206 item 23: a track that uses the album credits has no persons. A
+/// ADR 0258 item 23: a track that uses the album credits has no persons. A
 /// save with an empty list removes each item `podcast:person` and keeps the
 /// channel persons.
 #[tokio::test]
@@ -6746,14 +6746,14 @@ fn each_background_uses_a_token() {
     }
 }
 
-/// ADR 0206 item 5: no page is a placeholder. The text "Select a feed" was
+/// ADR 0258 item 5: no page is a placeholder. The text "Select a feed" was
 /// the placeholder of the editor area, so no UI file may show it again.
 #[test]
 fn no_ui_file_has_the_select_a_feed_placeholder() {
     for (name, text) in crate::ui::text_files() {
         assert!(
             !text.contains("Select a feed"),
-            "ADR 0206 item 5: {name} shows the placeholder \"Select a feed\". Show the \
+            "ADR 0258 item 5: {name} shows the placeholder \"Select a feed\". Show the \
              Releases page, or the feed that is open, instead."
         );
     }
@@ -14039,7 +14039,7 @@ async fn the_media_route_reads_the_plain_address_of_a_prefixed_enclosure() {
     assert_eq!(body, json!({ "length": 4321, "media_type": "audio/mpeg" }));
 }
 
-/// ADR 0230 item 15: a new release with the description, the artwork address
+/// ADR 0261 item 15: a new release with the description, the artwork address
 /// and the website of a found release has them in its first draft.
 #[tokio::test]
 async fn a_new_release_with_found_values_has_them_in_its_first_draft() {
@@ -14052,19 +14052,19 @@ async fn a_new_release_with_found_values_has_them_in_its_first_draft() {
     let model = draft_model(&app, feed["id"].as_i64().unwrap()).await;
     assert_eq!(
         model["description"], "About the found release.",
-        "ADR 0230 item 15: the route must put the description in the first draft. Pass it to pipeline::new_feed_with."
+        "ADR 0261 item 15: the route must put the description in the first draft. Pass it to pipeline::new_feed_with."
     );
     assert_eq!(
         model["image"], "https://art.example/found.jpg",
-        "ADR 0230 item 15: the artwork address is missing from the first draft."
+        "ADR 0261 item 15: the artwork address is missing from the first draft."
     );
     assert_eq!(
         model["link"], "https://found.example/",
-        "ADR 0230 item 15: the website is missing from the first draft."
+        "ADR 0261 item 15: the website is missing from the first draft."
     );
 }
 
-/// ADR 0230 item 13: the route has no copy. A request with the old field
+/// ADR 0261 item 13: the route has no copy. A request with the old field
 /// `from` is not refused. The route ignores the field and makes an empty
 /// release.
 #[tokio::test]
@@ -14082,7 +14082,7 @@ async fn a_new_release_ignores_the_removed_field_from() {
     assert_eq!(model["title"], "Next");
     assert!(
         model["description"].is_null(),
-        "ADR 0230 item 13: the route must not copy a release. Remove the copy branch."
+        "ADR 0261 item 13: the route must not copy a release. Remove the copy branch."
     );
 }
 
@@ -17258,7 +17258,7 @@ async fn the_asset_sweeps_do_not_change_the_last_use_of_the_vault() {
     );
 }
 
-// ---- Export and import of an account (task 071b, 071c, ADR 0107) ----
+// ---- Export and import of an account (task 071b, 071c, ADR 0262) ----
 
 /// Make an export ticket and read the archive of the ticket. Gives the
 /// ticket response, and the status, the headers and the body of the stream.
@@ -17303,14 +17303,14 @@ async fn a_new_recovery_key_opens_the_vault_and_needs_a_recent_unlock() {
     let (_, status_body) = call(&app, "GET", "/api/v1/status", None).await;
     assert_eq!(
         status_body["vault"], "open",
-        "ADR 0107 item 4: the new recovery key must open the vault. Save the vault in new_recovery_key."
+        "ADR 0262 item 4: the new recovery key must open the vault. Save the vault in new_recovery_key."
     );
     offset.store(6 * 60, std::sync::atomic::Ordering::SeqCst);
     let (status, body) = call(&app, "POST", "/api/v1/vault/recovery-key", None).await;
     assert_eq!(
         status,
         StatusCode::UNAUTHORIZED,
-        "ADR 0107 item 4: the recovery key route needs a recent unlock: {body}"
+        "ADR 0262 item 4: the recovery key route needs a recent unlock: {body}"
     );
     assert_eq!(body["error"]["code"], "unlock_required");
     assert!(
@@ -17329,7 +17329,7 @@ async fn the_export_facts_give_the_counts_and_if_the_vault_can_move() {
     assert_eq!(facts["people"], 0);
     assert_eq!(
         facts["movable"], true,
-        "ADR 0107 item 4: a passphrase vault can move"
+        "ADR 0262 item 4: a passphrase vault can move"
     );
     assert_eq!(facts["methods"], json!(["passphrase"]));
     assert!(facts["archive_bytes"].as_u64().unwrap() > 0, "{facts}");
@@ -17345,14 +17345,14 @@ async fn the_export_facts_give_the_counts_and_if_the_vault_can_move() {
     let (_, facts) = call(&app, "GET", "/api/v1/account/export-facts", None).await;
     assert_eq!(
         facts["movable"], false,
-        "ADR 0107 item 4: a vault with only a passkey wrapper must not be movable"
+        "ADR 0262 item 4: a vault with only a passkey wrapper must not be movable"
     );
     assert_eq!(facts["methods"], json!(["passkey"]));
     let (status, body) = call(&app, "POST", "/api/v1/account/export", Some(json!({}))).await;
     assert_eq!(status, StatusCode::CONFLICT, "{body}");
     assert_eq!(
         body["error"]["code"], "vault_not_movable",
-        "ADR 0107 item 4: the export of a vault with only passkeys needs a recovery key first"
+        "ADR 0262 item 4: the export of a vault with only passkeys needs a recovery key first"
     );
     // The recovery key makes the vault movable.
     let (status, _) = call(&app, "POST", "/api/v1/vault/recovery-key", None).await;
@@ -17379,7 +17379,7 @@ async fn the_export_ticket_streams_an_archive_and_writes_no_copy() {
         .unwrap();
     assert!(
         disposition.starts_with("attachment;") && disposition.contains(".tar"),
-        "ADR 0107 item 7: the archive must come as an attachment: {disposition}"
+        "ADR 0262 item 7: the archive must come as an attachment: {disposition}"
     );
     assert_eq!(
         headers.get(header::CONTENT_TYPE).unwrap(),
@@ -17390,7 +17390,7 @@ async fn the_export_ticket_streams_an_archive_and_writes_no_copy() {
         "studio-2026-11-01.tar".len()
     );
     let manifest = studio_core::account_archive::check_archive(&bytes[..])
-        .unwrap_or_else(|e| panic!("ADR 0107 item 11: the export must pass check_archive: {e}"));
+        .unwrap_or_else(|e| panic!("ADR 0262 item 11: the export must pass check_archive: {e}"));
     assert_eq!(manifest.email, None, "the desktop has no email");
     let names = tar_names(&bytes);
     assert!(names.contains(&"library/loose.mp3".to_owned()), "{names:?}");
@@ -17398,14 +17398,14 @@ async fn the_export_ticket_streams_an_archive_and_writes_no_copy() {
     assert_eq!(
         files_under(app.data.path()),
         before,
-        "ADR 0107 item 7: the export must write no copy of the archive and leave no temporary file"
+        "ADR 0262 item 7: the export must write no copy of the archive and leave no temporary file"
     );
     // The ticket works one time.
     let (status, _, _) = send_raw(&app, download_request(ticket["ticket"].as_str().unwrap())).await;
     assert_eq!(
         status,
         StatusCode::FORBIDDEN,
-        "ADR 0107 item 7: an archive ticket must work one time. Use take_archive."
+        "ADR 0262 item 7: an archive ticket must work one time. Use take_archive."
     );
     // Without the audio, the loose file stays out.
     let (_, status, _, bytes) = export_archive(&app, json!({ "include_assets": false })).await;
@@ -17423,7 +17423,7 @@ async fn a_server_that_holds_no_assets_exports_the_files_that_it_keeps() {
     assert_eq!(ticket["include_assets"], true);
     assert!(
         tar_names(&bytes).contains(&"library/waiting.mp3".to_owned()),
-        "ADR 0107 item 6: with --hold-assets off the archive must hold the files that the server keeps, because they have no other copy"
+        "ADR 0262 item 6: with --hold-assets off the archive must hold the files that the server keeps, because they have no other copy"
     );
 }
 
@@ -17445,7 +17445,7 @@ async fn a_library_outside_the_data_folder_is_in_the_archive() {
     let (_, _, _, bytes) = export_archive(&app, json!({})).await;
     assert!(
         tar_names(&bytes).contains(&"library/song.mp3".to_owned()),
-        "ADR 0107 item 6: a library outside the data folder must go into library/ of the archive"
+        "ADR 0262 item 6: a library outside the data folder must go into library/ of the archive"
     );
 }
 
@@ -17566,7 +17566,7 @@ async fn an_export_imports_into_an_empty_desktop_and_opens_with_the_passphrase()
     assert_eq!(
         std::fs::read(target.data.path().join("vault.json")).unwrap(),
         vault_before,
-        "ADR 0107 item 13: the import must keep the vault as it is"
+        "ADR 0262 item 13: the import must keep the vault as it is"
     );
     let collection =
         studio_core::collection::Collection::open(&target.data.path().join("collection.sqlite"))
@@ -17574,7 +17574,7 @@ async fn an_export_imports_into_an_empty_desktop_and_opens_with_the_passphrase()
     assert_eq!(
         collection.library_root().unwrap(),
         Some(target.data.path().join("library")),
-        "ADR 0107 item 1: the library must be in the new data folder"
+        "ADR 0262 item 1: the library must be in the new data folder"
     );
     assert_eq!(
         std::fs::read(target.data.path().join("library/loose.mp3")).unwrap(),
@@ -17593,7 +17593,7 @@ async fn an_export_imports_into_an_empty_desktop_and_opens_with_the_passphrase()
             .join("import-staging")
             .read_dir()
             .is_ok_and(|mut d| d.next().is_some()),
-        "ADR 0107 item 9: the import must leave no staging file"
+        "ADR 0262 item 9: the import must leave no staging file"
     );
 }
 
@@ -17637,7 +17637,7 @@ async fn a_hostile_library_root_does_not_leave_the_data_folder_on_the_desktop() 
     assert_eq!(
         collection.library_root().unwrap(),
         Some(target.data.path().join("library")),
-        "ADR 0107 item 1: an absolute library_root in an archive must become the library of the data folder. Call reset_library_root after the unpack."
+        "ADR 0262 item 1: an absolute library_root in an archive must become the library of the data folder. Call reset_library_root after the unpack."
     );
 }
 
@@ -17660,7 +17660,7 @@ async fn a_desktop_import_into_a_collection_with_a_feed_gives_collection_not_emp
         assert_eq!(status, StatusCode::CONFLICT, "{path}: {body}");
         assert_eq!(
             body["error"]["code"], "collection_not_empty",
-            "ADR 0107 item 9: {path} must refuse a collection with a feed. Call require_empty."
+            "ADR 0262 item 9: {path} must refuse a collection with a feed. Call require_empty."
         );
     }
 }
@@ -17672,7 +17672,7 @@ async fn the_import_refuses_a_file_that_is_not_an_archive_and_the_server_has_no_
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
     assert_eq!(
         body["error"]["code"], "archive_invalid",
-        "ADR 0107 item 11: a bad archive must give 422 archive_invalid"
+        "ADR 0262 item 11: a bad archive must give 422 archive_invalid"
     );
     let (status, _) = call(&target, "GET", &format!("/api/v1/import/{upload}"), None).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
@@ -17733,7 +17733,7 @@ async fn a_desktop_import_over_an_existing_vault_needs_a_recent_unlock() {
     assert_eq!(
         status,
         StatusCode::UNAUTHORIZED,
-        "ADR 0106 item 2 and ADR 0107 item 9: an import over an existing vault needs a recent unlock. Call require_recent_unlock in open_import: {answer}"
+        "ADR 0106 item 2 and ADR 0262 item 9: an import over an existing vault needs a recent unlock. Call require_recent_unlock in open_import: {answer}"
     );
     assert_eq!(answer["error"]["code"], "unlock_required");
     let (_, feeds) = call(&target, "GET", "/api/v1/feeds", None).await;
@@ -17799,7 +17799,7 @@ async fn the_queues_of_an_archive_do_not_come_in_on_the_desktop() {
     assert_eq!(
         count(target.data.path(), waiting),
         0,
-        "ADR 0107 item 13: an import must not bring a waiting announcement or a queued download. Call clear_queues in the check."
+        "ADR 0262 item 13: an import must not bring a waiting announcement or a queued download. Call clear_queues in the check."
     );
 }
 
@@ -19154,7 +19154,7 @@ async fn discard_the_draft(app: &App, id: i64) {
     assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
 }
 
-/// ADR 0230 items 20 and 21: a discard puts back the file host from before
+/// ADR 0261 items 20 and 21: a discard puts back the file host from before
 /// the move, and two moves in one draft keep the value from before the
 /// first move. A write keeps the new value.
 #[tokio::test]
@@ -19183,7 +19183,7 @@ async fn a_discard_puts_back_the_file_host_that_a_move_changed() {
     assert_eq!(files_host_of(&app, id).await, backup);
 }
 
-/// ADR 0230 item 22: the plan gives the old copies of a file that is on the
+/// ADR 0261 item 22: the plan gives the old copies of a file that is on the
 /// target already.
 #[tokio::test]
 async fn the_plan_gives_the_old_copies_of_a_file_that_the_target_holds() {
@@ -19203,7 +19203,7 @@ async fn the_plan_gives_the_old_copies_of_a_file_that_the_target_holds() {
     assert_eq!(plan["from_connector_ids"], json!([home]), "{plan}");
 }
 
-/// ADR 0230 item 23: a move with no old copy keeps no hold, also with
+/// ADR 0261 item 23: a move with no old copy keeps no hold, also with
 /// `delete_later` true.
 #[tokio::test]
 async fn a_move_with_no_old_copy_keeps_no_hold() {
@@ -19545,7 +19545,7 @@ async fn a_cancelled_feed_move_keeps_the_media_host_of_a_pending_media_move() {
     assert_eq!(files_host_of(&app, id).await, backup);
 }
 
-/// ADR 0230 items 20 and 21: a move of all releases sets the media host.
+/// ADR 0261 items 20 and 21: a move of all releases sets the media host.
 #[tokio::test]
 async fn a_written_move_of_all_releases_sets_the_media_host() {
     let app = move_all_app();
@@ -20091,13 +20091,13 @@ async fn the_outside_check_finds_a_change_and_a_move_and_keeps_a_result_after_a_
     let (status, same) = call(&app, "GET", &path, None).await;
     assert_eq!(status, StatusCode::OK, "{same}");
     assert_eq!(same["enabled"], json!(true));
-    assert_eq!(same["state"], Value::Null, "ADR 0150 item 2");
-    assert_eq!(same["read"], json!(true), "ADR 0165 item 7");
+    assert_eq!(same["state"], Value::Null, "ADR 0259 item 2");
+    assert_eq!(same["read"], json!(true), "ADR 0259 item 20");
 
     let changed = FEED.replace("</channel>", "<description>new</description></channel>");
     server.set("/album.xml", 200, changed.into_bytes());
     let (_, found) = call(&app, "GET", &path, None).await;
-    assert_eq!(found["state"], json!("changed"), "ADR 0150 item 2");
+    assert_eq!(found["state"], json!("changed"), "ADR 0259 item 2");
 
     let moved = FEED
         .replace(
@@ -20110,21 +20110,21 @@ async fn the_outside_check_finds_a_change_and_a_move_and_keeps_a_result_after_a_
         );
     server.set("/album.xml", 200, moved.clone().into_bytes());
     let (_, found) = call(&app, "GET", &path, None).await;
-    assert_eq!(found["state"], json!("moved"), "ADR 0150 item 3: {found}");
+    assert_eq!(found["state"], json!("moved"), "ADR 0259 item 3: {found}");
     assert_eq!(found["new_url"], json!("https://other.example/a.xml"));
 
     server.set("/album.xml", 500, Vec::new());
     let (_, kept) = call(&app, "GET", &path, None).await;
-    assert_eq!(kept["state"], json!("moved"), "ADR 0150 item 7");
-    assert_eq!(kept["read"], json!(false), "ADR 0165 item 7");
+    assert_eq!(kept["state"], json!("moved"), "ADR 0259 item 7");
+    assert_eq!(kept["read"], json!(false), "ADR 0259 item 20");
 
     server.set("/album.xml", 200, moved.into_bytes());
     let (status, _) = call(&app, "POST", &format!("{path}/keep"), None).await;
     assert_eq!(status, StatusCode::OK);
     let (_, hidden) = call(&app, "GET", &path, None).await;
-    assert_eq!(hidden["state"], Value::Null, "ADR 0150 item 4");
+    assert_eq!(hidden["state"], Value::Null, "ADR 0259 item 4");
 
-    // The check writes nothing and makes no draft (ADR 0150 item 8).
+    // The check writes nothing and makes no draft (ADR 0259 item 8).
     assert_eq!(
         std::fs::read_to_string(app.feeds.path().join("album.xml")).unwrap(),
         FEED
@@ -20148,13 +20148,13 @@ async fn the_outside_check_compares_the_address_of_musicindex_only_on_request() 
     // No entry gives nothing.
     server.set(route, 404, Vec::new());
     let (_, none) = call(&app, "GET", &format!("{path}?index=true"), None).await;
-    assert_eq!(none["index_url"], Value::Null, "ADR 0150 item 5");
+    assert_eq!(none["index_url"], Value::Null, "ADR 0259 item 5");
     assert_eq!(none["held"], json!(false), "ADR 0220 item 2");
 
     // The same address gives nothing.
     server.set(route, 200, answer(&own));
     let (_, same) = call(&app, "GET", &format!("{path}?index=true"), None).await;
-    assert_eq!(same["index_url"], Value::Null, "ADR 0150 item 5: {same}");
+    assert_eq!(same["index_url"], Value::Null, "ADR 0259 item 5: {same}");
     assert_eq!(same["held"], json!(true), "ADR 0220 item 2");
 
     // A different address gives both.
@@ -20174,7 +20174,7 @@ async fn the_outside_check_compares_the_address_of_musicindex_only_on_request() 
     // No answer gives nothing.
     server.set(route, 500, Vec::new());
     let (_, failed) = call(&app, "GET", &format!("{path}?index=true"), None).await;
-    assert_eq!(failed["index_url"], Value::Null, "ADR 0150 item 5");
+    assert_eq!(failed["index_url"], Value::Null, "ADR 0259 item 5");
     assert_eq!(failed["held"], Value::Null, "ADR 0220 item 2");
 }
 
@@ -20364,7 +20364,7 @@ async fn the_cleared_check_box_stops_each_request_of_the_outside_check() {
     let (app, server, id) = outside_app().await;
     let path = format!("/api/v1/feeds/{id}/outside");
     let (_, on) = call(&app, "GET", "/api/v1/settings/outside-check", None).await;
-    assert_eq!(on["enabled"], json!(true), "ADR 0150 item 10");
+    assert_eq!(on["enabled"], json!(true), "ADR 0259 item 10");
     call(
         &app,
         "PUT",
@@ -20377,7 +20377,7 @@ async fn the_cleared_check_box_stops_each_request_of_the_outside_check() {
     let (_, off) = call(&app, "GET", &path, None).await;
     assert_eq!(off["enabled"], json!(false));
     assert_eq!(off["state"], Value::Null);
-    assert_eq!(off["read"], json!(false), "ADR 0165 item 7");
+    assert_eq!(off["read"], json!(false), "ADR 0259 item 20");
     call(
         &app,
         "PUT",
@@ -20404,7 +20404,7 @@ async fn a_read_and_a_write_give_the_outside_check_a_new_start() {
     assert_eq!(
         read["state"],
         Value::Null,
-        "ADR 0150 item 2: a read ends the result."
+        "ADR 0259 item 2: a read ends the result."
     );
     // A write of Studio is not a change from outside.
     call(
@@ -20430,7 +20430,7 @@ async fn a_read_and_a_write_give_the_outside_check_a_new_start() {
     assert_eq!(
         new["state"],
         Value::Null,
-        "ADR 0150: a write of Studio is not a change."
+        "ADR 0259: a write of Studio is not a change."
     );
 }
 

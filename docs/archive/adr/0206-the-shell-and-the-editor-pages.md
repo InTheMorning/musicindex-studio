@@ -1,17 +1,19 @@
+> Archived: superseded by [ADR 0258](../../adr/0258-the-shell-and-the-editor-pages.md) on 2026-11-25. The new ADR restates each live rule and gives its Item Map.
+
 # ADR 0206: The Shell And The Editor Pages
 
-- Status: Accepted
+- Status: Superseded by ADR 0258
 - Date: 2026-11-14
 - Owner: operator
 - Accepted: 2026-11-14. The operator accepted the consolidation of each changed decision (musicindex-research `df7b823`). This ADR makes no new decision. It restates each live rule of the ADRs that it supersedes, with each change from a subsequent ADR.
-- Supersedes: [ADR 0039](../archive/adr/0039-the-shell-releases-and-the-outline.md), The Shell, Releases And The Outline Of A Feed.
-- Supersedes: [ADR 0064](../archive/adr/0064-the-editor-edits-the-fields-that-msp-2-0-edits.md), The Editor Edits The Fields That MSP 2.0 Edits.
-- Supersedes: [ADR 0068](../archive/adr/0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md), The Sequence Of The Sections And Fields Of An Editor Page.
+- Supersedes: [ADR 0039](0039-the-shell-releases-and-the-outline.md), The Shell, Releases And The Outline Of A Feed.
+- Supersedes: [ADR 0064](0064-the-editor-edits-the-fields-that-msp-2-0-edits.md), The Editor Edits The Fields That MSP 2.0 Edits.
+- Supersedes: [ADR 0068](0068-the-sequence-of-the-sections-and-fields-of-an-editor-page.md), The Sequence Of The Sections And Fields Of An Editor Page.
 - Changed by: musicindex ADR 0080 R-SHELL-2 item 6, R-TITLE-1 and R-TITLE-2, at musicindex `72b4e4a`, for items 10 to 12. It supersedes musicindex ADR 0069, ADR 0071 and ADR 0079.
-- Changed by: [ADR 0254](0254-the-catalog-is-a-tree-and-each-change-uses-music-words.md) item 7, on 2026-11-24. Items 6 to 8: a publisher feed has no outline. The first row of the outline of a release or a playlist is "‹ Catalog", and it shows the tree with the same open rows. The back link to a level goes.
-- Changed by: [ADR 0223](0223-a-split-in-shares-or-percent-a-release-search-and-one-tap-on-a-phone.md) items 7 and 8, on 2026-11-19. Items 13 and 14: the fixed destinations come first on the root page, and a release opens its feed page in one tap.
-- Uses: musicindex ADR 0080 R-SHELL-1, R-NAV-2 and R-LIST-1, musicindex ADR 0028 R-PAGE-1, musicindex ADR 0080 R-SHELL-2 and musicindex ADR 0080 R-NAV-3. [ADR 0029](0029-editor-pages-toolbar-and-three-levels.md) for the editor pages and the bar. [ADR 0042](0042-ui-models-with-node-tests.md) for the model modules.
-- Uses: these current ADRs own a part of this area. This ADR names each one at its item. [ADR 0069](0069-the-outline-head-opens-the-feed-page.md) (the outline head), [ADR 0070](0070-a-cover-opens-the-artwork-sheet.md) (the Artwork sheet), [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) (Settings and the tiers), [ADR 0072](0072-add-a-feed-opens-from-releases.md) (Add a feed), [ADR 0212](0212-the-add-pages.md) (Add tracks), [ADR 0074](0074-nostr-keys-for-artists-labels-and-contributors.md) (the Nostr keys), [ADR 0076](0076-an-op3-switch-on-feed-settings.md) (OP3), [ADR 0080](0080-the-season-of-a-track-is-an-experimental-disc-setting.md) (the disc), [ADR 0085](../archive/adr/0085-each-artist-and-label-is-a-destination.md) and [ADR 0254](0254-the-catalog-is-a-tree-and-each-change-uses-music-words.md) (the destinations of the publisher feeds), [ADR 0090](0090-studio-names-the-feeds-that-it-does-not-edit.md) (Other feeds), [ADR 0092](0092-file-hosts-and-the-destination-icons.md) (File hosts and the icons), [ADR 0112](0112-a-credit-role-comes-from-a-list.md) (the credit roles), [ADR 0221](0221-the-welcome-page-and-the-first-steps.md) (the Welcome page), [ADR 0130](0130-the-facts-of-an-audio-file-stay-locked.md) (the audio facts), [ADR 0239](0239-the-panel-holds-the-content-and-the-page-has-tabs.md) (the tabs), [ADR 0155](0155-the-sort-menu-names-both-directions.md) (the sort directions), [ADR 0203](0203-people.md) (People).
+- Changed by: [ADR 0254](../../adr/0254-the-catalog-is-a-tree-and-each-change-uses-music-words.md) item 7, on 2026-11-24. Items 6 to 8: a publisher feed has no outline. The first row of the outline of a release or a playlist is "‹ Catalog", and it shows the tree with the same open rows. The back link to a level goes.
+- Changed by: [ADR 0223](../../adr/0223-a-split-in-shares-or-percent-a-release-search-and-one-tap-on-a-phone.md) items 7 and 8, on 2026-11-19. Items 13 and 14: the fixed destinations come first on the root page, and a release opens its feed page in one tap.
+- Uses: musicindex ADR 0080 R-SHELL-1, R-NAV-2 and R-LIST-1, musicindex ADR 0028 R-PAGE-1, musicindex ADR 0080 R-SHELL-2 and musicindex ADR 0080 R-NAV-3. [ADR 0029](../../adr/0029-editor-pages-toolbar-and-three-levels.md) for the editor pages and the bar. [ADR 0042](../../adr/0042-ui-models-with-node-tests.md) for the model modules.
+- Uses: these current ADRs own a part of this area. This ADR names each one at its item. [ADR 0069](../../adr/0069-the-outline-head-opens-the-feed-page.md) (the outline head), [ADR 0070](../../adr/0070-a-cover-opens-the-artwork-sheet.md) (the Artwork sheet), [ADR 0071](../../adr/0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) (Settings and the tiers), [ADR 0072](../../adr/0072-add-a-feed-opens-from-releases.md) (Add a feed), [ADR 0212](../../adr/0212-the-add-pages.md) (Add tracks), [ADR 0074](../../adr/0074-nostr-keys-for-artists-labels-and-contributors.md) (the Nostr keys), [ADR 0076](../../adr/0076-an-op3-switch-on-feed-settings.md) (OP3), [ADR 0080](../../adr/0080-the-season-of-a-track-is-an-experimental-disc-setting.md) (the disc), [ADR 0085](0085-each-artist-and-label-is-a-destination.md) and [ADR 0254](../../adr/0254-the-catalog-is-a-tree-and-each-change-uses-music-words.md) (the destinations of the publisher feeds), [ADR 0090](../../adr/0090-studio-names-the-feeds-that-it-does-not-edit.md) (Other feeds), [ADR 0092](../../adr/0092-file-hosts-and-the-destination-icons.md) (File hosts and the icons), [ADR 0112](../../adr/0112-a-credit-role-comes-from-a-list.md) (the credit roles), [ADR 0221](0221-the-welcome-page-and-the-first-steps.md) (the Welcome page), [ADR 0130](../../adr/0130-the-facts-of-an-audio-file-stay-locked.md) (the audio facts), [ADR 0239](../../adr/0239-the-panel-holds-the-content-and-the-page-has-tabs.md) (the tabs), [ADR 0155](../../adr/0155-the-sort-menu-names-both-directions.md) (the sort directions), [ADR 0203](../../adr/0203-people.md) (People).
 
 ## Context
 
@@ -26,14 +28,14 @@
 ### The Destinations
 
 1. With no feed open, the left panel holds the destinations:
-   - The top group holds Releases, then the tree of the Catalog, then "No artist yet", then "Other feeds" ([ADR 0254](0254-the-catalog-is-a-tree-and-each-change-uses-music-words.md) items 2 and 3). "No artist yet" shows only when a release has no link to an artist page of the collection. "Other feeds" shows only when a feed that is not a release or a publisher feed exists ([ADR 0090](0090-studio-names-the-feeds-that-it-does-not-edit.md) item 2).
-   - Add a feed opens from a button on Releases ([ADR 0072](0072-add-a-feed-opens-from-releases.md) items 1 and 2).
-   - The bottom group holds People, File hosts, Settings and Lock Studio, in this sequence ([ADR 0203](0203-people.md) item 36, [ADR 0092](0092-file-hosts-and-the-destination-icons.md) item 1, [ADR 0071](0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) item 9). The bottom group stays at the bottom of the panel at each height of the window.
-   - On a server with a locked vault, "Unlock Studio" is in the place of "Lock Studio". It opens the unlock sheet of [ADR 0056](0056-server-sign-in-methods-and-vault-wrappers.md).
+   - The top group holds Releases, then the tree of the Catalog, then "No artist yet", then "Other feeds" ([ADR 0254](../../adr/0254-the-catalog-is-a-tree-and-each-change-uses-music-words.md) items 2 and 3). "No artist yet" shows only when a release has no link to an artist page of the collection. "Other feeds" shows only when a feed that is not a release or a publisher feed exists ([ADR 0090](../../adr/0090-studio-names-the-feeds-that-it-does-not-edit.md) item 2).
+   - Add a feed opens from a button on Releases ([ADR 0072](../../adr/0072-add-a-feed-opens-from-releases.md) items 1 and 2).
+   - The bottom group holds People, File hosts, Settings and Lock Studio, in this sequence ([ADR 0203](../../adr/0203-people.md) item 36, [ADR 0092](../../adr/0092-file-hosts-and-the-destination-icons.md) item 1, [ADR 0071](../../adr/0071-settings-is-a-destination-and-each-page-orders-its-sections-by-tier.md) item 9). The bottom group stays at the bottom of the panel at each height of the window.
+   - On a server with a locked vault, "Unlock Studio" is in the place of "Lock Studio". It opens the unlock sheet of [ADR 0056](../../adr/0056-server-sign-in-methods-and-vault-wrappers.md).
    - Each fixed destination shows its icon, and no destination row shows a type dot (ADR 0092 items 5 and 9).
 2. Releases is a list page at the full width of the content area. Each row shows the cover, the type label, the host and the draft state, for example "Saved, not written". Releases lists each album and each playlist. A publisher feed opens from its row in the Catalog, not from a row of Releases (ADR 0254 item 2).
 3. Releases has the sort and the view of musicindex ADR 0080 R-LIST-1:
-   - The sorts are "Newest", the default, and "A to Z" with a letter bar. "Newest" gives the feed that joined the collection last first. The menu also names the reversed direction of each sort: "Oldest" and "Z to A" ([ADR 0155](0155-the-sort-menu-names-both-directions.md) item 1).
+   - The sorts are "Newest", the default, and "A to Z" with a letter bar. "Newest" gives the feed that joined the collection last first. The menu also names the reversed direction of each sort: "Oldest" and "Z to A" ([ADR 0155](../../adr/0155-the-sort-menu-names-both-directions.md) item 1).
    - The views are rows, the default, and tiles.
    - A sort, a direction or a view that is not the default is in the query of the address, as `sort=az`, `reversed=1` and `view=tiles` (ADR 0155 item 4).
 4. Releases is the start page. A user with no feed in the collection sees the page "Welcome to Studio" in the place of the empty Releases page ([ADR 0221](0221-the-welcome-page-and-the-first-steps.md) item 1).
@@ -42,9 +44,9 @@
 ### The Outline Of An Open Feed
 
 6. While a feed is open, the left panel shows the outline of that feed in place of the destinations of the top group. The bottom group stays at the bottom (item 1). The left panel is one panel at any time.
-7. The outline of an album shows the link to Releases and the head of the feed. Then it shows each track by its number and title, and "Add tracks" ([ADR 0239](0239-the-panel-holds-the-content-and-the-page-has-tabs.md) item 1, [ADR 0212](0212-the-add-pages.md) item 15). The head opens the first tab of the feed, and the outline has no row for the first page ([ADR 0069](0069-the-outline-head-opens-the-feed-page.md) items 1 and 2, ADR 0239 item 3). The outline of a publisher feed holds its head and its releases. The outline of a playlist holds only its head (ADR 0239 item 4). Value routes, credits, files and the settings of a feed are tabs of its page (ADR 0239 item 2).
+7. The outline of an album shows the link to Releases and the head of the feed. Then it shows each track by its number and title, and "Add tracks" ([ADR 0239](../../adr/0239-the-panel-holds-the-content-and-the-page-has-tabs.md) item 1, [ADR 0212](../../adr/0212-the-add-pages.md) item 15). The head opens the first tab of the feed, and the outline has no row for the first page ([ADR 0069](../../adr/0069-the-outline-head-opens-the-feed-page.md) items 1 and 2, ADR 0239 item 3). The outline of a publisher feed holds its head and its releases. The outline of a playlist holds only its head (ADR 0239 item 4). Value routes, credits, files and the settings of a feed are tabs of its page (ADR 0239 item 2).
 8. The link to Releases shows "‹ Releases" (ADR 0069 item 6). It opens the Releases page at the same scroll position, with the row of the feed marked. It is a destination link, not a back control (musicindex ADR 0080 R-NAV-2 item 5). A feed that opens from a level of a publisher feed shows "‹" with the name of that level. That link opens the level (ADR 0088 item 6).
-9. Each item of the outline opens one page of the editor. [ADR 0029](0029-editor-pages-toolbar-and-three-levels.md) items 7 to 9 stay.
+9. Each item of the outline opens one page of the editor. [ADR 0029](../../adr/0029-editor-pages-toolbar-and-three-levels.md) items 7 to 9 stay.
 
 ### Back
 
@@ -64,20 +66,20 @@
 ### The MSP 2.0 Fields In The Core
 
 16. The core models these elements: `itunes:explicit` of the channel and of each item, `itunes:owner` with `itunes:name` and `itunes:email`, `itunes:keywords`, `managingEditor`, `webMaster`, and `podcast:season` with its `name`. A read and a write with no edit give the same bytes.
-17. Each new element takes its hosted position ([ADR 0031](0031-a-new-element-takes-its-hosted-position.md)).
+17. Each new element takes its hosted position ([ADR 0031](../../adr/0031-a-new-element-takes-its-hosted-position.md)).
 18. Studio writes no field that the user did not set. A feed with no `itunes:explicit` gets none from Studio. A new track gets no `podcast:season`.
 19. A switch keeps the form of the feed. The UI sends `true` or `false`. At the draft save, the core compares the sent value with the draft value. It does the same for the GUIDs and the track numbers. When the draft has `yes` or `no`, the core writes `yes` or `no`, with the same capital letter. In each other case, the core writes `true` or `false`, as Apple specifies.
-20. Studio keeps a text value as the user types it, with no space at its ends ([ADR 0061](0061-a-text-value-has-no-space-at-its-ends.md)). Studio does not refuse a `managingEditor`, a `webMaster` or an owner email that is not an email address.
+20. Studio keeps a text value as the user types it, with no space at its ends ([ADR 0061](../../adr/0061-a-text-value-has-no-space-at-its-ends.md)). Studio does not refuse a `managingEditor`, a `webMaster` or an owner email that is not an email address.
 
 ### The Channel Fields
 
-21. The album page, the playlist page and the publisher page get these fields, as [ADR 0063](0063-one-switch-hides-a-feed-from-apps.md) item 3 does for its switch:
+21. The album page, the playlist page and the publisher page get these fields, as [ADR 0063](../../adr/0063-one-switch-hides-a-feed-from-apps.md) item 3 does for its switch:
     - "Explicit": one switch for `itunes:explicit`.
     - "Owner": the owner name and the owner email.
     - "Keywords": one text field.
     - "Lock against import": one switch for `podcast:locked`, and the owner email of the lock.
     - "Managing editor" and "Webmaster": one text field each.
-22. "Explicit" is in the first section of the page, after "Hide from apps". Apple requires this tag. The other fields of item 21 are on the page "Feed settings", with "Language" (item 34). The Settings tab of the feed opens that page (ADR 0239 items 2 and 7). The user does not change these fields in each visit ([ADR 0028](0028-summary-lines-and-one-open-entry.md)). The page "Feed settings" of an album also has the switch "OP3 statistics" ([ADR 0076](0076-an-op3-switch-on-feed-settings.md) item 5).
+22. "Explicit" is in the first section of the page, after "Hide from apps". Apple requires this tag. The other fields of item 21 are on the page "Feed settings", with "Language" (item 34). The Settings tab of the feed opens that page (ADR 0239 items 2 and 7). The user does not change these fields in each visit ([ADR 0028](../../adr/0028-summary-lines-and-one-open-entry.md)). The page "Feed settings" of an album also has the switch "OP3 statistics" ([ADR 0076](../../adr/0076-an-op3-switch-on-feed-settings.md) item 5).
 
 ### The Track Fields
 
@@ -85,16 +87,16 @@
     - "Explicit": one switch for the item `itunes:explicit`.
     - "Credits": a selection between "Use the album credits" and "Credits for this track". The second selection shows the People control of the album. When the user selects it, the list starts with a copy of the album credits, because the item list replaces the channel list.
 
-      The copy keeps the Nostr key of each person ([ADR 0074](0074-nostr-keys-for-artists-labels-and-contributors.md) item 26).
+      The copy keeps the Nostr key of each person ([ADR 0074](../../adr/0074-nostr-keys-for-artists-labels-and-contributors.md) item 26).
 
-      A change back to "Use the album credits" removes each item `podcast:person`, after a confirmation. The role of a credit is a select menu from the role list, then "Other role…" ([ADR 0112](0112-a-credit-role-comes-from-a-list.md) items 2 and 3).
-    - "Lyrics": a list of `podcast:transcript` entries. Each entry has the address, the type, the language and a "Captions" check box for `rel="captions"`. The address field uses the file picker ([ADR 0062](0062-a-file-picker-for-each-file-field.md)).
-    - "Season": a number field and a name field, in the "Identity" row. They show as the experimental entry "Disc", with the fields "Disc number" and "Disc name". The fields write `podcast:season` and its `name` ([ADR 0080](0080-the-season-of-a-track-is-an-experimental-disc-setting.md) items 1 to 4).
+      A change back to "Use the album credits" removes each item `podcast:person`, after a confirmation. The role of a credit is a select menu from the role list, then "Other role…" ([ADR 0112](../../adr/0112-a-credit-role-comes-from-a-list.md) items 2 and 3).
+    - "Lyrics": a list of `podcast:transcript` entries. Each entry has the address, the type, the language and a "Captions" check box for `rel="captions"`. The address field uses the file picker ([ADR 0062](../../adr/0062-a-file-picker-for-each-file-field.md)).
+    - "Season": a number field and a name field, in the "Identity" row. They show as the experimental entry "Disc", with the fields "Disc number" and "Disc name". The fields write `podcast:season` and its `name` ([ADR 0080](../../adr/0080-the-season-of-a-track-is-an-experimental-disc-setting.md) items 1 to 4).
 24. The file picker gets a third kind of file: a lyrics file. The extensions are `.srt`, `.vtt`, `.txt`, `.json` and `.html`. The three sources of ADR 0062 item 2 and the drop of ADR 0062 item 20 accept this kind in the lyrics field. An upload of a lyrics file goes to the release folder, as an image does. This extends ADR 0062 items 1 and 3.
 
 ### More Artwork
 
-25. The album and each track have a list of `podcast:image` entries. Each entry has the address, the description for accessibility (`alt`), the `purpose` tokens and the dimensions. The address field uses the file picker. The list is in the Artwork sheet of the item, not on its page ([ADR 0070](0070-a-cover-opens-the-artwork-sheet.md) items 5 and 8).
+25. The album and each track have a list of `podcast:image` entries. Each entry has the address, the description for accessibility (`alt`), the `purpose` tokens and the dimensions. The address field uses the file picker. The list is in the Artwork sheet of the item, not on its page ([ADR 0070](../../adr/0070-a-cover-opens-the-artwork-sheet.md) items 5 and 8).
 26. When the user selects an image, Studio reads its width, its height and its type from the file. Studio gives the ratio, and selects a near ratio from a list, such as `16/9`. The user can change each value.
 27. The `purpose` field offers the tokens of the specification as check boxes: `artwork`, `social`, `canvas`, `banner`, `publisher`, `circular` and `poster`. Studio keeps each other token of the feed.
 
@@ -119,7 +121,7 @@
 33. On the playlist page and the publisher page, the first section has the field sequence of the "Album" section of item 31. The second field has the name "Author" or "Name".
 34. "Language" is on the page "Feed settings", not on the first page. This applies to the album, the playlist and the publisher feed.
 35. The start values of the publisher page were the first section, "Releases", "Role", then a section with the rows Feed settings and Feed facts.
-36. The start values of the playlist page were the first section, then a section with the rows Feed settings and Feed facts. Its tracks stay on their own tab ([ADR 0053](0053-playlists-are-musicl-feeds-with-remote-items.md) item 4, ADR 0239 item 2).
+36. The start values of the playlist page were the first section, then a section with the rows Feed settings and Feed facts. Its tracks stay on their own tab ([ADR 0053](../../adr/0053-playlists-are-musicl-feeds-with-remote-items.md) item 4, ADR 0239 item 2).
 37. The start values of the page "Feed settings" were these sections in this sequence: "Language", "Keywords", "Owner", "Lock against import", "Editors".
 38. The start values of the track page were these sections in this sequence:
     1. "Track": Title, the audio file with its duration and its alternative enclosures, Artwork, Description.
@@ -127,7 +129,7 @@
     3. "Lyrics".
     4. The payments of the track (ADR 0029 item 9).
     5. "More": Publication date, Explicit, Identity.
-39. The duration is in "Properties" of the audio file. It is text until the user selects "Advanced", and then the user can change it (ADR 0130 items 1, 2 and 5). The publication date keeps the hint of [ADR 0024](0024-track-numbers-follow-the-track-sequence.md) item 5.
+39. The duration is in "Properties" of the audio file. It is text until the user selects "Advanced", and then the user can change it (ADR 0130 items 1, 2 and 5). The publication date keeps the hint of [ADR 0024](../../adr/0024-track-numbers-follow-the-track-sequence.md) item 5.
 
 ### The Module And The Check
 
@@ -144,7 +146,7 @@
 - Refuse a `managingEditor` that is not an email address. Rejected: the corpus has such values, and the RSS readers accept them.
 - Put all the channel fields in the first section. Not chosen: the first section then gets fields that the user sets one time.
 - Edit one lyrics file for each track, as MSP 2.0 does. Rejected: the specification permits more than one, and Studio keeps more than one.
-- Apply the form rule of item 19 in the UI, as ADR 0063 does for its switch. Rejected: another client of the API can then write `true` into a feed that uses `yes` and `no`. Each feed rule is in the core ([ADR 0002](0002-rust-core-json-api-browser-ui.md)).
+- Apply the form rule of item 19 in the UI, as ADR 0063 does for its switch. Rejected: another client of the API can then write `true` into a feed that uses `yes` and `no`. Each feed rule is in the core ([ADR 0002](../../adr/0002-rust-core-json-api-browser-ui.md)).
 - Send a flag for the switch through the API. Rejected: the model then has two ways to change one value.
 - A text field with no picker for the lyrics address. Not chosen: each other file field has the picker.
 - The tracks first on the album page, as R-PAGE-1 gives for an item page. Not chosen by the operator: the fields that identify the release come first in an editor.

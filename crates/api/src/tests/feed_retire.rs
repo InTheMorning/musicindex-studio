@@ -613,7 +613,7 @@ async fn feed_row(app: &App, id: i64) -> Value {
 
 // A plain 404 of the index lets the delete pass for a feed that is not
 // hidden. The deleted feed keeps its media rows, takes no notice of a host,
-// and gets its path again after the restore write (ADR 0230 items 28 to 30).
+// and gets its path again after the restore write (ADR 0261 items 28 to 30).
 #[tokio::test]
 async fn a_deleted_feed_makes_no_remote_rows_and_the_restore_gives_its_path_again() {
     let index = CountingIndex::start(404, "{}");
@@ -651,17 +651,17 @@ async fn a_deleted_feed_makes_no_remote_rows_and_the_restore_gives_its_path_agai
     assert_eq!(deleted["host_deleted"], true);
     assert_eq!(
         deleted["host_for_address"], false,
-        "ADR 0230 item 28: a feed with a done delete has no host for its address. Fix host_for_address in crates/api/src/routes.rs."
+        "ADR 0261 item 28: a feed with a done delete has no host for its address. Fix host_for_address in crates/api/src/routes.rs."
     );
     assert_eq!(state(&app, id).await["delete"], "done");
     let after = file_paths(&app, id).await;
     assert_eq!(
         after, before,
-        "ADR 0230 item 29: the delete must not add remote rows. Skip feeds with a done delete in record_remote_files_with in crates/api/src/workspace.rs."
+        "ADR 0261 item 29: the delete must not add remote rows. Skip feeds with a done delete in record_remote_files_with in crates/api/src/workspace.rs."
     );
     assert!(
         after.iter().all(|path| !path.contains(" 2")),
-        "ADR 0230 item 29: no row has ' 2' in its name. Fix record_remote_files_with in crates/api/src/workspace.rs. {after:?}"
+        "ADR 0261 item 29: no row has ' 2' in its name. Fix record_remote_files_with in crates/api/src/workspace.rs. {after:?}"
     );
 
     let (status, restore) = call(&app, "POST", &format!("{base}/delete/restore"), None).await;
@@ -671,14 +671,14 @@ async fn a_deleted_feed_makes_no_remote_rows_and_the_restore_gives_its_path_agai
     assert_eq!(restored["host_deleted"], false);
     assert_eq!(
         restored["connector_id"], original["connector_id"],
-        "ADR 0230 item 30: the restore write gives the feed its host again."
+        "ADR 0261 item 30: the restore write gives the feed its host again."
     );
     assert_eq!(
         restored["path"], original["path"],
-        "ADR 0230 item 30: the restore write gives the feed its path again."
+        "ADR 0261 item 30: the restore write gives the feed its path again."
     );
     assert!(
         file_paths(&app, id).await.contains(&"one.mp3".to_owned()),
-        "ADR 0230 item 30: after the restore the file list keeps the original row."
+        "ADR 0261 item 30: after the restore the file list keeps the original row."
     );
 }

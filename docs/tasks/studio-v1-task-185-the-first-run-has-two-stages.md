@@ -1,6 +1,6 @@
 # Studio v1 Task 185: The First Run Has Two Stages
 
-Decision: [ADR 0222](../adr/0222-errors-give-a-step-terms-get-a-hint-and-the-first-run-has-two-stages.md) items 6 to 10, and [ADR 0221](../adr/0221-the-welcome-page-and-the-first-steps.md) item 6 for the lines of the rows.
+Decision: [ADR 0222](../adr/0222-errors-give-a-step-terms-get-a-hint-and-the-first-run-has-two-stages.md) items 6 to 10, and [ADR 0221](../archive/adr/0221-the-welcome-page-and-the-first-steps.md) item 6 for the lines of the rows.
 
 Status: Done.
 

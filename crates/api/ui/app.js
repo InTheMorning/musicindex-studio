@@ -7,7 +7,7 @@ import { UI_SCALES, SCALE_KEY, normalizeScale, measureWindowUnits } from './uisc
 import { LOCK_HINT, START_HINT, lockChoiceText } from './vaultlock.js';
 import { serverFilesRows, sizeText, SERVER_FILES_NOTE } from './assets.js';
 import { failedLine } from './failures.js';
-import { OPEN_REVIEW, OPEN_MERGE, OPEN_FEED_MOVE, MoveAllSheet, MoveSheet, GatherPagesSheet, AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, OUTSIDE_RECHECK, restoreDeletedFile, checkDeletedAgain, AnnounceChoice, UndoButtons, useUndoKeys, DeleteUndoBar, removeFeedFromCollection } from './editor.js';
+import { OPEN_REVIEW, OPEN_MERGE, OPEN_FEED_MOVE, PublisherPath, MoveAllSheet, MoveSheet, GatherPagesSheet, AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, OUTSIDE_RECHECK, restoreDeletedFile, checkDeletedAgain, AnnounceChoice, UndoButtons, useUndoKeys, DeleteUndoBar, removeFeedFromCollection } from './editor.js';
 import {
   recipientKey,
   outcomeText, blockedText, operationLine, nameOf, writableIds, firstOpenId, initialStatuses, refreshedStatuses, startWrite,
@@ -53,7 +53,7 @@ import {
 } from './move.js';
 import {
   mediumKind, feedKind, FIRST_CLASS_ROLES, roleWord, kindGlow, isEditable, isReadOnly, isPublisher, trackKey, isTrack,
-  leftPanel, releasesList, listQuery, queryText, sortLabel, sortEntries, mosaicCells, otherFeedText, mediumProblemView, mediumProblemCause, feedCover,
+  placeText, draftLabel, leftPanel, releasesList, listQuery, queryText, sortLabel, sortEntries, mosaicCells, otherFeedText, mediumProblemView, mediumProblemCause, feedCover,
   startNav, pushNav, backNav, forwardNav, releasesView, canBack, canForward, setScroll,
   isFeedView, openFeedView, newFeedView, navAtWidth, toggleRow, revealRows, pageTabs, tabsFit, showsRootButtons, rootNav, segmentKey, isTabChange, movedReleaseView } from './shell.js';
 import {
@@ -2634,6 +2634,16 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
   };
   // The header buttons wrap as one group (finding 11 of 2026-11-23).
   const canMovePage = isPublisher(feed) && (feed.publisher_roles || []).some((role) => role === 'artist' || role === 'label');
+  // The head of the page of a publisher feed (ADR 0254 items 11 to 12a): the
+  // path above it, the place in music words and the state of this feed. The
+  // button ⋯ has "Move To…" until task 254 gives its actions (item 23).
+  const publisher = isPublisher(feed);
+  const { results: outside } = useContext(OutsideContext);
+  const place = publisher ? placeText(feed, feeds) : null;
+  const stateMarkOfFeed = publisher ? outsideMark(outside[feed.id]) : null;
+  // The button "Open Feed File" is next to the menu, so the menu does not
+  // repeat it.
+  const headMenu = canMovePage ? [{ id: 'move', label: 'Move To…' }] : [];
   return html`<div>
     <${Bar}>
       <${Crumb} feed=${feed} view=${view} draft=${draft} />
@@ -2642,19 +2652,26 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
         onOpsChanged=${() => { opsChanged(); reloadFiles(); }} onOpsCleared=${reloadFiles} go=${go} />
     <//>
     <div class="feed-head">
+      ${publisher && html`<${PublisherPath} feeds=${feeds} feed=${feed} from=${view.from} go=${go} />`}
       <header class="head">
         <${ImageThumb} url=${draft.model && coverOf(draft.model)} glow=${glow} className="cover" always
           onOpen=${() => setArtwork({ kind: 'feed' })} label=${`Artwork of ${feed.title || 'Untitled feed'}`} />
         <div class="text">
           <span class="eyebrow"><span class=${`dot ${kind.dot}`}></span>${kind.label}${isReadOnly(feed) ? ' · read-only' : ''}</span>
           <h1>${feed.title || 'Untitled feed'}</h1>
+          ${place && html`<p class="sub page-place">${place}</p>`}
+          ${publisher && html`<p class="sub page-state">${draftLabel(feed)}${stateMarkOfFeed && html` · <span class=${`outside-mark ${stateMarkOfFeed.tone}`}><${Icon} name="alert" />${stateMarkOfFeed.text}</span>`}</p>`}
           ${feed.public_url
             ? html`<${FeedAddress} url=${feed.public_url} />`
             : html`<p class="sub mono">This feed has no public address yet.</p>`}
           ${musicIndexLink && html`<a class="button link index-link" href=${musicIndexLink.href} target="_blank" rel="noopener">${musicIndexLink.text}</a>`}
         </div>
-        ${(canMovePage || feed.last_version !== null) && html`<div class="head-actions">
-          ${canMovePage && html`<button class="button" type="button" onClick=${() => onMove(feed.id)}>Move To…</button>`}
+        ${(canMovePage || publisher || feed.last_version !== null) && html`<div class="head-actions">
+          ${publisher
+            ? html`${headMenu.length > 0 && html`<${MenuControl} buttonLabel="⋯" accessibleName=${`More for ${feed.title || 'Untitled feed'}`}
+                menuLabel="More" items=${headMenu} onSelect=${() => onMove(feed.id)} />`}
+              ${feed.public_url && html`<a class="button" href=${feed.public_url} target="_blank" rel="noopener">Open Feed File</a>`}`
+            : canMovePage && html`<button class="button" type="button" onClick=${() => onMove(feed.id)}>Move To…</button>`}
           ${feed.last_version !== null && html`<button class="button" type="button" disabled=${busy} onClick=${refresh}>
             ${busy ? 'Reading…' : 'Read Again'}</button>`}
         </div>`}

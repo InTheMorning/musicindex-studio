@@ -2655,6 +2655,21 @@ button.outline-feed {
 .sheet footer .footer-error { flex: 1 0 100%; min-width: 0; }
 .sheet footer .footer-error:empty { display: none; }
 
+/* The page of a publisher feed (ADR 0254 items 11 to 17): the path above the
+   head, the place and state lines, the menu Add and the groups. A row menu
+   opens below the row, so a group does not cut it. */
+.page-path { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; color: var(--muted); font-size: var(--text-callout); }
+.page-path .button.link { padding: 0 2px; }
+.head .sub.page-place, .head .sub.page-state { white-space: normal; }
+.page-tools { display: flex; justify-content: flex-end; }
+.page-tools .add-menu .sort-menu { left: auto; right: 0; }
+.page-group > .group { overflow: visible; }
+.page-group .page-sort { max-width: 20em; }
+.page-group-row > .link-row { flex: 1 1 0; min-width: 0; width: auto; }
+.page-group-row > .row-menu-wrap { margin-inline-end: 8px; }
+.link-row.add:disabled { color: var(--muted); cursor: default; }
+.link-row.add:disabled:hover { background: none; }
+
 /* musicindex ADR 0206 R-TYPE-1: with Touch, a field has the Body size of 17 px.
    iOS Safari zooms the page when a field with text under 16 px gets the focus.
    This rule is the last rule of the file, and its selector is as specific as

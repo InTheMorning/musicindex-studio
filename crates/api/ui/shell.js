@@ -492,6 +492,148 @@ export function pagePath(feeds, id, from = undefined) {
   };
 }
 
+// ---- The page of a publisher feed (ADR 0254 items 11 to 17) ----
+
+// The sorts of the group Releases, the default first (ADR 0254 item 13a).
+export const PAGE_SORTS = ['order', 'newest', 'az'];
+
+// The name of a sort of the group Releases. "Feed order" is the sequence of
+// ADR 0254 item 4a.
+export const pageSortLabel = (sort) => (sort === 'order' ? 'Feed order' : sortLabel(sort, false));
+
+// The sort of the page in a view. A view with no sort, or with a sort that
+// is not known, gives the default. The view is the navigation record of the
+// session (ADR 0254 item 13a).
+export const pageSort = (view) => (view && PAGE_SORTS.includes(view.sort) ? view.sort : PAGE_SORTS[0]);
+
+// The state text of the feed of a page, as a release tile gives it (ADR 0254
+// item 11a). A release with a draft does not change it.
+export const draftLabel = (feed) => DRAFT_LABELS[feed.draft_state] || 'No changes';
+
+// The place of a feed in music words (ADR 0254 item 11), for display only.
+// The text reads `parent_ids` and `publisher_roles` of the feed list. It
+// reads the parents of the labels above the feed, to name a publisher above a
+// label. It does not decide which feed is below which feed (ADR 0065). An
+// artist is "On {labels}" or "Independent", then "published by {names}" or
+// "not published". A feed at another rank gives "Published by {names}" or
+// "Not published". A feed with the role `hosting` and no publisher above
+// it gives `null`.
+export function placeText(feed, feeds) {
+  const byId = new Map((feeds || []).map((f) => [f.id, f]));
+  const has = (f, role) => (f.publisher_roles || []).includes(role);
+  const above = (f) => (f.parent_ids || []).map((id) => byId.get(id)).filter(Boolean);
+  const names = (list) => andNames(ranked(list).map(displayTitle));
+  const parents = above(feed);
+  const labels = parents.filter((p) => has(p, 'label'));
+  const publishers = new Map();
+  [...parents, ...labels.flatMap(above)].filter((p) => has(p, 'hosting')).forEach((p) => publishers.set(p.id, p));
+  const by = publishers.size > 0 ? `published by ${names([...publishers.values()])}` : null;
+  const rank = headingIndex(feed);
+  if (rank === HEADINGS.findIndex(([role]) => role === 'artist')) {
+    return `${labels.length > 0 ? `On ${names(labels)}` : 'Independent'}, ${by || 'not published'}`;
+  }
+  if (by) return `P${by.slice(1)}`;
+  // A publisher with no publisher above it has no place line.
+  return has(feed, 'hosting') ? null : 'Not published';
+}
+
+// The text of a count: "1 release", "3 pages below".
+const countWords = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+// The groups of the page of publisher feed `feed` (ADR 0254 items 6b and 13
+// to 16). `from` is the `from` of the view of the page. `sort` is a sort of
+// `PAGE_SORTS`. The groups go from the highest rank of the level roles of the
+// feed. A group of a different role heading shows only when it has rows, and
+// it has no add row. Each group gives:
+// - `id`, `heading` and `empty`: the title and the text of an empty group.
+// - `add`: the add rows. A row has `id`, `label` and `ready`. A row with
+//   `ready` false does nothing until task 254 (ADR 0254 items 18 to 21).
+// - `rows`: the rows of the pages below or of the releases, each with the
+//   `view` that a selection opens.
+// - `sorts` and `sort`: only the group Releases has them (item 13a).
+// The function lists the feed list fields as they are (ADR 0065).
+export function publisherGroups(feed, feeds, { sort = PAGE_SORTS[0], from = undefined } = {}) {
+  const list = Array.isArray(feeds) ? feeds : [];
+  const byId = new Map(list.map((f) => [f.id, f]));
+  const roles = feed.publisher_roles || [];
+  const childFrom = fromPath(rowPath(list, feed.id, from));
+  const pageRow = (page) => {
+    const kind = feedKind(page);
+    const { releases, pages } = levelCounts(page);
+    return {
+      id: page.id,
+      title: displayTitle(page),
+      typeLabel: kind.label,
+      dot: kind.dot,
+      countText: [
+        releases === null ? null : countWords(releases, 'release', 'releases'),
+        pages === null ? null : countWords(pages, 'page', 'pages'),
+      ].filter(Boolean).join(' · '),
+      view: openFeedView(page.id, false, childFrom),
+    };
+  };
+  const kids = ranked((feed.child_ids || []).map((id) => byId.get(id)).filter((kid) => kid && isPublisher(kid) && kid.id !== feed.id));
+  const claimed = new Set();
+  const claim = (ranks) => kids.filter((kid) => !claimed.has(kid.id) && ranks.includes(headingIndex(kid)))
+    .map((kid) => { claimed.add(kid.id); return pageRow(kid); });
+  const rankOf = (role) => HEADINGS.findIndex(([r]) => r === role);
+  const groups = [];
+  const levels = HEADINGS.map(([role]) => role).filter((role) => roles.includes(role));
+  // A label claims its artists before a publisher does (item 13).
+  const claimedRows = {};
+  if (levels.includes('label')) claimedRows.label = claim([rankOf('artist')]);
+  if (levels.includes('hosting')) {
+    claimedRows.hosting = claim(levels.includes('label') ? [rankOf('label')] : [rankOf('label'), rankOf('artist')]);
+  }
+  for (const role of levels) {
+    if (role === 'hosting') {
+      groups.push({
+        id: 'pages', heading: 'Labels and artists published here', empty: 'Nothing published here yet.',
+        add: [{ id: 'publish-label', label: '＋ Publish a label', ready: false }, { id: 'publish-artist', label: '＋ Publish an artist', ready: false }],
+        rows: claimedRows.hosting,
+      });
+    } else if (role === 'label') {
+      groups.push({
+        id: 'artists', heading: 'Artists on this label', empty: 'No artists on this label yet.',
+        add: [{ id: 'sign-artist', label: '＋ Sign an artist', ready: false }],
+        rows: claimedRows.label,
+      });
+    }
+  }
+  const hasReleases = levels.some((role) => ['label', 'curator', 'artist'].includes(role)) || levels.length === 0;
+  if (hasReleases) {
+    const key = PAGE_SORTS.includes(sort) ? sort : PAGE_SORTS[0];
+    const releases = (feed.release_ids || []).map((id) => byId.get(id)).filter(Boolean);
+    const sorted = key === 'order' ? releases : releases.slice().sort(key === 'az' ? compareAz : compareNewest);
+    const start = roles.includes('artist') ? releaseStart(feed, displayTitle(feed)) : null;
+    groups.push({
+      id: 'releases', heading: 'Releases', empty: 'No releases on this page.',
+      add: roles.includes('artist') ? [{ id: 'add-release', label: '＋ Add release', ready: start !== null }] : [],
+      sorts: PAGE_SORTS, sort: key,
+      rows: sorted.map((release) => {
+        const kind = feedKind(release);
+        return {
+          id: release.id,
+          title: displayTitle(release),
+          typeLabel: kind.label,
+          dot: kind.dot,
+          countText: trackCountText(release.track_count),
+          view: openFeedView(release.id, false, childFrom),
+        };
+      }),
+    });
+  }
+  // A child of a different role heading shows only when it has rows.
+  const rest = kids.filter((kid) => !claimed.has(kid.id));
+  for (let rank = 0; rank <= HEADINGS.length; rank += 1) {
+    const rows = rest.filter((kid) => headingIndex(kid) === rank).map(pageRow);
+    if (rows.length > 0) {
+      groups.push({ id: `other-${rank}`, heading: rank < HEADINGS.length ? HEADINGS[rank][1] : 'No role', empty: '', add: [], rows });
+    }
+  }
+  return groups;
+}
+
 // The set of open rows after a click on the button of the row with `key`.
 export function toggleRow(open, key) {
   const next = new Set(open || []);
@@ -528,6 +670,18 @@ export function newFeedView(id, from) {
   return { name: 'feed', id, ...(from ? { from } : {}) };
 }
 
+// The numbers of a row (ADR 0254 item 6): the releases of the feed, the pages
+// below it, or `null` for a number that the row does not show. A feed with
+// only the role `hosting` shows the pages. A feed with no level role shows its
+// releases.
+function levelCounts(feed) {
+  const roles = feed.publisher_roles || [];
+  const releases = !roles.includes('hosting') || roles.some((role) => ['label', 'curator', 'artist'].includes(role))
+    ? (feed.release_ids || []).length : null;
+  const pages = roles.includes('hosting') ? (feed.child_ids || []).length : null;
+  return { releases, pages };
+}
+
 // The rows of the panel below Releases (ADR 0254 items 2 to 8): the rows of
 // the Catalog tree, then "No artist yet" when a release has no artist page,
 // then "Other feeds". `open` is the set of the keys of the open rows. The top
@@ -551,10 +705,7 @@ export function groupDestinations(feeds, view, open = []) {
     const key = rowKey(path);
     const kids = ranked((feed.child_ids || []).map((id) => byId.get(id)).filter((kid) => kid && isPublisher(kid) && !path.includes(kid.id)));
     const isOpen = kids.length > 0 && openKeys.has(key);
-    const roles = feed.publisher_roles || [];
-    const releases = !roles.includes('hosting') || roles.some((role) => ['label', 'curator', 'artist'].includes(role))
-      ? (feed.release_ids || []).length : null;
-    const pages = roles.includes('hosting') ? (feed.child_ids || []).length : null;
+    const { releases, pages } = levelCounts(feed);
     const parent = path.length > 1 ? path[path.length - 2] : null;
     const others = ranked((feed.parent_ids || []).filter((id) => id !== parent).map((id) => byId.get(id)).filter(Boolean));
     const labels = others.filter((other) => (other.publisher_roles || []).includes('label'));

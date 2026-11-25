@@ -6,7 +6,7 @@ import {
   pageTabs, tabsFit, mediumKind, feedKind, trackCountText, roleChoice, roleHint, keptRoleFolds, linkRoleChoices, toggleRole, isEditable, isReadOnly, reviewHost, moveNote, isPublisher, isPlaylist, trackKey, isTrack,
   leftPanel, groupDestinations, releasesList, listQuery, queryText, sortLabel, sortEntries, compareNames, byName, segmentKey,
   startNav, pushNav, backNav, forwardNav, canBack, canForward, setScroll, releasesView,
-  narrowStack, openFeedView, newFeedView, navAtWidth, rowPath, pagePath, toggleRow, revealRows, widthNav, wideView, publisherArt, mosaicCells, otherFeedText, mediumProblemView, mediumProblemCause,
+  narrowStack, openFeedView, publisherGroups, placeText, pageSort, pageSortLabel, PAGE_SORTS, draftLabel, newFeedView, navAtWidth, rowPath, pagePath, toggleRow, revealRows, widthNav, wideView, publisherArt, mosaicCells, otherFeedText, mediumProblemView, mediumProblemCause,
 } from '../ui/shell.js';
 import { stateMark } from '../ui/outsidecheck.js';
 
@@ -1053,4 +1053,113 @@ test('the releases that keep a page of a role show in one fold for each role', (
     { summary: '1 release keeps its artist page.', names: ['Low Tide'] },
     { summary: '2 releases keep their publisher page.', names: ['Harbor EP', 'Untitled release'] },
   ], owner);
+});
+
+// ---- The page of a publisher feed (ADR 0254 items 11 to 17) ----
+
+const groupIds = (feed, feeds, options) => publisherGroups(feed, feeds, options).map((g) => g.id);
+
+test('a publisher page gives the groups of its level roles, from the highest rank (ADR 0254 items 6b and 13)', () => {
+  const message = 'ADR 0254 item 13: a publisher gives "Labels and artists published here", a label gives "Artists on this label" then Releases, an artist gives Releases. Fix publisherGroups in crates/api/ui/shell.js.';
+  const groups = publisherGroups(host, tree);
+  assert.deepEqual(groups.map((g) => [g.heading, g.add.map((a) => a.label), g.rows.map((r) => r.title)]), [
+    ['Labels and artists published here', ['＋ Publish a label', '＋ Publish an artist'], ['Label A', 'Label B']],
+  ], message);
+  const label = publisherGroups(labelA, tree);
+  assert.deepEqual(label.map((g) => [g.heading, g.add.map((a) => a.label), g.rows.map((r) => r.title)]), [
+    ['Artists on this label', ['＋ Sign an artist'], ['Artist X']],
+    ['Releases', [], ['Album 1']],
+    ['No role', [], ['Beat Lab']],
+  ], message);
+  const curator = { ...artistX, id: 70, publisher_roles: ['curator'], release_ids: [51] };
+  assert.deepEqual(publisherGroups(curator, [...tree, curator]).map((g) => [g.id, g.add.length]), [['releases', 0]], message);
+  assert.deepEqual(publisherGroups(artistX, tree).map((g) => [g.id, g.add.map((a) => [a.label, a.ready])]),
+    [['releases', [['＋ Add release', false]]]], 'An artist with no connector has no start parent, so its add row is not ready.');
+  const writable = { ...artistX, connector_id: 'c1' };
+  assert.deepEqual(publisherGroups(writable, tree)[0].add, [{ id: 'add-release', label: '＋ Add release', ready: true }], message);
+});
+
+test('a feed with the roles artist and hosting gives the publisher group, then Releases (ADR 0254 item 6b)', () => {
+  const message = 'ADR 0254 item 6b: a feed with several level roles gives the groups of each role, from the highest rank. Fix publisherGroups in crates/api/ui/shell.js.';
+  const both = { ...artistX, id: 61, title: 'Both', publisher_roles: ['artist', 'hosting'], release_ids: [51], child_ids: [41, 43], parent_ids: [] };
+  const groups = publisherGroups(both, [...tree, both]);
+  assert.deepEqual(groups.map((g) => g.id), ['pages', 'releases'], message);
+  assert.deepEqual(groups[0].rows.map((r) => r.title), ['Label A', 'Artist X'], message);
+  assert.deepEqual(groups[1].rows.map((r) => r.title), ['Album 1'], message);
+  // A label of a feed with the roles label and hosting claims the artists.
+  const both2 = { ...labelA, id: 62, publisher_roles: ['label', 'hosting'], child_ids: [41, 43], parent_ids: [] };
+  const second = publisherGroups(both2, [...tree, both2]);
+  assert.deepEqual(second.map((g) => [g.id, g.rows.map((r) => r.title)]),
+    [['pages', ['Label A']], ['artists', ['Artist X']], ['releases', ['Album 1']]], message);
+});
+
+test('an empty group says its text (ADR 0254 item 14)', () => {
+  const message = 'ADR 0254 item 14: an empty group says "Nothing published here yet.", "No artists on this label yet." or "No releases on this page.". Fix publisherGroups in crates/api/ui/shell.js.';
+  const emptyHost = { ...host, child_ids: [], release_ids: [] };
+  const emptyLabel = { ...labelB, child_ids: [], release_ids: [] };
+  const emptyArtist = { ...artistX, release_ids: [] };
+  assert.deepEqual(publisherGroups(emptyHost, [emptyHost]).map((g) => [g.rows.length, g.empty]), [[0, 'Nothing published here yet.']], message);
+  assert.deepEqual(publisherGroups(emptyLabel, [emptyLabel]).map((g) => [g.rows.length, g.empty]),
+    [[0, 'No artists on this label yet.'], [0, 'No releases on this page.']], message);
+  assert.deepEqual(publisherGroups(emptyArtist, [emptyArtist]).map((g) => [g.rows.length, g.empty]), [[0, 'No releases on this page.']], message);
+});
+
+test('the group Releases has the sorts Feed order, Newest and A to Z (ADR 0254 item 13a)', () => {
+  const message = 'ADR 0254 item 13a: Releases has the sorts Feed order (default), Newest and A to Z, and the sort is in the view. Fix publisherGroups and pageSort in crates/api/ui/shell.js.';
+  const b = { id: 81, title: 'B Album', medium: 'music', added_at: 5 };
+  const a = { id: 82, title: 'A Album', medium: 'music', added_at: 9 };
+  const c = { id: 83, title: 'C Album', medium: 'music', added_at: 1 };
+  const owner = { ...artistX, release_ids: [81, 83, 82] };
+  const titles = (options) => publisherGroups(owner, [owner, a, b, c], options).find((g) => g.id === 'releases').rows.map((r) => r.title);
+  assert.deepEqual(titles(), ['B Album', 'C Album', 'A Album'], message);
+  assert.deepEqual(titles({ sort: 'newest' }), ['A Album', 'B Album', 'C Album'], message);
+  assert.deepEqual(titles({ sort: 'az' }), ['A Album', 'B Album', 'C Album'], message);
+  assert.deepEqual(titles({ sort: 'other' }), ['B Album', 'C Album', 'A Album'], message);
+  assert.deepEqual(PAGE_SORTS.map(pageSortLabel), ['Feed order', 'Newest', 'A to Z'], message);
+  assert.equal(pageSort({ name: 'feed', sort: 'az' }), 'az', message);
+  assert.equal(pageSort({ name: 'feed', sort: 'x' }), 'order', message);
+  assert.equal(pageSort(undefined), 'order', message);
+});
+
+test('a group of a different role heading shows only with rows and has no add row (ADR 0254 item 13)', () => {
+  const message = 'ADR 0254 item 13: a group of a different role heading shows only when it has rows, and it has no add row. Fix publisherGroups in crates/api/ui/shell.js.';
+  const curator = { ...artistX, id: 71, title: 'Lists', publisher_roles: ['curator'], parent_ids: [40] };
+  const owner = { ...host, child_ids: [41, 71] };
+  const groups = publisherGroups(owner, [owner, labelA, curator]);
+  assert.deepEqual(groups.map((g) => [g.id, g.heading, g.add.length]), [['pages', 'Labels and artists published here', 2], ['other-2', 'Curators', 0]], message);
+  assert.deepEqual(groupIds(host, [host]), ['pages'], message);
+});
+
+test('a row of a group opens its page with the path of this page (ADR 0254 items 12a and 16)', () => {
+  const message = 'ADR 0254 items 12a and 16: a row opens the page of its feed and keeps the path of this page. Fix publisherGroups in crates/api/ui/shell.js.';
+  const groups = publisherGroups(labelA, tree, { from: { group: 40, trail: [] } });
+  const artist = groups[0].rows[0];
+  assert.deepEqual(artist.view, { name: 'feed', id: 43, from: { group: 41, trail: [40] } }, message);
+  assert.deepEqual([artist.dot, artist.typeLabel, artist.countText], ['artist hollow', 'Artist', '1 release'], message);
+  assert.equal(publisherGroups(host, tree)[0].rows[0].countText, '1 release', message);
+  const hosts = { ...host, id: 95, child_ids: [], parent_ids: [] };
+  const upper = { ...host, id: 96, title: 'Upper', child_ids: [95] };
+  assert.deepEqual(publisherGroups(upper, [upper, hosts]).map((g) => [g.heading, g.rows.map((r) => r.countText)]),
+    [['Labels and artists published here', []], ['Publishers', ['0 pages']]], message);
+  assert.deepEqual(groups[1].rows[0].view, { name: 'feed', id: 51, from: { group: 41, trail: [40] } }, message);
+});
+
+test('the place of a feed uses music words (ADR 0254 item 11)', () => {
+  const message = 'ADR 0254 item 11: the place reads "On {label}, published by {publisher}", "Independent, published by {publisher}" or "Not published". Fix placeText in crates/api/ui/shell.js.';
+  const north = { ...labelA, id: 90, title: 'Northwind Records', parent_ids: [91] };
+  const river = { ...host, id: 91, title: 'Riverside', child_ids: [90, 92], parent_ids: [] };
+  const onLabel = { ...artistX, id: 93, parent_ids: [90] };
+  const indep = { ...artistX, id: 92, parent_ids: [91] };
+  const lone = { ...artistX, id: 94, parent_ids: [] };
+  const feeds = [north, river, onLabel, indep, lone];
+  assert.equal(placeText(onLabel, feeds), 'On Northwind Records, published by Riverside', message);
+  assert.equal(placeText(indep, feeds), 'Independent, published by Riverside', message);
+  assert.equal(placeText(lone, feeds), 'Independent, not published', message);
+  assert.equal(placeText(north, feeds), 'Published by Riverside', message);
+  assert.equal(placeText({ ...north, parent_ids: [] }, feeds), 'Not published', message);
+  assert.equal(placeText(river, feeds), null, message);
+  // A label that is also a publisher publishes itself, so it has no place line.
+  assert.equal(placeText({ ...north, parent_ids: [], publisher_roles: ['label', 'hosting'] }, feeds), null, message);
+  assert.equal(draftLabel({ draft_state: 'changed' }), 'Saved, not written', message);
+  assert.equal(draftLabel({}), 'No changes', message);
 });

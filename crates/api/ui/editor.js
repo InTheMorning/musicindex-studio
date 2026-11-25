@@ -14,7 +14,8 @@ import { onListKey, onTreeKey } from './listkeys.js';
 import { creditPickRows, supportPickRows, creditChoices, creditFillRows, creditFillValue, creditFillNote, creditFillNoteText, CREDIT_FIELD_LABELS, fundingChoices, nostrChoices, withPersonValues, filterRows, nostrPickRows, feedWord, memberRowLine, memberSectionNote } from './people.js';
 import { withCids, STATUS } from './draft.js';
 import { roleSummary } from './roles.js';
-import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, roleHint, keptRoleFolds, relLabel, linkRoleChoices, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName, newFeedView, pageLevel } from './shell.js';
+import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, roleHint, keptRoleFolds, relLabel, linkRoleChoices, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName, newFeedView, pageLevel, pagePath, publisherGroups, pageSort, pageSortLabel, PAGE_SORTS } from './shell.js';
+import { MenuControl } from './menu.js';
 import { isLiveItem, liveKey, liveDot, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner, OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning, hasBadAddress, problemGroup, setLiveStreamType, viewAfterLiveGone, withoutLive } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
 import { checkRows, unreadableRows, hasShowGrant, checkTexts, pageRefusalView, refusalPageCandidates, linkedRefusalView, NEW_PAGE_CHOICE, guidChangeView, repairAddresses, wrongAddressSet, OPEN_ACTIONS, COPY_SHEET_TEXT, WAYS_SHEET_TEXT } from './feedcheck.js';
@@ -33,7 +34,7 @@ import { coverOf, coverConflict } from './cover.js';
 import { platformBlocks } from './listing.js';
 import { deleteWrite } from './feeddelete.js';
 import { pageSequence } from './pages.js';
-import { releaseKindOptions, shouldAddTracksAfterNewRelease } from './addfeeds.js';
+import { releaseKindOptions, shouldAddTracksAfterNewRelease, addMenuEntries } from './addfeeds.js';
 import { releaseCreditFields, NEW_PAGE_PREFIX,
   movePageTitle, pageMoveBody, pageMoveMenus, pageMoveStart, pageMoveLines, gatherPagesModel } from './movepages.js';
 import { nextStep, firstStart, releaseAdd, releaseArtistChoices, FIRST_STEPS, HOST_STEP } from './welcome.js';
@@ -4427,10 +4428,54 @@ function LinkRolesSheet({ row, pageRoles, onSave, onClose }) {
   </dialog>`;
 }
 
+// The path above the head of a publisher page (ADR 0254 items 12 and 12a).
+// Each name opens its page, with " › " between two names. A feed with no feed
+// above it shows "Top level".
+export function PublisherPath({ feeds, feed, from, go }) {
+  const path = pagePath(feeds, feed.id, from);
+  return html`<nav class="page-path" aria-label="Path">
+    ${path.top
+      ? html`<span class="muted">Top level</span>`
+      : path.names.map((name, i) => html`${i > 0 && html`<span class="page-path-sep" aria-hidden="true"> › </span>`}
+        <button class="button link" type="button" key=${name.id} onClick=${() => go(name.view)}>${name.title}</button>`)}
+  </nav>`;
+}
+
+// One group of the page of a publisher feed (ADR 0254 items 13 to 16). A row
+// opens its page. An add row with `ready` false is not available until task
+// 254 gives the Add sheet. The group Releases has a select menu of its sorts.
+function PageGroup({ group, sort, onSort, onOpen, onAddRelease }) {
+  const headingId = `page-group-${group.id}`;
+  return html`<section class="page-section page-group" aria-labelledby=${headingId}>
+    <h2 id=${headingId}>${group.heading}</h2>
+    ${group.sorts && group.rows.length > 1 && html`<div class="field page-sort">
+      <label for="page-sort">Sort</label>
+      <div class="field-body"><select id="page-sort" value=${sort} onChange=${(e) => onSort(e.target.value)}>
+        ${PAGE_SORTS.map((key) => html`<option value=${key}>${pageSortLabel(key)}</option>`)}
+      </select></div>
+    </div>`}
+    <div class="group">
+      ${group.rows.length === 0 && html`<p class="hint">${group.empty}</p>`}
+      ${group.rows.map((row) => html`<div class="panel-row-with-menu page-group-row" key=${row.id}>
+        <button class="link-row" type="button" onClick=${() => onOpen(row.view)}>
+          <span class=${`dot ${row.dot}`} aria-hidden="true"></span>
+          <span class="text"><span class="label">${row.title}</span>
+            <span class="summary">${[row.typeLabel, row.countText].filter(Boolean).join(' · ')}</span></span>
+          <span class="go" aria-hidden="true">›</span></button>
+        <${MenuControl} row=${true} Icon=${Icon} buttonLabel="More" accessibleName=${`More for ${row.title}`}
+          menuLabel=${`More for ${row.title}`} items=${[{ label: 'Open' }]} onSelect=${() => onOpen(row.view)} />
+      </div>`)}
+      ${group.add.map((add) => html`<button class="link-row add" type="button" key=${add.id} disabled=${!add.ready}
+        onClick=${add.id === 'add-release' ? onAddRelease : undefined}>
+        <span class="title">${add.label}</span></button>`)}
+    </div>
+  </section>`;
+}
+
 // The publisher page: the fields, the role and the releases (ADR 0255 item
 // 3). Each link changes the draft of this feed and the draft of the release,
 // so the page loads both drafts and names each release that changed.
-function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, onMove, onListChanged, onArtwork, onRemoved, connectors }) {
+function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, view, onMove, onListChanged, onArtwork, onRemoved, connectors }) {
   const field = (name) => (value) => update((m) => set(m, name, value));
   const nav = useContext(NavContext);
   const roleAction = useAction();
@@ -4443,6 +4488,9 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, onMov
   const [addOpen, setAddOpen] = useState(null);
   // The start role of the form that a row of a new hosting page opens (ADR 0240 item 3).
   const [addRole, setAddRole] = useState(null);
+  // The start values of the form that the menu ＋ Add or the add row of a
+  // group opens (ADR 0254 items 15 and 17).
+  const [addStart, setAddStart] = useState(null);
   // The members of this feed, from `GET /feeds/{id}/members` (ADR 0118 item 9).
   const [members, setMembers] = useState([]);
   const [membersError, setMembersError] = useState(null);
@@ -4482,6 +4530,24 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, onMov
   // The add row at the end of the Releases section. It does not show with a
   // first-step row (ADR 0164 item 1).
   const more = nextStep(feed) === null ? releaseAdd(feed, model.title) : null;
+  // The form of a release with the artist of this page as its parent (ADR
+  // 0254 item 15).
+  const closeAdd = () => { setAddOpen(null); setAddStart(null); };
+  const openReleaseForm = (start) => { setAddStart(start || {}); setAddOpen('release-form'); };
+  // The groups of the page (ADR 0254 item 13). The sort is in the view, which
+  // is the navigation record of the session (item 13a).
+  const sort = pageSort(view);
+  const groups = publisherGroups(feed, feeds, { sort, from: view && view.from });
+  const setSort = (next) => go({ ...view, sort: next }, { replace: true });
+  // The menu ＋ Add of the page head (ADR 0254 item 17). `addMenuEntries`
+  // leaves out the values that this page cannot add.
+  const headAdd = addMenuEntries(releaseAdd(feed, model.title), feed);
+  const pickAdd = (entry) => {
+    if (entry.id === 'release') { openReleaseForm(entry.start); return; }
+    setAddRole(entry.start && entry.start.role ? entry.start.role : null);
+    setAddStart(entry.start || {});
+    setAddOpen(entry.open);
+  };
 
   // The steps of this page for one change of two drafts.
   const twoDrafts = (action, call) => changeTwoDrafts(action, { feedId: feed.id, draft, onListChanged, setChanged, call });
@@ -4572,7 +4638,9 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, onMov
         <${ErrorNotice} error=${publisherError(roleAction.error, PUBLISHER_ROLE_TEXT)} />
       </div>
     </section>`,
-    releases: () => html`<section class="page-section"><h2>Releases</h2>
+    // The links of the releases, with their sequence and roles. The group
+    // Releases above lists the releases (ADR 0254 item 13).
+    releases: () => html`<section class="page-section"><h2>Linked releases</h2>
       <div class="group">
         ${rows.length === 0 && html`<p class="hint">No releases yet.</p>`}
         ${spaced > 0 && html`<div class="release-row">
@@ -4597,7 +4665,7 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, onMov
               onClick=${() => setLinkRolesRow(row)}>Change…</button>`}
           </div>
         </div>`)}
-        ${more && html`<button class="link-row add" type="button" onClick=${() => { setReleaseStart(more.start); setAddOpen('release-form'); }}>
+        ${more && html`<button class="link-row add" type="button" onClick=${() => openReleaseForm(more.start)}>
           <span class="num">＋</span><span class="title">${more.label}</span></button>`}
         ${candidates.length > 0 && html`<div class="field">
           <label for="pub-release">Release</label>
@@ -4659,9 +4727,13 @@ function PublisherPage({ feed, feeds, model, update, bad, draft, go, from, onMov
       onClick=${() => { setAddRole(step.role || null); setAddOpen(step.open); }}><span class="step-icon" aria-hidden="true"><${Icon} name=${step.icon} /></span>
       <span class="text"><span class="label">${step.title}</span><span class="summary">${step.line}</span></span><span class="go" aria-hidden="true">›</span></button>`)}</div>`}
     ${addOpen === 'release-form' && html`<${AddFeedRowSheet} open="album" connectors=${connectors} feeds=${feeds}
-      start=${{}} onAdded=${addedFeed} onClose=${() => setAddOpen(null)} />`}
+      start=${addStart || {}} onAdded=${addedFeed} onClose=${closeAdd} />`}
     ${addOpen && addOpen !== 'release-form' && html`<${AddFeedRowSheet} open=${addOpen} connectors=${connectors} feeds=${feeds}
-      start=${firstStart(first, addOpen, model, feed.id, addRole)} onAdded=${addedFeed} onClose=${() => setAddOpen(null)} />`}
+      start=${addStart || firstStart(first, addOpen, model, feed.id, addRole)} onAdded=${addedFeed} onClose=${closeAdd} />`}
+    <div class="page-tools"><${MenuControl} className="add-menu" buttonLabel="＋ Add" accessibleName="Add" menuLabel="Add"
+      items=${headAdd} onSelect=${pickAdd} /></div>
+    ${groups.map((group) => html`<${PageGroup} key=${group.id} group=${group} sort=${sort} onSort=${setSort}
+      onOpen=${(target) => go(target)} onAddRelease=${() => openReleaseForm(more && more.start)} />`)}
     ${showSections(pageSequence('publisher'), shown)}`;
 }
 
@@ -5663,7 +5735,7 @@ export function AlbumEditor({ feed, feeds, draft, view, go, adding, onAdding, im
       op3Tracks=${draft.op3Tracks} />`;
   } else if (publisher && page !== 'files' && page !== 'credits' && page !== 'recipients') {
     body = html`<${PublisherPage} feed=${feed} feeds=${feeds} model=${model} update=${update} bad=${draft.bad} onMove=${onMove}
-      draft=${draft} go=${go} from=${pageLevel(feed.id, view.from)}
+      draft=${draft} go=${go} from=${pageLevel(feed.id, view.from)} view=${view}
       onListChanged=${onListChanged} onArtwork=${onArtwork} onRemoved=${onRemoved} connectors=${connectors} />`;
   } else if (playlist && page === 'tracks') {
     body = html`<${PlaylistTracksPage} feed=${feed} model=${model} update=${update} />`;

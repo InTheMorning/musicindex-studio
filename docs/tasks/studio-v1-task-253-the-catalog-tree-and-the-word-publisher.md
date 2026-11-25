@@ -4,7 +4,13 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Levels And Move
 Decisions: [ADR 0253](../adr/0253-the-roles-of-a-feed-and-of-each-link.md) items 7 to 14, 16 and 18. [ADR 0254](../adr/0254-the-catalog-is-a-tree-and-each-change-uses-music-words.md) items 1 to 17 and 43 to 46.
 Prototype: `.studio-dev/design-brief/prototype/structure.html`. Git ignores it. Its words "Hosting" and "Catalog" follow the ADRs, not the prototype, where the two are different.
 
-Status: Packets 253a to 253c are done. Packet 253d is not started.
+Status: Done. Screenshots of packets 253b to 253d in Light, Dark and at 390 px passed.
+
+Operator choices (main session, packet 253d):
+- The button of item 11 is "Open Feed File". The word guard of ADR 0230 item 6 refuses "Open the Feed".
+- The section of the links of the releases on a publisher page has the title "Linked releases", so that the page has one title "Releases".
+- A feed with the role `hosting` and no publisher above it has no place line. An artist on a label that is also a publisher reads "On {label}, published by {label}".
+- The add rows of the Add sheet are disabled until task 254.
 
 Operator choice (main session, packet 253b): a feed with no level role shows the number of its releases. A feed with only the role `hosting` shows the number of the pages below it.
 

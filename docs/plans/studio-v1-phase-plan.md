@@ -343,13 +343,14 @@ A phase gets task files in `docs/tasks/` before work starts.
 - Step 1, defects with no new design: [task 249](../tasks/studio-v1-task-249-a-move-to-a-written-page-with-no-draft-and-the-links-after-a-write.md) corrects observation 14 and shows that the harness caused observation 15. Observations 16 and 17 go into the structural design, because the count of a row and the text of the move sheet depend on it.
 - Decision for topics A to E of the brief and observations 16 to 19: [ADR 0254](../adr/0254-the-catalog-is-a-tree-and-each-change-uses-music-words.md). The roles are in [ADR 0253](../adr/0253-the-roles-of-a-feed-and-of-each-link.md), after musicindex ADR 0097. The panel is the Catalog tree, each change uses music words and waits for Review, and drag and drop with Undo is on the desktop only.
 - Decision for the release fields: [ADR 0257](../adr/0257-a-release-has-one-artist-one-label-and-one-publisher-in-its-fields.md). A release has one artist page, one label page and one publisher, in select menus of its first tab.
-- The build is five tasks, in this sequence. None is started.
+- The build is five tasks, in this sequence. The five tasks are built. The operator checks of task 254 are open.
   1. [Task 250](../tasks/studio-v1-task-250-the-roles-of-each-link-and-one-page-for-each-role.md): the roles of each link, one page for each role, and the levels from a link (core and API, four packets).
   2. [Task 251](../tasks/studio-v1-task-251-the-changes-of-the-catalog-in-one-change-set.md): the page actions in music words, one change set of the Catalog, and Undo (core and API, three packets, schema 51).
   3. [Task 252](../tasks/studio-v1-task-252-the-artist-label-and-publisher-fields-of-a-release.md): the fields of a release (core, API and UI, four packets).
   4. [Task 253](../tasks/studio-v1-task-253-the-catalog-tree-and-the-word-publisher.md): the word "Publisher", the Catalog tree and the page of a publisher feed (UI, four packets). Most of packet 253a needs no other task.
   5. [Task 254](../tasks/studio-v1-task-254-the-sheets-of-a-catalog-change-review-and-drag-and-drop.md): the sheets of a change, the Add sheet, Review and drag and drop (UI, four packets).
 - The control that adds a role to one link or removes a role from one link (ADR 0253 item 21): [task 255](../tasks/studio-v1-task-255-the-roles-of-one-release-on-a-page.md), with the operator choice of 2026-11-24. Each release row of a publisher page shows its roles and a **Change…** button that opens a sheet with check boxes.
+- Decision for findings 4 and 5 of the [check of task 254](../reviews/2026-11-25-task-254-check.md): [ADR 0263](../adr/0263-overview-is-the-start-page-and-each-page-keeps-the-sequence-of-its-feed.md). [Task 256](../tasks/studio-v1-task-256-overview-and-the-sequence-of-a-page.md) gives the build in four packets: the release date (core and API), Overview, the Catalog rows and the sequence of a page. None is started.
 
 ### Phase 13: Desktop Shell
 

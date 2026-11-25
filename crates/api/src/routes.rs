@@ -8888,10 +8888,16 @@ fn change_blocked(w: &Workspace, id: FeedId) -> Option<&'static str> {
 }
 
 // The place of each feed in music words, from the core (ADR 0254 item 36).
-fn catalog_places(feeds: &[(FeedRow, Option<Feed>)], kept: &[(FeedId, FeedId)]) -> Vec<String> {
+// A page that is only a publisher has no place.
+fn catalog_places(
+    feeds: &[(FeedRow, Option<Feed>)],
+    kept: &[(FeedId, FeedId)],
+) -> Vec<Option<String>> {
     feeds
         .iter()
-        .map(|(row, _)| publisher::catalog_place(feeds, kept, row.id))
+        .map(|(row, _)| {
+            publisher::has_catalog_place(row).then(|| publisher::catalog_place(feeds, kept, row.id))
+        })
         .collect()
 }
 

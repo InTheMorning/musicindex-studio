@@ -289,7 +289,9 @@ export function catalogReview(set) {
     title: 'What changes',
     feedsTitle: 'Feeds that Studio writes',
     rows: (set.catalog_changes || []).map((row) => ({
-      id: row.feed_id, title: row.title || 'Untitled feed', now: `Now: ${row.now}`, after: `After: ${row.after}`,
+      id: row.feed_id, title: row.title || 'Untitled feed',
+      // A page that is only a publisher has no place (ADR 0254 item 36).
+      now: row.now == null ? null : `Now: ${row.now}`, after: row.after == null ? null : `After: ${row.after}`,
     })),
   };
 }

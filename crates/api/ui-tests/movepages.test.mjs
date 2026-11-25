@@ -277,13 +277,15 @@ test('ADR 0254 items 35 and 36: Catalog notices and the count use API values', (
 test('ADR 0254 item 36: What changes shows the API places without a feed rule', () => {
   const view = catalogReview({ operation: { kind: 'catalog' }, catalog_changes: [
     { feed_id: 1, title: 'Artist', now: 'On Old, not published', after: 'On New, published by Publisher' },
-    { feed_id: 2, title: 'Release', now: 'By Artist, on Old, not published', after: 'By Artist, on New, published by Publisher' },
+    { feed_id: 2, title: 'Release', now: 'On Old, not published', after: 'On New, published by Publisher' },
+    { feed_id: 3, title: 'Publisher', now: null, after: null },
   ] });
   assert.equal(view.title, 'What changes');
   assert.equal(view.feedsTitle, 'Feeds that Studio writes');
   assert.deepEqual(view.rows, [
     { id: 1, title: 'Artist', now: 'Now: On Old, not published', after: 'After: On New, published by Publisher' },
-    { id: 2, title: 'Release', now: 'Now: By Artist, on Old, not published', after: 'After: By Artist, on New, published by Publisher' },
+    { id: 2, title: 'Release', now: 'Now: On Old, not published', after: 'After: On New, published by Publisher' },
+    { id: 3, title: 'Publisher', now: null, after: null },
   ]);
   assert.equal(catalogReview({ operation: { kind: 'add' } }), null);
 });

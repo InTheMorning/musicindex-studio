@@ -516,6 +516,18 @@ fn remove_outside_roles(
     Ok(outside_changes)
 }
 
+/// A page that is only a publisher has no page above it, so it has no place
+/// (ADR 0254 item 36). A release and each other page have a place.
+#[must_use]
+pub fn has_catalog_place(row: &FeedRow) -> bool {
+    row.medium.as_deref() != Some("publisher")
+        || !row.publisher_roles.contains(&PublisherRole::Hosting)
+        || row
+            .publisher_roles
+            .iter()
+            .any(|role| matches!(role, PublisherRole::Artist | PublisherRole::Label))
+}
+
 /// The place of a page or a release in music words, for example
 /// "On Harbor Records, published by Northwind" (ADR 0254 items 25 and 36).
 #[must_use]

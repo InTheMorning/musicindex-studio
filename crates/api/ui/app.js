@@ -3567,7 +3567,7 @@ function ChangeSetPage({ id, go, onChanged, feeds }) {
       <p class="hint">${set.person_id != null ? changeLine(set, personName) : operationLine(set.operation, nameOf(known, set.recipient))}</p></header>
       ${catalog && html`<section class="page-section"><h2>${catalog.title}</h2><div class="group rows">
         ${catalog.rows.map((row) => html`<div class="link-row static" key=${row.id}><span class="text">
-          <span class="label">${row.title}</span><span class="summary">${row.now}</span><span class="summary">${row.after}</span>
+          <span class="label">${row.title}</span>${row.now && html`<span class="summary">${row.now}</span>`}${row.after && html`<span class="summary">${row.after}</span>`}
         </span></div>`)}
       </div></section>`}
       <${ReviewPanels} findings=${findings} feeds=${feeds} busy=${busy || writing} onRepair=${repairShortAddresses}

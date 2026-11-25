@@ -14,6 +14,7 @@ Operator choices (the main session, in the approved ADR 0254):
 - Packet 254b: the Add sheet shows no row for a page below the sheet page, also when a different page is between the two pages (ADR 0254 item 19 gives only a page directly below). The core refuses each of these pages, and the place of such a page does not change.
 - Packet 254c: the API gives "Now" and "After" with the core function `catalog_place`. The main session made that function public and extended it for a release and for a publisher page. A release gets its place from the roles of its own links. A publisher page gets "Published by" or "Not published", as a label page does.
 - Packet 254c: the title of Review for the change set of the Catalog is "Changes in the Catalog".
+- Packet 254c: in Review, a page that is only a publisher shows its name with no "Now" and no "After". The core function `has_catalog_place` gives this rule (ADR 0254, operator choice of 2026-11-25).
 
 ## Goal
 

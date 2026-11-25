@@ -7,6 +7,7 @@
 - Technical choices: the main session selected the texts of the sheets and of the notice. It also selected the start selection of item 28 and the third menu of the release sheet in item 30. The operator did not receive them as a question.
 - Bar: crosses modules. It changes the left panel, the page of a publisher feed, the sheets, the core routes of a move and the change set. Without this record, an agent can keep the levels of ADR 0215 or the sheet **Move To…** of ADR 0240.
 - Operator choice, 2026-11-24: one record replaces ADR 0085, ADR 0181, ADR 0215, ADR 0232 and ADR 0240. The tree changes most of their rules. ADR 0085 and ADR 0232 had three "Changed by" lines. ADR 0181 gave the rules of a level only.
+- Operator choice, 2026-11-25: in Review, a page that is only a publisher shows its name with no "Now" and no "After" (item 36). It has no page above it, so it has no place.
 - Supersedes: [ADR 0085](../archive/adr/0085-each-artist-and-label-is-a-destination.md), Each Artist And Label Is A Destination.
 - Supersedes: [ADR 0181](../archive/adr/0181-a-level-shows-the-state-of-its-own-feed.md), A Level Shows The State Of Its Own Feed.
 - Supersedes: [ADR 0215](../archive/adr/0215-the-left-panel-shows-the-levels-of-the-publisher-feeds.md), The Left Panel Shows The Levels Of The Publisher Feeds.
@@ -129,7 +130,7 @@
 34. No change of the Catalog writes a file. Each change of items 21, 26, 27, 33 and 39 goes into one open change set (ADR 0207 items 24 to 33), until Write or Discard. This change set is the change set of the Catalog. This changes ADR 0243 item 1, where each move made its own change set. ADR 0243 items 2 and 6 apply to each change.
 34a. ADR 0243 item 5 applies only to a different open change set. When a feed of a change is in a different open change set, Studio does not do the change. The sheet gives the text and the button of ADR 0243 item 5. This changes ADR 0243 item 5.
 35. After a change, the sheet closes, and a notice shows "{name} is now {place}. Not written yet." with the buttons **Undo** and **Review** and a close button. Review does not open by itself. This changes ADR 0243 item 3.
-36. While the change set is open, the top of the panel says "{N} changes not written", with the button **Review**. Review has the group "What changes" first. It shows each changed page and each changed release with "Now: {place}" and "After: {place}". Then it shows the group "Feeds that Studio writes", and the buttons **Discard** and **Write**.
+36. While the change set is open, the top of the panel says "{N} changes not written", with the button **Review**. Review has the group "What changes" first. It shows each changed page and each changed release with "Now: {place}" and "After: {place}". A page that is only a publisher shows only its name. Then it shows the group "Feeds that Studio writes", and the buttons **Discard** and **Write**.
 37. **Undo** puts back the drafts and the kept links of the change set before the last change (ADR 0227). Discard puts back each draft and each kept link of the change set (ADR 0243 item 2).
 
 ### Drag And Drop On The Desktop

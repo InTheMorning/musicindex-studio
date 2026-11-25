@@ -21217,12 +21217,15 @@ async fn catalog_review_gives_saved_and_current_places_after_two_changes() {
             "On Label, published by Hosting",
         ),
         (label, "Not published", "Published by Hosting"),
-        (host, "Not published", "Published by Hosting"),
     ] {
         let row = rows.iter().find(|row| row["feed_id"] == id).unwrap();
         assert_eq!(row["now"], now, "{review}");
         assert_eq!(row["after"], after, "{review}");
     }
+    // A page that is only a publisher has no place (ADR 0254 item 36).
+    let row = rows.iter().find(|row| row["feed_id"] == host).unwrap();
+    assert_eq!(row["now"], Value::Null, "{review}");
+    assert_eq!(row["after"], Value::Null, "{review}");
     assert_eq!(
         move_draft_rows(&app, &[artist, label, host, release]),
         before_read

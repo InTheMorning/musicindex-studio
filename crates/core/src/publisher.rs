@@ -27,7 +27,7 @@ pub use credits::{
 mod page_change;
 pub use page_change::{
     PageAction, PageChangePreview, PageChangeRequest, PageChangeResult, catalog_place, change_page,
-    gather_pages_with_drafts, page_change_selection, page_change_with_drafts,
+    gather_pages_with_drafts, has_catalog_place, page_change_selection, page_change_with_drafts,
 };
 
 /// The side of the linked feed (ADR 0251 item 2).

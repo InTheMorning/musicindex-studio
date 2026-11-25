@@ -1,7 +1,7 @@
 # Studio v1 Task 256: Overview And The Sequence Of A Page
 
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md), "Levels And Moves".
-Decisions: [ADR 0263](../adr/0263-overview-is-the-start-page-and-each-page-keeps-the-sequence-of-its-feed.md) items 1 to 18.
+Decisions: [ADR 0263](../adr/0263-overview-is-the-start-page-and-each-page-keeps-the-sequence-of-its-feed.md) items 1 to 18. [ADR 0264](../adr/0264-overview-groups-the-releases-below-label-artist-and-curator-headings.md) items 1 to 8 replace ADR 0263 items 5 and 7 on Overview.
 Mockup: `.studio-dev/design-brief/prototype/overview.html`. Git ignores it.
 
 Status: Not started.
@@ -12,7 +12,7 @@ Operator choices (the main session, in the approved ADR 0263):
 
 ## Goal
 
-Overview is the start page and shows the full collection with the newest release date first. The Catalog shows each playlist below its curator page, and the list pages "No artist yet", "No curator yet" and "Other feeds". The group Releases of a page has one sequence, the sequence of its feed, with a drag handle and the moves **Move up**, **Move down** and **Move to the top**.
+Overview is the start page and shows the full collection as tiles below label, artist and curator headings. The Catalog shows each playlist below its curator page, and the list pages "No artist yet", "No curator yet" and "Other feeds". The group Releases of a page has one sequence, the sequence of its feed, with a drag handle and the moves **Move up**, **Move down** and **Move to the top**.
 
 ## Base components
 
@@ -23,9 +23,9 @@ Overview is the start page and shows the full collection with the newest release
 | Feed list route | extend | crates/api/src/routes.rs | `list_feeds` gives `release_date`. |
 | Link write of a page | extend | crates/core/src/publisher.rs | `upsert` puts a new release link before each other release entry (item 15). |
 | Panel model | extend | crates/api/ui/shell.js | `leftPanel` and `groupDestinations` get Overview, the playlist rows and the three list rows (items 9 to 11). |
-| Release list model | extend | crates/api/ui/shell.js | `releasesList` becomes the Overview model and the list page model (items 3 to 5, 9a). The sorts, the reversed sequence and the letters go. |
+| Release list model | extend | crates/api/ui/shell.js | `releasesList` becomes the Overview model with the headings of ADR 0264, and the list page model of ADR 0263 item 9a. The sorts, the reversed sequence and the letters go. |
 | Navigation | extend | crates/api/ui/shell.js | `startNav`, `narrowStack`, `rootNav`, `listQuery` and `queryText` (items 1, 8 and 17). |
-| Releases page | extend | crates/api/ui/app.js | `ReleasesPage` becomes `OverviewPage`. Reuse `SearchField`. `SortMenu`, `LetterBar` and the view buttons go. |
+| Releases page | extend | crates/api/ui/app.js | `ReleasesPage` becomes `OverviewPage`. Reuse `SearchField` and the tile markup of the old view "Tiles" (class `releases-tile`). `SortMenu`, `LetterBar` and the view buttons go. |
 | Welcome check | reuse | crates/api/ui/welcome.js | `showWelcome` (item 1). |
 | Segmented control | reuse | crates/api/ui/app.js | The keys of a segmented control (line 2389, musicindex ADR 0051 R-SEG-1) and the page tabs. Do not write a new one. |
 | Sequence helpers | reuse | crates/api/ui/order.js | `moveTo` and `moveAmong` (items 13 and 13b). |
@@ -68,13 +68,14 @@ Overview is the start page and shows the full collection with the newest release
 ### 256b: Overview (UI)
 
 1. The panel gives Overview first, with the icon of Releases, then the heading "Catalog" (items 1 and 9). The start page is Overview, or "Welcome to Studio" with no feed.
-2. `OverviewPage` replaces `ReleasesPage`: the head with **＋ Add**, the counts line, the notice rows, the search field "Search the collection", the filters All, Releases and Playlists, and the list (items 3 to 5). The list model sorts by `release_date`: newest instant first, then the rows with no date, then A to Z for equal values.
-3. The row of item 7 with no menu **⋯**.
+2. `OverviewPage` replaces `ReleasesPage`: the head with **＋ Add**, the counts line, the notice rows, the search field "Search the collection" and the filters All, Releases and Playlists (ADR 0263 items 3 and 4).
+3. Below the filters, the release part and the playlist part of ADR 0264 items 1 to 6. The model gives the headings in the sequence of the tree, from the label page and the artist page of each release. Below a heading, it sorts by `release_date`: newest instant first, then no date, then A to Z for equal values. Reuse the tree sequence of `groupDestinations`. Do not write a second sort of the tree.
+3a. The tile of ADR 0264 item 7, with no menu **⋯**. The filters and the search of ADR 0264 item 8.
 4. The filter and the search go into the navigation record. The address of Overview has no query. An old address with `sort`, `reversed` or `view` opens Overview with no error (item 8).
 5. Each other place that opens `{ name: 'releases' }` opens Overview.
 6. Delete `SortMenu`, `LetterBar`, the view buttons, `compareNewest`, `letterGroups` and each sort constant that no entry point reaches.
 7. The button "‹ Overview" of a narrow feed page becomes "‹ Sections" (item 18).
-8. Node tests: the panel sequence, the counts line with a zero count, each notice row and its target, the sequence of item 5, the filters, the search and its empty text, the address with old keys, and "‹ Sections". Delete the tests of the old sorts and views.
+8. Node tests: the panel sequence, the counts line with a zero count, each notice row and its target, the tests of ADR 0264 "How This Decision Is Checked", the address with old keys, and "‹ Sections". Delete the tests of the old sorts and views.
 
 ### 256c: The Catalog Rows (UI)
 
@@ -102,7 +103,7 @@ Mechanical:
 
 Visual (the main session with screenshots and `$edges()`, then the operator):
 
-- Overview at 1280 px and at 390 px, in Light and in Dark.
+- Overview at 1280 px and at 390 px, in Light and in Dark, with label, artist and curator headings and tiles.
 - A drag of a release row with the insertion line, in the release binary.
 - A curator row with its playlists, and "No curator yet".
 - The menu **⋯** of a release row at 390 px.

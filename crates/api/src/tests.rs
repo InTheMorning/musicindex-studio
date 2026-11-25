@@ -5830,6 +5830,74 @@ async fn the_feed_list_gives_the_track_count_of_a_release_and_none_for_a_publish
     assert_eq!(listed(&app, release_id).await["track_count"], 0);
 }
 
+#[tokio::test]
+async fn the_feed_list_gives_the_release_date_from_the_draft() {
+    // ADR 0263 item 6: the core gives `release_date`. The draft is the source.
+    let app = app();
+    let hosted = set_up(&app).await;
+    let (_, connectors) = call(&app, "GET", "/api/v1/connectors", None).await;
+    let connector = connectors[0]["id"].as_i64().unwrap();
+    let album_id = hosted;
+    let (status, _) = call(
+        &app,
+        "POST",
+        &format!("/api/v1/feeds/{hosted}/refresh"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let draft_path = format!("/api/v1/feeds/{album_id}/draft");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    let mut first = model["items"][0].clone();
+    first["pub_date_time"] = json!("2026-10-30T00:30:00+01:00");
+    let mut second = first.clone();
+    second["guid"] = json!("second-guid");
+    second["key"] = Value::Null;
+    second["pub_date_time"] = json!("2026-10-29T23:00:00+00:00");
+    model["items"] = json!([first, second]);
+    let (status, body) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        listed(&app, album_id).await["release_date"],
+        "2026-10-29T23:00:00+00:00",
+        "ADR 0263 item 6: an album gives its earliest item date, read from the draft."
+    );
+
+    let playlist = make_feed(
+        &app,
+        new_feed_body(connector, "list.xml", "List", Some("musicL"), None),
+    )
+    .await;
+    let playlist_id = playlist["id"].as_i64().unwrap();
+    assert!(
+        listed(&app, playlist_id).await["release_date"].is_string(),
+        "ADR 0263 item 6: a new playlist has a channel pubDate."
+    );
+    let draft_path = format!("/api/v1/feeds/{playlist_id}/draft");
+    let (_, draft) = call(&app, "GET", &draft_path, None).await;
+    let mut model = draft["model"].clone();
+    model["pub_date"] = json!("Fri, 30 Oct 2026 20:00:00 +0100");
+    let (status, _) = call(
+        &app,
+        "PUT",
+        &draft_path,
+        Some(json!({ "revision": draft["revision"], "model": model })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        listed(&app, playlist_id).await["release_date"],
+        "2026-10-30T20:00:00+01:00"
+    );
+}
+
 /// The live file of the feed that `set_up` adds.
 fn live(app: &App) -> String {
     std::fs::read_to_string(app.feeds.path().join("album.xml")).unwrap()

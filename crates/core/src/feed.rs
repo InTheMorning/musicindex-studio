@@ -85,6 +85,10 @@ pub struct Feed {
     /// `webMaster`, as the source wrote it (ADR 0258).
     #[serde(default)]
     pub web_master: Option<String>,
+    /// The channel `pubDate`, as the source wrote it (ADR 0263 item 6).
+    /// The release date of a playlist. See [`Feed::release_date`].
+    #[serde(default)]
+    pub pub_date: Option<String>,
     /// `lastBuildDate`, as the source wrote it (ADR 0127). Only the core sets
     /// it. The user cannot edit it.
     #[serde(default)]
@@ -166,6 +170,7 @@ impl Feed {
             language: read_text(channel, Ns::None, "language"),
             managing_editor: read_text(channel, Ns::None, "managingEditor"),
             web_master: read_text(channel, Ns::None, "webMaster"),
+            pub_date: read_text(channel, Ns::None, "pubDate"),
             last_build_date: read_text(channel, Ns::None, "lastBuildDate"),
             rss_image: read_one(channel),
             podcast_guid: read_text(channel, Ns::Podcast, "guid"),
@@ -202,6 +207,31 @@ impl Feed {
         Ok(feed)
     }
 
+    /// The release date as an RFC 3339 time, or none (ADR 0263 item 6).
+    /// An album gives its earliest item `pub_date_time`, compared as an
+    /// instant. A playlist (`musicL`) gives its channel `pubDate`, read
+    /// with the same parse (ADR 0093). Another medium gives none.
+    #[must_use]
+    pub fn release_date(&self) -> Option<String> {
+        match self.medium.as_deref() {
+            Some("music") => self
+                .items
+                .iter()
+                .filter_map(|entry| entry.value.pub_date_time.as_deref())
+                .filter_map(|text| {
+                    crate::datetime::parse_rfc3339(text).map(|at| (at.seconds, text))
+                })
+                .min_by_key(|(at, _)| *at)
+                .map(|(_, text)| text.to_owned()),
+            Some("musicL") => self
+                .pub_date
+                .as_deref()
+                .and_then(crate::datetime::parse_rfc2822)
+                .map(crate::datetime::format_rfc3339),
+            _ => None,
+        }
+    }
+
     /// Put the values into `doc` and change only what is different.
     ///
     /// # Errors
@@ -235,6 +265,7 @@ impl Feed {
         c.text(Ns::None, "language", self.language.as_ref());
         c.text(Ns::None, "managingEditor", self.managing_editor.as_ref());
         c.text(Ns::None, "webMaster", self.web_master.as_ref());
+        c.text(Ns::None, "pubDate", self.pub_date.as_ref());
         c.text(Ns::None, "lastBuildDate", self.last_build_date.as_ref());
         c.one(self.rss_image.as_ref());
         c.text(Ns::Podcast, "guid", self.podcast_guid.as_ref());
@@ -904,6 +935,76 @@ mod tests {
         assert_eq!(release_kind_shown(Some("ep"), 1, 0), "ep");
         assert_eq!(release_kind_shown(Some("album"), 3, 0), "album");
         assert_eq!(release_kind_shown(None, 0, 1), "album");
+    }
+
+    fn dated(medium: &str, channel_date: Option<&str>, item_dates: &[&str]) -> Feed {
+        let channel_date =
+            channel_date.map_or_else(String::new, |d| format!("<pubDate>{d}</pubDate>"));
+        let mut items = String::new();
+        for d in item_dates {
+            items += "<item><pubDate>";
+            items += d;
+            items += "</pubDate></item>";
+        }
+        let xml = format!(
+            "<rss version=\"2.0\" xmlns:podcast=\"https://podcastindex.org/namespace/1.0\">\
+             <channel><podcast:medium>{medium}</podcast:medium>{channel_date}{items}</channel></rss>"
+        );
+        Feed::read(&Document::parse(&xml).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn release_date_of_an_album_is_the_earliest_instant() {
+        // ADR 0263 item 6: compare the instant, not the text. Fix: use `pub_date_time`.
+        let feed = dated(
+            "music",
+            None,
+            &[
+                "Fri, 30 Oct 2026 00:30:00 +0100",
+                "Thu, 29 Oct 2026 23:00:00 +0000",
+            ],
+        );
+        // The first date is 2026-10-29T23:30Z. The second is earlier.
+        assert_eq!(
+            feed.release_date().as_deref(),
+            Some("2026-10-29T23:00:00+00:00"),
+            "ADR 0263 item 6: an album gives its earliest item date as an instant."
+        );
+    }
+
+    #[test]
+    fn release_date_of_a_playlist_is_the_channel_pub_date() {
+        let feed = dated("musicL", Some("Fri, 30 Oct 2026 20:00:00 +0100"), &[]);
+        assert_eq!(
+            feed.release_date().as_deref(),
+            Some("2026-10-30T20:00:00+01:00"),
+            "ADR 0263 item 6: a playlist gives its channel pubDate. Read it with parse_rfc2822."
+        );
+    }
+
+    #[test]
+    fn release_date_is_none_when_no_date_can_be_read() {
+        assert_eq!(dated("music", None, &["yesterday"]).release_date(), None);
+        assert_eq!(dated("musicL", Some("soon"), &[]).release_date(), None);
+        assert_eq!(dated("musicL", None, &[]).release_date(), None);
+    }
+
+    #[test]
+    fn the_channel_pub_date_is_read_and_written() {
+        let feed = dated("musicL", Some("Fri, 30 Oct 2026 20:00:00 +0100"), &[]);
+        assert_eq!(
+            feed.pub_date.as_deref(),
+            Some("Fri, 30 Oct 2026 20:00:00 +0100")
+        );
+        let mut doc =
+            Document::parse("<rss version=\"2.0\"><channel><title>T</title></channel></rss>")
+                .unwrap();
+        feed.write(&mut doc).unwrap();
+        let again = Feed::read(&doc).unwrap();
+        assert_eq!(
+            again.pub_date, feed.pub_date,
+            "ADR 0263 item 6: Feed::write writes pubDate."
+        );
     }
 
     fn read_dates(dates: [&str; 2]) -> Feed {

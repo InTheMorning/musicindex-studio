@@ -539,12 +539,13 @@ fn set_link_roles_changes_only_the_selected_link() {
         &[PublisherRole::Producer],
     )
     .unwrap();
+    // ADR 0263 item 15: the newer link `other` is first.
     assert_eq!(
-        model(&s, publisher).remote_items[0].value.rel.as_deref(),
+        model(&s, publisher).remote_items[1].value.rel.as_deref(),
         Some("producer")
     );
     assert_eq!(
-        model(&s, publisher).remote_items[1].value.rel.as_deref(),
+        model(&s, publisher).remote_items[0].value.rel.as_deref(),
         Some("label")
     );
 }
@@ -779,7 +780,7 @@ fn link_back_keeps_written_position_and_element_after_another_edit() {
             .iter()
             .map(|entry| entry.value.title.as_deref().unwrap())
             .collect::<Vec<_>>(),
-        ["Release A", "Release B", "Release C"],
+        ["Release C", "Release B", "Release A"],
         "observation 4 of the 2026-11-23 walk: publisher::upsert must restore the base position"
     );
     assert!(
@@ -1263,10 +1264,11 @@ fn catalogs_give_the_releases_of_each_publisher_and_the_publishers_of_each_relea
         let index = feeds.iter().position(|(row, _)| row.id == id).unwrap();
         catalogs[index].clone()
     };
-    assert_eq!(of(artist).releases, vec![first, shared]);
+    // ADR 0263 item 15: a newer link comes first.
+    assert_eq!(of(artist).releases, vec![shared, first]);
     // ADR 0085 item 2: the listed releases in their sequence, then the
     // release that names the label only.
-    assert_eq!(of(label).releases, vec![shared, mixtape, half]);
+    assert_eq!(of(label).releases, vec![mixtape, shared, half]);
     // ADR 0085 item 5: the primary publisher comes first.
     assert_eq!(of(shared).publishers, vec![label, artist]);
     assert_eq!(of(first).publishers, vec![artist]);
@@ -2184,11 +2186,11 @@ fn a_catalog_start_selection_uses_the_selected_tree_parent() {
     );
     assert_eq!(
         publisher::page_change_selection(&feeds, artist, Some(FeedId(-1))),
-        [first, second]
+        [second, first]
     );
     assert_eq!(
         publisher::page_change_selection(&feeds, artist, None),
-        [first, second]
+        [second, first]
     );
 }
 
@@ -2799,4 +2801,73 @@ fn an_outside_publisher_of_the_newest_independent_release_does_not_follow() {
     assert_eq!(credits(&s, release).label.unwrap().id, Some(label));
     assert_eq!(credits(&s, release).publisher, None);
     assert!(credits(&s, release).publisher_follows);
+}
+
+#[test]
+fn a_new_link_goes_before_the_release_entries_of_the_page() {
+    // ADR 0263 items 13b and 15: a new release link goes first. An entry
+    // that is not a release keeps its position. A changed link keeps its place.
+    let mut s = setup();
+    let publisher = new_feed(&mut s, "label.xml", "Label", "publisher");
+    let first = new_feed(&mut s, "first.xml", "First", "music");
+    let second = new_feed(&mut s, "second.xml", "Second", "music");
+    s.collection
+        .set_publisher_roles(publisher, &[PublisherRole::Hosting], true)
+        .unwrap();
+    pipeline::edit_draft(&s.collection, publisher, |feed| {
+        feed.remote_items = vec![
+            Entry::new(remote(
+                "podcast",
+                "show-guid",
+                "https://music.example/show.xml",
+                "Show",
+                None,
+            )),
+            Entry::new(remote(
+                "music",
+                "old-guid",
+                "https://music.example/old.xml",
+                "Old",
+                None,
+            )),
+        ];
+    })
+    .unwrap();
+    publisher::link(&s.collection, publisher, first, None).unwrap();
+    publisher::list_on_page(&s.collection, publisher, second, None).unwrap();
+
+    let titles = |s: &Setup| -> Vec<Option<String>> {
+        model(s, publisher)
+            .remote_items
+            .iter()
+            .map(|entry| entry.value.title.clone())
+            .collect()
+    };
+    let expected: Vec<Option<String>> = ["Show", "Second", "First", "Old"]
+        .map(|t| Some(t.to_owned()))
+        .into();
+    assert_eq!(
+        titles(&s),
+        expected,
+        "ADR 0263 items 13b and 15: put a new release link before the first release entry in upsert."
+    );
+
+    publisher::link(&s.collection, publisher, first, None).unwrap();
+    assert_eq!(
+        titles(&s),
+        expected,
+        "ADR 0263 item 15: a changed link keeps its position."
+    );
+}
+
+#[test]
+fn a_new_playlist_has_a_channel_pub_date_and_a_new_album_has_none() {
+    let mut s = setup();
+    let playlist = new_feed(&mut s, "list.xml", "List", "musicL");
+    let album = new_feed(&mut s, "album.xml", "Album", "music");
+    assert!(
+        model(&s, playlist).release_date().is_some(),
+        "ADR 0263 item 6: pipeline::new_feed_with must set the channel pubDate of a new playlist."
+    );
+    assert_eq!(model(&s, album).pub_date, None);
 }

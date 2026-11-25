@@ -1156,6 +1156,17 @@ pub fn new_feed(
     )
 }
 
+/// The channel `pubDate` of a new feed. A new playlist has one from its
+/// first save, and its release date is this value (ADR 0263 item 6).
+fn first_pub_date(medium: &str) -> Option<String> {
+    (medium == "musicL").then(|| {
+        crate::datetime::format_rfc2822(crate::datetime::Moment {
+            seconds: i64::try_from(unix_now()).unwrap_or(0),
+            offset_minutes: 0,
+        })
+    })
+}
+
 /// The optional values that a new feed gets in its first draft, for example
 /// from a release that the user found on Music Index (ADR 0261 item 15). An
 /// empty value is left out.
@@ -1215,6 +1226,7 @@ pub fn new_feed_with(
         description: kept(values.description.as_deref()),
         link: kept(values.website.as_deref()),
         image: kept(values.image.as_deref()),
+        pub_date: first_pub_date(medium),
         ..Feed::default()
     };
     if let Some(copy) = &values.copy {

@@ -347,7 +347,7 @@ pub fn publishers_linking(
 
 /// Link a publisher feed and a release. Each draft gets its `remoteItem`
 /// (ADR 0255 items 6 and 7). An existing link changes in place. A new link
-/// goes last.
+/// on the page goes before its other release entries (ADR 0263 item 15).
 ///
 /// # Errors
 ///
@@ -396,6 +396,7 @@ pub fn link(
                 .map_or(&[], |base| &base.remote_items),
             &release_party,
             channel_link,
+            NewLink::BeforeReleases,
         );
     })?;
 
@@ -418,6 +419,7 @@ pub fn link(
                 .map_or(&[], |base| &base.remote_items),
             &publisher_party,
             publisher_link,
+            NewLink::Last,
         );
         sort_publisher_links(links);
     })?;
@@ -462,6 +464,7 @@ pub fn list_on_page(
                 .map_or(&[], |base| &base.remote_items),
             &release_party,
             link,
+            NewLink::BeforeReleases,
         );
     })?;
     Ok(())
@@ -1270,13 +1273,25 @@ fn names(item: &RemoteItem, feed: &Party) -> bool {
     }
 }
 
+/// Where `upsert` puts a new link that no item or base item names.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum NewLink {
+    /// Last.
+    Last,
+    /// Before the first release entry of the channel (ADR 0263 items 13b
+    /// and 15). An entry that is not a release keeps its position. When the
+    /// channel has no release entry, the link goes last.
+    BeforeReleases,
+}
+
 /// Change the first item that names the feed, and keep its position. Add
-/// the item last when no item names the feed.
+/// the item at the place that `place` gives when no item names the feed.
 fn upsert(
     items: &mut Vec<Entry<RemoteItem>>,
     base: &[Entry<RemoteItem>],
     feed: &Party,
     link: RemoteItem,
+    place: NewLink,
 ) {
     if let Some(entry) = items.iter_mut().find(|entry| names(&entry.value, feed)) {
         update_link(&mut entry.value, &link);
@@ -1284,7 +1299,14 @@ fn upsert(
     }
 
     let Some(base_index) = base.iter().position(|entry| names(&entry.value, feed)) else {
-        items.push(Entry::new(link));
+        let at = match place {
+            NewLink::Last => items.len(),
+            NewLink::BeforeReleases => items
+                .iter()
+                .position(|entry| is_release(entry.value.medium.as_deref()))
+                .unwrap_or(items.len()),
+        };
+        items.insert(at, Entry::new(link));
         return;
     };
     // A removed link that comes back gets the roles of the new link only. It

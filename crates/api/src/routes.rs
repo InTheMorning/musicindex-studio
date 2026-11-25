@@ -1491,6 +1491,9 @@ pub(crate) async fn list_feeds(State(shared): State<Shared>) -> ApiResult {
                 written.as_ref(),
                 &feeds
             ));
+            // The core gives the release date, from the draft when the feed
+            // has one (ADR 0263 item 6). `files_feed` picks the source.
+            value["release_date"] = json!(feed.as_ref().and_then(Feed::release_date));
             if row.medium.as_deref() == Some("music") {
                 let track_count = feed.as_ref().map_or(0, |model| model.items.len());
                 value["track_count"] = json!(track_count);

@@ -5973,7 +5973,17 @@ async fn a_draft_is_edited_examined_written_and_rolled_back() {
         Some(json!({ "diff_id": diff["id"] })),
     )
     .await;
-    assert_eq!(live(&app), FEED);
+    assert_eq!(
+        live(&app),
+        FEED.replace(
+            "<item>",
+            &format!(
+                "<generator>{}</generator><item>",
+                studio_core::feed::GENERATOR
+            )
+        ),
+        "ADR 0265 item 11: a roll back is a change and sets the generator."
+    );
     let (status, _) = call(
         &app,
         "POST",
@@ -13358,7 +13368,16 @@ async fn a_change_of_the_alt_of_an_image_with_an_unknown_purpose_token_changes_o
     assert_eq!(status, StatusCode::OK);
     assert_eq!(
         live(&app),
-        FEED_WITH_ARTWORK.replace("alt=\"Old text\"", "alt=\"New text\"")
+        FEED_WITH_ARTWORK
+            .replace("alt=\"Old text\"", "alt=\"New text\"")
+            .replace(
+                "<item>",
+                &format!(
+                    "<generator>{}</generator><item>",
+                    studio_core::feed::GENERATOR
+                )
+            ),
+        "ADR 0265 item 11: a changed feed gets the generator in its write."
     );
 }
 

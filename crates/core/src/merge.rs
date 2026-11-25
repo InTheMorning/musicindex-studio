@@ -267,11 +267,12 @@ pub fn merge(
         choices,
         plan: MergePlan::default(),
     };
-    // Studio sets the build date at each write (ADR 0127).
+    // Studio sets the build date at each write (ADR 0127). The next diff
+    // sets the generator (ADR 0265 item 13).
     let skip: &[&str] = if by_track {
-        &["last_build_date", "items"]
+        &["last_build_date", "generator", "items"]
     } else {
-        &["last_build_date"]
+        &["last_build_date", "generator"]
     };
     let mut model = merger.fields(&b, &m, &h, "", None, skip);
     if by_track {
@@ -337,6 +338,21 @@ mod tests {
             let merged = merge(&base, &mine, &hosted, &choices).unwrap();
             assert_eq!(merged.model["title"], title);
         }
+    }
+
+    #[test]
+    fn the_merge_ignores_the_generator() {
+        let base = feed("T", "D", &[]);
+        let mut mine = feed("T", "D", &[]);
+        mine.generator = Some(crate::feed::GENERATOR.to_owned());
+        let mut hosted = feed("T", "D", &[]);
+        hosted.generator = Some("Other tool".to_owned());
+        let merged = merge(&base, &mine, &hosted, &BTreeMap::new()).unwrap();
+        assert_eq!(
+            merged.plan,
+            MergePlan::default(),
+            "ADR 0265 item 13: the merge must ignore the generator. Put `generator` in the skip list of merge::merge."
+        );
     }
 
     #[test]

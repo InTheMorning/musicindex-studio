@@ -388,7 +388,7 @@ pub fn grant_limit(live: &LiveItem) -> Option<i64> {
 ///
 /// The function compares the two typed models. In copies of the two
 /// models, it makes the status and the live value of that live item, and
-/// `lastBuildDate`, equal.
+/// `lastBuildDate` and `generator`, equal.
 /// Then all other parts must be equal. Each other entry also keeps its
 /// source element in the compare. Thus a change that the model does not
 /// hold also makes the result false.
@@ -419,6 +419,8 @@ pub fn covered(before: &Feed, after: &Feed, item_guid: &str) -> bool {
     // The new build date is the one other change that a grant covers
     // (ADR 0127 item 21).
     changed.last_build_date.clone_from(&before.last_build_date);
+    // The generator is the other one (ADR 0265 item 11).
+    changed.generator.clone_from(&before.generator);
     changed == *before
 }
 

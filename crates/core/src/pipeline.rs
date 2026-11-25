@@ -24,7 +24,7 @@ use crate::connector::{
 };
 use crate::digest::sha256_hex;
 use crate::feed::{
-    AtomLink, Entry, Feed, FeedError, Item, Person, Recipient, RemoteItem, ValueBlock,
+    AtomLink, Entry, Feed, FeedError, GENERATOR, Item, Person, Recipient, RemoteItem, ValueBlock,
 };
 use crate::grant::{self, GrantChange};
 use crate::guid::podcast_guid_for_url;
@@ -872,6 +872,7 @@ pub fn merge_draft(
     let mut doc = Document::parse_bytes(&file.bytes)?;
     let current = Feed::read(&doc)?;
     sent.last_build_date.clone_from(&current.last_build_date);
+    sent.generator.clone_from(&current.generator);
     sent.adopt(&current).map_err(|e| invalid(e.to_string()))?;
     number_tracks(&current, &mut sent);
     apply_op3(&current, &mut sent);
@@ -1728,6 +1729,7 @@ fn same_model_without_entry_identity_or_date(a: &Feed, b: &Feed) -> bool {
         let mut value = serde_json::to_value(feed).ok()?;
         if let serde_json::Value::Object(object) = &mut value {
             object.remove("last_build_date");
+            object.remove("generator");
         }
         remove_entry_keys(&mut value);
         Some(value)
@@ -1736,30 +1738,43 @@ fn same_model_without_entry_identity_or_date(a: &Feed, b: &Feed) -> bool {
     matches!((normalized(a), normalized(b)), (Some(a), Some(b)) if a == b)
 }
 
-/// The draft of a save that changed the feed, with the date of its base
-/// (ADR 0127 item 3). `before` is the XML of the draft before the save.
-/// The compare ignores `lastBuildDate`. When the save changes nothing else,
-/// the draft keeps its date. The function makes no request and reads no
-/// clock.
+/// The draft of a save that changed the feed, with the date and the
+/// generator of its base (ADR 0127 item 3, ADR 0265 item 5). `before` is the
+/// XML of the draft before the save. The compare ignores `lastBuildDate` and
+/// `generator`. When the save changes nothing else, the draft keeps them.
+/// The function makes no request and reads no clock.
 ///
 /// # Errors
 ///
 /// Gives a [`PipelineError`] when the draft is not a feed.
 fn dated_like_base(draft: DraftRow, before: &[u8]) -> Result<DraftRow, PipelineError> {
-    if same_apart_from_date(&draft.draft_xml, before) {
+    if same_apart_from_stamp(&draft.draft_xml, before) {
         return Ok(draft);
     }
-    with_base_date(draft)
+    with_base_stamp(draft)
 }
 
-/// The draft with the `lastBuildDate` of its base, or with no such element
-/// when the base has none.
-fn with_base_date(draft: DraftRow) -> Result<DraftRow, PipelineError> {
+/// The draft with the `lastBuildDate` and the `generator` of its base, or
+/// with no such element when the base has none.
+fn with_base_stamp(draft: DraftRow) -> Result<DraftRow, PipelineError> {
     let base_date = build_date_of(&draft.base_xml);
-    if build_date_of(&draft.draft_xml) == base_date {
+    let base_generator = generator_of(&draft.base_xml);
+    if build_date_of(&draft.draft_xml) == base_date
+        && generator_of(&draft.draft_xml) == base_generator
+    {
         return Ok(draft);
     }
-    changed_draft(draft, |feed| feed.last_build_date = base_date)
+    changed_draft(draft, |feed| {
+        feed.last_build_date = base_date;
+        feed.generator = base_generator;
+    })
+}
+
+/// The channel `generator` of feed bytes. Gives none for bytes that are not
+/// a feed.
+fn generator_of(bytes: &[u8]) -> Option<String> {
+    let doc = Document::parse_bytes(bytes).ok()?;
+    Feed::read(&doc).ok()?.generator
 }
 
 /// The `lastBuildDate` of feed bytes. Gives none for bytes that are not a
@@ -1769,22 +1784,24 @@ fn build_date_of(bytes: &[u8]) -> Option<String> {
     Feed::read(&doc).ok()?.last_build_date
 }
 
-/// The feed bytes without the `lastBuildDate` element. Gives none for bytes
-/// that are not a feed.
-fn without_build_date(bytes: &[u8]) -> Option<Vec<u8>> {
+/// The feed bytes without the `lastBuildDate` and `generator` elements.
+/// Gives none for bytes that are not a feed.
+fn without_stamp(bytes: &[u8]) -> Option<Vec<u8>> {
     let mut doc = Document::parse_bytes(bytes).ok()?;
     let mut feed = Feed::read(&doc).ok()?;
     feed.last_build_date = None;
+    feed.generator = None;
     feed.write(&mut doc).ok()?;
     Some(doc.write().into_bytes())
 }
 
-/// True when two feed documents differ at most in `lastBuildDate`. Bytes
-/// that are not a feed are equal only when they are the same bytes.
-fn same_apart_from_date(a: &[u8], b: &[u8]) -> bool {
+/// True when two feed documents differ at most in `lastBuildDate` and
+/// `generator`. Bytes that are not a feed are equal only when they are the
+/// same bytes.
+fn same_apart_from_stamp(a: &[u8], b: &[u8]) -> bool {
     a == b
         || matches!(
-            (without_build_date(a), without_build_date(b)),
+            (without_stamp(a), without_stamp(b)),
             (Some(a), Some(b)) if a == b
         )
 }
@@ -1905,13 +1922,13 @@ pub fn keep_known_guid(collection: &mut Collection, id: FeedId) -> Result<(), Pi
     Ok(())
 }
 
-/// The revision of a draft: a hash of its bytes without `lastBuildDate`
-/// (ADR 0022 item 5, ADR 0127 item 5).
+/// The revision of a draft: a hash of its bytes without `lastBuildDate` and
+/// `generator` (ADR 0022 item 5, ADR 0127 item 5, ADR 0265 item 8).
 #[must_use]
 pub fn revision(draft: &DraftRow) -> String {
-    // The date that a diff sets must not make the revision of the editor
-    // stale (ADR 0127 item 5).
-    match without_build_date(&draft.draft_xml) {
+    // The date and the generator that a diff sets must not make the
+    // revision of the editor stale (ADR 0127 item 5, ADR 0265 item 8).
+    match without_stamp(&draft.draft_xml) {
         Some(bytes) => sha256_hex(&[&bytes]),
         None => sha256_hex(&[&draft.draft_xml]),
     }
@@ -1988,8 +2005,10 @@ pub fn replace_model(
     let mut doc = Document::parse_bytes(&draft.draft_xml)?;
     let current = Feed::read(&doc)?;
     let invalid = |message: String| PipelineError::new(PipelineErrorKind::InvalidModel, message);
-    // The user cannot edit the build date (ADR 0127 item 1).
+    // The user cannot edit the build date (ADR 0127 item 1) or the
+    // generator (ADR 0265 item 1).
     sent.last_build_date.clone_from(&current.last_build_date);
+    sent.generator.clone_from(&current.generator);
     sent.adopt(&current).map_err(|e| invalid(e.to_string()))?;
     keep_identity(&current, &mut sent).map_err(invalid)?;
     live::check_live_values(&sent)
@@ -2515,11 +2534,14 @@ pub struct BuildDateState {
     pub clock_ahead_seconds: Option<i64>,
 }
 
-/// True when the draft differs from its base in more than the date. The diff
-/// applies `one_cover`, so the compare does too.
+/// True when the draft differs from its base in more than the date and the
+/// generator. The diff applies `one_cover`, so the compare does too.
 fn changes_feed(draft: &DraftRow) -> Result<bool, PipelineError> {
     let covered = one_cover(draft.clone())?;
-    Ok(!same_apart_from_date(&covered.draft_xml, &covered.base_xml))
+    Ok(!same_apart_from_stamp(
+        &covered.draft_xml,
+        &covered.base_xml,
+    ))
 }
 
 /// True when [`set_build_date`] needs a checked time for the draft of a
@@ -2536,8 +2558,10 @@ pub fn needs_build_date(collection: &Collection, id: FeedId) -> Result<bool, Pip
         && build_date_of(&stored.draft_xml) == build_date_of(&stored.base_xml))
 }
 
-/// Set the build date of the draft of a feed before its diff (ADR 0127
-/// items 4 to 11). The function sets the date one time for a change:
+/// Set the build date and the generator of the draft of a feed before its
+/// diff (ADR 0127 items 4 to 11, ADR 0265 items 6 and 7). The function sets
+/// the generator to [`GENERATOR`] for each change, also with `checked` of
+/// `None`. It sets the date one time for a change:
 ///
 /// - A draft that differs from its base only in the date gets none (items 2
 ///   and 6).
@@ -2556,9 +2580,15 @@ pub fn set_build_date(
     id: FeedId,
     checked: Option<CheckedTime>,
 ) -> Result<BuildDateState, PipelineError> {
-    let stored = current_draft(collection, id)?;
+    let mut stored = current_draft(collection, id)?;
     if !changes_feed(&stored)? {
         return Ok(BuildDateState::default());
+    }
+    // The generator needs no clock and no server (ADR 0265 items 6 and 7).
+    // The draft is saved only when the tag changes.
+    if generator_of(&stored.draft_xml).as_deref() != Some(GENERATOR) {
+        stored = changed_draft(stored, |feed| feed.generator = Some(GENERATOR.to_owned()))?;
+        collection.save_draft(id, &stored)?;
     }
     let base_date = build_date_of(&stored.base_xml);
     let notice = checked
@@ -5941,6 +5971,8 @@ fn write_granted_with(
         {
             changed.last_build_date = Some(text);
         }
+        // The tag of a granted write is set in this step (ADR 0265 item 11).
+        changed.generator = Some(GENERATOR.to_owned());
         changed.write_hosted(&mut doc, Some(&hosted_doc))?;
         let draft_xml = doc.write().into_bytes();
         collection.save_draft(
@@ -7030,9 +7062,9 @@ pub fn draft_from_snapshot(
     // A snapshot that differs from the live file only in the date is no
     // change. Otherwise the roll back is a change and gets the date of its
     // base (ADR 0127 item 17).
-    if !same_apart_from_date(&xml, &draft.base_xml) {
+    if !same_apart_from_stamp(&xml, &draft.base_xml) {
         draft.draft_xml = xml;
-        draft = with_base_date(draft)?;
+        draft = with_base_stamp(draft)?;
     }
     collection.save_draft(id, &draft)?;
     Ok(draft)

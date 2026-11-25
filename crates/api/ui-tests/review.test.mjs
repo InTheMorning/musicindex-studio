@@ -394,3 +394,7 @@ test('ADR 0228 items 14 to 16: the Review sheet orders the diff, the file operat
 test('ADR 0247 item 8: Review names the GUID of a link', () => {
   assert.equal(keyWord('feed_guid'), 'Feed GUID', 'ADR 0247 item 8: add feed_guid to KEY_WORDS in review.js');
 });
+
+test('ADR 0265 item 12: the field name of generator is Generator', () => {
+  assert.equal(keyWord('generator'), 'Generator', 'ADR 0265 item 12: the field view names the tag "Generator". Add generator to KEY_WORDS in ui/review.js.');
+});

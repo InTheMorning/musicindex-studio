@@ -47,6 +47,10 @@ fn writable_credits(persons: &[Entry<Person>]) -> Vec<Entry<Person>> {
         .collect()
 }
 
+/// The text that Studio writes in the channel `generator` of a changed feed
+/// (ADR 0265 item 2).
+pub const GENERATOR: &str = concat!("Music Index Studio ", env!("CARGO_PKG_VERSION"));
+
 /// The elements of `channel` that come after its other elements.
 const CHANNEL_TAIL: &[(Ns, &str)] = &[(Ns::None, "item"), (Ns::Podcast, "liveItem")];
 
@@ -93,6 +97,10 @@ pub struct Feed {
     /// it. The user cannot edit it.
     #[serde(default)]
     pub last_build_date: Option<String>,
+    /// The channel `generator`, as the source wrote it (ADR 0265). Only the
+    /// core sets it. The user cannot edit it. See [`GENERATOR`].
+    #[serde(default)]
+    pub generator: Option<String>,
     /// The channel `image` of RSS 2.0 (ADR 0060). The model has this tag and
     /// `itunes:image` as two fields. The pipeline keeps the form of the
     /// cover at the draft save (ADR 0065 item 6).
@@ -172,6 +180,7 @@ impl Feed {
             web_master: read_text(channel, Ns::None, "webMaster"),
             pub_date: read_text(channel, Ns::None, "pubDate"),
             last_build_date: read_text(channel, Ns::None, "lastBuildDate"),
+            generator: read_text(channel, Ns::None, "generator"),
             rss_image: read_one(channel),
             podcast_guid: read_text(channel, Ns::Podcast, "guid"),
             medium: read_text(channel, Ns::Podcast, "medium"),
@@ -267,6 +276,7 @@ impl Feed {
         c.text(Ns::None, "webMaster", self.web_master.as_ref());
         c.text(Ns::None, "pubDate", self.pub_date.as_ref());
         c.text(Ns::None, "lastBuildDate", self.last_build_date.as_ref());
+        c.text(Ns::None, "generator", self.generator.as_ref());
         c.one(self.rss_image.as_ref());
         c.text(Ns::Podcast, "guid", self.podcast_guid.as_ref());
         c.text(Ns::Podcast, "medium", self.medium.as_ref());

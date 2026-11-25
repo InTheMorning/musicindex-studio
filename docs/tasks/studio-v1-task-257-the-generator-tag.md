@@ -3,7 +3,12 @@
 Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md).
 Decision: [ADR 0265](../adr/0265-a-changed-feed-names-studio-as-its-generator.md) items 1 to 13. Read [ADR 0127](../adr/0127-a-changed-feed-gets-a-new-build-date.md) items 2 to 6 and 21 first. The tag follows the path of the build date.
 
-Status: open.
+Status: built. The screenshot check of Review passed. The human check of the operator is open.
+
+Operator choices (the main session):
+
+- A new tag goes at the end of the channel, before the items (ADR 0012 item 3). When the date is also new, the tag comes before `lastBuildDate`, because the core sets the tag first. RSS 2.0 gives no sequence for channel elements.
+- A core unit test in `crates/core/src/merge.rs` covers ADR 0265 item 13, the merge of a hosted file.
 
 ## Goal
 

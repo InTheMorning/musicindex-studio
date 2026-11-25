@@ -431,6 +431,7 @@ const FEED: Table = &[
     child("web_master", Ns::None, "webMaster"),
     child("pub_date", Ns::None, "pubDate"),
     child("last_build_date", Ns::None, "lastBuildDate"),
+    child("generator", Ns::None, "generator"),
     object("rss_image", Ns::None, "image", RSS_IMAGE),
     child("podcast_guid", Ns::Podcast, "guid"),
     child("medium", Ns::Podcast, "medium"),

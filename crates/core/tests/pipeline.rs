@@ -12,7 +12,7 @@ use studio_core::connector::{
     KeptBlob, ListedFile, LocalFolder, NsiteHost, PlannedEvent, S3Bucket, S3Config, S3Credentials,
     S3UrlStyle, Stamp, Version,
 };
-use studio_core::feed::{ContentLink, Enclosure, Entry, Feed, Item, RssImage};
+use studio_core::feed::{ContentLink, Enclosure, Entry, Feed, GENERATOR, Item, RssImage};
 use studio_core::grant::{self, GrantChange};
 use studio_core::guid::podcast_guid_for_url;
 use studio_core::inventory::{self, Hosts};
@@ -6402,6 +6402,172 @@ fn a_granted_write_sets_the_date_and_changes_only_the_live_item_and_the_date() {
         "granted write",
         &[after.last_build_date, hosted_feed(&s).last_build_date],
     );
+}
+
+// ADR 0265: the generator follows the path of the build date.
+
+/// The feed with a tag of a different tool after the title.
+fn with_generator(tag: &str) -> String {
+    FEED.replace(
+        "    <title>Album</title>\n",
+        &format!("    <title>Album</title>\n    <generator>{tag}</generator>\n"),
+    )
+}
+
+fn generator_of(bytes: &[u8]) -> Option<String> {
+    Feed::read(&Document::parse_bytes(bytes).unwrap())
+        .unwrap()
+        .generator
+}
+
+#[test]
+fn adr_0265_a_save_with_no_edit_gives_no_tag_and_the_bytes_stay() {
+    let s = setup_with(&with_generator("MSP 2.0 - Music Side Project Studio"));
+    let base = pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    let (model, revision) = pipeline::draft_model(&s.collection, s.feed).unwrap();
+    pipeline::replace_model(&s.collection, s.feed, &revision, model).unwrap();
+    assert_eq!(
+        draft_bytes(&s),
+        base.base_xml,
+        "ADR 0265 item 4: a read and a write with no edit must keep the bytes. Do not set the generator in a save."
+    );
+    pipeline::set_build_date(&s.collection, s.feed, Some(ck(T0))).unwrap();
+    assert_eq!(
+        draft_bytes(&s),
+        base.base_xml,
+        "ADR 0265 item 4: a draft with no change gets no tag."
+    );
+    let plain = setup();
+    pipeline::start_draft(&plain.collection, plain.connector.as_ref(), plain.feed).unwrap();
+    pipeline::set_build_date(&plain.collection, plain.feed, Some(ck(T0))).unwrap();
+    assert_eq!(generator_of(&draft_bytes(&plain)), None);
+}
+
+#[test]
+fn adr_0265_the_diff_of_a_changed_draft_replaces_the_tag_in_its_position() {
+    for checked in [Some(ck(T0)), None] {
+        let s = setup_with(&with_generator("MSP 2.0 - Music Side Project Studio"));
+        edit_title(&s);
+        pipeline::set_build_date(&s.collection, s.feed, checked).unwrap();
+        let text = String::from_utf8(draft_bytes(&s)).unwrap();
+        assert!(
+            text.contains(&format!(
+                "<title>Changed</title>\n    <generator>{GENERATOR}</generator>\n    <podcast:guid>"
+            )),
+            "ADR 0265 item 6: the diff of a changed feed must set the generator. Set it in pipeline::set_build_date. {text}"
+        );
+        assert_eq!(text.matches("<generator>").count(), 1);
+        let first = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+        pipeline::set_build_date(&s.collection, s.feed, checked).unwrap();
+        let second = pipeline::diff(&s.collection, &s.hosts, &s.library, s.feed).unwrap();
+        assert_eq!(
+            first.id, second.id,
+            "ADR 0265 item 8: a second diff must keep the tag and the diff ID. Save the draft only when the tag changes."
+        );
+    }
+}
+
+#[test]
+fn adr_0265_a_changed_feed_with_no_tag_gets_one_element_in_the_position_of_adr_0012() {
+    let s = setup();
+    edit_title(&s);
+    pipeline::set_build_date(&s.collection, s.feed, Some(ck(T0))).unwrap();
+    let text = String::from_utf8(draft_bytes(&s)).unwrap();
+    assert_eq!(text.matches("<generator>").count(), 1, "{text}");
+    assert!(
+        text.contains(&format!(
+            "</podcast:medium>\n    <generator>{GENERATOR}</generator>\n"
+        )) && text.find("<generator>") < text.find("<item>"),
+        "ADR 0265 item 10: a feed with no tag gets one in the position of ADR 0012 item 3. Write it in Feed::write_hosted. {text}"
+    );
+}
+
+#[test]
+fn adr_0265_after_a_diff_the_next_save_with_its_revision_passes() {
+    let s = setup();
+    edit_title(&s);
+    let (_, revision) = pipeline::draft_model(&s.collection, s.feed).unwrap();
+    pipeline::set_build_date(&s.collection, s.feed, Some(ck(T0))).unwrap();
+    let (mut model, after) = pipeline::draft_model(&s.collection, s.feed).unwrap();
+    assert_eq!(
+        revision, after,
+        "ADR 0265 item 8: the revision must ignore the tag. Remove generator in pipeline::without_stamp."
+    );
+    model.title = Some("Changed again".into());
+    pipeline::replace_model(&s.collection, s.feed, &revision, model).unwrap();
+}
+
+#[test]
+fn adr_0265_an_edit_that_the_user_undoes_gives_the_bytes_of_the_base() {
+    let s = setup_with(&with_generator("MSP 2.0 - Music Side Project Studio"));
+    let base = pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    pipeline::edit_draft(&s.collection, s.feed, |f| f.title = Some("Changed".into())).unwrap();
+    pipeline::set_build_date(&s.collection, s.feed, Some(ck(T0))).unwrap();
+    assert_eq!(generator_of(&draft_bytes(&s)).as_deref(), Some(GENERATOR));
+    pipeline::edit_draft(&s.collection, s.feed, |f| f.title = Some("Album".into())).unwrap();
+    assert_eq!(
+        draft_bytes(&s),
+        base.base_xml,
+        "ADR 0265 item 9: an undone edit must give the bytes of the base. Restore the tag in pipeline::with_base_stamp."
+    );
+    let state = pipeline::set_build_date(&s.collection, s.feed, Some(ck(T0))).unwrap();
+    assert_eq!(state, pipeline::BuildDateState::default());
+    assert_eq!(
+        draft_bytes(&s),
+        base.base_xml,
+        "ADR 0265 item 9: set_build_date must add no tag."
+    );
+}
+
+#[test]
+fn adr_0265_a_sent_model_cannot_change_the_tag() {
+    let s = setup_with(&with_generator("MSP 2.0 - Music Side Project Studio"));
+    pipeline::start_draft(&s.collection, s.connector.as_ref(), s.feed).unwrap();
+    for sent in [Some("Other tool".to_owned()), None] {
+        let (mut model, revision) = pipeline::draft_model(&s.collection, s.feed).unwrap();
+        model.generator = sent;
+        model.title = Some("Changed".into());
+        let (saved, _) = pipeline::replace_model(&s.collection, s.feed, &revision, model).unwrap();
+        assert_eq!(
+            saved.generator.as_deref(),
+            Some("MSP 2.0 - Music Side Project Studio"),
+            "ADR 0265 item 1: a model from the UI must not change the generator. Keep the value of the draft in pipeline::replace_model."
+        );
+    }
+}
+
+#[test]
+fn adr_0265_a_granted_write_sets_the_tag_and_the_grant_covers_it() {
+    let mut s = setup();
+    let guid = write_granted_show(&mut s);
+    let before = hosted_feed(&s);
+    assert_eq!(before.generator, None);
+    granted_at(&mut s, &guid, &GrantChange::GoLive, None).unwrap();
+    let after = hosted_feed(&s);
+    assert_eq!(
+        after.generator.as_deref(),
+        Some(GENERATOR),
+        "ADR 0265 item 11: a granted write must set the generator. Set it in step 3 of pipeline::write_granted."
+    );
+    assert!(
+        grant::covered(&before, &after, &guid),
+        "ADR 0265 item 11: grant::covered must ignore the generator."
+    );
+}
+
+#[test]
+fn adr_0265_the_grant_check_ignores_only_the_tag_and_the_live_item() {
+    let mut s = setup();
+    let guid = write_granted_show(&mut s);
+    let before = hosted_feed(&s);
+    let mut tagged = before.clone();
+    tagged.generator = Some(GENERATOR.to_owned());
+    assert!(
+        grant::covered(&before, &tagged, &guid),
+        "ADR 0265 item 11: grant::covered must be true when only the generator differs. Make it equal in grant::covered."
+    );
+    tagged.title = Some("Other".into());
+    assert!(!grant::covered(&before, &tagged, &guid));
 }
 
 #[test]

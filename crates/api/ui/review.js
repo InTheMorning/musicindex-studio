@@ -176,7 +176,7 @@ export const KEY_WORDS = {
   rss_image: 'RSS image', season: 'Disc', sources: 'Sources', start: 'Start', start_time: 'Start time',
   status: 'Status', suggested: 'Suggested', time_splits: 'Time splits', title: 'Title',
   transcripts: 'Transcripts', txts: 'Text channels', url: 'Address', value: 'Value', value_type: 'Value type',
-  values: 'Payments', web_master: 'Webmaster', last_build_date: 'Build date', publisher: 'Artist or label',
+  values: 'Payments', web_master: 'Webmaster', last_build_date: 'Build date', generator: 'Generator', publisher: 'Artist or label',
   // Keys of the entries that the list above does not name.
   npub: 'Nostr key', role: 'Role', group: 'Group', href: 'Information address', img: 'Picture',
   address: 'Address', feed_url: 'Address', feed_guid: 'Feed GUID', split: 'Split', fee: 'Fee', type: 'Type', purpose: 'Purpose', text: 'Text',

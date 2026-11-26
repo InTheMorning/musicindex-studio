@@ -313,6 +313,66 @@ async fn a_retire_sets_the_switch_in_the_draft_and_the_state_follows_the_write()
 }
 
 #[tokio::test]
+async fn a_retire_of_a_feed_made_in_studio_uses_the_last_written_copy() {
+    let index = CountingIndex::start(404, "{}");
+    let (app, existing) = app_with(&index.url(), &feed_xml("Album", &guid_tag())).await;
+    let collection =
+        studio_core::collection::Collection::open(&app.data.path().join("collection.sqlite"))
+            .unwrap();
+    let connector = collection
+        .feed(studio_core::collection::FeedId(existing))
+        .unwrap()
+        .connector_id
+        .unwrap();
+    let feed = make_feed(
+        &app,
+        new_feed_body(
+            connector.0,
+            "label.xml",
+            "Label",
+            Some("publisher"),
+            Some("label"),
+        ),
+    )
+    .await;
+    let id = feed["id"].as_i64().unwrap();
+    let feed_id = studio_core::collection::FeedId(id);
+    let base = format!("/api/v1/feeds/{id}");
+
+    let (status, draft) = call(&app, "POST", &format!("{base}/retire"), None).await;
+    assert_eq!(status, StatusCode::OK, "{draft}");
+    assert_eq!(state(&app, id).await["ask"], "draft_only");
+    let (status, diff) = call(&app, "GET", &format!("{base}/diff"), None).await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    approve_and_write(&app, id, &diff).await;
+
+    assert!(collection.feed(feed_id).unwrap().folder.is_none());
+    assert!(collection.draft(feed_id).unwrap().is_none());
+    let written = collection.written_xml(feed_id).unwrap().unwrap();
+    assert_eq!(
+        std::fs::read(app.feeds.path().join("label.xml")).unwrap(),
+        written
+    );
+    let without_draft = state(&app, id).await;
+
+    let (status, draft) = call(&app, "GET", &format!("{base}/draft"), None).await;
+    assert_eq!(status, StatusCode::OK, "{draft}");
+    let recreated = collection.draft(feed_id).unwrap().unwrap();
+    assert_eq!(recreated.base_xml, written);
+    assert_eq!(recreated.draft_xml, written);
+    assert_eq!(
+        state(&app, id).await["ask"],
+        "written",
+        "Walk 2026-11-26 finding 8: a written hidden feed without a release folder must give ask written. \
+         Read pipeline::written_copy in retire_facts."
+    );
+    assert_eq!(
+        without_draft["ask"], "written",
+        "Walk 2026-11-26 finding 8: a feed with no draft must give ask written. Read pipeline::written_copy in retire_facts."
+    );
+}
+
+#[tokio::test]
 async fn a_read_only_feed_gives_409_for_a_retire_and_a_delete_draft() {
     let index = CountingIndex::start(404, "{}");
     let (app, id) = app_with(&index.url(), &feed_xml("Album", &guid_tag())).await;

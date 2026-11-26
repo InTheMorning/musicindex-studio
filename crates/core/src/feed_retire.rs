@@ -129,7 +129,8 @@ pub fn retire_facts(
     };
     let deleted = collection.feed_host_delete(id)?.is_some();
     let written = (deleted && draft.as_ref().is_some_and(Feed::hidden))
-        || pipeline::hosted_copy(library, &row).is_some_and(|feed| feed.hidden());
+        || pipeline::written_copy(collection, Some(library), &row)
+            .is_some_and(|feed| feed.hidden());
     let ask = match (written, draft.as_ref().map(Feed::hidden)) {
         (false, Some(true)) => RetireAsk::DraftOnly,
         (true, Some(false)) => RetireAsk::WrittenCleared,

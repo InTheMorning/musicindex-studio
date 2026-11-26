@@ -86,6 +86,10 @@ export function retireActions(state) {
 
 const step = (number, title, text, done, button = null) => ({ number, title, text, done, button });
 
+export function retireCheckedLine(time) {
+  return time ? `Checked at ${time}` : null;
+}
+
 export function retireSteps(state) {
   const askDone = state.ask === 'draft_only' || state.ask === 'written';
   const askText = state.ask === 'draft_only'

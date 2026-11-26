@@ -57,7 +57,7 @@ import {
   startNav, pushNav, backNav, forwardNav, overviewView, canBack, canForward, setScroll,
   isFeedView, openFeedView, newFeedView, navAtWidth, toggleRow, revealRows, pageTabs, tabsFit, showsRootButtons, rootNav, segmentKey, isTabChange } from './shell.js';
 import { pageActions, pageChangeNotice, catalogChangeCount, catalogReview, gatherChangeNotice,
-  pageDropRows, pageDropDecision, leaveAllBody, previewPath, startSelection, pageChangeBody } from './movepages.js';
+  pageDropRows, pageDropDecision, topDropChanges, leaveAllBody, previewPath, startSelection, pageChangeBody } from './movepages.js';
 import {
   eventsToSign, signErrorText,
   npubOf, addressLines, linesText, invalidConfigField, blossomDefaultName, siteAddress, siteNameFromGuid, isNsec,
@@ -1741,6 +1741,7 @@ function MakeFeedForm({ connectors, feeds, startType, start = {}, onAdded, onKin
     ${importMode === 'folder' ? html`<${AddFeedForm} connectors=${connectors} onAdded=${onAdded} />`
       : html`<${MspImport} onAdded=${(result) => onAdded(result.added[0])} />`}</div>`;
   const findRow = html`<button class="link-row" type="button" onClick=${() => setFinding(true)}>
+    <${Icon} name="search" />
     <span class="text"><span class="label">Find on Music Index</span></span><span class="go">›</span></button>`;
   const findSheet = html`<${AddFindSheet} open=${finding} type=${type} role=${role} parent=${card?.title} connectors=${connectors}
     onPick=${pick} onAdded=${onAdded} onOpen=${(id) => onAdded({ id }, { openId: id })}
@@ -3694,7 +3695,8 @@ function catalogDropHandlers(drag, key, selected) {
 // The top area exists only during a desktop Catalog drag (ADR 0254 item 38).
 function CatalogDropTop() {
   const drag = useContext(CatalogDragContext);
-  if (!drag?.page) return null;
+  const { feeds } = useContext(OutsideContext);
+  if (!drag?.page || !topDropChanges(drag.page, feeds)) return null;
   return html`<div class=${`catalog-drop-top${drag.over === 'top' ? ' catalog-drop-over' : ''}`}
     ...${catalogDropHandlers(drag, 'top', null)}>${'Drop here: no label and no publisher'}</div>`;
 }
@@ -3718,10 +3720,11 @@ function DestinationRow({ item, open }) {
   const releases = item.group === undefined ? ''
     : item.typeLabel ? `${item.label}, ${item.typeLabel}`
       : `${item.label}, ${item.countLabel || `${item.count} ${item.count === 1 ? 'release' : 'releases'}`}`;
-  const row = html`<button class="row" type="button" aria-current=${currentAttr(item)}
+  const row = (handle = null) => html`<button class="row" type="button" aria-current=${currentAttr(item)}
     aria-label=${item.group === undefined ? undefined : (mark ? `${releases}, ${mark.text}` : releases)}
     onClick=${click}>
     ${item.icon && html`<${Icon} name=${item.icon} />`}
+    ${handle}
     ${item.group !== undefined && (item.art
       ? html`<${FeedArt} art=${item.art} glow=${item.glow} dot=${item.dot} />`
       : html`<span class="art-space" aria-hidden="true"></span>`)}
@@ -3729,7 +3732,7 @@ function DestinationRow({ item, open }) {
     <${StateMark} mark=${mark} />
     ${item.group !== undefined && item.count !== null && html`<span class="count" aria-hidden="true">${item.countText ?? item.count}</span>`}
   </button>`;
-  if (item.group === undefined) return row;
+  if (item.group === undefined) return row();
   const feed = item.key !== undefined;
   const page = feed ? (feeds || []).find((f) => f.id === item.group) : null;
   const draggable = !!(page && !drag.narrow && !drag.busy && pageActions(page, feeds).length);
@@ -3741,6 +3744,7 @@ function DestinationRow({ item, open }) {
   // "More" gives the same changes to the keyboard (ADR 0254 item 39).
   const handle = feed && !drag.narrow && html`<span class=${`drag-handle${draggable ? '' : ' drag-handle-space'}`} aria-hidden="true"
     draggable=${draggable ? 'true' : undefined} title=${draggable ? `Drag ${item.label}` : undefined}
+    onClick=${(event) => event.stopPropagation()}
     onDragStart=${(event) => {
       if (!draggable) { event.preventDefault(); return; }
       event.stopPropagation();
@@ -3755,12 +3759,11 @@ function DestinationRow({ item, open }) {
   return html`<div class=${`tree-row${feed ? ' panel-row-with-menu' : ''}${drag.page && drag.key === item.key ? ' catalog-dragging' : ''}${target ? ' catalog-drop-target' : ''}${target && drag.over === item.key ? ' catalog-drop-over' : ''}`}
     style=${`--depth:${item.depth || 0}`}
     ...${target ? catalogDropHandlers(drag, item.key, target.id) : {}}>
-    ${handle}
     ${item.expandable
       ? html`<button class="tree-toggle" type="button" aria-expanded=${item.open ? 'true' : 'false'}
         aria-label=${`${item.open ? 'Close' : 'Open'} ${item.label}`} onClick=${() => onToggle(item.key)}><span aria-hidden="true">${item.open ? '▾' : '▸'}</span></button>`
       : html`<span class="tree-toggle" aria-hidden="true"></span>`}
-    ${row}
+    ${row(handle)}
     ${feed && html`<${MenuControl} row=${true} Icon=${Icon} buttonLabel="More"
       accessibleName=${`More for ${item.label}`} menuLabel=${`More for ${item.label}`} items=${rowMenu}
       onSelect=${(entry) => (entry.id ? onPageAction({ id: item.group, action: entry.id, above: aboveOf(item.key) }) : open(item, true))} />`}

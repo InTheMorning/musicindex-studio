@@ -4,7 +4,7 @@ import {
   NEW_PAGE_PREFIX, releaseCreditFields,
   pageActions, pageSheet, pageNow, pageChoiceRows, pageReleaseRows, previewPath, pageChangeBody,
   startSelection, pageSheetResult, pageChangeNotice, gatherPagesModel, catalogChangeCount, catalogReview, gatherChangeNotice,
-  pageDropRows, pageDropDecision, leaveAllBody,
+  pageDropRows, pageDropDecision, topDropChanges, leaveAllBody,
 } from '../ui/movepages.js';
 
 const page = (id, title, roles, extra = {}) => ({ id, title, medium: 'publisher', publisher_roles: roles, connector_id: 'c', ...extra });
@@ -250,6 +250,25 @@ test('a drop changes immediately only when the preview selects each release and 
   const empty = page(50, 'Empty artist', ['artist']);
   assert.equal(pageDropDecision(empty, answer([])), 'change', ownerDrop);
   assert.equal(pageDropDecision(empty, answer([], true)), 'sheet', ownerDrop);
+});
+
+test('Walk 2026-11-26 finding 2: the top drop area shows only for a label parent or publisher above', () => {
+  const fix = 'Walk 2026-11-26 finding 2: show the top area only for a changed place. Fix topDropChanges in movepages.js.';
+  const independent = page(50, 'Independent artist', ['artist']);
+  const label = page(51, 'Label', ['label']);
+  const publisher = page(52, 'Publisher', ['hosting']);
+  const signed = page(53, 'Signed artist', ['artist'], { parent_ids: [51] });
+  const published = page(54, 'Published artist', ['artist'], { parent_ids: [52] });
+  const publishedLabel = page(55, 'Published label', ['label'], { parent_ids: [52] });
+  const nested = page(56, 'Nested artist', ['artist'], { parent_ids: [55] });
+  const selfPublisher = page(57, 'Independent publisher artist', ['artist', 'hosting']);
+  const curator = page(58, 'Curator', ['curator']);
+  const curated = page(59, 'Curated artist', ['artist'], { parent_ids: [58] });
+  const all = [independent, label, publisher, signed, published, publishedLabel, nested, selfPublisher, curator, curated];
+  for (const source of [independent, label, selfPublisher, curated]) assert.equal(topDropChanges(source, all), false, fix);
+  for (const source of [signed, published, publishedLabel, nested]) assert.equal(topDropChanges(source, all), true, fix);
+  assert.equal(topDropChanges(page(60, 'Missing parent', ['artist'], { parent_ids: [999] }), all), false, fix);
+  assert.equal(topDropChanges(independent), false, fix);
 });
 
 test('the top area sends leave_all with each release and no selected page', () => {

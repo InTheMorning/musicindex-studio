@@ -4,11 +4,20 @@
 // and the text in the wide layout. `Icon` is the icon component of the
 // shell, so that this module does not import the shell. `className` adds a
 // class to the wrapper, for example to open the menu to the left.
-import { html, useState, useRef } from './vendor/htm-preact-standalone.module.js';
+import { html, useState, useRef, useEffect } from './vendor/htm-preact-standalone.module.js';
 
 export function MenuControl({ buttonLabel, accessibleName, menuLabel, items, onSelect, row = false, Icon, className = '', buttonClassName = '' }) {
   const [open, setOpen] = useState(false);
   const button = useRef(null);
+  const wrapper = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const closeOutside = (event) => {
+      if (wrapper.current && !wrapper.current.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    return () => document.removeEventListener('pointerdown', closeOutside);
+  }, [open]);
   const pick = (entry) => {
     setOpen(false);
     onSelect(entry);
@@ -22,7 +31,7 @@ export function MenuControl({ buttonLabel, accessibleName, menuLabel, items, onS
       if (button.current) button.current.focus();
     }
   };
-  return html`<div class=${`${row ? 'sort row-menu-wrap' : 'sort'}${className ? ` ${className}` : ''}`} onKeyDown=${onKey}>
+  return html`<div ref=${wrapper} class=${`${row ? 'sort row-menu-wrap' : 'sort'}${className ? ` ${className}` : ''}`} onKeyDown=${onKey}>
     <button class=${`${row ? 'button row-menu' : 'button'}${buttonClassName ? ` ${buttonClassName}` : ''}`} type="button" ref=${button} aria-haspopup="menu"
       aria-label=${accessibleName} aria-expanded=${open ? 'true' : 'false'} onClick=${() => setOpen(!open)}>
       ${row ? html`<span class="row-menu-icon"><${Icon} name="ellipsis" /></span><span class="row-menu-text">${buttonLabel} ⌄</span>` : html`${buttonLabel} ⌄`}</button>

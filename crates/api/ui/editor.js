@@ -52,7 +52,7 @@ import { shortType as formatLabel, propertiesSummary, propertiesOpen, propertyRo
 import { MOVE_SCOPES, fileHostRows, planRows, stayRows, deleteLabel, deleteAllLabel, DELETE_NOTE_ON, DELETE_NOTE_OFF, waitLabel, waitingView, readyNotice, partMoveNotice, existsRefusalView, addDisabled, replacesCopyNote, replaceWarning, indexNeedsRead, INDEX_READ_AGAIN_MS } from './releasemove.js';
 import { PURPOSES, purposeTokens, withPurpose, imageFacts, artworkSummary, artworkPreview } from './artwork.js';
 import { fieldKind, sources, hostTree, canSelect, reasonText, acceptsFile, dropResult, addsAsTrackFile, refusedText, wrongKindText, replacedAddresses, selectedFacts, TRACK_FILES_ACCEPT } from './picker.js';
-import { deleteChoices, leftoverLine, deleteButtonEnabled, retireSteps, retireActions, retireBlockShown, domainLine, DELETE_POINTS, operationNote, refusedDelete } from './feeddelete.js';
+import { deleteChoices, leftoverLine, deleteButtonEnabled, retireSteps, retireCheckedLine, retireActions, retireBlockShown, domainLine, DELETE_POINTS, operationNote, refusedDelete } from './feeddelete.js';
 import { writeResult, alsoRows, rowsToWrite, pageWriteFailed, writeInOrder, reviewRemoveLabel, discardFailureTitle, ALSO_WRITE_HINT } from './writeresult.js';
 import { undoKey } from './undohistory.js';
 
@@ -813,6 +813,7 @@ export function NostrSheet({ open, value, feedId, person, offerPeople = true, on
         </div>`}
         <section class="page-section"><h2>From Music Index</h2>
           <div class="group"><button class="link-row" type="button" onClick=${() => setFinding(true)}>
+            <${Icon} name="search" />
             <span class="text"><span class="label">Find on Music Index</span>
               <span class="summary">Use the Nostr key of a feed. Few feeds have one.</span></span>
             <span class="go" aria-hidden="true">›</span></button></div></section>
@@ -2752,6 +2753,7 @@ function FeedDelete({ feed, draft, onListChanged }) {
   const [finalOpen, setFinalOpen] = useState(false);
   const [retireOpen, setRetireOpen] = useState(false);
   const [retire, setRetire] = useState(null);
+  const [retireCheckedAt, setRetireCheckedAt] = useState(null);
   const [deleteState, setDeleteState] = useState(null);
   const [preview, setPreview] = useState(null);
   const [typed, setTyped] = useState('');
@@ -2794,14 +2796,19 @@ function FeedDelete({ feed, draft, onListChanged }) {
   // Only the answer of the last request sets the state. An earlier answer
   // that arrives late does not show the state before the write again.
   const retireRequest = useRef(0);
+  const showRetire = (state) => {
+    setRetire(state);
+    setRetireCheckedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+  };
   const loadRetire = () => {
     const request = ++retireRequest.current;
     return action.run(async () => {
       const state = await api(`/feeds/${feed.id}/retire/state`, { method: 'POST' });
-      if (request === retireRequest.current) setRetire(state);
+      if (request === retireRequest.current) showRetire(state);
     });
   };
   useEffect(() => {
+    setRetireCheckedAt(null);
     if (!retiring) { retireRequest.current += 1; setRetire(null); return; }
     loadRetire();
   }, [retiring, feed.id, written]);
@@ -2810,7 +2817,7 @@ function FeedDelete({ feed, draft, onListChanged }) {
     const show = (event) => {
       if (event.detail.id !== feed.id) return;
       retireRequest.current += 1;
-      setRetire(event.detail.state);
+      showRetire(event.detail.state);
     };
     window.addEventListener(RETIRE_STATE, show);
     return () => window.removeEventListener(RETIRE_STATE, show);
@@ -2866,6 +2873,7 @@ function FeedDelete({ feed, draft, onListChanged }) {
   const usedStays = rows ? rows.stays.filter((file) => file.reason === 'used_by_feeds').length : 0;
   const fileNoun = (count, singular, plural) => `${count} ${count === 1 ? singular : plural}`;
   const steps = retire && retireSteps(retire);
+  const checkedLine = retireCheckedLine(retireCheckedAt);
   const activeRetire = retireBlockShown(retire, feed.host_deleted);
   return html`
     ${activeRetire && html`<div class="retire-head"><span class="label">Retire</span><span class="summary">Studio cannot check Podcast Index.</span></div>
@@ -2874,6 +2882,7 @@ function FeedDelete({ feed, draft, onListChanged }) {
           <span class="num">${row.done ? '✓' : row.number}</span><span class="text"><span class="label">${row.title}</span><span class="summary">${row.text}</span></span>
           ${row.button && html`<button class="button destructive" type="button" disabled=${action.busy} onClick=${openFinal}>${row.button}</button>`}
         </div>`)}
+      ${checkedLine && html`<p class="hint" role="status">${checkedLine}</p>`}
       <div class="actions">${retireActions(retire).map((key) => key === 'restore'
         ? html`<button class="button" type="button" key=${key} disabled=${action.busy} onClick=${restoreFile}>Put the File Back</button>`
         : key === 'check'

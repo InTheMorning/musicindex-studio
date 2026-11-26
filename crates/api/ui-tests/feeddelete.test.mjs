@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { deleteChoices, deleteButtonEnabled, deleteWrite, refusedDelete, retireSteps, leftoverLine, operationNote, domainLine, DELETE_POINTS, retireActions, retireBlockShown, deletedNotice } from '../ui/feeddelete.js';
+import { deleteChoices, deleteButtonEnabled, deleteWrite, refusedDelete, retireSteps, retireCheckedLine, leftoverLine, operationNote, domainLine, DELETE_POINTS, retireActions, retireBlockShown, deletedNotice } from '../ui/feeddelete.js';
 import { readFileSync } from 'node:fs';
 
 test('the choice sheet gives the goals of ADR 0131 items 2 to 4 and the third row only after removal', () => {
@@ -76,6 +76,13 @@ test('editor.js has no loss list and uses DomainLine in the four places', () => 
 
 const state = (extra = {}) => ({
   ask: 'written', removal: { answer: 'not_yet' }, removal_done: false, delete: 'not_done', ...extra,
+});
+
+test('Walk 2026-11-26 finding 9: the Retire check line uses the given local time', () => {
+  const fix = 'Walk 2026-11-26 finding 9: show the last check time. Fix retireCheckedLine in feeddelete.js.';
+  assert.equal(retireCheckedLine('11:06:23'), 'Checked at 11:06:23', fix);
+  assert.equal(retireCheckedLine('01:06:23 PM'), 'Checked at 01:06:23 PM', fix);
+  for (const time of [undefined, null, '']) assert.equal(retireCheckedLine(time), null, fix);
 });
 
 test('retire steps show the state of each step', () => {
@@ -200,7 +207,7 @@ test('ADR 0198 reads the retire state again after a write', () => {
   const editor = readFileSync(new URL('../ui/editor.js', import.meta.url), 'utf8');
   assert.ok(editor.includes('}, [retiring, feed.id, written]);') && editor.includes('feed.last_version') && editor.includes('feed.host_deleted}`'),
     'ADR 0198 item 6: the Retire block must read its state again after a write. Add the version of the feed and host_deleted to the dependencies of the retire state effect in FeedDelete.');
-  assert.ok(editor.includes('if (request === retireRequest.current) setRetire(state);'),
+  assert.ok(editor.includes('if (request === retireRequest.current) showRetire(state);'),
     'ADR 0198 item 6: a late answer must not show the state before the write. Set the retire state only from the answer of the last request.');
   assert.ok(editor.includes('onClick=${loadRetire}>Check Again</button>') && !editor.includes('setRetire(await api('),
     'ADR 0198 item 6: Check Again must use loadRetire. Do not set the retire state directly from an API answer.');

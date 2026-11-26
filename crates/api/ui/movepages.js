@@ -88,6 +88,14 @@ export function pageActions(page, feeds) {
     : [{ id: 'sign_to_label', label: 'Sign to a label…' }, publisher];
 }
 
+// The top drop area shows only when a parent label or a publisher is above the page.
+export function topDropChanges(page, feeds) {
+  const parents = new Set(page.parent_ids || []);
+  const above = ancestors(feeds, page);
+  return (feeds || []).some((feed) => (parents.has(feed.id) && hasRole(feed, 'label'))
+    || (above.has(feed.id) && hasRole(feed, 'hosting')));
+}
+
 // The texts of the sheet of one action, or null for an unknown action.
 export function pageSheet(page, action) {
   const sheet = PAGE_SHEETS[action];

@@ -230,6 +230,7 @@ export function PickerLayout({ id, onSubmit, fields, notice, musicindex, lists, 
   };
   const indexSection = html`<section class="page-section"><h2>From Music Index</h2>
       <div class="group"><button class="link-row" type="button" onClick=${musicindex.onOpen}>
+        <${Icon} name="search" />
         <span class="text"><span class="label">${musicindex.title}</span>
           <span class="summary">${musicindex.summary}</span></span>
         <span class="go" aria-hidden="true">›</span></button></div>

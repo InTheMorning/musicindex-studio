@@ -4,7 +4,9 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md).
 Findings: [walk of 2026-11-26](../reviews/2026-11-26-human-check-walk.md), findings 2, 4, 5, 6, 8 and 9.
 Decisions: [ADR 0254](../adr/0254-the-catalog-is-a-tree-and-each-change-uses-music-words.md) items 38 and 39, ADR 0131 items 1 to 10, [ADR 0234](../adr/0234-a-release-move-is-a-guided-flow.md) item 7.
 
-Status: not started.
+Status: built. Packet 259a is commit 0b472a9. Packet 259b is the commit "Close a menu on an outside click and correct the Catalog drag (task 259b)".
+
+Result of the visual check of the main session, 2026-11-26: each visual criterion passed in the harness at 1280 px, with no `$edges()` finding. A real drag from the handle in the WebKit release binary passed, and a click on the handle does not open the page. At 390 px, the fit check gives an overlap of the top bar and the field "Description" of a scrolled publisher page. The same overlap occurs on the code before packet 259b, so this task did not cause it.
 
 Operator choices (the main session, defect corrections with no new decision):
 

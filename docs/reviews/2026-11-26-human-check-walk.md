@@ -155,3 +155,20 @@ Recommendation: the retire flow of ADR 0131 cannot complete step 2 until Music I
 
 - Defects with no decision: findings 2, 4, 5, 6, 8 and 9, in [task 259](../tasks/studio-v1-task-259-defects-of-the-walk-of-2026-11-26.md).
 - Changes of an ADR: findings 1, 3, 11 and 12, in [ADR 0267](../adr/0267-a-page-sheet-can-make-a-new-page-and-review-has-one-button.md). The operator selected the mockups of findings 3 and 12 on 2026-11-26: the group "New" at the top of a page sheet, and one **Review** button in the top bar.
+
+## The Human Check Of ADR 0267
+
+The operator did the check in the release binary of commit cf07f38. Each step passed:
+
+1. The sheet "Sign to a label…" of HeyCitizen starts with the group "New" and the row "＋ Make a new label page". The list "Labels" follows. The button is **Sign**.
+2. The row opens the form. After **Make the Page**, the sheet shows again with the new label selected, and **Sign** is available.
+3. After **Sign**, the notice has **Undo** and the close button only. The top bar shows the count and **Review**. The Catalog panel has no **Review**.
+4. **Review** in the top bar opens the Review of the change set. No release shows the Music Index warning, because each release has tracks.
+
+The label had a test name, so the operator did not write the change. **Discard** closed the change set, and **Remove from Collection…** removed the new page.
+
+### Finding 13: the sheet "Sign to a label…" lists TestLabel
+
+The operator retires TestLabel, and its written feed is hidden from apps. The sheet still offers TestLabel as a label.
+
+Recommendation: an observation for a subsequent decision. A page in the retire flow of ADR 0131 can leave the lists of the page sheets. No change until the operator decides.

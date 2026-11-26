@@ -6,7 +6,7 @@ Findings: [walk of 2026-11-26](../reviews/2026-11-26-human-check-walk.md), findi
 
 Status: built. Packet 260a is commit 366718a. Packet 260b is the commit "Give page sheets the group New and one Review button (task 260b)".
 
-Result of the visual check of the main session, 2026-11-26: each visual criterion passed at 1280 px, in Light and Dark. The fit check at 390 px and 761 px gave no finding. The human check of the operator is open.
+Result of the visual check of the main session, 2026-11-26: each visual criterion passed at 1280 px, in Light and Dark. The fit check at 390 px and 761 px gave no finding. The human check of the operator passed on 2026-11-26 (walk file, "The Human Check Of ADR 0267").
 
 Operator choices (the main session, technical choices inside ADR 0267):
 

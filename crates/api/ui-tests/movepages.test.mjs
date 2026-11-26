@@ -37,7 +37,7 @@ test('the Add sheet lists writable pages with no start selection (ADR 0254 items
   assert.ok(model.rows.every((row) => !row.checked), ownerAdd);
   assert.equal(model.rows[0].role, 'Artist', ownerAdd);
   assert.equal(model.rows[0].releases, 2, ownerAdd);
-  assert.equal(model.rows[0].place, 'Independent, not published', ownerAdd);
+  assert.equal(model.rows[0].place, 'Independent, self-published', ownerAdd);
   assert.equal(model.rows[1].role, 'No role', ownerAdd);
   assert.equal(model.ready, false, ownerAdd);
   assert.equal(model.button, 'Publish', ownerAdd);
@@ -109,9 +109,9 @@ test('an artist with a publisher above it and no label gets Change publisher', (
 test('each sheet has its question and its button (ADR 0254 item 24)', () => {
   const zed = byId(1);
   const sheet = (action) => { const { title, button, role, listTitle, noneHint } = pageSheet(zed, action); return { title, button, role, listTitle, noneHint }; };
-  assert.deepEqual(sheet('sign_to_label'), { title: 'Which label releases Zed?', button: 'Change Label', role: 'label',
+  assert.deepEqual(sheet('sign_to_label'), { title: 'Which label releases Zed?', button: 'Sign', role: 'label',
     listTitle: 'Releases on the new label', noneHint: 'Select a label.' }, owner254);
-  assert.deepEqual(sheet('change_label'), sheet('sign_to_label'), owner254);
+  assert.deepEqual(sheet('change_label'), { ...sheet('sign_to_label'), button: 'Change Label' }, owner254);
   assert.deepEqual(sheet('go_independent'), { title: 'Make Zed independent', button: 'Go Independent', role: null,
     listTitle: 'Releases with no label after the change', noneHint: '' }, owner254);
   assert.deepEqual(sheet('change_publisher'), { title: 'Who publishes Zed?', button: 'Change Publisher', role: 'hosting',
@@ -121,35 +121,35 @@ test('each sheet has its question and its button (ADR 0254 item 24)', () => {
 });
 
 test('the list of labels has only writable pages, and marks the label now (ADR 0254 item 25)', () => {
-  const rows = pageChoiceRows(tree, byId(1), 'change_label');
+  const rows = pageChoiceRows(tree, byId(1), 'change_label')[1].rows;
   assert.deepEqual(rows.map(({ id, title, now }) => ({ id, title, now })), [
     { id: 10, title: 'Label A', now: true },
     { id: 11, title: 'Label B', now: false },
   ], owner254);
   assert.equal(rows[0].sub, 'Published by Host A', owner254);
-  assert.deepEqual(pageChoiceRows(tree, byId(1), 'change_label', 'label b').map((row) => row.id), [11], owner254);
+  assert.deepEqual(pageChoiceRows(tree, byId(1), 'change_label', 'label b')[1].rows.map((row) => row.id), [11], owner254);
   assert.deepEqual(pageChoiceRows(tree, byId(1), 'go_independent'), [], owner254);
 });
 
-test('the list of publishers starts with "Not published" and marks the publisher now', () => {
-  const rows = pageChoiceRows(tree, byId(1), 'change_publisher');
+test('the list of publishers starts with "Self-published" and marks the publisher now', () => {
+  const rows = pageChoiceRows(tree, byId(1), 'change_publisher')[1].rows;
   assert.deepEqual(rows.map(({ id, title, now }) => ({ id, title, now })), [
-    { id: null, title: 'Not published', now: false },
+    { id: null, title: 'Self-published', now: false },
     { id: 20, title: 'Host A', now: true },
     { id: 21, title: 'Host B', now: false },
   ], owner254);
   assert.equal(rows[1].sub, '2 pages', owner254);
   assert.equal(rows[2].sub, '0 pages', owner254);
-  assert.equal(pageChoiceRows(tree, byId(2), 'change_publisher')[0].now, true, owner254);
+  assert.equal(pageChoiceRows(tree, byId(2), 'change_publisher')[1].rows[0].now, true, owner254);
   // A label that is also a publisher publishes its own releases.
   const selfHost = page(50, 'Self Host', ['label', 'hosting']);
-  assert.equal(pageChoiceRows([...tree, selfHost], selfHost, 'change_publisher')[0].now, false, owner254);
+  assert.equal(pageChoiceRows([...tree, selfHost], selfHost, 'change_publisher')[1].rows[0].now, false, owner254);
   assert.equal(pageNow(selfHost, [...tree, selfHost]), 'Published by Self Host', owner254);
-  assert.deepEqual(pageChoiceRows(tree, byId(2), 'change_publisher', 'host b').map((row) => row.id), [21], owner254);
+  assert.deepEqual(pageChoiceRows(tree, byId(2), 'change_publisher', 'host b')[1].rows.map((row) => row.id), [21], owner254);
 });
 
 test('a page below the page is not in the list', () => {
-  const rows = pageChoiceRows(tree, byId(20), 'change_publisher');
+  const rows = pageChoiceRows(tree, byId(20), 'change_publisher')[1].rows;
   assert.ok(!rows.some((row) => row.id === 10), 'A label below the publisher cannot be its publisher.');
 });
 
@@ -191,7 +191,7 @@ test('the hints and the result texts come from the preview (ADR 0254 item 25)', 
   assert.equal(two.changes, 'Changes 0 releases.', owner254);
   assert.equal(two.keeps, 'A, B and C keep their publisher.', owner254);
   assert.equal(pageSheetResult(zed, 'change_label', 11, null).ready, false, owner254);
-  assert.equal(pageChangeNotice(zed, { place: 'On Label B, not published' }), 'Zed is now on Label B, not published. Not written yet.', owner254);
+  assert.equal(pageChangeNotice(zed, { place: 'On Label B, self-published' }), 'Zed is now on Label B, self-published. Not written yet.', owner254);
 });
 
 const ownerDrop = 'ADR 0254 items 38 and 39: desktop drops use the row rank and the core preview.';
@@ -291,7 +291,7 @@ test('release menus use writable pages and core selections without parent defaul
   assert.deepEqual(view.menus.map(({ role, value }) => [role, value]), [['artist', '1'], ['label', '10'], ['hosting', '20']]);
   assert.deepEqual(view.menus[0].options.map((option) => option[1]), ['Amy', 'Zed', 'New Artist Page…']);
   assert.deepEqual(view.menus[1].options.at(-2), ['', 'Independent (no label)']);
-  assert.deepEqual(view.menus[2].options.at(-2), ['', 'Not published']);
+  assert.deepEqual(view.menus[2].options.at(-2), ['', 'Self-published']);
   for (const menu of view.menus) assert.equal(menu.options.at(-1)[0], `${NEW_PAGE_PREFIX}${menu.role}`);
   const empty = releaseCreditFields({ ...credits, artist: null, label: null, publisher: null, follows: null }, feeds);
   assert.equal(empty.menus[0].placeholder, 'Select an artist page');
@@ -342,36 +342,56 @@ test('the alias section and its hint use the alias that the core gives', () => {
 });
 
 test('ADR 0254 items 35 and 36: Catalog notices and the count use API values', () => {
-  const answer = { change_set_id: 7, change_set: { id: 7, open: true, operation: { kind: 'catalog' }, catalog_steps: 2,
+  const answer = { change_set_id: 7, change_set: { id: 7, open: true, operation: { kind: 'catalog' }, catalog_steps: 9,
+    feeds: [1, 2].map((feed_id) => ({ feed_id, outcome: { outcome: 'changed' } })),
     catalog_changes: [
-      { feed_id: 1, title: 'First', now: 'Independent, not published', after: 'On Label, published by Publisher' },
-      { feed_id: 2, title: 'Second', now: 'Independent, not published', after: 'On Label, not published' },
+      { feed_id: 1, title: 'First', now: 'Independent, self-published', after: 'On Label, published by Publisher' },
+      { feed_id: 2, title: 'Second', now: 'Independent, self-published', after: 'On Label, self-published' },
     ],
   } };
   assert.equal(pageChangeNotice({ title: 'First' }, { place: 'On Label, published by Publisher' }),
     'First is now on Label, published by Publisher. Not written yet.');
   assert.equal(gatherChangeNotice(answer, [1, 2]),
-    'First is now on Label, published by Publisher. Not written yet. Second is now on Label, not published. Not written yet.');
-  assert.equal(gatherChangeNotice(answer, [2]), 'Second is now on Label, not published. Not written yet.');
+    'First is now on Label, published by Publisher. Not written yet. Second is now on Label, self-published. Not written yet.');
+  assert.equal(gatherChangeNotice(answer, [2]), 'Second is now on Label, self-published. Not written yet.');
   assert.equal(catalogChangeCount(answer.change_set), '2 changes not written');
-  assert.equal(catalogChangeCount({ ...answer.change_set, catalog_steps: 1 }), '1 change not written');
+  assert.equal(catalogChangeCount({ ...answer.change_set, feeds: answer.change_set.feeds.slice(0, 1) }), '1 change not written');
   assert.equal(catalogChangeCount({ ...answer.change_set, open: false }), null);
-  assert.equal(catalogChangeCount({ operation: { kind: 'move_pages' }, open: true }), null);
+  assert.equal(catalogChangeCount({ operation: { kind: 'move_pages' }, open: true }), '0 changes not written');
   assert.equal(catalogChangeCount(null), null);
 });
 
 test('ADR 0254 item 36: What changes shows the API places without a feed rule', () => {
   const view = catalogReview({ operation: { kind: 'catalog' }, catalog_changes: [
-    { feed_id: 1, title: 'Artist', now: 'On Old, not published', after: 'On New, published by Publisher' },
-    { feed_id: 2, title: 'Release', now: 'On Old, not published', after: 'On New, published by Publisher' },
+    { feed_id: 1, title: 'Artist', now: 'On Old, self-published', after: 'On New, published by Publisher' },
+    { feed_id: 2, title: 'Release', now: 'On Old, self-published', after: 'On New, published by Publisher' },
     { feed_id: 3, title: 'Publisher', now: null, after: null },
   ] });
   assert.equal(view.title, 'What changes');
   assert.equal(view.feedsTitle, 'Feeds that Studio writes');
   assert.deepEqual(view.rows, [
-    { id: 1, title: 'Artist', now: 'Now: On Old, not published', after: 'After: On New, published by Publisher' },
-    { id: 2, title: 'Release', now: 'Now: On Old, not published', after: 'After: On New, published by Publisher' },
+    { id: 1, title: 'Artist', now: 'Now: On Old, self-published', after: 'After: On New, published by Publisher' },
+    { id: 2, title: 'Release', now: 'Now: On Old, self-published', after: 'After: On New, published by Publisher' },
     { id: 3, title: 'Publisher', now: null, after: null },
   ]);
   assert.equal(catalogReview({ operation: { kind: 'add' } }), null);
+});
+
+
+test('ADR 0267 items 2 to 5: page lists start with New', () => {
+  const message = 'ADR 0267 items 2 to 5: page lists start with New. Extend pageChoiceRows and pageSheet.';
+  for (const [action, role, title] of [
+    ['sign_to_label', 'label', 'Labels'], ['change_label', 'label', 'Labels'], ['change_publisher', 'hosting', 'Publishers'],
+  ]) {
+    for (const candidates of [tree, [byId(1)]]) {
+      for (const query of ['', 'no match']) {
+        const groups = pageChoiceRows(candidates, byId(1), action, query);
+        assert.deepEqual(groups.map((group) => group.title), ['New', title], message);
+        assert.deepEqual(groups[0].rows, [{ id: `new:${role}`, make: true,
+          title: `＋ Make a new ${role === 'label' ? 'label' : 'publisher'} page` }], message);
+      }
+    }
+  }
+  assert.deepEqual(pageChoiceRows(tree, byId(1), 'go_independent'), [], message);
+  assert.equal(pageSheet(byId(1), 'sign_to_label').button, 'Sign', message);
 });

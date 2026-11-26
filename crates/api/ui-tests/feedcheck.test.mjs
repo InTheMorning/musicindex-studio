@@ -1,3 +1,4 @@
+import { indexWarningView } from '../ui/feedcheck.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -445,4 +446,14 @@ test('ADR 0257 item 19: a release links artist pages only in the refusal panel',
   assert.deepEqual(refusalPageCandidates(feeds, 'music', others).map((f) => f.id), [1, 4], owner);
   assert.deepEqual(refusalPageCandidates(feeds, 'musicL', others), others, owner);
   assert.deepEqual(refusalPageCandidates(feeds, 'podcast', others), others, owner);
+});
+
+
+test('ADR 0267 item 9: Review shows the warning code of the core', () => {
+  const message = 'ADR 0267 item 9: show the warning without a write block. Extend indexWarningView.';
+  assert.deepEqual(indexWarningView('no_tracks_or_payment_split', 'First Album'), {
+    title: 'Music Index does not list First Album: it has no track and no payment split.',
+    text: 'Add a track or a split. You can write it now and add them later.',
+  }, message);
+  for (const code of [null, undefined, 'other']) assert.equal(indexWarningView(code, 'First Album'), null, message);
 });

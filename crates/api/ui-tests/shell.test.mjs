@@ -6,7 +6,7 @@ import {
   pageTabs, tabsFit, mediumKind, feedKind, trackCountText, roleChoice, roleHint, keptRoleFolds, linkRoleChoices, toggleRole, isEditable, isReadOnly, reviewHost, moveNote, isPublisher, isPlaylist, trackKey, isTrack,
   leftPanel, groupDestinations, releasesList, overviewModel, overviewFilter, legacyView, legacyNav, addressSearch, unlinkedPlaylists, sortLabel, sortEntries, compareNames, byName, segmentKey,
   startNav, pushNav, backNav, forwardNav, canBack, canForward, setScroll, overviewView,
-  narrowStack, openFeedView, publisherGroups, releaseRows, releaseMoves, moveTarget, moveRelease, isReleaseEntry, entryFeed, placeText, draftLabel, newFeedView, navAtWidth, rowPath, pagePath, toggleRow, revealRows, widthNav, wideView, publisherArt, mosaicCells, otherFeedText, mediumProblemView, mediumProblemCause,
+  narrowStack, openFeedView, publisherGroups, releaseRows, releaseMoves, moveTarget, moveRelease, isReleaseEntry, entryFeed, placeText, draftLabel, toolbarStatus, showsChangeSet, newFeedView, navAtWidth, rowPath, pagePath, toggleRow, revealRows, widthNav, wideView, publisherArt, mosaicCells, otherFeedText, mediumProblemView, mediumProblemCause,
 } from '../ui/shell.js';
 import { stateMark } from '../ui/outsidecheck.js';
 import { makeHistory } from '../ui/undohistory.js';
@@ -1133,7 +1133,7 @@ test('a row of a group opens its page with the path of this page (ADR 0254 items
 });
 
 test('the place of a feed uses music words (ADR 0254 item 11)', () => {
-  const message = 'ADR 0254 item 11: the place reads "On {label}, published by {publisher}", "Independent, published by {publisher}" or "Not published". Fix placeText in crates/api/ui/shell.js.';
+  const message = 'ADR 0267 item 1: the place reads "On {label}, published by {publisher}", "Independent, published by {publisher}" or "Self-published". Fix placeText in crates/api/ui/shell.js.';
   const north = { ...labelA, id: 90, title: 'Northwind Records', parent_ids: [91] };
   const river = { ...host, id: 91, title: 'Riverside', child_ids: [90, 92], parent_ids: [] };
   const onLabel = { ...artistX, id: 93, parent_ids: [90] };
@@ -1142,9 +1142,9 @@ test('the place of a feed uses music words (ADR 0254 item 11)', () => {
   const feeds = [north, river, onLabel, indep, lone];
   assert.equal(placeText(onLabel, feeds), 'On Northwind Records, published by Riverside', message);
   assert.equal(placeText(indep, feeds), 'Independent, published by Riverside', message);
-  assert.equal(placeText(lone, feeds), 'Independent, not published', message);
+  assert.equal(placeText(lone, feeds), 'Independent, self-published', message);
   assert.equal(placeText(north, feeds), 'Published by Riverside', message);
-  assert.equal(placeText({ ...north, parent_ids: [] }, feeds), 'Not published', message);
+  assert.equal(placeText({ ...north, parent_ids: [] }, feeds), 'Self-published', message);
   assert.equal(placeText(river, feeds), null, message);
   // A label that is also a publisher publishes itself, so it has no place line.
   assert.equal(placeText({ ...north, parent_ids: [], publisher_roles: ['label', 'hosting'] }, feeds), null, message);
@@ -1353,4 +1353,41 @@ test('the search of a list page finds the title or the name of a linked page (AD
   assert.deepEqual(ids('LONE'), [95], message);
   assert.deepEqual(ids('zeta'), [95], message);
   assert.deepEqual(ids('nothing'), [], message);
+});
+
+
+test('ADR 0267 item 7: the top bar counts feeds that Review writes', () => {
+  const message = 'ADR 0267 item 7: count feeds awaiting writes. Extend toolbarStatus and catalogChangeCount.';
+  const changeSet = { id: 8, open: true, operation: { kind: 'catalog' }, catalog_steps: 1, feeds: [
+    { feed_id: 1, outcome: { outcome: 'changed' } },
+    { feed_id: 2, outcome: { outcome: 'changed' } },
+    { feed_id: 3, outcome: { outcome: 'unchanged' } },
+    { feed_id: 4, outcome: { outcome: 'changed' }, written_at: 123 },
+    { feed_id: 5, outcome: { outcome: 'changed' }, blocked: 'vault_locked' },
+  ] };
+  for (const draft of [{ changed: false }, { changed: true }, { status: 'saving' }, { stepError: 'Save failed' }]) {
+    assert.deepEqual(toolbarStatus(draft, changeSet), { text: '2 changes not written' }, message);
+  }
+  assert.deepEqual(toolbarStatus({}, { ...changeSet, feeds: changeSet.feeds.slice(0, 1) }), { text: '1 change not written' }, message);
+  assert.deepEqual(toolbarStatus({ changed: true }, { ...changeSet, open: false }), { text: 'Saved, not written' }, message);
+});
+
+test('ADR 0267 item 7: the top bar keeps the draft state without a change set', () => {
+  const message = 'ADR 0267 item 7: retain each draft state. Extend toolbarStatus.';
+  for (const status of ['idle', 'loading']) assert.deepEqual(toolbarStatus({ status }), { text: 'Loading…' }, message);
+  for (const status of ['waiting', 'saving']) assert.deepEqual(toolbarStatus({ status }), { text: 'Saving…' }, message);
+  assert.deepEqual(toolbarStatus({ status: 'failed' }), { text: 'Not saved', error: true }, message);
+  assert.deepEqual(toolbarStatus({ stepError: 'Save failed' }), { text: 'Save failed', error: true }, message);
+  assert.deepEqual(toolbarStatus({ status: 'saved', changed: true }), { text: 'Saved, not written' }, message);
+  assert.deepEqual(toolbarStatus({ status: 'saved', changed: false }), { text: 'No changes' }, message);
+});
+
+test('ADR 0267 item 7: a page shows the change set unless it has a draft that the set does not write', () => {
+  const message = 'ADR 0267 item 7 and task 260: a page draft outside the change set keeps its own Review. Change showsChangeSet.';
+  const changeSet = { id: 8, open: true, feeds: [{ feed_id: 1, outcome: { outcome: 'changed' } }] };
+  assert.equal(showsChangeSet(1, { changed: true }, changeSet), true, message);
+  assert.equal(showsChangeSet(2, { changed: false }, changeSet), true, message);
+  assert.equal(showsChangeSet(2, { changed: true }, changeSet), false, message);
+  assert.equal(showsChangeSet(1, { changed: true }, { ...changeSet, open: false }), false, message);
+  assert.equal(showsChangeSet(1, { changed: true }, null), false, message);
 });

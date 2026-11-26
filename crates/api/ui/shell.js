@@ -7,6 +7,8 @@ import { liveKey, isLiveItem, statusLabel } from './live.js';
 import { coverOf } from './cover.js';
 import { tabLabel } from './feedcheck.js';
 import { moveAmong } from './order.js';
+import { catalogChangeCount } from './movepages.js';
+import { writableIds } from './recipients.js';
 
 // The nine roles of a publisher feed, in the sequence of musicindex ADR
 // 0081 R-CURATOR-1 item 1 (ADR 0083 item 1).
@@ -501,13 +503,32 @@ export function pagePath(feeds, id, from = undefined) {
 // item 11a). A release with a draft does not change it.
 export const draftLabel = (feed) => DRAFT_LABELS[feed.draft_state] || 'No changes';
 
+// The top bar shows the open change set before the page draft (ADR 0267 item 7).
+export function toolbarStatus(draft, changeSet = null) {
+  const changes = catalogChangeCount(changeSet);
+  if (changes !== null) return { text: changes };
+  if (draft.stepError) return { text: draft.stepError, error: true };
+  if (draft.status === 'idle' || draft.status === 'loading') return { text: 'Loading…' };
+  if (draft.status === 'waiting' || draft.status === 'saving') return { text: 'Saving…' };
+  if (draft.status === 'failed') return { text: 'Not saved', error: true };
+  return draft.changed ? { text: 'Saved, not written' } : { text: 'No changes' };
+}
+
+// The top bar of a page shows the open change set (ADR 0267 item 7). A page
+// with a draft of its own that the change set does not write keeps its own
+// status and Review, because only that Review writes the draft (task 260).
+export function showsChangeSet(feedId, draft, changeSet) {
+  if (!changeSet?.open) return false;
+  return !draft.changed || writableIds(changeSet).includes(feedId);
+}
+
 // The place of a feed in music words (ADR 0254 item 11), for display only.
 // The text reads `parent_ids` and `publisher_roles` of the feed list. It
 // reads the parents of the labels above the feed, to name a publisher above a
 // label. It does not decide which feed is below which feed (ADR 0065). An
 // artist is "On {labels}" or "Independent", then "published by {names}" or
-// "not published". A feed at another rank gives "Published by {names}" or
-// "Not published". A feed with the role `hosting` and no publisher above
+// "self-published". A feed at a different rank gives "Published by {names}" or
+// "Self-published". A feed with the role `hosting` and no publisher above
 // it gives `null`.
 export function placeText(feed, feeds) {
   const byId = new Map((feeds || []).map((f) => [f.id, f]));
@@ -521,11 +542,11 @@ export function placeText(feed, feeds) {
   const by = publishers.size > 0 ? `published by ${names([...publishers.values()])}` : null;
   const rank = headingIndex(feed);
   if (rank === HEADINGS.findIndex(([role]) => role === 'artist')) {
-    return `${labels.length > 0 ? `On ${names(labels)}` : 'Independent'}, ${by || 'not published'}`;
+    return `${labels.length > 0 ? `On ${names(labels)}` : 'Independent'}, ${by || 'self-published'}`;
   }
   if (by) return `P${by.slice(1)}`;
   // A publisher with no publisher above it has no place line.
-  return has(feed, 'hosting') ? null : 'Not published';
+  return has(feed, 'hosting') ? null : 'Self-published';
 }
 
 // The text of a count: "1 release", "3 pages below".

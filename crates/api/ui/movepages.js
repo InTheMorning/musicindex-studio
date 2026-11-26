@@ -1,6 +1,7 @@
 // The models of the sheets of a page action (ADR 0254 items 22 to 28), of the
 // gather sheet and of the release credit fields. The functions have no Preact
 // and no browser state. `editor.js` shows the sheets.
+import { writableIds } from './recipients.js';
 import { isPublisher, roleWord, headingIndex, placeText, feedKind } from './shell.js';
 
 // The prefix of the value that opens the form of a new page (ADR 0240 item
@@ -41,7 +42,7 @@ function ancestors(feeds, page) {
 // the hint. The `action` is the name that the route of packet 251c reads.
 const PAGE_SHEETS = {
   sign_to_label: {
-    question: (name) => `Which label releases ${name}?`, button: 'Change Label', pick: 'label', search: 'Search for a label',
+    question: (name) => `Which label releases ${name}?`, button: 'Sign', pick: 'label', search: 'Search for a label',
     list: 'Releases on the new label', none: 'Select a label.', keeps: 'label',
   },
   change_label: {
@@ -117,15 +118,13 @@ export function pageSheet(page, action) {
 // page with the role hosting and no publisher above it publishes its own
 // releases, as in the place text of the core.
 export function pageNow(page, feeds) {
-  return placeText(page, feeds) || (hasRole(page, 'hosting') ? `Published by ${pageTitle(page)}` : 'Not published');
+  return placeText(page, feeds) || (hasRole(page, 'hosting') ? `Published by ${pageTitle(page)}` : 'Self-published');
 }
 
 const countWords = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
-// The rows of the list of pages (ADR 0254 item 25), A to Z. `query` is the
-// text of the search field. A publisher question starts with the row "Not
-// published", which has `id` null. The page above the page has `now`. The
-// pages below the page and the page itself are not in the list.
+// The groups of a page sheet start with New (ADR 0267 item 2).
+// The existing pages follow in title sequence. The search filters these pages only.
 export function pageChoiceRows(feeds, page, action, query = '') {
   const sheet = PAGE_SHEETS[action];
   if (!sheet || sheet.pick === null) return [];
@@ -141,11 +140,16 @@ export function pageChoiceRows(feeds, page, action, query = '') {
       sub: sheet.pick === 'label' ? pageNow(feed, feeds) : countWords((feed.child_ids || []).length, 'page', 'pages'),
       now: above.has(feed.id),
     }));
-  if (sheet.pick !== 'hosting') return rows;
-  // A page with the role hosting publishes its own releases.
-  const none = !hasRole(page, 'hosting') && !(feeds || []).some((feed) => above.has(feed.id) && hasRole(feed, 'hosting'));
-  const label = 'Not published';
-  return !text || label.toLowerCase().includes(text) ? [{ id: null, title: label, dot: null, sub: '', now: none }, ...rows] : rows;
+  if (sheet.pick === 'hosting') {
+    // A page with the role hosting publishes its own releases.
+    const none = !hasRole(page, 'hosting') && !(feeds || []).some((feed) => above.has(feed.id) && hasRole(feed, 'hosting'));
+    const label = 'Self-published';
+    if (!text || label.toLowerCase().includes(text)) rows.unshift({ id: null, title: label, dot: null, sub: '', now: none });
+  }
+  return [
+    { title: 'New', rows: [{ id: `${NEW_PAGE_PREFIX}${sheet.pick}`, make: true, title: `＋ Make a new ${sheet.pick === 'label' ? 'label' : 'publisher'} page` }] },
+    { title: sheet.pick === 'label' ? 'Labels' : 'Publishers', rows },
+  ];
 }
 
 // The releases of the page, with their check marks (ADR 0254 item 25).
@@ -169,7 +173,7 @@ export function previewPath(page, action, { selected = null, above = null, relea
 }
 
 // The body of the change route (packet 251c). `selected` is `undefined` when
-// the user selected no row, and `null` for "Not published".
+// the user selected no row, and `null` for "Self-published".
 export function pageChangeBody(action, selected, releases) {
   return { action, page: selected ?? null, releases };
 }
@@ -186,7 +190,8 @@ export function pageDropRows(feeds, page, above = null) {
   if (!isPublisher(page) || ![ARTIST_RANK, LABEL_RANK].includes(rank)) return [];
   const labelAction = pageActions(page, feeds).find((entry) => ['change_label', 'sign_to_label'].includes(entry.id))?.id;
   const actions = [...(labelAction ? [labelAction] : []), 'change_publisher'];
-  return actions.flatMap((action) => pageChoiceRows(feeds, page, action)
+  return actions.flatMap((action) => pageChoiceRows(feeds, page, action).flatMap((group) => group.rows)
+    .filter((row) => !row.make)
     .filter((row) => row.id !== null && row.id !== above)
     .filter((row) => headingIndex(feeds.find((feed) => feed.id === row.id)) === (action === 'change_publisher' ? 0 : LABEL_RANK))
     .map((row) => ({ id: row.id, action })));
@@ -291,7 +296,7 @@ export function releaseCreditFields(credits, feeds) {
     return {
       role, label: roleWord(role), value,
       placeholder: role === 'artist' && !selected ? 'Select an artist page' : null,
-      options: [...pages, ...(role === 'artist' ? [] : [['', role === 'label' ? 'Independent (no label)' : 'Not published']]),
+      options: [...pages, ...(role === 'artist' ? [] : [['', role === 'label' ? 'Independent (no label)' : 'Self-published']]),
         [`${NEW_PAGE_PREFIX}${role}`, `New ${roleWord(role)} Page…`]],
       hint: role === 'artist' ? 'One artist page. A second artist goes in the release alias, for now.'
         : role === 'hosting' ? (credits.publisher_follows
@@ -312,9 +317,9 @@ export function releaseCreditFields(credits, feeds) {
   };
 }
 
-// The Catalog count and Review lines use only the values of the API.
+// The count uses the feed rows that a write sends (ADR 0267 item 7).
 export function catalogChangeCount(set) {
-  return set?.open && set.operation?.kind === 'catalog' ? `${countWords(set.catalog_steps, 'change', 'changes')} not written` : null;
+  return set?.open ? `${countWords(writableIds(set).length, 'change', 'changes')} not written` : null;
 }
 
 export function catalogReview(set) {

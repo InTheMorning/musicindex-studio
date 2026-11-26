@@ -7,7 +7,7 @@ import { UI_SCALES, SCALE_KEY, normalizeScale, measureWindowUnits } from './uisc
 import { LOCK_HINT, START_HINT, lockChoiceText } from './vaultlock.js';
 import { serverFilesRows, sizeText, SERVER_FILES_NOTE } from './assets.js';
 import { failedLine } from './failures.js';
-import { OPEN_REVIEW, OPEN_MERGE, OPEN_FEED_MOVE, PublisherPath, MoveAllSheet, MoveRefusal, PageChangeSheet, GatherPagesSheet, AlbumEditor, DraftToolbar, useSheet, DiffView, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, OUTSIDE_RECHECK, restoreDeletedFile, checkDeletedAgain, AnnounceChoice, UndoButtons, useUndoKeys, DeleteUndoBar, removeFeedFromCollection } from './editor.js';
+import { OPEN_REVIEW, OPEN_MERGE, OPEN_FEED_MOVE, PublisherPath, MoveAllSheet, MoveRefusal, PageChangeSheet, GatherPagesSheet, AlbumEditor, DraftToolbar, OpenChangeSetContext, useSheet, DiffView, IndexWarning, signPlanned, currentSignerChoice, ANNOUNCE_RELOAD, OUTSIDE_RECHECK, restoreDeletedFile, checkDeletedAgain, AnnounceChoice, UndoButtons, useUndoKeys, DeleteUndoBar, removeFeedFromCollection } from './editor.js';
 import {
   recipientKey,
   outcomeText, blockedText, operationLine, nameOf, writableIds, firstOpenId, initialStatuses, refreshedStatuses, startWrite,
@@ -53,10 +53,10 @@ import {
 } from './move.js';
 import {
   mediumKind, feedKind, FIRST_CLASS_ROLES, roleWord, kindGlow, isEditable, isReadOnly, isPublisher, trackKey, isTrack,
-  placeText, draftLabel, leftPanel, releasesList, overviewModel, overviewFilter, legacyNav, addressSearch, sortLabel, sortEntries, mosaicCells, otherFeedText, mediumProblemView, mediumProblemCause, feedCover,
+  placeText, draftLabel, toolbarStatus, leftPanel, releasesList, overviewModel, overviewFilter, legacyNav, addressSearch, sortLabel, sortEntries, mosaicCells, otherFeedText, mediumProblemView, mediumProblemCause, feedCover,
   startNav, pushNav, backNav, forwardNav, overviewView, canBack, canForward, setScroll,
   isFeedView, openFeedView, newFeedView, navAtWidth, toggleRow, revealRows, pageTabs, tabsFit, showsRootButtons, rootNav, segmentKey, isTabChange } from './shell.js';
-import { pageActions, pageChangeNotice, catalogChangeCount, catalogReview, gatherChangeNotice,
+import { pageActions, pageChangeNotice, catalogReview, gatherChangeNotice,
   pageDropRows, pageDropDecision, topDropChanges, leaveAllBody, previewPath, startSelection, pageChangeBody } from './movepages.js';
 import {
   eventsToSign, signErrorText,
@@ -3625,19 +3625,12 @@ function ChangeSetPage({ id, go, onChanged, feeds }) {
               ? html`<${DiffView} diff=${shown.diff} />`
               : html`<p class="hint">The draft is the same as the hosted file.</p>`)}
           </div>
-        </details>`, openFeed];
+        </details>`, html`<${IndexWarning} key=${`warning-${feed.feed_id}`} reason=${shown?.diff ? shown.diff.index_warning : feed.index_warning} title=${feed.title} />`, openFeed];
       })}</div></section>
       ${catalog && controls}
       ${addressBlocked && html`<p class="hint" role="status">${findings.address.write}</p>`}
       <${ReviewCorrectSheet} target=${correcting} feeds=${feeds} onApplied=${() => findings.act(readAgain)} onClose=${() => setCorrecting(null)} />`}
   </section></div>`;
-}
-
-// The open Catalog change set has one count in each panel width.
-function CatalogChangeCount({ set, go }) {
-  const text = catalogChangeCount(set);
-  return text && html`<div class="notice" role="status"><span>${text}</span>
-    <div class="actions"><button class="button action" type="button" onClick=${() => go({ name: 'change-set', id: set.id })}>Review</button></div></div>`;
 }
 
 // The left panel (ADR 0258 items 1, 6 and 7). It shows the destinations, or
@@ -3647,15 +3640,14 @@ function CatalogChangeCount({ set, go }) {
 // At 760 px or less the left panel is not shown: its content is the root
 // page and the outline page of the stack (ADR 0258 item 13, musicindex ADR
 // 0030 R-SHELL-2).
-function LeftPanel({ panel, draft, changedFeeds, go, showReleases, onAdding, onImporting, onAddFeedRow, onLock, collections, catalogSet }) {
+function LeftPanel({ panel, draft, changedFeeds, go, showReleases, onAdding, onImporting, onAddFeedRow, onLock, collections }) {
   if (panel.kind === 'destinations') {
     return html`<header><${Brand} /><${ThemeToggle} /></header>
-      <div class="sidebar-scroll"><${CatalogChangeCount} set=${catalogSet} go=${go} />${destinationRows(panel.top, go)}</div>
+      <div class="sidebar-scroll">${destinationRows(panel.top, go)}</div>
       <${LeftPanelFooter} panel=${panel} go=${go} onLock=${onLock} collections=${collections} />`;
   }
   return html`<header><${Brand} /><${ThemeToggle} /></header>
     <div class="sidebar-scroll">
-      <${CatalogChangeCount} set=${catalogSet} go=${go} />
       <${Outline} panel=${panel} draft=${draft} changedFeeds=${changedFeeds} go=${go} showReleases=${showReleases}
         onAdding=${onAdding} onImporting=${onImporting} onAddFeedRow=${onAddFeedRow} />
     </div>
@@ -3955,12 +3947,11 @@ function SwitchCollectionSheet({ open, collections, go, onClose, onDone }) {
 
 // ADR 0241 item 3: the narrow root page uses the same footer order.
 // The page has no Back control (ADR 0226 items 7 and 8).
-function RootPage({ panel, go, onLock, collections, catalogSet }) {
+function RootPage({ panel, go, onLock, collections }) {
   return html`<div class="panel-page">
     <${Bar} back=${false}><span class="bar-title">Studio</span><//>
     <div class="stack-page">
       <header><${Brand} /><${ThemeToggle} /></header>
-      <${CatalogChangeCount} set=${catalogSet} go=${go} />
       ${destinationRows(panel.top, go)}
       <${LeftPanelFooter} panel=${panel} go=${go} onLock=${onLock} collections=${collections} />
     </div>
@@ -4063,7 +4054,7 @@ function GroupPage({ feeds, connectors, marked, group, changedFeeds, onOpen }) {
 // tiles (`overviewModel`). The filter and the search are part of the view, and
 // `onChange` replaces them. A collection with no feed starts at the Welcome
 // page (ADR 0260 item 1, ADR 0263 item 1).
-function OverviewPage({ feeds, connectors, marked, filter, query, changedFeeds, onChange, onOpen, onAddedFeed, onConnect }) {
+function OverviewPage({ feeds, connectors, marked, filter, query, changedFeeds, onChange, onOpen, onAddedFeed, onConnect, catalogSet }) {
   const { results: outside } = useContext(OutsideContext);
   const [adding, setAdding] = useState(null);
   if (showWelcome(feeds)) return html`<${WelcomePage} connectors=${connectors} feeds=${feeds} onAdded=${onAddedFeed} />`;
@@ -4102,7 +4093,10 @@ function OverviewPage({ feeds, connectors, marked, filter, query, changedFeeds, 
     </section>`;
   };
   return html`<div>
-    <${Bar}><span class="bar-title">Overview</span><${DeleteUndoBar} /><//>
+    <${Bar}><span class="bar-title">Overview</span><${DeleteUndoBar} />
+      ${catalogSet?.open && html`<div class="draft-toolbar"><span class="draft-status" role="status">${toolbarStatus({}, catalogSet).text}</span>
+        <button class="button primary" type="button" onClick=${() => onOpen({ name: 'change-set', id: catalogSet.id })}>Review</button></div>`}
+    <//>
     <section class="releases overview">
       <div class="releases-head">
         <h1>Overview</h1>
@@ -4759,7 +4753,7 @@ function Shell({ vault, onLock, version }) {
   } else if (feeds === null) {
     main = withBar(html`<section class="section"><p class="empty" role="status">Loading your collection…</p></section>`);
   } else if (view.name === 'root') {
-    main = html`<${RootPage} catalogSet=${catalogSet} panel=${panel} go=${go} onLock=${lock} collections=${collectionState.collections} />`;
+    main = html`<${RootPage} panel=${panel} go=${go} onLock=${lock} collections=${collectionState.collections} />`;
   } else if (view.name === 'hosts') {
     main = html`<${Hosts} connectors=${connectors} feeds=${feeds} view=${view} onChanged=${() => load()}
       onOpen=${(id) => go({ name: 'feed', id })} onMoved=${async (id) => { await load(); go({ name: 'change-set', id, area: 'hosts' }); }} />`;
@@ -4793,7 +4787,7 @@ function Shell({ vault, onLock, version }) {
       group=${view.group} changedFeeds=${changedFeeds}
       onOpen=${(id) => go(openFeedView(id, narrow, undefined))} />`;
   } else {
-    main = html`<${OverviewPage} feeds=${feeds} connectors=${connectors} marked=${view.marked}
+    main = html`<${OverviewPage} feeds=${feeds} connectors=${connectors} marked=${view.marked} catalogSet=${catalogSet}
       filter=${overviewFilter(view)} query=${typeof view.query === 'string' ? view.query : ''}
       changedFeeds=${changedFeeds} onChange=${changeOverview}
       onOpen=${(target) => go(target)}
@@ -4805,17 +4799,17 @@ function Shell({ vault, onLock, version }) {
     // A new release opens with the import sheet "Add tracks" (ADR 0224 item 7).
     addTracksNext: setPendingAddTracks };
   const panelProps = { panel, draft, changedFeeds, go, showReleases, onAdding: setAdding, onImporting: setImporting, onAddFeedRow: openAddFeedRow,
-    collections: collectionState.collections, catalogSet,
+    collections: collectionState.collections,
     onLock: lock };
   const dragValue = { narrow, busy: catalogBusy, page: narrow ? null : catalogDrag?.page, key: catalogDrag?.key,
     over: catalogOver, targets: dropTargets, start: setCatalogDrag, end: endCatalogDrag, setOver: setCatalogOver, drop: dropCatalogPage };
-  return html`<${NavContext.Provider} value=${navValue}><${OutsideContext.Provider} value=${outsideValue}><${CatalogContext.Provider} value=${toggleOpenRow}><${PageActionContext.Provider} value=${setPageSheet}><${CatalogDragContext.Provider} value=${dragValue}><div class="shell">
+  return html`<${NavContext.Provider} value=${navValue}><${OutsideContext.Provider} value=${outsideValue}><${CatalogContext.Provider} value=${toggleOpenRow}><${PageActionContext.Provider} value=${setPageSheet}><${CatalogDragContext.Provider} value=${dragValue}><${OpenChangeSetContext.Provider} value=${catalogSet?.open ? catalogSet : null}><div class="shell">
     ${!narrow && html`<nav class="sidebar" aria-label="Collection">
       <${LeftPanel} ...${panelProps} />
     </nav>`}
     <main class="main" ref=${mainRef}>
       ${catalogNotice && html`<${CatalogUndoNotice} key=${`${catalogNotice.change_set_id}-${catalogNotice.change_set.catalog_steps}`} answer=${catalogNotice} onUndo=${catalogNotice.undo}
-        onReview=${openChangeSet} onClose=${() => setCatalogNotice(null)} />`}
+        onClose=${() => setCatalogNotice(null)} />`}
       <${MoveRefusal} error=${catalogError} feeds=${feeds}
         onAddHost=${() => { setCatalogError(null); go({ name: 'hosts', add: true }); }}
         onOpenChanges=${(id) => { setCatalogError(null); openChangeSet(id); }} />
@@ -4837,7 +4831,7 @@ function Shell({ vault, onLock, version }) {
       onClose=${() => setAddingFeed(null)} />`}
     ${pageSheet && sheetFeed && html`<${PageChangeSheet} key=${`${pageSheet.id}-${pageSheet.action}`}
       page=${{ ...sheetFeed, parent_ids: sheetFeed.parent_ids || [], release_ids: sheetFeed.release_ids || [] }}
-      action=${pageSheet.action} above=${pageSheet.above} startSelected=${pageSheet.selected} feeds=${feeds}
+      action=${pageSheet.action} above=${pageSheet.above} startSelected=${pageSheet.selected} feeds=${feeds} connectors=${connectors} onListChanged=${load}
       prepare=${draftFeedId !== null ? () => draft.flush() : undefined}
       onChanged=${pageChanged}
       onAddHost=${() => { setPageSheet(null); go({ name: 'hosts', add: true }); }}
@@ -4854,7 +4848,7 @@ function Shell({ vault, onLock, version }) {
       onAddHost=${() => { setGather(null); go({ name: 'hosts', add: true }); }}
       onOpenChanges=${(id) => { setGather(null); openChangeSet(id); }}
       onClose=${() => setGather(null)} />`}
-  </div><//><//><//><//><//>`;
+  </div><//><//><//><//><//><//>`;
 }
 
 // ---- Sign-in and sign-up on a server (ADR 0204, ADR 0056) ----

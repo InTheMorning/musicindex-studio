@@ -4,12 +4,15 @@ Plan: [Studio v1 phase plan](../plans/studio-v1-phase-plan.md).
 Decision: [ADR 0267](../adr/0267-a-page-sheet-can-make-a-new-page-and-review-has-one-button.md) items 1 to 10.
 Findings: [walk of 2026-11-26](../reviews/2026-11-26-human-check-walk.md), findings 1, 3, 11 and 12.
 
-Status: not started.
+Status: built. Packet 260a is commit 366718a. Packet 260b is the commit "Give page sheets the group New and one Review button (task 260b)".
+
+Result of the visual check of the main session, 2026-11-26: each visual criterion passed at 1280 px, in Light and Dark. The fit check at 390 px and 761 px gave no finding. The human check of the operator is open.
 
 Operator choices (the main session, technical choices inside ADR 0267):
 
 - Item 7 applies to Overview also. Overview has no draft of its own, so its top bar shows only the count and **Review** while a change set is open.
 - Item 9 gives the API a value `index_warning` for each feed that Review writes. It uses the same paths as `page_refusal`: the feed diff (`diff_json`) and the feed rows of a change set.
+- The stop rule about a page draft occurred in packet 260b. The top bar of a page shows the change set in two conditions: the page is in the change set, or the page has no draft of its own. Some pages have a draft that the change set does not write. Such a page keeps its own status and its own **Review**, because only that Review writes the draft (`showsChangeSet` in `shell.js`). Example: the user signs a new artist page to a label. The change set writes the label and the release. The new artist page keeps its own draft.
 - Item 9 applies to a feed with the medium `music` only. A feed with live items and no items gets the warning also, because the rule names items.
 
 ## Goal

@@ -14,11 +14,11 @@ import { onListKey, onTreeKey } from './listkeys.js';
 import { creditPickRows, supportPickRows, creditChoices, creditFillRows, creditFillValue, creditFillNote, creditFillNoteText, CREDIT_FIELD_LABELS, fundingChoices, nostrChoices, withPersonValues, filterRows, nostrPickRows, feedWord, memberRowLine, memberSectionNote } from './people.js';
 import { withCids, STATUS } from './draft.js';
 import { roleSummary } from './roles.js';
-import { feedKind, ROLES, FIRST_CLASS_ROLES, roleWord, roleHint, keptRoleFolds, relLabel, linkRoleChoices, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName, newFeedView, pageLevel, pagePath, publisherGroups, entryFeed, isReleaseEntry, moveRelease, moveTarget } from './shell.js';
+import { feedKind, toolbarStatus, showsChangeSet, ROLES, FIRST_CLASS_ROLES, roleWord, roleHint, keptRoleFolds, relLabel, linkRoleChoices, roleChoice, toggleRole, trackKey, isTrack, isPublisher, isPlaylist, isReadOnly, reviewHost, moveNote, byName, newFeedView, pageLevel, pagePath, publisherGroups, entryFeed, isReleaseEntry, moveRelease, moveTarget } from './shell.js';
 import { MenuControl } from './menu.js';
 import { isLiveItem, liveKey, liveDot, nextAction, canRecord, hasRecording, showSummary, statusLabel, grantActive, grantSummary, grantWriteText, grantBoxState, hostUsesSigner, OTHER_TYPE, typeIsSelected, typeMenuState, filledType, checkLine, checkTypeWarning, hasBadAddress, problemGroup, setLiveStreamType, viewAfterLiveGone, withoutLive } from './live.js';
 import { grantControl, draftBlockedNotice } from './apps.js';
-import { checkRows, unreadableRows, hasShowGrant, checkTexts, pageRefusalView, refusalPageCandidates, linkedRefusalView, NEW_PAGE_CHOICE, guidChangeView, repairAddresses, wrongAddressSet, OPEN_ACTIONS, COPY_SHEET_TEXT, WAYS_SHEET_TEXT } from './feedcheck.js';
+import { checkRows, unreadableRows, hasShowGrant, checkTexts, pageRefusalView, indexWarningView, refusalPageCandidates, linkedRefusalView, NEW_PAGE_CHOICE, guidChangeView, repairAddresses, wrongAddressSet, OPEN_ACTIONS, COPY_SHEET_TEXT, WAYS_SHEET_TEXT } from './feedcheck.js';
 import { addressParts } from './breaks.js';
 import { buildDateNotices } from './builddate.js';
 import { versionLabel, LOCK_HELP, hasSpace, spaceNotice, ROW_SPACE_NOTE, newFeedAddress, newFeedAddressLine, libraryFolderRow } from './feedfacts.js';
@@ -2433,6 +2433,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
         <ul class="address-list">${otherBad.map((b) => html`<li><span class="mono">${b.field}</span>: <span class="mono">${b.value}</span></li>`)}</ul>
       </div>`}
       ${refusal && html`<${LinkRefusal} refusal=${refusal} busy=${busy} onRepair=${repair} />`}
+      ${diff && html`<${IndexWarning} reason=${diff.index_warning} title=${draft.model?.title || thisFeed.title} />`}
       ${pageRefusal && html`<div class="notice error" role="alert"><strong>${pageRefusal.title}</strong><p>${pageRefusal.line}</p>
         ${pageRefusal.noRole && html`<p>${pageRefusal.noRole.line}</p><div class="actions">
           <button class="button action" type="button" disabled=${busy} onClick=${makeArtistLink}>${pageRefusal.noRole.button}</button></div>`}
@@ -2475,6 +2476,7 @@ function ReviewSheet({ feedId, feedConnectorId, draft, open, mergeRequest = 0, o
           <label class="check"><input type="checkbox" checked=${row.checked} disabled=${busy || row.locked}
             onChange=${(e) => toggleAlso(row.id, e.target.checked)} /><span>${row.label}</span></label>
           <p class="hint">${row.note}</p>
+          <${IndexWarning} reason=${row.diff.index_warning} title=${row.title} />
           ${row.diff.changed && html`<${DiffView} diff=${row.diff} />`}
         </div>`)}
         <p class="hint">${ALSO_WRITE_HINT}</p>
@@ -2581,15 +2583,14 @@ function VersionsSheet({ feedId, draft, open, onClose }) {
   </dialog>`;
 }
 
-// The short status of the toolbar (ADR 0029 item 1). It differs from the
-// long status of the review sheet. `draft.changed` from the server also
-// counts the pending host operations (ADR 0036 item 14).
-function toolbarStatus(draft) {
-  if (draft.stepError) return { text: draft.stepError, error: true };
-  if (draft.status === 'idle' || draft.status === 'loading') return { text: 'Loading…' };
-  if (draft.status === 'waiting' || draft.status === 'saving') return { text: 'Saving…' };
-  if (draft.status === 'failed') return { text: 'Not saved', error: true };
-  return draft.changed ? { text: 'Saved, not written' } : { text: 'No changes' };
+// The open Catalog change set for the top bar of a page (ADR 0267 item 7).
+// The shell gives the value. It is null when no change set is open.
+export const OpenChangeSetContext = createContext(null);
+
+// The warning does not prevent a write (ADR 0267 item 9).
+export function IndexWarning({ reason, title }) {
+  const view = indexWarningView(reason, title);
+  return view && html`<div class="notice warning" role="status"><strong><${Icon} name="alert" />${view.title}</strong><p>${view.text}</p></div>`;
 }
 
 // The form of AddFeedRowSheet that makes a page of one role (ADR 0240 item
@@ -2641,12 +2642,14 @@ export function DraftToolbar({ feedId, feedConnectorId, draft, onWritten, connec
       window.removeEventListener(OPEN_MERGE, openMerge);
     };
   }, []);
-  const status = toolbarStatus(draft);
+  const changeSet = useContext(OpenChangeSetContext);
+  const showSet = showsChangeSet(feedId, draft, changeSet);
+  const status = toolbarStatus(draft, showSet ? changeSet : null);
   return html`<div class="draft-toolbar">
     <${UndoButtons} canUndo=${draft.canUndo} canRedo=${draft.canRedo} undo=${draft.undo} redo=${draft.redo} />
     <span class=${`draft-status${status.error ? ' error' : ''}`} role="status">${status.text}</span>
     <button class="button" type="button" onClick=${() => setOpen('versions')}>Versions</button>
-    <button class="button primary" type="button" onClick=${() => setOpen('review')}>Review</button>
+    <button class="button primary" type="button" onClick=${() => (showSet ? go({ name: 'change-set', id: changeSet.id }) : setOpen('review'))}>Review</button>
     <${ReviewSheet} feedId=${feedId} feedConnectorId=${feedConnectorId} draft=${draft} open=${open === 'review'} mergeRequest=${mergeRequest}
       onWritten=${onWritten} onClose=${() => setOpen(null)} connectors=${connectors} onOpenHosts=${onOpenHosts}
       feeds=${feeds} onListChanged=${onListChanged} onMakeArtist=${(request) => setMaking(request || {})} linkedPage=${linkedPage} setLinkedPage=${setLinkedPage}
@@ -2943,12 +2946,13 @@ export function MoveRefusal({ error, feeds, onAddHost, onOpenChanges }) {
 // `PAGE_ACTION_NAMES`, and `above` is the page above the tree row that opened
 // the sheet, or null. `prepare` runs before the call, and false stops the
 // change.
-export function PageChangeSheet({ page, action, above, startSelected, feeds, prepare, onChanged, onAddHost, onOpenChanges, onClose }) {
+export function PageChangeSheet({ page, action, above, startSelected, feeds, connectors, prepare, onChanged, onListChanged, onAddHost, onOpenChanges, onClose }) {
   const ref = useSheet(true);
   const { busy, error, run } = useAction();
   const sheet = pageSheet(page, action);
+  const [making, setMaking] = useState(false);
   const [query, setQuery] = useState('');
-  // `undefined` is no selected row, and `null` is the row "Not published".
+  // `undefined` is no selected row, and `null` is the row "Self-published".
   const [selected, setSelected] = useState(startSelected);
   // The checked releases. `null` is the time before the start selection.
   const [checked, setChecked] = useState(null);
@@ -2980,7 +2984,7 @@ export function PageChangeSheet({ page, action, above, startSelected, feeds, pre
     return () => { current = false; };
   }, [selected, checkedKey]);
   const result = pageSheetResult(page, action, selected, preview);
-  const rows = pageChoiceRows(feeds, page, action, query);
+  const groups = pageChoiceRows(feeds, page, action, query);
   const releases = pageReleaseRows(feeds, page, checked || []);
   const toggle = (id) => setChecked((before) => {
     const list = before || [];
@@ -2998,14 +3002,19 @@ export function PageChangeSheet({ page, action, above, startSelected, feeds, pre
     <div class="body"><div class="form">
       <p class="page-change-now"><span class="label">Now</span><span>${now || pageNow(page, feeds)}</span></p>
       ${sheet.role !== null && html`<${SearchField} label=${sheet.searchLabel} value=${query} onInput=${(event) => setQuery(event.target.value)} />
-        <div class="group rows page-change-list" role="group" aria-label=${sheet.role === 'label' ? 'Labels' : 'Publishers'}>
-          ${rows.map((row) => html`<button class="link-row pick-row" type="button" key=${row.id ?? 'none'} aria-pressed=${selected === row.id ? 'true' : 'false'}
-            onClick=${() => setSelected(row.id)}>
-            <span class=${row.dot ? `dot ${row.dot}` : 'dot-slot'} aria-hidden="true"></span>
-            <span class="text"><span class="label">${row.title}</span>${row.sub && html`<span class="summary">${row.sub}</span>`}</span>
-            ${row.now && html`<span class="now-mark">now</span>`}</button>`)}
-          ${rows.length === 0 && html`<p class="empty">${sheet.role === 'label' ? 'No label matches.' : 'No publisher matches.'}</p>`}
-        </div>`}
+        ${groups.map((group) => html`<section aria-label=${group.title}>
+          <h3 class="page-change-heading">${group.title}</h3>
+          <div class="group rows page-change-list">
+            ${group.rows.map((row) => row.make
+              ? html`<button class="link-row add" type="button" key=${row.id} disabled=${busy} onClick=${() => setMaking(true)}>${row.title}</button>`
+              : html`<button class="link-row pick-row" type="button" key=${row.id ?? 'none'} aria-pressed=${selected === row.id ? 'true' : 'false'}
+                onClick=${() => setSelected(row.id)}>
+                <span class=${row.dot ? `dot ${row.dot}` : 'dot-slot'} aria-hidden="true"></span>
+                <span class="text"><span class="label">${row.title}</span>${row.sub && html`<span class="summary">${row.sub}</span>`}</span>
+                ${row.now && html`<span class="now-mark">now</span>`}</button>`)}
+            ${group.rows.length === 0 && html`<p class="empty">${sheet.role === 'label' ? 'No label matches.' : 'No publisher matches.'}</p>`}
+          </div>
+        </section>`)}`}
       ${releases.length > 0 && html`<h3 class="page-change-heading">${sheet.listTitle}</h3>
         <div class="group rows">${releases.map((row) => html`<${FeedCheckRow} key=${row.id} title=${row.title} checked=${row.checked}
           onChange=${() => toggle(row.id)} />`)}</div>`}
@@ -3019,7 +3028,14 @@ export function PageChangeSheet({ page, action, above, startSelected, feeds, pre
       <div class="actions"><button class="button" type="button" onClick=${() => ref.current.close()}>Cancel</button>
         <button class="button primary" type="button" disabled=${busy || !result.ready} onClick=${change}>${sheet.button}</button></div>
     </div></div>
-  </dialog>`;
+  </dialog>
+    ${making && html`<${AddFeedRowSheet} open=${ARTIST_PAGE_FORM} connectors=${connectors} feeds=${feeds} start=${{ role: sheet.role }}
+      onAdded=${async (made) => {
+        await onListChanged?.();
+        setSelected(made.id);
+        setQuery('');
+        setMaking(false);
+      }} onConnect=${onAddHost} onClose=${() => setMaking(false)} />`}`;
 }
 
 // The Add sheet signs or publishes pages (ADR 0254 items 18 to 21).
@@ -3284,7 +3300,7 @@ function ReleaseCreditFields({ feed, feeds, draft, model, update, go, onListChan
         onClick=${() => change('', 'PUT', { role: 'hosting', page: view.follows })}>${view.followLabel}</button></div>`}
     <//>`)}
     ${notice && html`<${CatalogUndoNotice} key=${notice.notice} answer=${notice} api=${api} prepare=${() => draft.flush()}
-      onUndone=${async () => { setNotice(null); await reload(); }} onReview=${(id) => go({ name: 'change-set', id })} />`}
+      onUndone=${async () => { setNotice(null); await reload(); }} onClose=${() => setNotice(null)} />`}
     ${making && html`<${AddFeedRowSheet} open=${ARTIST_PAGE_FORM} connectors=${connectors} feeds=${feeds} start=${{ role: making }}
       onAdded=${made} onConnect=${() => go({ name: 'hosts' })} onClose=${() => setMaking(null)} />`}`;
 }

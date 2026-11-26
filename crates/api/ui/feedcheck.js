@@ -118,6 +118,15 @@ export function pageRefusalView(reason, selected = false, noRoleTitle = null) {
   };
 }
 
+// Show only the warning code of the core (ADR 0267 item 9).
+export function indexWarningView(reason, title) {
+  if (reason !== 'no_tracks_or_payment_split') return null;
+  return {
+    title: `Music Index does not list ${title || 'Untitled feed'}: it has no track and no payment split.`,
+    text: 'Add a track or a split. You can write it now and add them later.',
+  };
+}
+
 // The pages in the menu of the refusal panel (ADR 0257 item 19). A release
 // gets the artist pages only. Each other feed keeps the pages in `others`.
 export function refusalPageCandidates(feeds, medium, others) {

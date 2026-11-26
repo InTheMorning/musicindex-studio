@@ -153,5 +153,5 @@ Recommendation: the retire flow of ADR 0131 cannot complete step 2 until Music I
 
 ## Plan For The Findings
 
-- Defects with no decision: findings 2, 4, 5, 6, 8 and 9. One task file.
-- Changes of an ADR: findings 1, 3, 11 and 12. Findings 3 and 12 get mockups before the ADR.
+- Defects with no decision: findings 2, 4, 5, 6, 8 and 9, in [task 259](../tasks/studio-v1-task-259-defects-of-the-walk-of-2026-11-26.md).
+- Changes of an ADR: findings 1, 3, 11 and 12, in [ADR 0267](../adr/0267-a-page-sheet-can-make-a-new-page-and-review-has-one-button.md). The operator selected the mockups of findings 3 and 12 on 2026-11-26: the group "New" at the top of a page sheet, and one **Review** button in the top bar.

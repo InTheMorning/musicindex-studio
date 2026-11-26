@@ -223,6 +223,7 @@ This is the index of the project documents. The user guide is in the root [READM
 - [ADR 0264: Overview groups the releases below label, artist and curator headings](adr/0264-overview-groups-the-releases-below-label-artist-and-curator-headings.md)
 - [ADR 0265: A changed feed names Studio as its generator](adr/0265-a-changed-feed-names-studio-as-its-generator.md)
 - [ADR 0266: A playlist shows below each page that its curator link names](adr/0266-a-playlist-shows-below-each-page-that-its-curator-link-names.md)
+- [ADR 0267: A page sheet can make a new page, and Review has one button](adr/0267-a-page-sheet-can-make-a-new-page-and-review-has-one-button.md)
 
 
 ## Plans

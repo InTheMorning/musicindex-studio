@@ -353,6 +353,7 @@ A phase gets task files in `docs/tasks/` before work starts.
 - Decision for findings 4 and 5 of the [check of task 254](../reviews/2026-11-25-task-254-check.md): [ADR 0263](../adr/0263-overview-is-the-start-page-and-each-page-keeps-the-sequence-of-its-feed.md). [Task 256](../tasks/studio-v1-task-256-overview-and-the-sequence-of-a-page.md) gives the build in four packets: the release date (core and API), Overview, the Catalog rows and the sequence of a page. The four packets are built. The operator checks are open.
 - Decision for the channel `generator`: [ADR 0265](../adr/0265-a-changed-feed-names-studio-as-its-generator.md). [Task 257](../tasks/studio-v1-task-257-the-generator-tag.md) built it. The human check after a write to a real file host is open.
 - Decision for a curator link: [ADR 0266](../adr/0266-a-playlist-shows-below-each-page-that-its-curator-link-names.md). [Task 258](../tasks/studio-v1-task-258-a-curator-link-holds-a-playlist.md) built it, with its screenshot check.
+- Findings of the [walk of 2026-11-26](../reviews/2026-11-26-human-check-walk.md): [task 259](../tasks/studio-v1-task-259-defects-of-the-walk-of-2026-11-26.md) corrects findings 2, 4, 5, 6, 8 and 9. [ADR 0267](../adr/0267-a-page-sheet-can-make-a-new-page-and-review-has-one-button.md) gives findings 1, 3, 11 and 12. Its task is not written.
 
 ### Phase 13: Desktop Shell
 

@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { outsideMark, outsideNotice, readOnlyHostNotice, indexNotice, releaseMusicIndexLink, moveNotice, moveAgainDelay, tagTime, writeNotice, nextNoticeLoad, LATE_NOTICE_LOAD, WRITE_NOTICE_AGE, eachLimited, OUTSIDE_LIMIT, panelSet, stateMark, feedsToCheck } from '../ui/outsidecheck.js';
+import { outsideMark, outsideNotice, readOnlyHostNotice, indexNotice, releaseMusicIndexLink, moveNotice, moveAgainDelay, tagTime, writeNotice, nextNoticeLoad, LATE_NOTICE_LOAD, WRITE_NOTICE_AGE, eachLimited, OUTSIDE_LIMIT, panelSet, stateMark, feedsToCheck, noticeCheck } from '../ui/outsidecheck.js';
 import { pageSequence, tierError } from '../ui/pages.js';
 import { INDEX_READ_AGAIN_MS } from '../ui/releasemove.js';
 
@@ -365,4 +365,13 @@ test('The outline head checks a feed, and a write checks the written feed (task 
   assert.match(editor, /new CustomEvent\(OUTSIDE_RECHECK, \{ detail: \{ id: feed\.id \} \}\)/, fix);
   assert.match(app, /addEventListener\(OUTSIDE_RECHECK,/, fix);
   assert.match(app, /removeEventListener\(OUTSIDE_RECHECK,/, fix);
+});
+
+test('the notice of the hosted file uses the known panel result until the page read ends', () => {
+  const known = { state: 'changed' };
+  assert.equal(outsideNotice(noticeCheck(null, false, known)).strong, 'The hosted file changed outside Studio.',
+    'Before the page read ends, the notice must come from the known result, or it comes late and moves the rows down.');
+  assert.equal(noticeCheck(null, false, undefined), null);
+  assert.equal(outsideNotice(noticeCheck({ state: null }, true, known)), null, 'The answer of the page read replaces the known result.');
+  assert.equal(noticeCheck(null, true, known), null, 'A failed page read shows no notice.');
 });

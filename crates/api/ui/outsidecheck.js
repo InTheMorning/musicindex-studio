@@ -55,6 +55,13 @@ export function outsideNotice(check) {
   };
 }
 
+// The check that gives the notice of the hosted file. Until the read of the
+// page gives its answer, the notice uses the last known result of the panel
+// check, so the notice does not come late and move the page down.
+export function noticeCheck(check, loaded, known) {
+  return loaded ? check : (known || null);
+}
+
 // The notice of a read-only feed that followed a move (ADR 0211 items 15
 // and 16), or null. The API gives `followed_move` and `host_for_address`.
 export function readOnlyHostNotice(feed) {

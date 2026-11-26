@@ -21,6 +21,10 @@ Operator choices (the main session, in the approved ADR 0263):
 - Packet 256d: the button **{Type} Page** of ADR 0261 item 7 was only in the head of the old group page, so it is removed with that page. ADR 0261 item 7 is open until the operator confirms this.
 - Packet 256d: the "Also on" note (ADR 0254 item 9) and the line "⚠ {page} does not list it yet" (task 220) move to the rows of the group Releases.
 - Packet 256d: **Move to the top** puts the release before the other release entries that the group shows. A release entry that is not in the collection keeps its position (ADR 0263 item 13b).
+- Agent check of 2026-11-25, in the release binary: after a move and **Undo**, the head showed "Saved, not written", and the `feedImg` attributes were on incorrect releases. The cause: an undo step sent the keys of an earlier draft (ADR 0022 item 5).
+- The correction of that defect gives each restored entry the key of its client ID in the server draft. An entry that a save removed gets no key (`restoreKeys` in `undohistory.js`). The draft hook keeps the last server draft of each feed from each load and each save.
+- A load of the same draft revision keeps the client IDs, so the undo steps of an earlier visit match (`carryCids`). A load of a different revision keeps the client ID of each entry with the same content (`carryCidsByContent`). An entry with changed content gets a new client ID, and its earlier undo steps keep their own keys. This also applies to each other list and to Redo.
+- Agent check of 2026-11-25: the notice "The hosted file changed outside Studio." came after the read of the page and moved the rows down. Until that read ends, the notice uses the last known result of the panel check (`noticeCheck` in `outsidecheck.js`). Each read of the page also gives its result to the panel check. "Follow the Move" removes the panel result, so the notice does not show the move again.
 - Packet 256d: the People list keeps `SortMenu` and `LetterBar`. The rest of the `rg` matches are the view name of the list pages, the filter `releases` of Overview and count nouns.
 
 ## Goal

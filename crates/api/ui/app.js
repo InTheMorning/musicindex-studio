@@ -35,7 +35,7 @@ import { DeleteUndoProvider, useDeleteUndo, undoNoticeText, UNDO_COMPLETE, Catal
 const settingsHistory = makeHistory();
 import { PeoplePage, PersonPage, CheckPage, WalletPage, useLookup, useReviewFindings, ReviewPanels, ReviewCorrectSheet } from './peoplepages.js';
 import { deletedNotice } from './feeddelete.js';
-import { OUTSIDE_LIMIT, OUTSIDE_SETTING_LABEL, OUTSIDE_SETTING_HINT, outsideMark, outsideNotice, readOnlyHostNotice, indexNotice, releaseMusicIndexLink, moveNotice, moveAgainDelay, writeNotice, nextNoticeLoad, eachLimited, panelSet, stateMark, feedsToCheck } from './outsidecheck.js';
+import { OUTSIDE_LIMIT, OUTSIDE_SETTING_LABEL, OUTSIDE_SETTING_HINT, outsideMark, outsideNotice, noticeCheck, readOnlyHostNotice, indexNotice, releaseMusicIndexLink, moveNotice, moveAgainDelay, writeNotice, nextNoticeLoad, eachLimited, panelSet, stateMark, feedsToCheck } from './outsidecheck.js';
 import { collectionMark, collectionRow, collectionSectionActions, collectionSheet, collectionAction, switchCollectionRows, CLOSED_EXPORT_HINT, COLLECTIONS_HINT, OPENING_TEXT } from './collectionlist.js';
 import { localInputToIso, isoToLocalInput, zoneHint, nowInput, unreadDateHint } from './datetime.js';
 import { durationText, readDuration, DURATION_ERROR, unreadDurationHint } from './duration.js';
@@ -2198,7 +2198,7 @@ const PageActionContext = createContext(() => {});
 // The drag of a Catalog row (ADR 0254 item 38). Without a provider, no row
 // can move.
 const CatalogDragContext = createContext({ narrow: true, busy: false, page: null, key: null, over: null, targets: [] });
-const OutsideContext = createContext({ feeds: [], results: {}, running: new Set(), check: () => {} });
+const OutsideContext = createContext({ feeds: [], results: {}, running: new Set(), check: () => {}, remember: () => {} });
 
 // The state mark of a row of the left panel, for the feeds that `ids` covers
 // (ADR 0259 items 14 to 17). `set` is a list of feeds. It gives nothing for a
@@ -4635,8 +4635,8 @@ function Shell({ vault, onLock, version }) {
   const releasesOpened = useRef({ shown: false, count: 0 });
   if (view.name === 'overview' && !releasesOpened.current.shown) releasesOpened.current.count += 1;
   releasesOpened.current.shown = view.name === 'overview';
-  const { results, running, check } = useOutsideChecks(feeds, releasesOpened.current.count);
-  const outsideValue = { feeds: feeds || [], results, running, check };
+  const { results, running, check, remember } = useOutsideChecks(feeds, releasesOpened.current.count);
+  const outsideValue = { feeds: feeds || [], results, running, check, remember };
   const panel = leftPanel({
     view, feeds: feeds || [], model: draft.model, vaultOpen: vault === 'open',
     vaultLocked: serverMode && vault === 'locked', narrow, collection, serverMode,
@@ -5665,13 +5665,19 @@ function useOutsideChecks(feeds, key) {
     window.addEventListener(OUTSIDE_RECHECK, recheck);
     return () => window.removeEventListener(OUTSIDE_RECHECK, recheck);
   }, []);
-  return { results, running, check };
+  // A feed page gives the answer of its own read, so that the panel does not
+  // keep an earlier result. `null` removes the result.
+  const remember = (id, answer) => setResults((old) => ({ ...old, [id]: answer }));
+  return { results, running, check, remember };
 }
 
 // The notices of the check on a feed page (ADR 0259 items 2 to 5). Each new
 // read of the feed checks again.
 function OutsideNotices({ feed, busy, refresh, onChanged, onCheck, onListChanged }) {
   const [check, setCheck] = useState(null);
+  // False until the first read of this feed gives its answer.
+  const [loaded, setLoaded] = useState(false);
+  const { results, remember } = useContext(OutsideContext);
   const [reads, setReads] = useState(0);
   const confirmedHere = useRef(false);
   // The `written_at` of the write that the user dismissed. A new write shows
@@ -5692,13 +5698,16 @@ function OutsideNotices({ feed, busy, refresh, onChanged, onCheck, onListChanged
     setReads(readsRef.current);
     return api(`/feeds/${feed.id}/outside?index=true`).then((answer) => {
       setCheck(answer);
+      setLoaded(true);
+      remember(feed.id, answer);
       if (onCheck) onCheck(answer);
     }, () => {
       setCheck(null);
+      setLoaded(true);
       if (onCheck) onCheck(null);
     });
   };
-  useEffect(() => { setCheck(null); if (onCheck) onCheck(null); setReads(0); readsRef.current = 0; since.current = 0; confirmedHere.current = false; writeHeight.current = 0; load(); }, [feed.id, feed.last_version]);
+  useEffect(() => { setCheck(null); setLoaded(false); if (onCheck) onCheck(null); setReads(0); readsRef.current = 0; since.current = 0; confirmedHere.current = false; writeHeight.current = 0; load(); }, [feed.id, feed.last_version]);
   useEffect(() => { setDismissedWrite(null); }, [feed.id]);
   useEffect(() => {
     window.addEventListener(ANNOUNCE_RELOAD, load);
@@ -5726,7 +5735,7 @@ function OutsideNotices({ feed, busy, refresh, onChanged, onCheck, onListChanged
     const timer = setTimeout(() => setClock((n) => n + 1), delay);
     return () => clearTimeout(timer);
   }, [check, feed.id]);
-  const notice = outsideNotice(check);
+  const notice = outsideNotice(noticeCheck(check, loaded, results[feed.id]));
   const move = moveNotice(check, Date.now() / 1000);
   const writtenNow = writeNotice(check, { reads, nowSeconds: Date.now() / 1000, confirmedHere: confirmedHere.current, since: since.current });
   // The confirmation shows only after the page showed that Music Index had
@@ -5763,6 +5772,7 @@ function OutsideNotices({ feed, busy, refresh, onChanged, onCheck, onListChanged
   };
   const follow = () => run(async () => {
     await api(`/feeds/${feed.id}/outside/follow`, { method: 'POST' });
+    remember(feed.id, null);
     await onChanged();
     await load();
   });
@@ -5772,6 +5782,7 @@ function OutsideNotices({ feed, busy, refresh, onChanged, onCheck, onListChanged
   const moveBack = () => run(async () => {
     const oldHost = feed.connector_id;
     await api(`/feeds/${feed.id}/outside/follow`, { method: 'POST' });
+    remember(feed.id, null);
     await onChanged();
     await load();
     window.dispatchEvent(new CustomEvent(OPEN_FEED_MOVE, { detail: { id: feed.id, start: oldHost } }));

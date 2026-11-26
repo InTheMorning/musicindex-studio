@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef, useCallback } from './vendor/htm-preact-standalone.module.js';
 import { api } from './app.js';
 import { withSavedCover } from './cover.js';
-import { makeHistory, focusedField, isOperationStep } from './undohistory.js';
+import { makeHistory, focusedField, isOperationStep, positions, rekey, keysOf, restoreKeys, carryCids, carryCidsByContent } from './undohistory.js';
 
 const histories = new Map();
 
@@ -12,6 +12,26 @@ const histories = new Map();
 function historyFor(feedId) {
   if (!histories.has(feedId)) histories.set(feedId, makeHistory());
   return histories.get(feedId);
+}
+
+// The last known server draft of each feed: its revision, its model with
+// client IDs, the key of each client ID, and the client IDs that a save
+// removed. It lives as long as the undo history, so that Undo can give the
+// entries of an earlier step their keys in the server draft (ADR 0022 item 5).
+const serverStates = new Map();
+
+function rememberServer(feedId, model, revision, keys, saved) {
+  const last = serverStates.get(feedId);
+  const removed = new Set(last ? last.removed : []);
+  if (saved && last) for (const cid of last.keys.keys()) if (!keys.has(cid)) removed.add(cid);
+  serverStates.set(feedId, { model, revision, keys, removed });
+}
+
+// The restored model of an undo or a redo step, with the keys of the server
+// draft.
+function withServerKeys(feedId, model) {
+  const state = serverStates.get(feedId);
+  return state ? restoreKeys(model, state.keys, state.removed) : model;
 }
 
 // ---- Client IDs and keys ----
@@ -37,39 +57,6 @@ export function withCids(value) {
 // The model without client IDs, as the API gets it.
 export function strip(model) {
   return JSON.parse(JSON.stringify(model, (name, value) => (name === '_cid' ? undefined : value)));
-}
-
-// The position of each entry in its list, by client ID.
-export function positions(value, found = new Map()) {
-  if (Array.isArray(value)) {
-    value.forEach((entry, index) => {
-      if (entry && entry._cid) found.set(entry._cid, index);
-      positions(entry, found);
-    });
-  } else if (value && typeof value === 'object') {
-    for (const field of Object.values(value)) positions(field, found);
-  }
-  return found;
-}
-
-// Give each entry that the server has the key of its position. An entry that
-// the user added during the save has no key yet.
-export function rekey(value, found) {
-  if (Array.isArray(value)) {
-    return value.map((entry) => {
-      if (!entry || typeof entry !== 'object' || !entry._cid) return entry;
-      const next = rekey(entry, found);
-      const key = found.get(entry._cid);
-      if (key === undefined) delete next.key; else next.key = key;
-      return next;
-    });
-  }
-  if (value && typeof value === 'object') {
-    const copy = {};
-    for (const [name, field] of Object.entries(value)) copy[name] = rekey(field, found);
-    return copy;
-  }
-  return value;
 }
 
 // The server sets these fields of a track: the GUID of a new track (ADR 0022
@@ -172,7 +159,16 @@ export function useDraft(feedId) {
 
   const show = (draft) => {
     clearTimeout(timer.current);
-    current.current = withCids(draft.model);
+    // The entries of the server draft keep their client IDs, so that the
+    // undo steps of an earlier visit match them. The same revision matches by
+    // key. A different revision, for example after a route changed one field,
+    // matches by content.
+    const known = serverStates.get(feedId);
+    const loaded = withCids(draft.model);
+    if (!known) current.current = loaded;
+    else if (known.revision === draft.revision) current.current = carryCids(loaded, known.model);
+    else current.current = carryCidsByContent(loaded, known.model);
+    rememberServer(feedId, current.current, draft.revision, keysOf(current.current), false);
     revision.current = draft.revision;
     dirty.current = false;
     setModel(current.current);
@@ -245,8 +241,9 @@ export function useDraft(feedId) {
     });
     // The server keeps the save. When the user selected a different feed
     // during the save, this hook does not show the result.
-    if (active.current !== feedId) return;
     const found = positions(sent);
+    rememberServer(feedId, rekey(sent, found), saved.revision, found, true);
+    if (active.current !== feedId) return;
     revision.current = saved.revision;
     const copied = copyServerFields(rekey(current.current, found), saved.model, found, sent);
     current.current = withSavedCover(copied, sent, saved.model);
@@ -340,30 +337,30 @@ export function useDraft(feedId) {
     const previous = history.undo(current.current);
     if (previous === null) return;
     if (isOperationStep(previous)) return runStep(previous, 'undo');
-    current.current = previous;
-    setModel(previous);
+    current.current = withServerKeys(feedId, previous);
+    setModel(current.current);
     setCanUndo(history.canUndo);
     setCanRedo(history.canRedo);
     dirty.current = true;
     setStatus('waiting');
     clearTimeout(timer.current);
     timer.current = setTimeout(flush, SAVE_DELAY);
-  }, [flush, history, runStep]);
+  }, [feedId, flush, history, runStep]);
 
   // Restore the next model and save it (ADR 0227 items 5 and 9).
   const redo = useCallback(() => {
     const next = history.redo(current.current);
     if (next === null) return;
     if (isOperationStep(next)) { runStep(next, 'redo'); return; }
-    current.current = next;
-    setModel(next);
+    current.current = withServerKeys(feedId, next);
+    setModel(current.current);
     setCanUndo(history.canUndo);
     setCanRedo(history.canRedo);
     dirty.current = true;
     setStatus('waiting');
     clearTimeout(timer.current);
     timer.current = setTimeout(flush, SAVE_DELAY);
-  }, [flush, history, runStep]);
+  }, [feedId, flush, history, runStep]);
 
   return { model, changed, hidden, op3Tracks, grantBlocked, liveProblems, streamTypes, hasHost, draftState, bad, status, error, edits, update, flush, load, show, undo, redo, canUndo, canRedo, recordOperation, forgetOperation, stepError };
 }

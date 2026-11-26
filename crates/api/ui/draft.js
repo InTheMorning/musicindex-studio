@@ -15,23 +15,19 @@ function historyFor(feedId) {
 }
 
 // The last known server draft of each feed: its revision, its model with
-// client IDs, the key of each client ID, and the client IDs that a save
-// removed. It lives as long as the undo history, so that Undo can give the
+// client IDs, and the key of each client ID. It lives as long as the undo history, so that Undo can give the
 // entries of an earlier step their keys in the server draft (ADR 0022 item 5).
 const serverStates = new Map();
 
-function rememberServer(feedId, model, revision, keys, saved) {
-  const last = serverStates.get(feedId);
-  const removed = new Set(last ? last.removed : []);
-  if (saved && last) for (const cid of last.keys.keys()) if (!keys.has(cid)) removed.add(cid);
-  serverStates.set(feedId, { model, revision, keys, removed });
+function rememberServer(feedId, model, revision, keys) {
+  serverStates.set(feedId, { model, revision, keys });
 }
 
 // The restored model of an undo or a redo step, with the keys of the server
 // draft.
 function withServerKeys(feedId, model) {
   const state = serverStates.get(feedId);
-  return state ? restoreKeys(model, state.keys, state.removed) : model;
+  return state ? restoreKeys(model, state.keys) : model;
 }
 
 // ---- Client IDs and keys ----
@@ -168,7 +164,7 @@ export function useDraft(feedId) {
     if (!known) current.current = loaded;
     else if (known.revision === draft.revision) current.current = carryCids(loaded, known.model);
     else current.current = carryCidsByContent(loaded, known.model);
-    rememberServer(feedId, current.current, draft.revision, keysOf(current.current), false);
+    rememberServer(feedId, current.current, draft.revision, keysOf(current.current));
     revision.current = draft.revision;
     dirty.current = false;
     setModel(current.current);
@@ -242,7 +238,7 @@ export function useDraft(feedId) {
     // The server keeps the save. When the user selected a different feed
     // during the save, this hook does not show the result.
     const found = positions(sent);
-    rememberServer(feedId, rekey(sent, found), saved.revision, found, true);
+    rememberServer(feedId, rekey(sent, found), saved.revision, found);
     if (active.current !== feedId) return;
     revision.current = saved.revision;
     const copied = copyServerFields(rekey(current.current, found), saved.model, found, sent);

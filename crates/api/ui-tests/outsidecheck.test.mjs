@@ -373,5 +373,6 @@ test('the notice of the hosted file uses the known panel result until the page r
     'Before the page read ends, the notice must come from the known result, or it comes late and moves the rows down.');
   assert.equal(noticeCheck(null, false, undefined), null);
   assert.equal(outsideNotice(noticeCheck({ state: null }, true, known)), null, 'The answer of the page read replaces the known result.');
-  assert.equal(noticeCheck(null, true, known), null, 'A failed page read shows no notice.');
+  assert.equal(noticeCheck(null, true, known), known, 'A failed page read keeps the known notice.');
+  assert.equal(noticeCheck(null, true, undefined), null);
 });

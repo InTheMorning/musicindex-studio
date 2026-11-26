@@ -2594,6 +2594,9 @@ function Crumb({ feed, view, draft }) {
 function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importing, onImporting, onChanged, onListChanged, onRemoved, connectors, differences, onRescan }) {
   const { busy, error, run } = useAction();
   const [outsideCheck, setOutsideCheck] = useState(null);
+  // The ID of the feed whose page read ended, or null while it runs.
+  const [indexDone, setIndexDone] = useState(null);
+  const onOutsideCheck = (answer, done) => { setOutsideCheck(answer); setIndexDone(done ? feed.id : null); };
   const kind = feedKind(feed);
   // The core moves a draft with no edits to the file that it reads, so the
   // edits of the user go first, and the draft loads again (ADR 0007 item 6).
@@ -2622,7 +2625,13 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
   const check = useFeedCheck(feed.id, draft);
   const [addRecipient, setAddRecipient] = useState(false);
   const checklist = releaseChecklist(check.check);
+  // The link comes only from the read of this visit. While the read runs, an
+  // empty line keeps the space of the link, so that the link does not move the
+  // page down when it comes. A feed that the last read found not held gets no
+  // empty line.
   const musicIndexLink = releaseMusicIndexLink(feed, outsideCheck);
+  const heldBefore = feed.podcast_guid ? knownIndexHeld.get(feed.podcast_guid) : false;
+  const musicIndexPending = !musicIndexLink && indexDone !== feed.id && heldBefore !== false;
   // The open actions of a finding, for the checklist and for the Check page
   // (ADR 0219 items 3 and 7). `row` is a row of `checkRows`.
   const openFinding = (row) => {
@@ -2680,6 +2689,7 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
             ? html`<${FeedAddress} url=${feed.public_url} />`
             : html`<p class="sub mono">This feed has no public address yet.</p>`}
           ${musicIndexLink && html`<a class="button link index-link" href=${musicIndexLink.href} target="_blank" rel="noopener">${musicIndexLink.text}</a>`}
+          ${musicIndexPending && html`<span class="button link index-link index-link-space" aria-hidden="true">Open on musicindex.org</span>`}
         </div>
         ${(publisher || feed.last_version !== null) && html`<div class="head-actions">
           ${publisher
@@ -2700,7 +2710,7 @@ function EditableFeed({ feed, feeds, draft, view, go, adding, onAdding, importin
         Open Review and write the draft to make the file.
       </div>`}
       <${AddressDifferences} feed=${feed} />
-      <${OutsideNotices} feed=${feed} busy=${busy} refresh=${refresh} onChanged=${onChanged} onCheck=${setOutsideCheck} onListChanged=${onListChanged} />
+      <${OutsideNotices} feed=${feed} busy=${busy} refresh=${refresh} onChanged=${onChanged} onCheck=${onOutsideCheck} onListChanged=${onListChanged} />
       ${checklist && html`<section class="release-checklist" aria-labelledby="release-checklist-title">
         <h2 id="release-checklist-title">${checklist.title}</h2>
         <ul>${checklist.rows.map((row) => html`<li key=${row.label}>
@@ -5671,8 +5681,14 @@ function useOutsideChecks(feeds, key) {
   return { results, running, check, remember };
 }
 
+// For each podcast GUID, true when the last page read found the feed held by
+// Music Index (ADR 0220 items 1 to 3), for the life of the page. It sets only
+// the empty line of the link, never the link itself.
+const knownIndexHeld = new Map();
+
 // The notices of the check on a feed page (ADR 0259 items 2 to 5). Each new
 // read of the feed checks again.
+
 function OutsideNotices({ feed, busy, refresh, onChanged, onCheck, onListChanged }) {
   const [check, setCheck] = useState(null);
   // False until the first read of this feed gives its answer.
@@ -5693,18 +5709,30 @@ function OutsideNotices({ feed, busy, refresh, onChanged, onCheck, onListChanged
   const since = useRef(0);
   const { busy: sending, error, run } = useAction();
   const nav = useContext(NavContext);
+  // The feed that the page shows now. The answer of a read for a feed that
+  // the user left goes only to the panel.
+  const shownFeed = useRef(feed.id);
+  shownFeed.current = feed.id;
   const load = () => {
     readsRef.current += 1;
     setReads(readsRef.current);
-    return api(`/feeds/${feed.id}/outside?index=true`).then((answer) => {
+    const id = feed.id;
+    return api(`/feeds/${id}/outside?index=true`).then((answer) => {
+      remember(id, answer);
+      // A lookup that did not answer (`held` is not true or false) leaves the
+      // feed unknown, so the next visit keeps the empty line.
+      const held = answer ? answer.held : undefined;
+      if (feed.podcast_guid && typeof held === 'boolean') knownIndexHeld.set(feed.podcast_guid, held);
+      else if (feed.podcast_guid && answer && answer.enabled !== false) knownIndexHeld.delete(feed.podcast_guid);
+      if (shownFeed.current !== id) return;
       setCheck(answer);
       setLoaded(true);
-      remember(feed.id, answer);
-      if (onCheck) onCheck(answer);
+      if (onCheck) onCheck(answer, true);
     }, () => {
+      if (shownFeed.current !== id) return;
       setCheck(null);
       setLoaded(true);
-      if (onCheck) onCheck(null);
+      if (onCheck) onCheck(null, true);
     });
   };
   useEffect(() => { setCheck(null); setLoaded(false); if (onCheck) onCheck(null); setReads(0); readsRef.current = 0; since.current = 0; confirmedHere.current = false; writeHeight.current = 0; load(); }, [feed.id, feed.last_version]);

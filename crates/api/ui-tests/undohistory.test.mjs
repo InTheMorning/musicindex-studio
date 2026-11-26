@@ -168,7 +168,7 @@ test('ADR 0022 item 5: an undo after a move gives each entry the key of the serv
   // The draft had A, B, C. The move put C first, and the save gave the new keys.
   const before = { remote_items: [{ _cid: 1, key: 0, title: 'A' }, { _cid: 2, key: 1, title: 'B' }, { _cid: 3, key: 2, title: 'C' }] };
   const saved = { remote_items: [{ _cid: 3, key: 0, title: 'C' }, { _cid: 1, key: 1, title: 'A' }, { _cid: 2, key: 2, title: 'B' }] };
-  const restored = restoreKeys(before, keysOf(saved), new Set());
+  const restored = restoreKeys(before, keysOf(saved));
   assert.deepEqual(titlesAndKeys(restored.remote_items), [['A', 1], ['B', 2], ['C', 0]],
     'An undo step must send the keys of the server draft, or the core copies the unmodeled attributes of a different entry.');
   assert.equal(before.remote_items[0].key, 0, 'The step in the history does not change.');
@@ -177,16 +177,17 @@ test('ADR 0022 item 5: an undo after a move gives each entry the key of the serv
 test('ADR 0022 item 5: an undo of a saved removal gives the restored entry no key, also in a nested list', () => {
   const before = { items: [{ _cid: 1, key: 0, title: 'One', persons: [{ _cid: 5, key: 0 }, { _cid: 6, key: 1 }] }, { _cid: 2, key: 1, title: 'Two' }] };
   const saved = { items: [{ _cid: 1, key: 0, title: 'One', persons: [{ _cid: 6, key: 0 }] }] };
-  const restored = restoreKeys(before, keysOf(saved), new Set([2, 5]));
+  const restored = restoreKeys(before, keysOf(saved));
   assert.equal(restored.items[0].key, 0);
   assert.equal('key' in restored.items[1], false, 'The server draft has no element for a removed entry.');
   assert.equal('key' in restored.items[0].persons[0], false);
   assert.equal(restored.items[0].persons[1].key, 0);
 });
 
-test('ADR 0022 item 5: an entry with an unknown client ID keeps its own key', () => {
+test('ADR 0022 item 5: an entry with an unknown client ID gets no key', () => {
   const step = { items: [{ _cid: 9, key: 1, title: 'Two' }] };
-  assert.equal(restoreKeys(step, new Map(), new Set()).items[0].key, 1);
+  assert.equal('key' in restoreKeys(step, new Map()).items[0], false,
+    'A key from an earlier draft can name the source element of a different entry.');
 });
 
 test('ADR 0227 item 7: a load of the same server draft keeps the client IDs, so an earlier step matches', () => {
@@ -198,25 +199,22 @@ test('ADR 0227 item 7: a load of the same server draft keeps the client IDs, so 
   assert.equal(carried.items[1].title, 'Two', 'The loaded values stay.');
 });
 
-test('a new revision carries the client IDs of entries with the same content', () => {
+test('a new revision carries the client IDs by content, and by key when the sequence stays', () => {
   // The earlier server draft after a saved move: C, A, B. A route then
   // changed one field of B, and a new revision loaded with new client IDs.
   const earlier = { hidden: false, items: [
     { _cid: 'c', key: 0, title: 'C' },
     { _cid: 'a', key: 1, title: 'A', tracks: [{ _cid: 't', key: 0, n: 1 }] },
     { _cid: 'b', key: 2, title: 'B' },
-    { _cid: 'd1', key: 3, title: 'Same' },
-    { _cid: 'd2', key: 4, title: 'Same' },
   ] };
   const loaded = { hidden: true, items: [
     { _cid: 'n1', key: 0, title: 'C' },
     { _cid: 'n2', key: 1, title: 'A', tracks: [{ _cid: 'n3', key: 0, n: 1 }] },
     { _cid: 'n4', key: 2, title: 'B', hidden: true },
-    { _cid: 'n5', key: 3, title: 'Same' },
-    { _cid: 'n6', key: 4, title: 'Same' },
   ] };
   const carried = carryCidsByContent(loaded, earlier);
-  assert.deepEqual(carried.items.map((entry) => entry._cid), ['c', 'a', 'n4', 'n5', 'n6']);
+  assert.deepEqual(carried.items.map((entry) => entry._cid), ['c', 'a', 'b']);
+  assert.equal(carried.items[2].hidden, true, 'The loaded values stay.');
   assert.equal(carried.items[1].tracks[0]._cid, 't');
   // An undo step from before the move gets the keys of the new revision.
   const step = { hidden: false, items: [
@@ -224,6 +222,29 @@ test('a new revision carries the client IDs of entries with the same content', (
     { _cid: 'b', key: 1, title: 'B' },
     { _cid: 'c', key: 2, title: 'C' },
   ] };
-  const restored = restoreKeys(step, keysOf(carried), new Set());
-  assert.deepEqual(restored.items.map((entry) => entry.key), [1, 1, 0]);
+  const restored = restoreKeys(step, keysOf(carried));
+  assert.deepEqual(restored.items.map((entry) => entry.key), [1, 2, 0]);
+});
+
+test('a new revision with a changed sequence matches a changed entry by content only', () => {
+  const earlier = { items: [{ _cid: 'a', key: 0, title: 'A' }, { _cid: 'b', key: 1, title: 'B' }, { _cid: 'c', key: 2, title: 'C' }] };
+  // A route moved A to the end and changed B.
+  const loaded = { items: [{ _cid: 'n1', key: 0, title: 'B2' }, { _cid: 'n2', key: 1, title: 'C' }, { _cid: 'n3', key: 2, title: 'A' }] };
+  const carried = carryCidsByContent(loaded, earlier);
+  assert.deepEqual(carried.items.map((entry) => entry._cid), ['n1', 'c', 'a'],
+    'After a change of sequence, the same key can name a different entry.');
+});
+
+test('entries with the same content match in the sequence of their keys', () => {
+  const earlier = { persons: [{ _cid: 'p1', key: 0, name: 'X' }, { _cid: 'p2', key: 1, name: 'X' }, { _cid: 'p3', key: 2, name: 'Y' }] };
+  const loaded = { persons: [{ _cid: 'n1', key: 0, name: 'X' }, { _cid: 'n2', key: 1, name: 'X' }, { _cid: 'n3', key: 2, name: 'Y' }] };
+  assert.deepEqual(carryCidsByContent(loaded, earlier).persons.map((entry) => entry._cid), ['p1', 'p2', 'p3'],
+    'Identical entries must keep their client IDs, or Undo gives them no key and their unmodeled XML is lost.');
+});
+
+test('two changed entries do not match by key, because they can have changed places', () => {
+  const earlier = { items: [{ _cid: 'a', key: 0, title: 'A' }, { _cid: 'b', key: 1, title: 'B' }, { _cid: 'c', key: 2, title: 'C' }] };
+  // A route put C before B and changed both.
+  const loaded = { items: [{ _cid: 'n1', key: 0, title: 'A' }, { _cid: 'n2', key: 1, title: 'C2' }, { _cid: 'n3', key: 2, title: 'B2' }] };
+  assert.deepEqual(carryCidsByContent(loaded, earlier).items.map((entry) => entry._cid), ['a', 'n2', 'n3']);
 });

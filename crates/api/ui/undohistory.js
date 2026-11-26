@@ -170,30 +170,10 @@ export const keysOf = (model) => positions(model, new Map(), (entry) => entry.ke
 // An undo or a redo step holds a model with the keys of an earlier draft.
 // After a move or a removal, the same key names a different entry of the
 // server draft. Give each entry the key of its client ID in the server draft
-// (`serverKeys`). An entry that a save removed (`removed`) gets no key, so
-// the core writes it as a new element. An entry with an unknown client ID
-// keeps its own key.
-export function restoreKeys(value, serverKeys, removed) {
-  if (Array.isArray(value)) {
-    return value.map((entry) => {
-      if (!entry || typeof entry !== 'object' || !entry._cid) return entry;
-      const next = restoreKeys(entry, serverKeys, removed);
-      if (serverKeys.has(entry._cid)) {
-        const key = serverKeys.get(entry._cid);
-        if (key === undefined) delete next.key; else next.key = key;
-      } else if (removed.has(entry._cid)) {
-        delete next.key;
-      }
-      return next;
-    });
-  }
-  if (value && typeof value === 'object') {
-    const copy = {};
-    for (const [name, field] of Object.entries(value)) copy[name] = restoreKeys(field, serverKeys, removed);
-    return copy;
-  }
-  return value;
-}
+// (`serverKeys`). An entry with a client ID that the server draft does not
+// have gets no key, so the core writes it as a new element. A wrong key would
+// give it the source element of a different entry (ADR 0022 item 5).
+export const restoreKeys = (value, serverKeys) => rekey(value, serverKeys);
 
 // Give each entry of a loaded model the client ID of the entry with the same
 // key in `old`. Use it only when `old` holds the same server draft, so that
@@ -227,27 +207,45 @@ function content(entry) {
 
 // Give each entry of a loaded model the client ID of the entry in `old` with
 // the same content. Use it when `old` holds an earlier server draft, for
-// example after a route changed one field. An entry with changed content, or
-// with content that more than one entry has, keeps its new client ID.
+// example after a route changed one field. When each entry with the same
+// content kept its key, and one entry is left in each draft with the same
+// key, that entry matches. Two changed entries do not match by key, because
+// they can have changed places. Entries with the same content match in the
+// sequence of their keys when both drafts have the same number of them.
+// Otherwise an entry with changed content keeps its new client ID.
 export function carryCidsByContent(value, old) {
   if (Array.isArray(value)) {
-    const byContent = new Map();
-    for (const entry of Array.isArray(old) ? old : []) {
-      if (!entry || typeof entry !== 'object' || !entry._cid) continue;
-      const text = content(entry);
-      byContent.set(text, byContent.has(text) ? null : entry);
-    }
-    const seen = new Map();
-    for (const entry of value) {
-      if (entry && typeof entry === 'object' && entry._cid) {
+    const before = (Array.isArray(old) ? old : []).filter((entry) => entry && typeof entry === 'object' && entry._cid);
+    const group = (list) => {
+      const groups = new Map();
+      for (const entry of list) {
         const text = content(entry);
-        seen.set(text, (seen.get(text) || 0) + 1);
+        if (!groups.has(text)) groups.set(text, []);
+        groups.get(text).push(entry);
       }
+      return groups;
+    };
+    const oldGroups = group(before);
+    const newGroups = group(value.filter((entry) => entry && typeof entry === 'object' && entry._cid));
+    const byKey = (a, b) => (a.key ?? Infinity) - (b.key ?? Infinity);
+    const matches = new Map();
+    for (const [text, entries] of newGroups) {
+      const olds = oldGroups.get(text);
+      if (!olds || olds.length !== entries.length) continue;
+      const sortedOld = [...olds].sort(byKey);
+      [...entries].sort(byKey).forEach((entry, index) => matches.set(entry, sortedOld[index]));
+    }
+    const sameSequence = [...matches].every(([entry, match]) => entry.key === match.key);
+    const usedOld = new Set(matches.values());
+    const restOld = before.filter((entry) => !usedOld.has(entry));
+    const restNew = value.filter((entry) => entry && typeof entry === 'object' && entry._cid && !matches.has(entry));
+    if (sameSequence && restNew.length === 1 && restOld.length === 1
+      && restNew[0].key !== undefined && restNew[0].key === restOld[0].key) {
+      matches.set(restNew[0], restOld[0]);
     }
     return value.map((entry) => {
       if (!entry || typeof entry !== 'object' || !entry._cid) return entry;
-      const text = content(entry);
-      const match = seen.get(text) === 1 ? byContent.get(text) : null;
+      const match = matches.get(entry);
       if (!match) return carryCidsByContent(entry, null);
       return { ...carryCidsByContent(entry, match), _cid: match._cid };
     });

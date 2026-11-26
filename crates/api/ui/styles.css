@@ -1793,6 +1793,7 @@ select.position:focus { background: var(--fill); }
    Music Index"). It starts at the left, and the link padding aligns with the
    text above it. */
 .index-link { justify-self: start; align-self: start; margin-inline-start: -4px; font-size: var(--text-callout); }
+.index-link-space { visibility: hidden; pointer-events: none; }
 .feed-address a:hover { color: var(--text); text-decoration: underline; }
 .feed-address .icon-button { flex: none; color: var(--muted); }
 .feed-address .icon { display: block; width: 16px; height: 16px; }

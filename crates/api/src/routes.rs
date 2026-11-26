@@ -3959,7 +3959,7 @@ pub(crate) async fn set_release_credit(
         } else if role == PublisherRole::Label {
             format!("{title} is independent.")
         } else {
-            format!("{title} is not published.")
+            format!("{title} is self-published.")
         };
         credit_response(w, &credits, &format!("{notice} Not written yet."))
     })
@@ -5113,6 +5113,7 @@ fn diff_json_with_streams(
         "grant_apps": grant_apps,
         "build_date": build_date,
         "page_refusal": page_refusal,
+        "index_warning": feed_index_warning(w, id)?,
         "page_refusal_link": page_refusal_link,
         "also_write": also_write,
         "apps": review_apps(w)?,
@@ -5182,6 +5183,7 @@ fn linked_feeds_to_write(
             "artist": artist,
             "change": changed.change,
             "refusal": feed_page_refusal(w, changed.feed)?,
+            "index_warning": feed_index_warning(w, changed.feed)?,
             "via": null,
         }));
         included.insert(changed.feed);
@@ -5204,12 +5206,20 @@ fn linked_feeds_to_write(
                     "artist": artist,
                     "change": page.change,
                     "refusal": feed_page_refusal(w, page.feed)?,
+                    "index_warning": feed_index_warning(w, page.feed)?,
                     "via": changed.feed.0,
                 }));
             }
         }
     }
     Ok(linked)
+}
+
+/// Give the core warning for the current draft (ADR 0267 item 9).
+fn feed_index_warning(w: &Workspace, id: FeedId) -> Result<Option<&'static str>, ApiError> {
+    let (feed, _) = pipeline::draft_model(&w.collection, id)?;
+    Ok(studio_core::feed_check::index_warning(&feed)
+        .map(studio_core::feed_check::IndexWarning::code))
 }
 
 /// Give the page-rule refusal for a draft. A feed-file deletion, a feed
@@ -8984,6 +8994,7 @@ pub(crate) fn change_set_json(w: &Workspace, set: &change_set::ChangeSet) -> Val
                 "had_draft": feed.had_draft,
                 "written_at": feed.written_at,
                 "blocked": blocked,
+                "index_warning": feed_index_warning(w, feed.feed_id).ok().flatten(),
             })
         })
         .collect();

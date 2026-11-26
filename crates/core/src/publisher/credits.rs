@@ -36,7 +36,7 @@ pub struct ReleaseCredits {
     pub label: Option<ReleasePage>,
     /// The first publisher page in file sequence.
     pub publisher: Option<ReleasePage>,
-    /// The publisher that follows, or none for "Not published".
+    /// The publisher that follows, or none for "Self-published".
     pub follows: Option<ReleasePage>,
     /// The value is `true` when the publisher is the value that follows.
     pub publisher_follows: bool,

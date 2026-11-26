@@ -2081,7 +2081,7 @@ async fn the_diff_of_a_new_release_names_its_artist_page_and_two_writes_leave_no
     assert_eq!(status, StatusCode::OK, "{diff}");
     assert_eq!(
         diff["also_write"],
-        json!([{ "id": artist_id, "title": "Artist", "side": "page", "artist": true, "change": "added", "refusal": null, "via": null }]),
+        json!([{ "id": artist_id, "title": "Artist", "side": "page", "artist": true, "change": "added", "refusal": null, "index_warning": null, "via": null }]),
         "ADR 0251 item 9: linked_feeds_to_write must include the page side"
     );
     let (_, lonely_diff) = call(
@@ -2102,7 +2102,7 @@ async fn the_diff_of_a_new_release_names_its_artist_page_and_two_writes_leave_no
     assert_eq!(artist_diff["changed"], true, "{artist_diff}");
     assert_eq!(
         artist_diff["also_write"],
-        json!([{ "id": release_id, "title": "Release", "side": "release", "artist": false, "change": "added", "refusal": null, "via": null }]),
+        json!([{ "id": release_id, "title": "Release", "side": "release", "artist": false, "change": "added", "refusal": null, "index_warning": "no_tracks_or_payment_split", "via": null }]),
         "ADR 0251 item 9: linked_feeds_to_write must include the release side"
     );
 
@@ -2180,12 +2180,12 @@ async fn a_changed_link_of_two_written_feeds_gives_a_row_on_each_side() {
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(
         also(&diff_of(second_id).await),
-        json!([{ "id": release_id, "title": "Release", "side": "release", "artist": false, "change": "added", "refusal": null, "via": null }]),
+        json!([{ "id": release_id, "title": "Release", "side": "release", "artist": false, "change": "added", "refusal": null, "index_warning": "no_tracks_or_payment_split", "via": null }]),
         "ADR 0251 item 2: Review of the page must offer the written release. Fix linked_feeds_to_write or changed_links."
     );
     assert_eq!(
         also(&diff_of(release_id).await),
-        json!([{ "id": second_id, "title": "Second", "side": "page", "artist": false, "change": "added", "refusal": null, "via": null }]),
+        json!([{ "id": second_id, "title": "Second", "side": "page", "artist": false, "change": "added", "refusal": null, "index_warning": null, "via": null }]),
         "ADR 0251 item 2: Review of the release must offer the written page. Fix linked_feeds_to_write or changed_links."
     );
 
@@ -2215,7 +2215,7 @@ async fn a_changed_link_of_two_written_feeds_gives_a_row_on_each_side() {
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(
         also(&diff_of(second_id).await),
-        json!([{ "id": release_id, "title": "Release", "side": "release", "artist": false, "change": "removed", "refusal": null, "via": null }]),
+        json!([{ "id": release_id, "title": "Release", "side": "release", "artist": false, "change": "removed", "refusal": null, "index_warning": "no_tracks_or_payment_split", "via": null }]),
         "ADR 0251 item 3: an unlink must give a removed row. Fix changed_links."
     );
 }
@@ -2265,8 +2265,8 @@ async fn a_linked_release_refusal_is_in_the_page_review_until_the_link_returns()
     assert_eq!(
         diff["also_write"],
         json!([
-            { "id": release_id, "title": "Release", "side": "release", "artist": false, "change": "removed", "refusal": null, "via": null },
-            { "id": second_id, "title": "Second Artist", "side": "page", "artist": true, "change": "added", "refusal": null, "via": release_id }
+            { "id": release_id, "title": "Release", "side": "release", "artist": false, "change": "removed", "refusal": null, "index_warning": "no_tracks_or_payment_split", "via": null },
+            { "id": second_id, "title": "Second Artist", "side": "page", "artist": true, "change": "added", "refusal": null, "index_warning": null, "via": release_id }
         ]),
         "ADR 0251 item 12: Review of A must include the changed page C through release B. Fix linked_feeds_to_write."
     );
@@ -21222,6 +21222,80 @@ async fn catalog_preview_uses_the_tree_parent_and_changes_no_draft() {
 }
 
 #[tokio::test]
+async fn review_gives_index_warning_without_blocking_the_write() {
+    let (app, connector) = publisher_app().await;
+    let [artist, _, _, _, release] = move_pages(&app, connector).await;
+    let (status, diff) = call(&app, "GET", &format!("/api/v1/feeds/{release}/diff"), None).await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    assert_eq!(
+        diff["index_warning"], "no_tracks_or_payment_split",
+        "ADR 0267 item 9: give the warning in the feed diff. Change diff_json."
+    );
+    let (status, changed) = call(
+        &app,
+        "PUT",
+        &format!("/api/v1/feeds/{release}/credits"),
+        Some(json!({ "role": "artist", "page": artist })),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{changed}");
+    let set_id = &changed["change_set_id"];
+    let (status, review) = call(&app, "GET", &format!("/api/v1/change-sets/{set_id}"), None).await;
+    assert_eq!(status, StatusCode::OK, "{review}");
+    assert_eq!(
+        change_row(&review, release)["index_warning"],
+        "no_tracks_or_payment_split",
+        "ADR 0267 item 9: give the warning in the change set. Change change_set_json."
+    );
+    assert!(
+        change_row(&review, artist)["index_warning"].is_null(),
+        "ADR 0267 item 9: a publisher feed has no warning. Change change_set_json."
+    );
+    let (status, diff) = call(&app, "GET", &format!("/api/v1/feeds/{artist}/diff"), None).await;
+    assert_eq!(status, StatusCode::OK, "{diff}");
+    let linked = diff["also_write"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["id"] == release)
+        .unwrap();
+    assert_eq!(
+        linked["index_warning"], "no_tracks_or_payment_split",
+        "ADR 0267 item 9: give the warning for a linked release. Change linked_feeds_to_write."
+    );
+    let (status, body) = write_with_own_diff(&app, release).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "ADR 0267 item 9: the warning permits a write. Change the write route. {body}"
+    );
+}
+
+#[tokio::test]
+async fn review_has_no_index_warning_with_an_item_or_channel_value() {
+    let (app, connector) = publisher_app().await;
+    for (path, xml) in [("item.xml", FEED), ("value.xml", FEED_WITH_RECIPIENTS)] {
+        let xml = if path == "value.xml" {
+            xml.replace("<item><guid>t-1</guid></item>", "")
+        } else {
+            xml.to_owned()
+        };
+        let id = add_paid_feed_raw(&app, connector, path, &xml).await;
+        let (status, diff) = call(&app, "GET", &format!("/api/v1/feeds/{id}/diff"), None).await;
+        assert_eq!(status, StatusCode::OK, "{diff}");
+        assert_eq!(
+            diff["index_warning"],
+            Value::Null,
+            "ADR 0267 item 9: an item or channel value removes the warning. Change diff_json."
+        );
+        assert!(
+            diff.as_object().unwrap().contains_key("index_warning"),
+            "ADR 0267 item 9: include a null warning. Change diff_json."
+        );
+    }
+}
+
+#[tokio::test]
 async fn catalog_routes_add_two_steps_and_undo_each_step() {
     let (app, connector) = publisher_app().await;
     let [artist, _, label, host, release] = move_pages(&app, connector).await;
@@ -21304,18 +21378,21 @@ async fn catalog_review_gives_saved_and_current_places_after_two_changes() {
     for (id, now, after) in [
         (
             artist,
-            "Independent, not published",
+            "Independent, self-published",
             "On Label, published by Hosting",
         ),
         (
             release,
-            "Independent, not published",
+            "Independent, self-published",
             "On Label, published by Hosting",
         ),
-        (label, "Not published", "Published by Hosting"),
+        (label, "Self-published", "Published by Hosting"),
     ] {
         let row = rows.iter().find(|row| row["feed_id"] == id).unwrap();
-        assert_eq!(row["now"], now, "{review}");
+        assert_eq!(
+            row["now"], now,
+            "ADR 0267 item 1: use self-published. Change catalog_place. {review}"
+        );
         assert_eq!(row["after"], after, "{review}");
     }
     // A page that is only a publisher has no place (ADR 0254 item 36).
@@ -21335,8 +21412,8 @@ async fn catalog_review_gives_saved_and_current_places_after_two_changes() {
         .iter()
         .find(|row| row["feed_id"] == artist)
         .unwrap();
-    assert_eq!(row["now"], "Independent, not published");
-    assert_eq!(row["after"], "On Label, not published");
+    assert_eq!(row["now"], "Independent, self-published");
+    assert_eq!(row["after"], "On Label, self-published");
 }
 
 #[tokio::test]
@@ -21354,8 +21431,8 @@ async fn catalog_review_gives_kept_places_for_gather_with_no_release() {
     let rows = body["change_set"]["catalog_changes"].as_array().unwrap();
     for id in [artist, other] {
         let row = rows.iter().find(|row| row["feed_id"] == id).unwrap();
-        assert_eq!(row["now"], "Independent, not published");
-        assert_eq!(row["after"], "On Label, not published");
+        assert_eq!(row["now"], "Independent, self-published");
+        assert_eq!(row["after"], "On Label, self-published");
     }
     let (status, review) = call(
         &app,
@@ -21652,7 +21729,7 @@ async fn release_credit_routes_replace_fields_give_notices_and_undo_both_sides()
         (
             "hosting",
             None,
-            "Release is not published. Not written yet.",
+            "Release is self-published. Not written yet.",
             5,
         ),
     ] {
@@ -21664,7 +21741,10 @@ async fn release_credit_routes_replace_fields_give_notices_and_undo_both_sides()
         )
         .await;
         assert_eq!(status, StatusCode::OK, "{changed}");
-        assert_eq!(changed["notice"], notice);
+        assert_eq!(
+            changed["notice"], notice,
+            "ADR 0267 item 1: use self-published. Change set_release_credit."
+        );
         assert_eq!(changed["change_set"]["operation"]["kind"], "catalog");
         assert_eq!(changed["change_set"]["catalog_steps"], step);
         assert_eq!(changed["change_set_id"], changed["change_set"]["id"]);

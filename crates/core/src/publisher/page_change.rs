@@ -619,7 +619,7 @@ pub fn catalog_place(
     );
     if is_label {
         return if publishers.is_empty() {
-            "Not published".to_owned()
+            "Self-published".to_owned()
         } else {
             format!("Published by {}", publishers.join(", "))
         };
@@ -630,7 +630,7 @@ pub fn catalog_place(
         format!("On {}", labels.join(", "))
     };
     let publisher = if publishers.is_empty() {
-        "not published".to_owned()
+        "self-published".to_owned()
     } else {
         format!("published by {}", publishers.join(", "))
     };

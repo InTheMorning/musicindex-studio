@@ -2164,7 +2164,7 @@ fn a_catalog_leave_all_removes_label_and_publisher_in_one_call() {
     )
     .unwrap();
     assert_eq!(result.changed_releases, 1);
-    assert_eq!(result.place, "Independent, not published");
+    assert_eq!(result.place, "Independent, self-published");
     assert_eq!(release_link_roles(&s, release, label), None);
     assert_eq!(release_link_roles(&s, release, host), None);
     assert_eq!(

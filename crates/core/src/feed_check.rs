@@ -182,6 +182,34 @@ pub fn page_refusal(feed: &Feed) -> Option<PageRefusal> {
     }
 }
 
+/// A warning about Music Index listing from ADR 0267 item 9
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IndexWarning {
+    /// A music feed has no item and no channel payment split.
+    NoTracksOrPaymentSplit,
+}
+
+impl IndexWarning {
+    /// The API code for this warning
+    #[must_use]
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::NoTracksOrPaymentSplit => "no_tracks_or_payment_split",
+        }
+    }
+}
+
+/// Give the Music Index warning for `feed` (ADR 0267 item 9)
+///
+/// The Stophammer verifier `v4v_payment` owns the rule. This check copies only
+/// the condition for no item and no channel `podcast:value`. It does not stop a write.
+#[must_use]
+pub fn index_warning(feed: &Feed) -> Option<IndexWarning> {
+    (feed.medium.as_deref() == Some("music") && feed.items.is_empty() && feed.values.is_empty())
+        .then_some(IndexWarning::NoTracksOrPaymentSplit)
+}
+
 /// Give the first publisher link with no role (ADR 0252 item 1).
 ///
 /// # Examples
@@ -1198,6 +1226,51 @@ mod tests {
                     .iter()
                     .any(|finding| finding.kind == FindingKind::LinkGuidOld),
                 "ADR 0247 item 7: fix old_links traversal"
+            );
+        }
+    }
+
+    #[test]
+    fn index_warning_checks_only_empty_music_without_channel_value() {
+        let mut feed = clean();
+        feed.medium = Some("music".to_owned());
+        let warning = Some(IndexWarning::NoTracksOrPaymentSplit);
+        assert_eq!(
+            index_warning(&feed),
+            warning,
+            "ADR 0267 item 9: warn for an empty music feed. Change index_warning."
+        );
+        assert_eq!(
+            IndexWarning::NoTracksOrPaymentSplit.code(),
+            "no_tracks_or_payment_split",
+            "ADR 0267 item 9: give the warning code. Change IndexWarning::code."
+        );
+        feed.live_items.push(Entry::new(LiveItem::default()));
+        assert_eq!(
+            index_warning(&feed),
+            warning,
+            "ADR 0267 item 9: live items do not count as items. Change index_warning."
+        );
+        feed.items.push(track("One", Some("1"), Some("1")));
+        assert_eq!(
+            index_warning(&feed),
+            None,
+            "ADR 0267 item 9: an item removes the warning. Change index_warning."
+        );
+        feed.items.clear();
+        feed.values.push(Entry::new(ValueBlock::default()));
+        assert_eq!(
+            index_warning(&feed),
+            None,
+            "ADR 0267 item 9: a channel value removes the warning. Change index_warning."
+        );
+        feed.values.clear();
+        for medium in [Some("publisher"), Some("musicL"), Some("podcast"), None] {
+            feed.medium = medium.map(str::to_owned);
+            assert_eq!(
+                index_warning(&feed),
+                None,
+                "ADR 0267 item 9: warn only for music. Change index_warning."
             );
         }
     }
